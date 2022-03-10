@@ -1,4 +1,5 @@
 import re
+from typing import List, Optional, Set, TypedDict
 import regex
 
 from . import namespace
@@ -7,7 +8,6 @@ from ...util.parser import EvaluatedCompositeValue, check_identifier, interpolat
 
 
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
-# regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*$", re.ASCII)
 
 
 class Parser(BaseParser):
@@ -52,7 +52,7 @@ class Parser(BaseParser):
 
 
   def _process_valves(self, expr, context = dict()):
-    pop_count, pushes = self._parse_expr(expr, context)
+    pop_count, pushes, peak = self._parse_expr(expr, context)
 
     for _ in range(pop_count):
       if len(self._stack) < 1:
@@ -63,10 +63,9 @@ class Parser(BaseParser):
     for push in pushes:
       self._stack.append(push ^ (self._stack[-1] if len(self._stack) > 0 else set()))
 
+    # self._stack.append(peak)
+    print(self._stack)
 
-  # def _check_identifier(self, identifier):
-  #   if not regexp_identifier.match(identifier.value):
-  #     raise self._parent.create_error(f"Invalid identifier literal {identifier.value}", location=identifier.location)
 
   # def _resolve_valve(self, name):
   #   if not name.value in self._parameters:
@@ -110,34 +109,41 @@ class Parser(BaseParser):
 
     pop_count = 0
     pushes = list()
+    peak = None
 
     comma = False
-    selection = None
+    selection: Optional[Set[int]] = None
     state = 0
 
     def create_error(message = None):
-      return token['data'].error(message or f"Unexpected token '{token['kind']}'")
+      return token['data'].error(message or f"Unexpected token '{token['data']}'")
 
     for token in tokens:
+      # (0) Detect pop tokens
       if state == 0:
-        if token['kind'] == 'minus':
+        if token['kind'] == 'pop':
           pop_count += 1
         else:
           state = 1
 
+      # (1) Detect push or peak tokens
       if state == 1:
-        if token['kind'] == 'plus':
+        if token['kind'] == 'push':
           state = 2
           selection = set()
           continue
+        elif token['kind'] == 'peak':
+          state = 3
+          selection = set()
+          continue
         elif (token['kind'] == 'query_atom') or (token['kind'] == 'ref'):
-          pop_count += 1
-          state = 2
+          state = 3
           selection = set()
         else:
           raise create_error()
 
-      if state == 2:
+      # (2) Accept push or (3) Accept peak
+      if state >= 2:
         if (token['kind'] == 'query_atom') and ((not selection) or comma):
           selection |= self._resolve_atom_query(token)
           comma = False
@@ -146,18 +152,21 @@ class Parser(BaseParser):
           selection |= token['query']
         elif (token['kind'] == 'comma') and selection and (not comma):
           comma = True
-        elif (token['kind'] == 'plus') and (not comma):
+        elif ((token['kind'] == 'push') or (token['kind'] == 'peak')) and (not comma) and (state == 2):
           pushes.append(selection)
           selection = set()
+          state = 2 if token['kind'] == 'push' else 3
         else:
           raise create_error()
 
     if state == 2:
       pushes.append(selection)
+    if state == 3:
+      peak = selection
     if comma:
       raise create_error()
 
-    return pop_count, pushes
+    return pop_count, pushes, peak
 
 
   def _parse_query(self, fragments):
@@ -186,14 +195,9 @@ class Parser(BaseParser):
     return result
 
 
-  # expr_fragments: EvaluatedCompositeValue
-  def _tokenize_expr(self, fragments):
+  # fragments: EvaluatedCompositeValue
+  def _tokenize_expr(self, fragments) -> list:
     tokens = list()
-
-    def create_error():
-      return expr.error(f"Unexpected token '{ch}'", offset=index)
-
-    symbol = False
 
     for fragment_index, fragment in enumerate(fragments):
       if (fragment_index % 2) < 1:
@@ -209,43 +213,31 @@ class Parser(BaseParser):
             span = query_atom_match.span()
             value_span = query_atom_match.spans(1)[0]
 
-            # print(fragment.value[(index + span[0]):(index + span[1])])
-            # print(fragment.value[(index + value_span[0]):(index + value_span[1])])
-
-            # print(query_atom_match.spans(1))
-
             tokens.append({
               'kind': 'query_atom',
               'data': fragment[(index + span[0]):(index + span[1])],
-              # 'span': (index, span[1] + index),
               'range_end': groups[1],
               'value': fragment[(index + value_span[0]):(index + value_span[1])],
               'wildcard': groups[2] is not None
             })
 
             index += span[1] - 1
-          elif symbol:
-            raise create_error()
-          elif ref_match:
-            ref_name, length = ref_match
-            tokens.append({ 'kind': 'ref', 'name': ref_name, 'span': (index, index + length) })
-            index += length - 1
-          # elif ch == "%":
-          #   symbol = True
-          elif ch == "+":
-            tokens.append({ 'kind': 'plus', 'data': ch })
+          # elif ref_match:
+          #   ref_name, length = ref_match
+          #   tokens.append({ 'kind': 'ref', 'name': ref_name, 'data': (index, index + length) })
+          #   index += length - 1
+          elif ch == ">":
+            tokens.append({ 'kind': 'push', 'data': ch })
+          elif ch == "<":
+            tokens.append({ 'kind': 'pop', 'data': ch })
           elif ch == "-":
-            tokens.append({ 'kind': 'minus', 'data': ch })
-          elif ch == "=":
-            tokens.append({ 'kind': 'equals', 'data': ch })
-          elif ch == "*":
-            tokens.append({ 'kind': 'star', 'data': ch })
-          elif ch == "^":
-            tokens.append({ 'kind': 'xor', 'data': ch })
+            tokens.append({ 'kind': 'mark', 'data': ch })
+          elif ch == "|":
+            tokens.append({ 'kind': 'peak', 'data': ch })
           elif ch == ",":
             tokens.append({ 'kind': 'comma', 'data': ch })
           elif ch != " ":
-            raise ch.error("Invalid token")
+            raise ch.error(f"Invalid token '{ch}'")
 
           index += 1
       else:
@@ -264,8 +256,5 @@ class Parser(BaseParser):
           'query': self._parse_query(query),
           'data': fragment
         })
-
-    if symbol:
-      raise create_error()
 
     return tokens

@@ -1,0 +1,38 @@
+name: Hello
+models:
+  - m1024
+parameters:
+  - A1
+  - A2
+  - A3
+
+# defaults: A1, A2, A
+
+shorthands:
+  wash:
+    duration: "1 min {args[1]}"
+  washhh:
+    # duration: 1 min {args[0]}
+    use: wash(xx, {args[0]})
+  # disp:
+  #   actions:
+  #     - defaults: "A3, A2, {args[0]}"
+  #       duration: 3 sec
+
+  p:
+    defaults: A1, {args[0]}
+  def:
+    use: p([{args[0]}, A21])
+
+stages:
+  - name: S1
+    steps:
+      # - use: def(A2)
+      # - defaults: A3, {'A2, A1'}
+      # - defaults: +++A1 {'A2'}
+      # - use: wash(a {'c'})
+      # - valves: A1
+      #   use: washhh(35 sec)
+
+      - duration: 3 sec
+        valves: A2, A3

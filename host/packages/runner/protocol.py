@@ -8,8 +8,8 @@ from .reader import parse
 from .models.timer.parser import Parser as TimerParser
 
 
-Stage = namedtuple("Stage", ["name", "steps"])
-Step = namedtuple("Step", ["description", "name", "segment_indices"])
+Stage = namedtuple("Stage", ["name", "seq", "steps"])
+Step = namedtuple("Step", ["description", "name", "seq"])
 
 # Fragment = namedtuple("Fragment", ["actions"])
 Segment = namedtuple("Segment", ["data", "process_namespace"])
@@ -46,39 +46,6 @@ class BuiltinParser(BaseParser):
       }
 
 
-
-  def _parse_action(self, data_action):
-    if "use" in data_action:
-      data_use, context = data_action["use"]
-      for name, args in data_use.items():
-        shorthand = self._shorthands.get(name)
-
-        if not shorthand:
-          raise name.error(f"Invalid shorthand name '{name}'")
-
-        context = { str(index): arg for index, arg in enumerate(args) }
-
-        return {
-          'role': 'replace',
-          'depth': 0,
-          'data': {
-            **{ key: value for key, value in data_action.items() if key != "use" },
-            **{ key: (value, context) for key, value in shorthand.items() }
-          }
-          # 'data': [
-          #   { 'data': data_action, 'context': dict() },
-          #   { 'data': self._shorthands[name], 'context': { index: arg for index, arg in enumerate(args) } }
-          # ]
-        }
-
-  # def _parse_action(self, data_action):
-  #   if "actions" in data_action:
-  #     return {
-  #       'role': 'fragment',
-  #       'actions': data_action["actions"]
-  #     }
-
-
 class InputParser(BaseParser):
   def __init__(self, master):
     self._master = master
@@ -103,7 +70,7 @@ class FragmentParser(BaseParser):
       actions, context = data_action["actions"]
 
       return {
-        'role': 'fragment',
+        'role': 'collection',
         'actions': [{ key: (value, context) for key, value in action.items() } for action in actions]
       }
 
@@ -155,19 +122,14 @@ class Protocol:
       self.chip_models[id] = chip_models[id]
 
 
-    # call enter_protocol()
+    # Call enter_protocol()
     for parser in self.parsers.values():
       parser.enter_protocol(data)
 
     for stage_index, data_stage in enumerate(data.get("stages", list())):
-      stage = Stage(
-        name=data_stage.get("name", f"Stage #{stage_index + 1}"),
-        steps=list()
-      )
+      steps = list()
 
-      self.stages.append(stage)
-
-      # call enter_stage()
+      # Call enter_stage()
       for parser in self.parsers.values():
         parser.enter_stage(stage_index, data_stage)
 
@@ -178,67 +140,92 @@ class Protocol:
         step = Step(
           description=data_step.get("description"),
           name=data_step.get("name", f"Step #{step_index + 1}"),
-          segment_indices=self.parse_action(add_context(data_step))
+          seq=self.parse_action(add_context(data_step))
         )
 
-        stage.steps.append(step)
+        steps.append(step)
 
-      # call leave_stage()
+      # Compute the stage's seq
+      if steps:
+        seq = (steps[0].seq[0], steps[-1].seq[1])
+      else:
+        seq_start = len(self.segments)
+        seq = (seq_start, seq_start)
+
+      # Call leave_stage()
       for parser in self.parsers.values():
         parser.leave_stage(stage_index, data_stage)
 
+      stage = Stage(
+        name=data_stage.get("name", f"Stage #{stage_index + 1}"),
+        seq=seq,
+        steps=steps
+      )
 
-  def parse_action(self, data_action):
-    data = dict()
+      self.stages.append(stage)
+
+
+  def parse_action(self, data):
+    # Call prepare_block()
     role = None
+    role_namespace = None
 
-    # data_props = {
-    #   key: (value, dict()) for key, value in data_action.items()
-    # }
+    for namespace, parser in self.parsers.items():
+      parser_role = parser.parse_action(data)
 
-    while True:
-      for namespace, parser in self.parsers.items():
-        parser_result = parser.parse_action(data_action)
+      if parser_role:
+        if role:
+          raise Exception(f"Block role is already defined as '{role['role']}' by '{role_namespace}', cannot be redefined to '{parser_role['role']}' by '{namespace}'")
 
-        if parser_result:
-          parser_role = parser_result['role']
+        role = parser_role
+        role_namespace = namespace
 
-          if parser_role and role:
-            raise Exception("Action role is already defined")
-          elif parser_role == 'process':
-            role = { 'type': 'process', 'namespace': namespace }
-          elif parser_role == 'replace':
-            data_action = parser_result['data']
-            break
-          elif parser_role == 'fragment':
-            role = { 'type': 'fragment', 'actions': parser_result['actions'] }
-          elif parser_role is not None:
-            raise Exception(f"Unknown parser role '{parser_role}'")
+    # Start again if a model returned a replacement
+    if role['role'] == 'replace':
+      return self.parse_action(role['data'])
 
-          data[namespace] = parser_result.get('data')
-      else:
-        break
-
-
+    # Store current segment index
     start_index = len(self.segments)
+    seq = start_index, start_index
 
-    if role:
-      if role['type'] == 'process':
-        segment = Segment(
-          data=data,
-          process_namespace=role['namespace']
-        )
+    # Call enter_block()
+    for namespace, parser in self.parsers.items():
+      parser.enter_block(data)
 
-        self.segments.append(segment)
+    # Create a segment if a model declared itself responsible for a process
+    if role['role'] == 'process':
+      segment_data = dict()
 
-        return start_index, start_index + 1
+      # Call handle_segment()
+      for namespace, parser in self.parsers.items():
+        segment_data_model = parser.handle_segment(data)
 
-      if role['type'] == 'fragment':
-        end_index = start_index
+        if segment_data_model:
+          segment_data[namespace] = segment_data_model
 
-        for data_action in role['actions']:
-          _, end_index = self.parse_action(data_action)
+      segment = Segment(
+        data=segment_data,
+        process_namespace=role_namespace
+      )
 
-        return start_index, end_index
+      self.segments.append(segment)
 
-    return start_index, start_index
+      seq = start_index, start_index + 1
+
+    # Enumerate children blocks if a model returned a collection
+    elif role['role'] == 'collection':
+      start_index = len(self.segments)
+
+      for data_action in role['actions']:
+        _, end_index = self.parse_action(data_action)
+
+      seq = start_index, end_index
+    elif role['role'] is not None:
+      raise Exception(f"Unknown role '{role['role']}'")
+
+    # Call leave_block()
+    for namespace, parser in self.parsers.items():
+      parser.leave_block(data)
+
+
+    return seq

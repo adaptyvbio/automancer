@@ -8,17 +8,19 @@ from ...util.parser import interpolate
 class Parser(BaseParser):
   def parse_action(self, data_action):
     if "duration" in data_action:
+      return { 'role': 'process' }
+
+  def handle_segment(self, data_action):
+    if "duration" in data_action:
       expr, context = data_action["duration"]
       # expr_composed = interpolate(expr, context).compose()
       # print(expr_composed)
       value = parse_duration(expr, context)
 
       return {
-        'data': {
-          'duration': value,
-        },
-        'role': 'process'
+        'duration': value
       }
+
 
 
 # ---

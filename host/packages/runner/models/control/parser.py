@@ -12,66 +12,54 @@ regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-z
 
 class Parser(BaseParser):
   def __init__(self, parent):
-    self._stack = [set()]
-    # self._depth = None
+    self._depth_stack = list()
+    self._valve_stack = [set()]
     self._parent = parent
     self._valve_parameters = list()
+
+  @property
+  def _depth(self) -> int:
+    return len(self._valve_stack)
+
 
   def enter_protocol(self, data_protocol):
     for valve_name in data_protocol.get("parameters", list()):
       check_identifier(valve_name)
       self._valve_parameters.append(valve_name.value)
 
-
-    # self._depth = 0
-
-    # if "defaults" in data_protocol:
-    #   self._process_defaults(data_protocol["defaults"])
-
-  def enter_stage(self, stage_index, data_stage):
-    # if "defaults" in data_stage:
-    #   self._process_defaults(data_stage["defaults"])
-
-    pass
-
-  def parse_action(self, data_action):
-    # if "defaults" in data_action:
-    #   data_defaults, context = data_action["defaults"]
-    #   self._process_defaults(data_defaults, context)
-
-    if "valves" in data_action:
-      data_valves, context = data_action["valves"]
+  def enter_block(self, data_block):
+    if "valves" in data_block:
+      data_valves, context = data_block["valves"]
       self._process_valves(data_valves, context)
+    else:
+      self._depth_stack.append(None)
 
-      return {
-        'data': {
-          'valves': self._stack[-1]
-        },
-        'role': None
-      }
+  def leave_block(self, data_block):
+    target_depth = self._depth_stack.pop()
+
+    if target_depth is not None:
+      self._valve_stack = self._valve_stack[0:target_depth]
+
+  def handle_segment(self, data_action):
+    return {
+      'valves': self._valve_stack[-1]
+    }
 
 
   def _process_valves(self, expr, context = dict()):
     pop_count, pushes, peak = self._parse_expr(expr, context)
 
     for _ in range(pop_count):
-      if len(self._stack) < 1:
-        raise expr.error(f"Invalid pop instruction")
+      if len(self._valve_stack) <= 1:
+        raise expr.error(f"Invalid pop instruction, stack is already empty")
 
-      self._stack.pop()
+      self._valve_stack.pop()
 
-    for push in pushes:
-      self._stack.append(push ^ (self._stack[-1] if len(self._stack) > 0 else set()))
+    for push in pushes + ([peak] if peak else list()):
+      self._valve_stack.append(push ^ self._valve_stack[-1])
 
-    # self._stack.append(peak)
-    print(self._stack)
+    self._depth_stack.append(self._depth - 1 if peak else None)
 
-
-  # def _resolve_valve(self, name):
-  #   if not name.value in self._parameters:
-  #     raise self._parent.create_error(f"Invalid valve name '{name.value}'", location=name.location)
-
-  #   return self._parameters.index(name.value)
 
   def _resolve_atom_query(self, token):
     query_name = token['value']
@@ -104,7 +92,6 @@ class Parser(BaseParser):
 
 
   def _parse_expr(self, expr, context):
-    # print(interpolate(expr, context).evaluate())
     tokens = self._tokenize_expr(interpolate(expr, context).evaluate().fragments)
 
     pop_count = 0
@@ -241,9 +228,6 @@ class Parser(BaseParser):
 
           index += 1
       else:
-        # if not isinstance(fragment, str):
-        #   raise fragment.error("Invalid fragment")
-
         if isinstance(fragment, EvaluatedCompositeValue):
           query = fragment.fragments
         elif isinstance(fragment, str):

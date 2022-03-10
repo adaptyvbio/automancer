@@ -18,6 +18,20 @@ class BaseParser:
   def leave_stage(self, stage_index, data_stage):
     pass
 
+  # def prepare_block(self, data_action):
+  def parse_action(self, data_action):
+    pass
+
+  def enter_block(self, data_block):
+    pass
+
+  def leave_block(self, data_block):
+    pass
+
+  def handle_segment(self, data_action):
+    pass
+
+
   # Return value:
   #  { data: { ... }, role: 'process' }
   def parse_action(self, data_action):

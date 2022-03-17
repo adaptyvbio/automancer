@@ -1,8 +1,8 @@
 from collections import namedtuple
 from optparse import Option
 
-from ...util.parser import check_identifier, check_identifier_alt
-from ...util.schema import And, Array, List, Optional, Schema, Use
+from ...util.parser import check_identifier
+from ...util.schema import And, Array, List, Optional, ParseType, Schema, Use
 
 
 Valve = namedtuple("Valve", ["alias", "group", "id", "inverse", "name", "schematic"])
@@ -16,18 +16,19 @@ class Sheet:
         "color": Optional(str),
         "id": And(str, Use(check_identifier)),
         "name": Optional(str),
-        "inverse": Optional(bool)
+        "inverse": Optional(ParseType(bool))
       })),
       "valves": Optional(List({
         "alias": Optional(And(str, Use(check_identifier))),
         "id": str,
+        "inverse": Optional(ParseType(bool)),
         "name": Optional(str),
-        "schematic": Optional(Array([int, int]))
+        "schematic": Optional(str)
       })),
       "schematic": Optional(str)
     })
 
-    schema.validate(data)
+    data = schema.transform(data)
 
     self.groups = dict()
 
@@ -66,7 +67,7 @@ class Sheet:
         raise group_id.error(f"Invalid group id '{group_id}'")
 
       valve_id = data_valve["id"][(slash_index + 1):]
-      check_identifier_alt(valve_id)
+      check_identifier(valve_id, allow_leading_digit=True)
 
       group = self.groups[group_id]
 
@@ -75,13 +76,30 @@ class Sheet:
 
       group.valve_ids.append(len(self.valves))
 
+      schematic = None
+      raw_schematic = data_valve.get("schematic")
+
+      if raw_schematic is not None:
+        fragments = raw_schematic.split(",")
+
+        if len(fragments) != 2:
+          raise raw_schematic.error("Invalid schematic reference")
+
+        def it(frag):
+          try:
+            return int(frag)
+          except ValueError:
+            raise frag.error("Invalid schematic reference entry")
+
+        schematic = [it(frag) for frag in fragments]
+
       self.valves.append(Valve(
         id=valve_id,
         alias=data_valve.get("alias"),
         group=group,
         inverse=(data_valve.get("inverse", False) != group.inverse),
         name=data_valve.get("name"),
-        schematic=data_valve.get("schematic")
+        schematic=schematic
       ))
 
 

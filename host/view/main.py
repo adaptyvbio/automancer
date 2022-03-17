@@ -12,7 +12,7 @@ sys.path.insert(0, str(packages_dir))
 
 
 import engine
-from runner.chip_model import ChipModel
+from runner.model import Model
 from runner.reader import LocatedError
 from runner.protocol import Protocol
 import runner.models
@@ -36,25 +36,6 @@ from collections import namedtuple
 Chip = namedtuple("Chip", ["id", "matrices", "model", "name", "runners"])
 
 
-# class ChipModel:
-#   def __init__(self, *, id, name, sheets):
-#     self.id = id
-#     self.name = name
-#     self.sheets = sheets
-
-#   def load(path, models):
-#     data = yaml.safe_load(path.open())
-
-#     return ChipModel(
-#       id=(data.get("id") or str(abs(hash(path)))),
-#       name=data["name"],
-#       sheets={
-#         namespace: model.Sheet(data, dir=path.parent) for namespace, model in models.items()
-#       }
-#     )
-
-
-
 class App(engine.Application):
   def __init__(self):
     super().__init__(version=2)
@@ -65,19 +46,24 @@ class App(engine.Application):
     self.data_dir = Path(__file__).parent / "app-data"
     self.data_dir.mkdir(exist_ok=True)
 
-    self.chip_models = dict()
 
-    for path in (self.data_dir / "chipmodels").glob("**/*.yml"):
+    # -- Load models --------------------------------------
+
+    self.models = dict()
+
+    for path in (self.data_dir / "models").glob("**/*.yml"):
       try:
-        chip_model = ChipModel.load(path, self.manager.models)
-        self.chip_models[chip_model.id] = chip_model
+        chip_model = Model.load(path, self.manager.models)
+        self.models[chip_model.id] = chip_model
       except LocatedError as e:
         print(e)
         e.display()
 
+    print(self.models['m1024'].sheets['control'])
+
 
     def create_chip():
-      chip_model = list(self.chip_models.values())[0]
+      chip_model = list(self.models.values())[0]
       matrices = { namespace: model.Matrix.load(chip_model.sheets[namespace]) for namespace, model in self.manager.models.items() }
       chip = Chip(id="v21", matrices=matrices, model=chip_model, name="Variant 21", runners=dict())
 
@@ -94,7 +80,7 @@ class App(engine.Application):
       p = Protocol(
         Path("../test.yml"),
         parsers={ namespace: model.Parser for namespace, model in self.manager.models.items() },
-        chip_models=self.chip_models
+        chip_models=self.models
       )
 
       from pprint import pprint
@@ -135,7 +121,7 @@ class App(engine.Application):
           "sheets": {
             namespace: sheet.export() for namespace, sheet in model.sheets.items()
           }
-        } for model in self.chip_models.values()
+        } for model in self.models.values()
       },
       "devices": [{
         "id": device.id,

@@ -11,7 +11,6 @@ from .models.timer.parser import Parser as TimerParser
 Stage = namedtuple("Stage", ["name", "seq", "steps"])
 Step = namedtuple("Step", ["description", "name", "seq"])
 
-# Fragment = namedtuple("Fragment", ["actions"])
 Segment = namedtuple("Segment", ["data", "process_namespace"])
 
 

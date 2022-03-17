@@ -212,12 +212,10 @@ from ..reader import LocatedString, LocatedValue
 regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*$", re.ASCII)
 regexp_identifier_alt = re.compile(r"^[a-zA-Z0-9]+$", re.ASCII)
 
-def check_identifier(identifier):
-  if not regexp_identifier.match(identifier.value):
-    raise identifier.error(f"Invalid identifier literal '{identifier.value}'")
+def check_identifier(identifier, *, allow_leading_digit = False):
+  regexp = regexp_identifier_alt if allow_leading_digit else regexp_identifier
 
-def check_identifier_alt(identifier):
-  if not regexp_identifier_alt.match(identifier.value):
+  if not regexp.match(identifier.value):
     raise identifier.error(f"Invalid identifier literal '{identifier.value}'")
 
 

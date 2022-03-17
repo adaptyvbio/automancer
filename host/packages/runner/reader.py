@@ -10,9 +10,6 @@ class Location:
     self.source = source
     self.start = start
 
-  def __repr__(self):
-    return f"[{self.line}:{self.column}]"
-
   def __mod__(self, offset):
     start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
 
@@ -113,6 +110,22 @@ class LocatedString(str, LocatedValue):
       return LocatedString(self.value[key], (self.location % (start, stop)) if not self.symbolic else self.location)
     else:
       return self[key:(key + 1)]
+
+  def split(self, sep, maxsplit = -1):
+    if sep is None:
+      raise Exception("Not supported")
+
+    index = 0
+
+    def it(frag):
+      nonlocal index
+
+      value = self[index:(index + len(frag))]
+      index += len(frag) + len(sep)
+      return value
+
+    fragments = self.value.split(sep, maxsplit)
+    return [it(frag) for frag in fragments]
 
   def splitlines(self):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]

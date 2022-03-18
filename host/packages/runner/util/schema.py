@@ -105,6 +105,20 @@ class Use:
   def validate(self, value):
     self._validator(value)
 
+class Transform:
+  def __init__(self, transform, *, prevalidate = None):
+    self._prevalidate = Schema(prevalidate) if prevalidate else None
+    self._transform = transform
+
+  def transform(self, value):
+    if self._prevalidate:
+      self._prevalidate.validate(value)
+
+    return self._transform(value)
+
+  def validate(self, value):
+    pass
+
 class Optional:
   def __init__(self, arg):
     self._arg = Schema(arg)

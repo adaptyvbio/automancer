@@ -2,33 +2,67 @@ from collections import namedtuple
 from optparse import Option
 
 from ...util.parser import check_identifier
-from ...util.schema import And, Array, List, Optional, ParseType, Schema, Use
+from ...util.schema import And, List, Optional, ParseType, Schema, Transform, Use
 
 
-Valve = namedtuple("Valve", ["alias", "group", "id", "inverse", "name", "schematic"])
-ValveGroup = namedtuple("ValveGroup", ["color", "id", "inverse", "name", "valve_ids"])
+Valve = namedtuple("Valve", ["alias", "diagram_ref", "group", "id", "inverse", "name"])
+ValveGroup = namedtuple("ValveGroup", ["id", "inverse", "name", "valve_ids"])
+
+
+def parse_diagram_ref(value):
+  fragments = value.split(",")
+
+  if len(fragments) != 2:
+    raise value.error("Invalid diagram reference")
+
+  def it(frag):
+    try:
+      return int(frag)
+    except ValueError:
+      raise frag.error("Invalid diagram reference entry")
+
+  return value, [it(frag) for frag in fragments]
+
+
+def parse_valve_id(value):
+  slash_index = value.find("/")
+
+  if slash_index < 0:
+    raise value.error("Invalid valve id")
+
+  group_id = value[0:slash_index]
+  valve_id = value[(slash_index + 1):]
+
+  check_identifier(valve_id, allow_leading_digit=True)
+
+  return (group_id, valve_id)
+
 
 
 class Sheet:
   def __init__(self, data, *, dir):
+    # -- Validate schema ----------------------------------
+
     schema = Schema({
+      "diagram": Optional(str),
       "groups": Optional(List({
-        "color": Optional(str),
         "id": And(str, Use(check_identifier)),
         "name": Optional(str),
         "inverse": Optional(ParseType(bool))
       })),
       "valves": Optional(List({
         "alias": Optional(And(str, Use(check_identifier))),
-        "id": str,
+        "id": Transform(parse_valve_id, prevalidate=str),
         "inverse": Optional(ParseType(bool)),
         "name": Optional(str),
-        "schematic": Optional(str)
-      })),
-      "schematic": Optional(str)
+        "diagram": Optional(Transform(parse_diagram_ref, prevalidate=str))
+      }))
     })
 
     data = schema.transform(data)
+
+
+    # -- Parse groups -------------------------------------
 
     self.groups = dict()
 
@@ -39,101 +73,82 @@ class Sheet:
         raise group_id.error(f"Duplicate group with id '{group_id}'")
 
       self.groups[group_id] = ValveGroup(
-        color=data_group.get("color"),
         id=group_id,
         inverse=data_group.get("inverse", False),
         name=data_group.get("name"),
         valve_ids=list()
       )
 
-    # self.valves = [Valve(
-    #   group=valve.get('group'),
-    #   names=[valve['name'], *valve.get('aliases', list())],
-    #   schematic=valve.get('schematic')
-    # ) for valve in data.get("valves", list())]
+
+    # -- Parse valves -------------------------------------
 
     self.valves = list()
+    self.valve_names = {}
 
     for data_valve in data.get("valves", list()):
-      full_id = data_valve["id"]
-      slash_index = full_id.find("/")
+      group_id, valve_id = data_valve["id"]
+      group = self.groups.get(group_id)
 
-      if slash_index < 0:
-        raise full_id.error("Invalid valve id")
-
-      group_id = full_id[0:slash_index]
-
-      if not group_id in self.groups:
+      if not group:
         raise group_id.error(f"Invalid group id '{group_id}'")
 
-      valve_id = data_valve["id"][(slash_index + 1):]
-      check_identifier(valve_id, allow_leading_digit=True)
+      alias=data_valve.get("alias")
+      full_id = f"{group.id}/{valve_id}"
+      valve_index = len(self.valves)
 
-      group = self.groups[group_id]
+      if full_id in self.valve_names:
+        raise valve_id.error(f"Duplicate valve id '{valve_id}' in group with id '{group_id}'")
 
-      # if valve_id in group.valve_ids:
-      #   raise valve_id.error(f"Duplicate valve id '{group_id}/{valve_id}'")
+      if alias in self.valve_names:
+        raise alias.error(f"Duplicate valve alias '{alias}'")
 
-      group.valve_ids.append(len(self.valves))
+      diagram_ref = None
 
-      schematic = None
-      raw_schematic = data_valve.get("schematic")
+      if "diagram" in data_valve:
+        diagram_ref_str, diagram_ref = data_valve.get("diagram")
 
-      if raw_schematic is not None:
-        fragments = raw_schematic.split(",")
-
-        if len(fragments) != 2:
-          raise raw_schematic.error("Invalid schematic reference")
-
-        def it(frag):
-          try:
-            return int(frag)
-          except ValueError:
-            raise frag.error("Invalid schematic reference entry")
-
-        schematic = [it(frag) for frag in fragments]
+        if diagram_ref and not ("diagram" in data):
+          raise diagram_ref_str.error("Invalid reference to missing diagram")
 
       self.valves.append(Valve(
-        id=valve_id,
-        alias=data_valve.get("alias"),
+        alias=alias,
+        diagram_ref=diagram_ref,
         group=group,
+        id=valve_id,
         inverse=(data_valve.get("inverse", False) != group.inverse),
-        name=data_valve.get("name"),
-        schematic=schematic
+        name=data_valve.get("name")
       ))
 
+      self.valve_names[full_id] = valve_index
 
-    self.schematic = None
+      if alias:
+        self.valve_names[alias] = valve_index
 
-    if "schematic" in data:
-      schematic_path = dir / data["schematic"]
+
+    # -- Parse diagram ------------------------------------
+
+    self.diagram = None
+
+    if "diagram" in data:
+      diagram_path = dir / data["diagram"]
 
       try:
-        self.schematic = schematic_path.open().read()
+        self.diagram = diagram_path.open().read()
       except FileNotFoundError:
-        raise data["schematic"].error(f"Missing file at {schematic_path}")
-
-
-    self.valve_names = {
-      name: index for index, valve in enumerate(self.valves) for name in [
-        f"{valve.group.id}/{valve.id}",
-        *([valve.alias] if valve.alias else list())
-      ]
-    }
+        raise data["diagram"].error(f"Missing file at {diagram_path}")
 
 
   def export(self):
     return {
+      "diagram": self.diagram,
       "groups": [{
-        "color": group.color,
         "name": group.name
       } for group in self.groups.values()],
       "valves": [{
+        "diagramRef": valve.diagram_ref,
         "group": list(self.groups.values()).index(valve.group),
         "names": [valve.name or valve.id],
-        "schematic": valve.schematic
-      } for valve in self.valves],
-      "schematic": self.schematic
+      } for valve in self.valves]
     }
 
   def resolve_valve(self, groups):

@@ -2,12 +2,13 @@ import * as React from 'react';
 
 import * as Rf from 'retroflex';
 import { Model } from '..';
-import { ControlNamespace } from '../backends/common';
+import { ChipId, ControlNamespace, HostId } from '../backends/common';
+import SelectChip from '../components/select-chip';
 import * as util from '../util';
 
 
 interface ViewControlState {
-  activeHostChipId: [string, string] | null;
+  selectedHostChipId: [HostId, ChipId] | null;
 }
 
 export default class ViewControl extends React.Component<Rf.ViewProps<Model>, ViewControlState> {
@@ -15,34 +16,35 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
     super(props);
 
     this.state = {
-      activeHostChipId: null
+      selectedHostChipId: null
     };
   }
 
   render() {
-    let host = Object.values(this.props.model.hosts)[0];
+    let host = this.state.selectedHostChipId && this.props.model.hosts[this.state.selectedHostChipId[0]];
+    let chip = this.state.selectedHostChipId && host!.state.chips[this.state.selectedHostChipId[1]];
+    let model = host && host.state.models[chip!.modelId];
 
-    if (!host) {
-      return <div />;
-    }
-
-    let chip = Object.values(host.state.chips)[0];
-    let model = host.state.models[chip.modelId];
-
-    let modelControl = model.sheets.control;
-    let runner = chip.runners.control;
-    let signal = BigInt(runner.signal);
+    let modelControl = model?.sheets.control;
+    let runner = chip?.runners.control;
+    let signal = runner && BigInt(runner.signal);
 
     return (
       <>
         <Rf.ViewHeader>
           <div className="toolbar-root">
             <div className="toolbar-group">
+              <SelectChip
+                hosts={this.props.model.hosts}
+                onSelect={(selectedHostChipId) => {
+                  this.setState({ selectedHostChipId });
+                }}
+                selected={this.state.selectedHostChipId} />
             </div>
           </div>
         </Rf.ViewHeader>
         <Rf.ViewBody>
-          <div className="control-root">
+          {modelControl && <div className="control-root">
             {modelControl.groups.map((group, groupIndex) => (
               <div className="control-group" style={{ '--group-color': group.color } as React.CSSProperties} key={groupIndex}>
                 <h2>{group.name}</h2>
@@ -79,7 +81,7 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
 
 
           {/* <div className="control-root" style={{ '--color': 'red' } as React.CSSProperties}>

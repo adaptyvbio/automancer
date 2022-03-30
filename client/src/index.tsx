@@ -7,16 +7,17 @@ import ViewChipSettings from './views/chip-settings';
 import ViewControl from './views/control';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
-import { BackendCommon, HostState } from './backends/common';
+import { BackendCommon, HostId, HostState } from './backends/common';
 
 
 export interface Host {
   backend: BackendCommon;
+  id: HostId;
   state: HostState;
 }
 
 export interface Model {
-  hosts: Record<string, Host>;
+  hosts: Record<HostId, Host>;
 }
 
 class App extends React.Component {
@@ -101,6 +102,7 @@ class App extends React.Component {
         hosts: {
           [backend.state.info.id]: {
             backend,
+            id: backend.state.info.id,
             state: backend.state
           }
         }

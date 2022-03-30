@@ -5,6 +5,7 @@ import * as Rf from 'retroflex';
 import type { Host, Model } from '..';
 // import { Chip, HostState } from '../backends/common';
 import type { Chip, ChipId, ChipModel, HostId } from '../backends/common';
+import SelectChip from '../components/select-chip';
 
 
 interface ViewChipSettingsState {
@@ -71,22 +72,12 @@ export default class ViewChipSettings extends React.Component<Rf.ViewProps<Model
         <Rf.ViewHeader>
           <div className="toolbar-root">
             <div className="toolbar-group">
-              <Rf.Select
-                selectedOptionPath={this.state.selectedHostChipId}
-                menu={
-                  Object.entries(this.props.model.hosts).map(([id, host]) => ({
-                    id,
-                    name: host.state.info.name,
-                    children: Object.values(host.state.chips).map((chip) => ({
-                      id: chip.id,
-                      icon: 'memory',
-                      name: chip.name
-                    }))
-                  }))
-                }
-                onSelect={([hostId, chipId]) => {
-                  this.setState({ selectedHostChipId: [hostId, chipId] });
-                }} />
+              <SelectChip
+                hosts={this.props.model.hosts}
+                onSelect={(selectedHostChipId) => {
+                  this.setState({ selectedHostChipId });
+                }}
+                selected={this.state.selectedHostChipId} />
             </div>
           </div>
         </Rf.ViewHeader>

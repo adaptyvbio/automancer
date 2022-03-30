@@ -13,15 +13,15 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
   render() {
     let tree = OrderedMap(
       Object.values(this.props.model.hosts).flatMap((host) => [
-        [List([host.state.info.id]), TreeEntryRecord({ name: host.state.info.name, selectable: false })],
-        [List([host.state.info.id, 'chips']), TreeEntryRecord({ name: 'Chips', selectable: false })],
+        [List([host.id]), TreeEntryRecord({ name: host.state.info.name, selectable: false })],
+        [List([host.id, 'chips']), TreeEntryRecord({ name: 'Chips', selectable: false })],
         ...Object.values(host.state.chips).map((chip): [TreePath, TreeEntryDef] => {
           let model = host.state.models[chip.modelId];
-          return [List([host.state.info.id, 'chips', chip.id]), TreeEntryRecord({ name: `${chip.name} (${model.name})` })]
+          return [List([host.id, 'chips', chip.id]), TreeEntryRecord({ name: `${chip.name} (${model.name})` })]
         }),
-        [List([host.state.info.id, 'devices']), TreeEntryRecord({ name: 'Devices', selectable: false })],
+        [List([host.id, 'devices']), TreeEntryRecord({ name: 'Devices', selectable: false })],
         ...host.state.devices.map((device): [TreePath, TreeEntryDef] =>
-          [List([host.state.info.id, 'devices', device.id]), TreeEntryRecord({ name: device.name })]
+          [List([host.id, 'devices', device.id]), TreeEntryRecord({ name: device.name })]
         )
       ])
     );

@@ -3,6 +3,7 @@
 from .runner import BinaryPermutation, Runner
 from .drivers import mock, numato
 from ...device import DeviceInformation
+from ...util.schema import List, Optional, ParseType, Schema
 
 
 drivers = {
@@ -12,9 +13,39 @@ drivers = {
 
 
 class Executor: # (BaseExecutor):
-  def __init__(self):
+  def __init__(self, conf):
     self._devices = list()
     self._valves = dict()
+
+    schema = Schema({
+      'devices': List({
+        'driver': str,
+        'name': Optional(str),
+        'valves': List({
+          'channel': ParseType(int),
+          'name': str
+        })
+      })
+    })
+
+    conf = schema.transform(conf)
+
+    for spec in conf.get('devices', list()):
+      Driver = drivers[spec['driver']]
+      driver = Driver.from_spec(spec)
+
+      self._devices.append({
+        'driver': driver,
+        'name': spec.get('name'),
+        'range': [len(self._valves), len(spec['valves'])],
+        'valves': [valve['channel'] for valve in spec['valves']]
+      })
+
+      self._valves.update({
+        valve['name']: len(self._valves) + index for index, valve in enumerate(spec['valves'])
+      })
+
+    print(self._devices)
 
   def get_device_info(self):
     return [
@@ -35,21 +66,6 @@ class Executor: # (BaseExecutor):
 
     # for device in self._devices:
     #   device['driver'].initialize()
-
-  def add_device(self, spec):
-    Driver = drivers[spec['driver']]
-    driver = Driver.from_spec(spec)
-
-    self._devices.append({
-      'driver': driver,
-      'name': spec.get('name'),
-      'range': [len(self._valves), len(spec['valves'])],
-      'valves': [valve['channel'] for valve in spec['valves']]
-    })
-
-    self._valves.update({
-      valve['name']: len(self._valves) + index for index, valve in enumerate(spec['valves'])
-    })
 
   def create_runner(self, chip):
     return Runner(self, chip)

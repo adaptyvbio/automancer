@@ -27,9 +27,6 @@ class Application:
       raise Exception("Software version too old")
 
 
-  def start(self):
-    pass
-
   def save_config(config):
     pass
 

@@ -1,5 +1,6 @@
 from collections import namedtuple
 import math
+import sys
 
 
 Position = namedtuple("Position", ["line", "column"])
@@ -40,7 +41,9 @@ class LocatedError(Exception):
     self.location = location
 
   # TODO: improve by trying to find block limits
-  def display(self):
+  def display(self, file=sys.stderr):
+    print(self, file=file)
+
     start = self.location.start_position
     end = self.location.end_position
 
@@ -60,7 +63,7 @@ class LocatedError(Exception):
       if (line_index < start.line - context_before) or (line_index > end_line + context_after):
         continue
 
-      print(f" {str(line_index + 1).rjust(width_line, ' ')} | {line}")
+      print(f" {str(line_index + 1).rjust(width_line, ' ')} | {line}", file=file)
 
       if (line_index >= start.line) and (line_index <= end_line):
         target_offset = start.column if line_index == start.line else 0
@@ -82,7 +85,8 @@ class LocatedError(Exception):
           "\033[31m" +
           " " * target_offset +
           "^" * target_width +
-          "\033[39m"
+          "\033[39m",
+          file=file
         )
 
 
@@ -309,3 +313,40 @@ def get_offset(line, origin):
 
 def parse(raw_source):
   return analyze(tokenize(raw_source))
+
+
+def dumps(obj, depth = 0, cont = True):
+  if isinstance(obj, dict):
+    output = str()
+
+    for index, (key, value) in enumerate(obj.items()):
+      output += (str() if cont and (index < 1) else f"\n{'  ' * depth}") + f"{key}: {dumps(value, depth + 1, False)}"
+
+    return output
+
+  if isinstance(obj, list):
+    output = str()
+
+    for item in obj:
+      output += f"\n{'  ' * depth}- {dumps(item, depth + 1, True)}"
+
+    return output
+
+
+  return str(obj)
+
+
+def loads(raw_source):
+  return analyze(tokenize(raw_source))
+
+
+if __name__ == "__main__":
+  print(dumps({
+    'foo': 'bar',
+    'baz': 42,
+    'x': [3, 4, {
+      'y': 'p',
+      'z': 'x'
+    }],
+    'a': [[3, 4], [5, 6]]
+  }))

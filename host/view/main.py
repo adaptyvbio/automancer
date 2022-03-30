@@ -1,8 +1,12 @@
-import json
 from pathlib import Path
-from venv import create
-import yaml
+import appdirs
+import json
+import os
+import platform
 import sys
+import time
+import uuid
+import yaml
 
 from pprint import pprint
 
@@ -13,66 +17,99 @@ sys.path.insert(0, str(packages_dir))
 
 import engine
 from runner.model import Model
-from runner.reader import LocatedError
 from runner.protocol import Protocol
 import runner.models
+import runner.reader as reader
 
 
 # Matrix
 # Node
 
-class Manager:
-  def __init__(self):
-    self.models = runner.models.models
-    self.executors = { namespace: model.Executor() for namespace, model in self.models.items() }
-
-  async def initialize(self):
-    for executor in self.executors.values():
-      await executor.initialize()
-
-
 from collections import namedtuple
 
-Chip = namedtuple("Chip", ["id", "matrices", "model", "name", "runners"])
+Chip = namedtuple("Chip", ['id', 'matrices', 'model', 'name', 'runners'])
 
-
-class App(engine.Application):
+class Host:
   def __init__(self):
-    super().__init__(version=2)
-
-    self.chips = list()
-    self.manager = Manager()
-
-    self.data_dir = Path(__file__).parent / "app-data"
+    self.data_dir = Path(appdirs.site_data_dir("PRn", "LBNC"))
     self.data_dir.mkdir(exist_ok=True)
+
+    self.chips = dict()
+
+    # os.chmod(self.data_dir, 0o775)
+
+
+    # -- Load configuration -------------------------------
+
+    conf_path = self.data_dir / "setup.yml"
+
+    if conf_path.exists():
+      try:
+        conf = reader.loads((self.data_dir / "setup.yml").open().read())
+      except reader.LocatedError as e:
+        e.display()
+        sys.exit(1)
+    else:
+      conf = {
+        'id': str(uuid.uuid4()),
+        'name': platform.node(),
+        'units': dict(),
+        'version': 1
+      }
+
+      conf_path.open("w").write(reader.dumps(conf))
+
+    self.id = conf.get('id') or hex(uuid.getnode())[2:]
+    self.name = conf['name']
+    self.start_time = round(time.time() * 1000)
+    self.units = runner.models.models
+
+    self.executors = {
+      namespace: unit.Executor(conf['units'].get(namespace, dict())) for namespace, unit in self.units.items()
+    }
+
+    # self.executors = dict()
+
+    # for namespace, unit in units.items():
+    #   executor = unit.Executor(self.conf.get(namespace, dict()))
+    #   self.executors[namespace] = executor
+
+    # for namespace, executor in self.units.items():
+    #   unit_conf = self.conf.get(namespace, dict())
+    #   executor.initialize()
+
+    #   executor = self.manager.executors[device['model']]
+    #   executor.add_device(device)
+
+    # await self.manager.initialize()
 
 
     # -- Load models --------------------------------------
 
+    models_dir = self.data_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+
     self.models = dict()
 
-    for path in (self.data_dir / "models").glob("**/*.yml"):
+    for path in models_dir.glob("**/*.yml"):
       try:
-        chip_model = Model.load(path, self.manager.models)
+        chip_model = Model.load(path, self.units)
         self.models[chip_model.id] = chip_model
-      except LocatedError as e:
-        print(e)
+      except reader.LocatedError as e:
         e.display()
+        sys.exit(1)
 
-    print(self.models['m1024'].sheets['control'])
 
+  def create_chip(self, model_id, name):
+    model = self.models[model_id]
+    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() }
+    chip = Chip(id=str(uuid.uuid4()), matrices=matrices, model=model, name=name, runners=dict())
 
-    def create_chip():
-      chip_model = list(self.models.values())[0]
-      matrices = { namespace: model.Matrix.load(chip_model.sheets[namespace]) for namespace, model in self.manager.models.items() }
-      chip = Chip(id="v21", matrices=matrices, model=chip_model, name="Variant 21", runners=dict())
+    for namespace, executor in self.executors.items():
+      chip.runners[namespace] = executor.create_runner(chip)
 
-      for namespace, executor in self.manager.executors.items():
-        chip.runners[namespace] = executor.create_runner(chip)
-
-      return chip
-
-    self.chips = [create_chip()]
+    self.chips[chip.id] = chip
+    return chip
 
 
     # Protocol test
@@ -91,7 +128,7 @@ class App(engine.Application):
       print("Segments -> ", end="")
       pprint(p.segments)
 
-    except LocatedError as e:
+    except reader.LocatedError as e:
       print(e)
       e.display()
 
@@ -99,8 +136,11 @@ class App(engine.Application):
 
   def get_state(self):
     return {
-      "id": self.config['id'],
-      "name": self.setup['name'],
+      "info": {
+        "id": self.id,
+        "name": self.name,
+        "startTime": self.start_time
+      },
       "chips": {
         chip.id: {
           "id": chip.id,
@@ -112,9 +152,9 @@ class App(engine.Application):
           "runners": {
             namespace: runner.export() for namespace, runner in chip.runners.items()
           }
-        } for chip in self.chips
+        } for chip in self.chips.values()
       },
-      "chipModels": {
+      "models": {
         model.id: {
           "id": model.id,
           "name": model.name,
@@ -128,45 +168,79 @@ class App(engine.Application):
         "info": device.info,
         "model": namespace,
         "name": device.name
-      } for namespace, executor in self.manager.executors.items() for device in executor.get_device_info()],
-      "executors": { namespace: executor.export() for namespace, executor in self.manager.executors.items() }
+      } for namespace, executor in self.executors.items() for device in executor.get_device_info()],
+      "executors": { namespace: executor.export() for namespace, executor in self.executors.items() }
     }
 
 
+
+# -------
+
+
+import asyncio
+from pathlib import Path
+import websockets
+
+
+class App():
+  def __init__(self):
+    self.host = Host()
+    self.clients = set()
+
+    self.hostname = "127.0.0.1"
+    self.port = 4567
+
   async def connect(self, client):
-    await client.send(json.dumps(self.get_state()))
+    await client.send(json.dumps(self.host.get_state()))
     # self.broadcast(json.dumps(self.state))
 
     async for msg in client:
       message = json.loads(msg)
 
       if message["type"] == "command":
-        chip = next(chip for chip in self.chips if chip.id == message["chipId"])
+        chip = self.host.chips[message["chipId"]]
         namespace, command = next(iter(message["command"].items()))
         chip.runners[namespace].command(command)
 
+      if message["type"] == "createChip":
+        self.host.create_chip(model_id=message["modelId"], name="Untitled chip")
+
+      if message["type"] == "deleteChip":
+        # TODO: checks
+        del self.host.chips[message["chipId"]]
+
       if message["type"] == "setMatrix":
-        chip = next(chip for chip in self.chips if chip.id == message["chipId"])
+        chip = self.host.chips[message["chipId"]]
 
         for namespace, matrix_data in message["update"].items():
           chip.matrices[namespace].update(matrix_data)
 
-      self.broadcast(json.dumps(self.get_state()))
+      self.broadcast(json.dumps(self.host.get_state()))
       # await client.send(json.dumps(self.get_state()))
 
     # import asyncio
     # await asyncio.Future()
 
-  async def initialize(self):
-    path = Path(__file__).parent
-    self.setup = yaml.safe_load((path / "setup.yml").open())
+  def broadcast(self, message):
+    websockets.broadcast(self.clients, message)
 
-    for device in self.setup['devices']:
-      executor = self.manager.executors[device['model']]
-      executor.add_device(device)
+  def start(self):
+    asyncio.run(self.serve())
 
-    await self.manager.initialize()
+  async def serve(self):
+    async def handler(client):
+      self.clients.add(client)
+
+      try:
+        await self.connect(client)
+      finally:
+        self.clients.remove(client)
+
+    stop = asyncio.Future()
+
+    async with websockets.serve(handler, host=self.hostname, port=self.port):
+      await stop
 
 
 app = App()
-# app.start()
+app.start()

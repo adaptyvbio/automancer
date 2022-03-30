@@ -16,6 +16,8 @@ export abstract class BackendCommon {
   }
 
   abstract command(chipId: ChipId, command: RunnerCommand): Promise<void>;
+  abstract createChip(options: { modelId: ChipModelId; }): Promise<void>;
+  abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
 }
 
@@ -43,17 +45,22 @@ export interface Chip {
 }
 
 export interface ChipModel {
-  name: ChipModelId;
+  id: ChipModelId;
+  name: string;
   sheets: {
     control: ControlNamespace.Sheet;
   };
 }
 
 export interface HostState {
-  id: HostId;
-  name: string;
+  info: {
+    id: HostId;
+    name: string;
+    startTime: number;
+  };
+
   chips: Record<ChipId, Chip>;
-  chipModels: Record<ChipModelId, ChipModel>;
+  models: Record<ChipModelId, ChipModel>;
   devices: Device[];
 
   executors: {

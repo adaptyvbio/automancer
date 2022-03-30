@@ -57,6 +57,20 @@ export default class WebsocketBackend extends BackendCommon {
     }));
   }
 
+  async createChip(options: { modelId: string; }) {
+    this.#socket.send(JSON.stringify({
+      type: 'createChip',
+      modelId: options.modelId
+    }));
+  }
+
+  async deleteChip(chipId: ChipId) {
+    this.#socket.send(JSON.stringify({
+      type: 'deleteChip',
+      chipId
+    }));
+  }
+
   async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
     this.#socket.send(JSON.stringify({
       type: 'setMatrix',

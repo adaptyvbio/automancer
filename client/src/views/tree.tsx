@@ -12,16 +12,16 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
 
   render() {
     let tree = OrderedMap(
-      Object.entries(this.props.model.hosts).flatMap(([id, host]) => [
-        [List([id]), TreeEntryRecord({ name: host.state.name, selectable: false })],
-        [List([id, 'chips']), TreeEntryRecord({ name: 'Chips', selectable: false })],
-        ...Object.values(host.state.chips).map((chip, index): [TreePath, TreeEntryDef] => {
-          let model = host.state.chipModels[chip.modelId];
-          return [List([id, 'chips', index.toString()]), TreeEntryRecord({ name: `${chip.name} (${model.name})` })]
+      Object.values(this.props.model.hosts).flatMap((host) => [
+        [List([host.state.info.id]), TreeEntryRecord({ name: host.state.info.name, selectable: false })],
+        [List([host.state.info.id, 'chips']), TreeEntryRecord({ name: 'Chips', selectable: false })],
+        ...Object.values(host.state.chips).map((chip): [TreePath, TreeEntryDef] => {
+          let model = host.state.models[chip.modelId];
+          return [List([host.state.info.id, 'chips', chip.id]), TreeEntryRecord({ name: `${chip.name} (${model.name})` })]
         }),
-        [List([id, 'devices']), TreeEntryRecord({ name: 'Devices', selectable: false })],
+        [List([host.state.info.id, 'devices']), TreeEntryRecord({ name: 'Devices', selectable: false })],
         ...host.state.devices.map((device): [TreePath, TreeEntryDef] =>
-          [List([id, 'devices', device.id]), TreeEntryRecord({ name: device.name })]
+          [List([host.state.info.id, 'devices', device.id]), TreeEntryRecord({ name: device.name })]
         )
       ])
     );
@@ -41,28 +41,36 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
                 return;
               }
 
-              if ((sourcePath.size === 2) && (sourcePath.get(1) === 'chips')) {
+              if ((sourcePath.size >= 2) && (sourcePath.get(1) === 'chips')) {
                 let host = this.props.model.hosts[sourcePath.first()!];
 
-                return this.props.app.showContextMenu(event, [
-                  { id: 'add', name: 'Add chip', icon: 'add', children: [
-                    ...Object.entries(host.state.chipModels).map(([id, chipModel]) => (
-                      { id: 'add.' + id, name: chipModel.name }
-                    )),
-                    { id: 'div1', type: 'divider' },
-                    { id: 'c', name: 'Manage chip models' }
-                  ] }
-                ]);
-              }
+                if (sourcePath.size === 2) {
+                  return this.props.app.showContextMenu(event, [
+                    { id: 'add', name: 'Add chip', children: [
+                      ...Object.values(host.state.models).map((model) => (
+                        { id: model.id, name: model.name }
+                      )),
+                      { id: 'div', type: 'divider' },
+                      { id: 'manage', name: 'Manage chip models', disabled: true }
+                    ] }
+                  ], (menuPath) => {
+                    if (menuPath.first() === 'add') {
+                      let modelId = menuPath.get(1)!;
+                      host.backend.createChip({ modelId });
+                    }
+                  });
+                } else {
+                  let chip = host.state.chips[sourcePath.get(2)!];
 
-              if ((sourcePath.size === 3) && (sourcePath.get(1)) === 'chips') {
-                return this.props.app.showContextMenu(event, [
-                  { id: 'remove', name: 'Remove chip' }
-                ]);
+                  return this.props.app.showContextMenu(event, [
+                    { id: 'remove', name: 'Remove chip' }
+                  ], (menuPath) => {
+                    if (menuPath.first() === 'remove') {
+                      host.backend.deleteChip(chip.id);
+                    }
+                  });
+                }
               }
-            }}
-            onModify={(path, modifierId, value) => {
-              // this.setState({ tree });
             }} />
         </ViewBody>
       </>

@@ -27,15 +27,17 @@ export default class ViewChipSettings extends React.Component<Rf.ViewProps<Model
 
   componentDidUpdate() {
     if (!this.state.selectedHostChipId) {
+      return;
+
       let host = Object.values(this.props.model.hosts)[0].state;
       console.log('Debug: selected', [
-        host.id,
+        host.info.id,
         Object.values(host.chips)[0].id
       ]);
 
       this.setState({
         selectedHostChipId: [
-          host.id,
+          host.info.id,
           Object.values(host.chips)[0].id
         ]
       });
@@ -53,7 +55,7 @@ export default class ViewChipSettings extends React.Component<Rf.ViewProps<Model
   }
 
   get chipModel(): ChipModel | null {
-    return this.host && this.host.state.chipModels[this.chip!.modelId];
+    return this.host && this.host.state.models[this.chip!.modelId];
   }
 
   render() {
@@ -74,8 +76,8 @@ export default class ViewChipSettings extends React.Component<Rf.ViewProps<Model
                 menu={
                   Object.entries(this.props.model.hosts).map(([id, host]) => ({
                     id,
-                    name: host.state.name,
-                    children: Object.values(host.state.chips).map((chip, index) => ({
+                    name: host.state.info.name,
+                    children: Object.values(host.state.chips).map((chip) => ({
                       id: chip.id,
                       icon: 'memory',
                       name: chip.name

@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build:js": "esbuild src/index.tsx --bundle --outfile=lib/index.js",
-    "build:js:watch": "esbuild src/index.tsx --bundle --outfile=lib/index.js --watch",
+    "build:js:watch": "esbuild src/index.tsx --bundle --outfile=lib/index.js --sourcemap --watch",
     "build:css": "sass styles/main.scss:lib/styles.css --no-source-map",
     "build:css:watch": "sass styles/main.scss:lib/styles.css --watch",
     "test:types": "tsc"

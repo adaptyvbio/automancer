@@ -27,7 +27,7 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
     }
 
     let chip = Object.values(host.state.chips)[0];
-    let model = host.state.chipModels[chip.modelId];
+    let model = host.state.models[chip.modelId];
 
     let modelControl = model.sheets.control;
     let runner = chip.runners.control;

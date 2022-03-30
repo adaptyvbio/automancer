@@ -99,7 +99,7 @@ class App extends React.Component {
 
       app.setModel({
         hosts: {
-          [backend.state.id]: {
+          [backend.state.info.id]: {
             backend,
             state: backend.state
           }
@@ -112,8 +112,8 @@ class App extends React.Component {
         app.setModel({
           hosts: {
             ...app.state.model.hosts,
-            [backend.state.id]: {
-              ...app.state.model.hosts[backend.state.id],
+            [backend.state.info.id]: {
+              ...app.state.model.hosts[backend.state.info.id],
               state: backend.state
             }
           }

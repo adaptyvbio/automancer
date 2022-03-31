@@ -97,6 +97,7 @@
   }
 
   &-error {
+    justify-self: start;
     color: $app-orange;
   }
 }

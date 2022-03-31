@@ -1,8 +1,11 @@
 import { List, OrderedMap } from 'immutable';
 import * as React from 'react';
-
 import { Tree, TreeEntryDef, TreeEntryRecord, TreePath, ViewBody, ViewHeader, ViewProps } from 'retroflex';
-import { Model } from '..';
+
+import type { Model } from '..';
+import type { ChipId, HostId } from '../backends/common';
+import type ViewChipSettings from './chip-settings';
+import type ViewControl from './control';
 
 
 export default class ViewTree extends React.Component<ViewProps<Model>> {
@@ -70,6 +73,17 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
                     }
                   });
                 }
+              }
+            }}
+            onDoubleClick={(_event, path) => {
+              if ((path.size === 3) && (path.get(1) === 'chips')) {
+                let hostId = path.get(0) as HostId;
+                let chipId = path.get(2) as ChipId;
+
+                let selectedHostChipId: [HostId, ChipId] = [hostId, chipId];
+
+                this.props.app.layoutManager.findView<ViewChipSettings>('chip-settings')?.setState({ selectedHostChipId });
+                this.props.app.layoutManager.findView<ViewControl>('control')?.setState({ selectedHostChipId });
               }
             }} />
         </ViewBody>

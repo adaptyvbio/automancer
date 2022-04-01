@@ -5,6 +5,7 @@ import { Application, FragmentPaneRecord, ViewBlank, ViewPaneRecord } from 'retr
 
 import ViewChipSettings from './views/chip-settings';
 import ViewControl from './views/control';
+import ViewProtocolEditor from './views/protocol-editor';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
@@ -36,6 +37,12 @@ class App extends React.Component {
       compact: false
     });
 
+    app.registerViewGroup({
+      id: 'protocol',
+      name: 'Protocol',
+      compact: false
+    });
+
     app.registerViewModel({
       id: 'blank',
       name: 'Blank',
@@ -50,7 +57,7 @@ class App extends React.Component {
       name: 'Tree',
       groupId: 'general',
       icon: 'account-tree',
-      component: ViewTree as any,
+      component: ViewTree,
       shortcut: 'T'
     });
 
@@ -59,7 +66,7 @@ class App extends React.Component {
       name: 'Control',
       groupId: 'general',
       icon: 'toggle-on',
-      component: ViewControl as any,
+      component: ViewControl,
       shortcut: 'C'
     });
 
@@ -68,7 +75,16 @@ class App extends React.Component {
       name: 'Chip settings',
       groupId: 'general',
       icon: null,
-      component: ViewChipSettings as any,
+      component: ViewChipSettings,
+      shortcut: null
+    });
+
+    app.registerViewModel({
+      id: 'protocol-editor',
+      name: 'Protocol editor',
+      groupId: 'protocol',
+      icon: null,
+      component: ViewProtocolEditor,
       shortcut: null
     });
 
@@ -82,11 +98,11 @@ class App extends React.Component {
     app.setState({
       layout: FragmentPaneRecord({
         horizontal: true,
-        cuts: List([0.4, 0.7]),
+        cuts: List([0.4, 0.75]),
         panes: List([
-          ViewPaneRecord({ view: 'control' }),
-          ViewPaneRecord({ view: 'tree' }),
-          ViewPaneRecord({ view: 'chip-settings' })
+          ViewPaneRecord({ view: 'protocol-editor' }),
+          ViewPaneRecord({ view: 'chip-settings' }),
+          ViewPaneRecord({ view: 'tree' })
         ])
       })
     });

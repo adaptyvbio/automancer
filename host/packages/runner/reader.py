@@ -20,11 +20,12 @@ class Location:
       end=(self.start + end)
     )
 
-  def __iadd__(self, other):
-    self.start = min(self.start, other.start)
-    self.end = max(self.end, other.end)
-
-    return self
+  def __add__(self, other):
+    return Location(
+      source=self.source,
+      start=min(self.start, other.start),
+      end=max(self.end, other.end)
+    )
 
   def __repr__(self):
     return f"Range({self.start} -> {self.end})"
@@ -145,13 +146,22 @@ class LocatedString(str, LocatedValue):
     return self[0:len(stripped)]
 
 
+class LocatedDict(dict, LocatedValue):
+  def __new__(cls, *args, **kwargs):
+    return super(LocatedDict, cls).__new__(cls)
+
+  def __init__(self, value, location):
+    LocatedValue.__init__(self, value, location)
+    self.update(value)
+
+
 class LocatedList(list, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
-  def __init__(self, init, location):
-    LocatedValue.__init__(self, init, location)
-    self += init
+  def __init__(self, value, location):
+    LocatedValue.__init__(self, value, location)
+    self += value
 
 
 class Source(LocatedString):
@@ -235,31 +245,28 @@ def tokenize(raw_source):
 
 
 def analyze(tokens):
-  # from pprint import pprint
-  # pprint(tokens)
-
-  origin = dict()
   stack = [
-    { 'mode': 'dict', 'location': None, 'value': origin }
+    { 'mode': 'dict', 'location': None, 'value': dict() }
   ]
+
+  def add_location(item):
+    if item['location']:
+      if item['mode'] == 'dict':
+        return LocatedDict(item['value'], item['location'])
+      if item['mode'] == 'list':
+        return LocatedList(item['value'], item['location'])
+
+    return item['value']
+
 
   def descend(new_depth):
     while len(stack) - 1 > new_depth:
       add = stack.pop()
+      add_value = add_location(add)
       head = stack[-1]
-
-      # print(add)
-      # if add['mode'] == 'list':
-      #   add = { **add, 'value': LocatedList(add['value'], add['location']) }
-
-      if add['mode'] == 'list':
-        add_value = LocatedList(add['value'], add['location'])
-      else:
-        add_value = add['value']
 
       if head['mode'] == 'dict':
         head['value'][add['key']] = add_value
-        # head['value'][add['key']] = add['value']
       elif head['mode'] == 'list':
         head['value'].append(add_value)
 
@@ -270,8 +277,6 @@ def analyze(tokens):
           head['location'] += add['location']
 
   for token in tokens:
-    # print(stack)
-
     depth = len(stack) - 1
 
     if token['depth'] > depth:
@@ -311,14 +316,14 @@ def analyze(tokens):
         if token['value']:
           stack.append({
             'mode': 'dict',
-            'location': token['data'].location,
+            'location': token['key'].location + token['value'].location,
             'key': None,
             'value': { token['key']: token['value'] }
           })
         else:
           stack.append({
             'mode': 'dict',
-            'location': token['data'].location,
+            'location': token['key'].location,
             'key': None,
             'value': dict()
           })
@@ -339,7 +344,7 @@ def analyze(tokens):
 
   descend(0)
 
-  return origin
+  return add_location(stack[0])
 
 
 def get_offset(line, origin):
@@ -382,12 +387,19 @@ foo:
   - bar
   - baz:
       - foo
+      - p: x
+        s: a
+    s: n
+  - f
 """)
 
   print(x)
 
+  LocatedError("Error", x.location).display()
   LocatedError("Error", x['foo'].location).display()
+  LocatedError("Error", x['foo'][1].location).display()
   LocatedError("Error", x['foo'][1]['baz'].location).display()
+  LocatedError("Error", x['foo'][1]['baz'][1].location).display()
 
   # print(dumps({
   #   'foo': 'bar',

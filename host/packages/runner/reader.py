@@ -20,6 +20,12 @@ class Location:
       end=(self.start + end)
     )
 
+  def __iadd__(self, other):
+    self.start = min(self.start, other.start)
+    self.end = max(self.end, other.end)
+
+    return self
+
   def __repr__(self):
     return f"Range({self.start} -> {self.end})"
 
@@ -41,7 +47,11 @@ class LocatedError(Exception):
     self.location = location
 
   # TODO: improve by trying to find block limits
-  def display(self, file=sys.stderr):
+  def display(self, file=sys.stderr, *,
+    context_after = 2,
+    context_before = 4,
+    target_space = False
+  ):
     print(self, file=file)
 
     start = self.location.start_position
@@ -49,11 +59,6 @@ class LocatedError(Exception):
 
     if (start.line == end.line) and (start.column == end.column):
       end = Position(end.line, end.column + 1)
-
-    # Options
-    context_before = 4
-    context_after = 2
-    target_space = False
 
     lines = self.location.source.splitlines()
     width_line = math.ceil(math.log(end.line + 1 + context_after + 1, 10))
@@ -144,8 +149,9 @@ class LocatedList(list, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
-  def __init__(self, location):
-    LocatedValue.__init__(self, self, location)
+  def __init__(self, init, location):
+    LocatedValue.__init__(self, init, location)
+    self += init
 
 
 class Source(LocatedString):
@@ -229,9 +235,12 @@ def tokenize(raw_source):
 
 
 def analyze(tokens):
+  # from pprint import pprint
+  # pprint(tokens)
+
   origin = dict()
   stack = [
-    { 'mode': 'dict', 'value': origin }
+    { 'mode': 'dict', 'location': None, 'value': origin }
   ]
 
   def descend(new_depth):
@@ -239,12 +248,30 @@ def analyze(tokens):
       add = stack.pop()
       head = stack[-1]
 
+      # print(add)
+      # if add['mode'] == 'list':
+      #   add = { **add, 'value': LocatedList(add['value'], add['location']) }
+
+      if add['mode'] == 'list':
+        add_value = LocatedList(add['value'], add['location'])
+      else:
+        add_value = add['value']
+
       if head['mode'] == 'dict':
-        head['value'][add['key']] = add['value']
+        head['value'][add['key']] = add_value
+        # head['value'][add['key']] = add['value']
       elif head['mode'] == 'list':
-        head['value'].append(add['value'])
+        head['value'].append(add_value)
+
+      if add['location']:
+        if not head['location']:
+          head['location'] = add['location']
+        else:
+          head['location'] += add['location']
 
   for token in tokens:
+    # print(stack)
+
     depth = len(stack) - 1
 
     if token['depth'] > depth:
@@ -271,6 +298,7 @@ def analyze(tokens):
       else:
         stack.append({
           'mode': None,
+          'location': None,
           'key': token['key'],
           'value': None
         })
@@ -283,23 +311,31 @@ def analyze(tokens):
         if token['value']:
           stack.append({
             'mode': 'dict',
+            'location': token['data'].location,
             'key': None,
             'value': { token['key']: token['value'] }
           })
         else:
           stack.append({
             'mode': 'dict',
+            'location': token['data'].location,
             'key': None,
             'value': dict()
           })
 
           stack.append({
             'mode': None,
+            'location': None,
             'key': token['key'],
             'value': None
           })
       else:
         head['value'].append(token['value'])
+
+    if not head['location']:
+      head['location'] = token['data'].location
+    else:
+      head['location'] += token['data'].location
 
   descend(0)
 
@@ -341,12 +377,24 @@ def loads(raw_source):
 
 
 if __name__ == "__main__":
-  print(dumps({
-    'foo': 'bar',
-    'baz': 42,
-    'x': [3, 4, {
-      'y': 'p',
-      'z': 'x'
-    }],
-    'a': [[3, 4], [5, 6]]
-  }))
+  x = parse("""
+foo:
+  - bar
+  - baz:
+      - foo
+""")
+
+  print(x)
+
+  LocatedError("Error", x['foo'].location).display()
+  LocatedError("Error", x['foo'][1]['baz'].location).display()
+
+  # print(dumps({
+  #   'foo': 'bar',
+  #   'baz': 42,
+  #   'x': [3, 4, {
+  #     'y': 'p',
+  #     'z': 'x'
+  #   }],
+  #   'a': [[3, 4], [5, 6]]
+  # }))

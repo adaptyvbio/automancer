@@ -45,8 +45,6 @@ class Executor: # (BaseExecutor):
         valve['name']: len(self._valves) + index for index, valve in enumerate(spec['valves'])
       })
 
-    print(self._devices)
-
   def get_device_info(self):
     return [
       DeviceInformation(

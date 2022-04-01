@@ -10,6 +10,9 @@ import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
 
+import 'retroflex/tmp/styles.css';
+import '../lib/styles.css';
+
 
 export interface Host {
   backend: BackendCommon;
@@ -98,10 +101,10 @@ class App extends React.Component {
     app.setState({
       layout: FragmentPaneRecord({
         horizontal: true,
-        cuts: List([0.4, 0.75]),
+        cuts: List([0.75]),
         panes: List([
           ViewPaneRecord({ view: 'protocol-editor' }),
-          ViewPaneRecord({ view: 'chip-settings' }),
+          // ViewPaneRecord({ view: 'chip-settings' }),
           ViewPaneRecord({ view: 'tree' })
         ])
       })

@@ -28,6 +28,9 @@ import runner.reader as reader
 from collections import namedtuple
 
 Chip = namedtuple("Chip", ['id', 'matrices', 'model', 'name', 'runners'])
+Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
+DraftError = namedtuple("DraftError", ['message', 'range'])
+
 
 class Host:
   def __init__(self):
@@ -35,6 +38,7 @@ class Host:
     self.data_dir.mkdir(exist_ok=True)
 
     self.chips = dict()
+    self.drafts = dict()
 
     # os.chmod(self.data_dir, 0o775)
 
@@ -100,6 +104,10 @@ class Host:
         sys.exit(1)
 
 
+    # debug
+    self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+
+
   def create_chip(self, model_id, name):
     model = self.models[model_id]
     matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() }
@@ -111,27 +119,25 @@ class Host:
     self.chips[chip.id] = chip
     return chip
 
+  def create_draft(self, draft_id, source):
+    errors = list()
+    protocol = None
 
-    # Protocol test
     try:
-      p = Protocol(
-        Path("../test.yml"),
-        parsers={ namespace: model.Parser for namespace, model in self.manager.models.items() },
+      protocol = Protocol(
+        source,
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
         chip_models=self.models
       )
-
-      from pprint import pprint
-
-      print("Stages   -> ", end="")
-      pprint(p.stages)
-
-      print("Segments -> ", end="")
-      pprint(p.segments)
-
     except reader.LocatedError as e:
-      print(e)
-      e.display()
+      errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
 
+    self.drafts[draft_id] = Draft(
+      id=draft_id,
+      errors=errors,
+      protocol=protocol,
+      source=source
+    )
 
 
   def get_state(self):
@@ -169,7 +175,17 @@ class Host:
         "model": namespace,
         "name": device.name
       } for namespace, executor in self.executors.items() for device in executor.get_device_info()],
-      "executors": { namespace: executor.export() for namespace, executor in self.executors.items() }
+      "executors": { namespace: executor.export() for namespace, executor in self.executors.items() },
+      "drafts": {
+        draft.id: {
+          "id": draft.id,
+          "errors": [{
+            "message": error.message,
+            "range": error.range
+          } for error in draft.errors],
+          "source": draft.source
+        } for draft in self.drafts.values()
+      }
     }
 
 
@@ -204,6 +220,9 @@ class App():
 
       if message["type"] == "createChip":
         self.host.create_chip(model_id=message["modelId"], name="Untitled chip")
+
+      if message["type"] == "createDraft":
+        self.host.create_draft(draft_id=message["draftId"], source=message["source"])
 
       if message["type"] == "deleteChip":
         # TODO: checks

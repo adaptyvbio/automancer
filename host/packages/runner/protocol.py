@@ -90,8 +90,8 @@ class FragmentParser(BaseParser):
 
 
 class Protocol:
-  def __init__(self, path, parsers, chip_models):
-    data = parse(path.open().read())
+  def __init__(self, text, parsers, chip_models):
+    data = parse(text)
 
 
     parsers = {

@@ -64,6 +64,14 @@ export default class WebsocketBackend extends BackendCommon {
     }));
   }
 
+  async createDraft(draftId: string, source: string) {
+    this.#socket.send(JSON.stringify({
+      type: 'createDraft',
+      draftId,
+      source
+    }));
+  }
+
   async deleteChip(chipId: ChipId) {
     this.#socket.send(JSON.stringify({
       type: 'deleteChip',

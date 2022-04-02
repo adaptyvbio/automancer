@@ -42,6 +42,10 @@
       font-size: 1.1rem;
     }
 
+    &-root._open &-expand {
+      display: none;
+    }
+
     &-steps {
       display: flex;
       flex-direction: column;
@@ -49,6 +53,10 @@
 
       max-width: 400px;
       margin: 1rem 0;
+    }
+
+    &-root:not(._open) &-steps {
+      display: none;
     }
   }
 
@@ -59,11 +67,18 @@
       border: 1px solid #ddd;
       border-radius: 4px;
 
-      transition: border-color 150ms, box-shadow 150ms;
+      cursor: default;
+      transition: background-color 150ms, border-color 150ms, box-shadow 150ms;
 
       &:hover {
         border-color: #bbb;
-        box-shadow: inset -1px 1px 6px #0001;
+        box-shadow: -1px 1px 6px #0001;
+      }
+
+      &._context {
+        background-color: lighten($app-blue, 55%);
+        border-color: $app-blue;
+        box-shadow: -1px 1px 6px #0001;
       }
     }
 
@@ -104,17 +119,32 @@
     }
   }
 
-  &-control {
-    &-items {
+  &-segment {
+    &-list {
+      display: flex;
+      flex-direction: column;
+      row-gap: 0.8rem;
+
+      margin-top: 0.8rem;
+    }
+
+    &-features {
       display: grid;
       align-items: baseline;
       grid-template-columns: auto 1fr;
       column-gap: 0.8rem;
       row-gap: 0.4rem;
 
-      margin: 0 1rem;
+      margin: 0 0.4rem;
+      padding: 0 0.6rem;
+
       font-size: 1.1rem;
       font-weight: 500;
+
+      &:not(:last-child) {
+        padding-bottom: 0.8rem;
+        border-bottom: 1px solid #ddd;
+      }
 
       > :nth-child(odd) {
         font-size: 1.1em;
@@ -125,5 +155,39 @@
         color: #0074d9;
       }
     }
+  }
+}
+
+
+.view-blank {
+  &-root {
+    display: flex;
+    height: 100%;
+  }
+
+  &-container {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    row-gap: 0.6rem;
+
+    margin: auto;
+  }
+
+  &-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  &-action {
+    width: auto;
+    padding: 0.5rem 0.8rem;
+
+    background-color: $app-blue;
+    border-radius: 4px;
+
+    color: #fff !important;
+    text-align: center;
   }
 }

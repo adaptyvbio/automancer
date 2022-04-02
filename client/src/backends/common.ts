@@ -60,8 +60,42 @@ export interface Draft {
     message: string;
     range: [number, number];
   }[];
+  protocol: Protocol;
   source: string;
 }
+
+
+export interface Protocol {
+  name: string;
+  segments: ProtocolSegment[];
+  stages: ProtocolStage[];
+  data: {
+    control?: ControlNamespace.ProtocolData;
+  }
+}
+
+export interface ProtocolStage {
+  name: string;
+  seq: ProtocolSeq;
+  steps: ProtocolStep[];
+}
+
+export interface ProtocolStep {
+  name: string;
+  seq: ProtocolSeq;
+}
+
+export interface ProtocolSegment {
+  processNamespace: Namespace;
+  data: {
+    control?: ControlNamespace.SegmentData;
+    input?: InputNamespace.SegmentData;
+    timer?: TimerNamespace.SegmentData;
+  };
+}
+
+export type ProtocolSeq = [number, number];
+
 
 export interface HostState {
   info: {
@@ -80,6 +114,7 @@ export interface HostState {
   };
 }
 
+export type Namespace = 'control' | 'input' | 'timer';
 export type RunnerCommand = ControlNamespace.RunnerCommand;
 
 
@@ -129,5 +164,27 @@ export namespace ControlNamespace {
       type: 'signal';
       signal: Signal;
     };
+  }
+
+  export interface ProtocolData {
+    parameters: { name: string; }[];
+  }
+
+  export interface SegmentData {
+    valves: number[];
+  }
+}
+
+
+export namespace InputNamespace {
+  export interface SegmentData {
+    message: string;
+  }
+}
+
+
+export namespace TimerNamespace {
+  export interface SegmentData {
+    duration: number;
   }
 }

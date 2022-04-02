@@ -1,13 +1,17 @@
+from collections import namedtuple
 import re
-from typing import List, Optional, Set, TypedDict
 import regex
 
 from . import namespace
 from ..base import BaseParser
-from ...util.parser import EvaluatedCompositeValue, check_identifier, interpolate, parse_ref
+from ...util.parser import EvaluatedCompositeValue, Identifier, interpolate, parse_ref
+from ...util import schema as sc
 
 
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
+
+
+ValveParameter = namedtuple("ValveParameter", ['label', 'name'])
 
 
 class Parser(BaseParser):
@@ -23,9 +27,14 @@ class Parser(BaseParser):
 
 
   def enter_protocol(self, data_protocol):
-    for valve_name in data_protocol.get("parameters", list()):
-      check_identifier(valve_name)
-      self._valve_parameters.append(valve_name.value)
+    schema = sc.Dict({
+      'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({ 'name': sc.Optional(str) })))
+    }, allow_extra=True)
+
+    schema.validate(data_protocol)
+
+    for valve_name, valve_info in data_protocol.get('parameters', dict()).items():
+      self._valve_parameters.append(ValveParameter(name=valve_name.value, label=(valve_info['name'].value if valve_info else valve_name.value)))
 
   def enter_block(self, data_block):
     if "valves" in data_block:
@@ -43,6 +52,16 @@ class Parser(BaseParser):
   def handle_segment(self, data_action):
     return {
       'valves': self._valve_stack[-1]
+    }
+
+  def export_protocol(self):
+    return {
+      "parameters": [{ "name": param.name } for param in self._valve_parameters],
+    }
+
+  def export_segment(self, data):
+    return {
+      "valves": list(data['valves'])
     }
 
 
@@ -68,9 +87,9 @@ class Parser(BaseParser):
 
     valves = set()
 
-    for valve_index, valve_name in enumerate(self._valve_parameters):
-      if (not wildcard) and (valve_name == query_name)\
-        or (wildcard is not None) and valve_name.startswith(query_name) and (len(valve_name) > len(query_name)):
+    for valve_index, valve_param in enumerate(self._valve_parameters):
+      if (not wildcard) and (valve_param.name == query_name)\
+        or (wildcard is not None) and valve_param.name.startswith(query_name) and (len(valve_param.name) > len(query_name)):
         valves.add(valve_index)
 
     if len(valves) < 1:
@@ -99,7 +118,7 @@ class Parser(BaseParser):
     peak = None
 
     comma = False
-    selection: Optional[Set[int]] = None
+    selection = None
     state = 0
 
     def create_error(message = None):

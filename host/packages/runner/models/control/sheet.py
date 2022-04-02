@@ -1,8 +1,7 @@
 from collections import namedtuple
-from optparse import Option
 
-from ...util.parser import check_identifier
-from ...util.schema import And, List, Optional, ParseType, Schema, Transform, Use
+from ...util.parser import Identifier, check_identifier
+from ...util import schema as sc
 
 
 Valve = namedtuple("Valve", ["alias", "diagram_ref", "group", "id", "inverse", "name"])
@@ -43,21 +42,21 @@ class Sheet:
   def __init__(self, data, *, dir):
     # -- Validate schema ----------------------------------
 
-    schema = Schema({
-      "diagram": Optional(str),
-      "groups": Optional(List({
-        "id": And(str, Use(check_identifier)),
-        "name": Optional(str),
-        "inverse": Optional(ParseType(bool))
+    schema = sc.Dict({
+      'diagram': sc.Optional(str),
+      'groups': sc.Optional(sc.List({
+        'id': Identifier(),
+        'name': sc.Optional(str),
+        'inverse': sc.Optional(sc.ParseType(bool))
       })),
-      "valves": Optional(List({
-        "alias": Optional(And(str, Use(check_identifier))),
-        "id": Transform(parse_valve_id, prevalidate=str),
-        "inverse": Optional(ParseType(bool)),
-        "name": Optional(str),
-        "diagram": Optional(Transform(parse_diagram_ref, prevalidate=str))
+      'valves': sc.Optional(sc.List({
+        'alias': sc.Optional(Identifier()),
+        'id': sc.Transform(parse_valve_id, str),
+        'inverse': sc.Optional(sc.ParseType(bool)),
+        'name': sc.Optional(str),
+        'diagram': sc.Optional(sc.Transform(parse_diagram_ref, str))
       }))
-    })
+    }, allow_extra=True)
 
     data = schema.transform(data)
 

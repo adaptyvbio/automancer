@@ -1,6 +1,6 @@
 from .reader import parse
-from .util.parser import check_identifier
-from .util.schema import And, Optional, Schema, Use
+from .util.parser import Identifier
+from .util import schema as sc
 
 
 class Model:
@@ -12,18 +12,18 @@ class Model:
   def load(path, units):
     data = parse(path.open().read())
 
-    schema = Schema({
-      "id": Optional(And(str, Use(check_identifier))),
-      "name": str
-    })
+    schema = sc.Dict({
+      'id': sc.Optional(Identifier()),
+      'name': str
+    }, allow_extra=True)
 
     schema.validate(data)
 
-    model_id = data.get("id") or str(abs(hash(path)))
+    model_id = data.get('id') or str(abs(hash(path)))
 
     return Model(
       id=model_id,
-      name=data.get("name", f"Model {model_id}"),
+      name=data.get('name', f"Model {model_id}"),
       sheets={
         namespace: unit.Sheet(data, dir=path.parent) for namespace, unit in units.items()
       }

@@ -5,6 +5,7 @@ import re
 from .models.base import BaseParser
 from .util.parser import interpolate, parse_call
 from .reader import parse
+from .models.input.parser import Parser as InputParser
 from .models.timer.parser import Parser as TimerParser
 
 
@@ -44,21 +45,6 @@ class BuiltinParser(BaseParser):
         }
       }
 
-
-class InputParser(BaseParser):
-  def __init__(self, master):
-    self._master = master
-
-  def parse_action(self, data_action):
-    if "confirm" in data_action:
-      message, context = data_action["confirm"]
-
-      return {
-        'role': 'process',
-        'data': {
-          'message': message
-        }
-      }
 
 class FragmentParser(BaseParser):
   def __init__(self, master):
@@ -103,6 +89,7 @@ class Protocol:
       **parsers
     }
 
+    self.parser_classes = parsers
     self.parsers = { namespace: Parser(self) for namespace, Parser in parsers.items() }
 
     self.chip_models = dict()
@@ -162,6 +149,28 @@ class Protocol:
       )
 
       self.stages.append(stage)
+
+  def export(self):
+    return {
+      "name": self.name,
+      "data": {
+        namespace: parser.export_protocol() for namespace, parser in self.parsers.items()
+      },
+      "segments": [{
+        "data": {
+          namespace: self.parser_classes[namespace].export_segment(data) for namespace, data in segment.data.items()
+        },
+        "processNamespace": segment.process_namespace
+      } for segment in self.segments],
+      "stages": [{
+        "name": stage.name,
+        "seq": stage.seq,
+        "steps": [{
+          "name": step.name,
+          "seq": step.seq
+        } for step in stage.steps]
+      } for stage in self.stages]
+    }
 
 
   def parse_action(self, data):

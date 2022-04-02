@@ -5,6 +5,7 @@ import regex
 import yaml
 
 from ..reader import LocatedString, LocatedValue
+from .schema import SchemaType
 
 
 # Location = namedtuple("Location", ["column", "line"])
@@ -224,6 +225,16 @@ regexp_ref = re.compile(r"^\$([a-zA-Z0-9]+)", re.ASCII)
 def parse_ref(expr):
   match = regexp_ref.match(expr)
   return (match.groups()[0], match.span()[1]) if match else None
+
+
+class Identifier(SchemaType):
+  def __init__(self, *, allow_leading_digit = False):
+    super().__init__(str)
+    self._allow_leading_digit = allow_leading_digit
+
+  def validate(self, test):
+    check_identifier(test, allow_leading_digit=self._allow_leading_digit)
+
 
 
 ## Calls

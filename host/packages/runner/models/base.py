@@ -31,6 +31,9 @@ class BaseParser:
   def handle_segment(self, data_action):
     pass
 
+  def export_protocol(self):
+    return dict()
+
 
   # Return value:
   #  { data: { ... }, role: 'process' }

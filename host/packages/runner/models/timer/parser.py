@@ -21,6 +21,11 @@ class Parser(BaseParser):
         'duration': value
       }
 
+  def export_segment(data):
+    return {
+      "duration": data['duration']
+    }
+
 
 
 # ---

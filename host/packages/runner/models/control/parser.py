@@ -59,7 +59,7 @@ class Parser(BaseParser):
       "parameters": [{ "name": param.name } for param in self._valve_parameters],
     }
 
-  def export_segment(self, data):
+  def export_segment(data):
     return {
       "valves": list(data['valves'])
     }

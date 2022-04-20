@@ -4,6 +4,7 @@ import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
 import type { ChipId, Draft, DraftId, HostId } from '../backends/common';
+import { ProtocolTimeline } from '../components/protocol-timeline';
 import * as util from '../util';
 
 
@@ -47,7 +48,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
 
     this.state = {
       mode: 'visual',
-      draftId: '828b7937-0621-4613-952c-bd37be6f856f', // debug
+      draftId: null, // debug
       selectedHostId: null
     };
   }
@@ -61,12 +62,20 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
     return (this.host && this.state.draftId && this.host.state.drafts[this.state.draftId]) || null;
   }
 
+  componentDidMount() {
+    // this.setState({  })
+  }
+
   componentDidUpdate() {
     // let host = Object.values(this.props.model.hosts)[0];
 
     // if (host && !host.state.protocols.a) {
     //   host.backend.createProtocol('a', text);
     // }
+
+    if (!this.state.draftId) {
+      this.setState({ draftId: Object.keys(this.host!.state.drafts)[0] });
+    }
   }
 
   createDraft(source: string) {
@@ -169,23 +178,17 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
           </div>
         </Rf.ViewHeader>
         <Rf.ViewBody>
-          {this.draft && (
-            this.state.mode === 'visual'
-              ? <VisualEditor
-                app={this.props.app}
-                draft={this.draft}
-                setTextMode={() => {
-                  this.setState({ mode: 'text' });
-                }} />
-              : <TextEditor
-                  draft={this.draft}
-                  ref={this.refTextEditor}
-                  onSave={(source) => {
-                    this.host!.backend.createDraft(this.draft!.id, source);
-                  }} />
-          )}
+          <div className="protocol-root">
+            {/* style={{ border: '1px solid #f000', margin: '1rem' }}> */}
+            <h2>Mitomi Main Protocol</h2>
 
-          {false && <div className="proto-root">
+            <h3>Timeline</h3>
+            <ProtocolTimeline />
+
+            <h3>Steps</h3>
+          </div>
+
+          {true && <div className="proto-root">
             <div className="proto-stage-root _open">
               <a href="#" className="proto-stage-header">
                 <div className="proto-stage-header-expand"><Rf.Icon name="expand-more" /></div>
@@ -258,6 +261,22 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
               </a>
             </div>
           </div>}
+
+          {/* {this.draft && (
+            this.state.mode === 'visual'
+              ? <VisualEditor
+                app={this.props.app}
+                draft={this.draft}
+                setTextMode={() => {
+                  this.setState({ mode: 'text' });
+                }} />
+              : <TextEditor
+                  draft={this.draft}
+                  ref={this.refTextEditor}
+                  onSave={(source) => {
+                    this.host!.backend.createDraft(this.draft!.id, source);
+                  }} />
+          )} */}
         </Rf.ViewBody>
       </>
     );
@@ -335,15 +354,32 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
                     <div className="proto-segment-list">
                       {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                         let segmentIndex = step.seq[0] + segmentRelIndex;
-                        let segment = protocol.segments[segmentIndex];
+                        let segment = protocol!.segments[segmentIndex];
                         let features = [];
 
-                        if (segment.data.timer) {
-                          features.push(['⧖', formatDuration(segment.data.timer.duration)]);
+                        switch (segment.processNamespace) {
+                          case 'input': {
+                            features.push(['⌘', segment.data.input!.message]);
+                            break;
+                          }
+
+                          case 'timer': {
+                            features.push(['⧖', formatDuration(segment.data.timer!.duration)]);
+                            break;
+                          }
+
+                          default: {
+                            features.push(['⦿', 'Unknown process']);
+                            break;
+                          }
                         }
 
-                        if (segment.data.input) {
-                          features.push(['⌘', segment.data.input.message]);
+                        if (segment.data.control) {
+                          let control = segment.data.control;
+
+                          if (control.valves.length > 0) {
+                            features.push(['→', control.valves.map((valveIndex) => protocol!.data.control!.parameters[valveIndex].label).join(', ')]);
+                          }
                         }
 
                         return (

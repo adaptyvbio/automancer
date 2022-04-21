@@ -188,6 +188,15 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
             <h3>Steps</h3>
           </div>
 
+                    {/* <div className="proto-step-featurelist">
+                      <div className="proto-step-feature">
+                        <span>→</span><span>Biotin BSA</span>
+                      </div>
+                      <div className="proto-step-feature">
+                        <span>⧖</span><span>6 min</span>
+                      </div>
+                    </div> */}
+
           {true && <div className="proto-root">
             <div className="proto-stage-root _open">
               <a href="#" className="proto-stage-header">
@@ -197,18 +206,60 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
               <div className="proto-stage-steps">
                 <div className="proto-step-item">
                   <div className="proto-step-header">
+                    <div className="proto-step-time">13:49</div>
                     <div className="proto-step-name">Step #1</div>
-                    <div className="proto-step-featurelist">
-                      <div className="proto-step-feature">
-                        <span>→</span><span>Biotin BSA</span>
-                      </div>
-                      <div className="proto-step-feature">
-                        <span>⧖</span><span>6 min</span>
-                      </div>
+                  </div>
+                </div>
+                <div className="proto-step-item">
+                  <div className="proto-step-header">
+                    <div className="proto-step-time">13:49</div>
+                    <div className="proto-step-name">Step #1</div>
+                  </div>
+                  <div className="proto-segment-list">
+                    <div className="proto-segment-features" style={{ gridRow: 1 }}>
+                      <span>→</span><span>Biotin BSA</span>
+                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
+                      <span>⁂</span><span>Button</span>
+                      <span>↬</span><span>Pump 200 µl</span>
+                      <span>⌘</span><span>Confirm action</span>
+                      <span>⧖</span><span>Wait 6 min</span>
+                      <span>✱</span><span>Notify</span>
+                    </div>
+                    <button type="button" className="proto-segment-divider" style={{ gridRow: 1 }}>
+                      <span></span>
+                      <span>Add segment</span>
+                      <span></span>
+                    </button>
+                    <div className="proto-segment-features" style={{ gridRow: 2 }}>
+                      <span>→</span><span>Flow biotin BSA</span>
+                      <span>⧖</span><span>Wait 20 min</span>
+                      <span>⎈</span><span>Enable multiplexer M8<sup>+</sup></span>
+                    </div>
+                    <button type="button" className="proto-segment-divider" style={{ gridRow: 2 }}>
+                      <span></span>
+                      <span>Add segment</span>
+                      <span></span>
+                    </button>
+                    <div className="proto-segment-features">
+                      <span>→</span><span>Biotin BSA</span>
+                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
                     </div>
                   </div>
                 </div>
+                <div className="proto-step-item">
+                  <div className="proto-step-header">
+                    <div className="proto-step-time">13:49</div>
+                    <div className="proto-step-name">Step #1</div>
+                  </div>
+                  <div className="proto-segment-list">
+                    <div className="proto-segment-features">
+                      <span>⌘</span><span>Confirm action</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
+              <div className="proto-stage-steps">
                 <div className="proto-step-item">
                   <div className="proto-step-header">
                     <div className="proto-step-name">Step #2</div>

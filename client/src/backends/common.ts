@@ -60,7 +60,7 @@ export interface Draft {
     message: string;
     range: [number, number];
   }[];
-  protocol: Protocol;
+  protocol: Protocol | null;
   source: string;
 }
 
@@ -167,7 +167,7 @@ export namespace ControlNamespace {
   }
 
   export interface ProtocolData {
-    parameters: { name: string; }[];
+    parameters: { label: string; }[];
   }
 
   export interface SegmentData {

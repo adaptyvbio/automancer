@@ -3,9 +3,83 @@ import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
-import type { Chip, ChipId, ChipModel, Draft, DraftId, HostId } from '../backends/common';
+import type { Chip, ChipId, ChipModel, ControlNamespace, Draft, DraftId, HostId, Protocol } from '../backends/common';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import * as util from '../util';
+
+
+interface ControlEngagementProps {
+  chip: Chip;
+  draft: Draft;
+  model: ChipModel;
+
+  code: ControlNamespace.Code;
+  setCode(code: ControlNamespace.Code): void;
+}
+
+class PlanDataComponent extends React.Component<ControlEngagementProps> {
+  constructor(props: ControlEngagementProps) {
+    super(props);
+  }
+
+  render() {
+    let protocol = this.props.draft.protocol!;
+    let sheet = this.props.model.sheets.control;
+
+    let args = this.props.code.arguments;
+
+    return (
+      <>
+        <h4>Control settings</h4>
+        <div className="protocol-config-form">
+          {protocol.data.control?.parameters.map((param, paramIndex) => {
+            let argValveIndex = args[paramIndex];
+            let argValve = sheet.valves[argValveIndex!];
+
+            return (
+              <label className="protocol-config-entry" key={paramIndex}>
+                <div>{param.label}</div>
+                <Rf.MenuSelect
+                  menu={sheet.groups.map((group, groupIndex) => ({
+                    id: groupIndex,
+                    name: group.name,
+                    children: Array.from(sheet.valves.entries())
+                      .filter(([_valveIndex, valve]) => groupIndex === valve.group)
+                      .map(([valveIndex, valve]) => ({
+                        id: valveIndex,
+                        name: valve.names[0]
+                      }))
+                  }))}
+                  onSelect={(selection) => {
+                    // this.setState((state) => ({ arguments: state.arguments.set(paramIndex, selection.get(1) as number) }));
+                    this.props.setCode({
+                      arguments: [
+                        ...args.slice(0, paramIndex),
+                        selection.get(1) as number,
+                        ...args.slice(paramIndex + 1)
+                      ]
+                    });
+                  }}
+                  selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} />
+              </label>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+}
+
+const Units = new Map([
+  ['control', {
+    PlanDataComponent,
+    createCode(protocol: Protocol): ControlNamespace.Code {
+      return {
+        arguments: protocol.data.control!.parameters.map(() => null)
+      };
+    }
+  }]
+]);
 
 
 declare global {
@@ -31,15 +105,20 @@ stages:
       - duration: 4 sec
 `;
 
+interface PlanData {
+  chipId: ChipId;
+  data: {
+    control: ControlNamespace.Code;
+  };
+}
+
 
 type ViewProtocolEditorMode = 'text' | 'visual';
 
 interface ViewProtocolEditorState {
   draftId: DraftId | null;
-  engagement: {
-    chipId: ChipId;
-  } | null;
   mode: ViewProtocolEditorMode;
+  planData: PlanData | null;
   selectedHostId: HostId | null;
 }
 
@@ -51,8 +130,8 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
 
     this.state = {
       draftId: null,
-      engagement: null,
       mode: 'visual',
+      planData: null,
       selectedHostId: null
     };
   }
@@ -85,9 +164,9 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
       this.setState({ draftId: Object.keys(this.host.state.drafts)[0] });
     }
 
-    if (this.draft && !this.state.engagement) {
-      this.setState({ engagement: { chipId: Object.values(this.host!.state.chips)[0].id } });
-    }
+    // if (this.draft && !this.state.engagement) {
+    //   this.setState({ engagement: { chipId: Object.values(this.host!.state.chips)[0].id } });
+    // }
   }
 
   createDraft(source: string) {
@@ -111,8 +190,9 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                   { id: 'file',
                     name: 'File',
                     children: [
-                      { id: 'new', name: 'New' },
-                      { id: 'open', name: 'Open file...' },
+                      { id: 'new', name: 'New', icon: 'note-add' },
+                      { id: 'divider', type: 'divider' },
+                      { id: 'open', name: 'Open file...', icon: 'folder' },
                       { id: 'recent', name: 'Open recent', children: [
                         { id: '_none', name: 'No recent protocols', disabled: true }
                       ] },
@@ -123,7 +203,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                   { id: 'edit',
                     name: 'Edit',
                     children: [
-                      { id: 'undo', name: 'Undo', shortcut: '⌘ Z', disabled: (this.state.mode !== 'text') }
+                      { id: 'undo', name: 'Undo', icon: 'undo', shortcut: '⌘ Z', disabled: (this.state.mode !== 'text') }
                     ] }
                 ]}
                 onSelect={(path) => {
@@ -174,8 +254,8 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
             <Rf.Select
               selectedOptionPath={[this.state.mode]}
               menu={[
-                { id: 'visual', name: 'Visual' },
-                { id: 'text', name: 'Code' },
+                { id: 'visual', name: 'Visual', icon: 'wysiwyg' },
+                { id: 'text', name: 'Code', icon: 'code' }
               ]}
               onSelect={([mode]) => {
                 this.setState({ mode: mode as ViewProtocolEditorMode });
@@ -194,165 +274,16 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
           </div>
         </Rf.ViewHeader>
         <Rf.ViewBody>
-          <div className="protocol-root">
-            {/* style={{ border: '1px solid #f000', margin: '1rem' }}> */}
-            <h2>Mitomi Main Protocol</h2>
-
-            <div className="protocol-header">
-              <span><Rf.Icon name="timeline" /></span>
-              <h3>Timeline</h3>
-            </div>
-
-            <section>
-              <ProtocolTimeline />
-            </section>
-
-            <div className="protocol-header">
-              <span><Rf.Icon name="format-list-bulleted" /></span>
-              <h3>Steps</h3>
-            </div>
-
-            <section>
-          {true && <div className="proto-root">
-            <div className="proto-stage-root _open">
-              <a href="#" className="proto-stage-header">
-                <div className="proto-stage-header-expand"><Rf.Icon name="expand-more" /></div>
-                <h3 className="proto-stage-name">Preparation</h3>
-              </a>
-              <div className="proto-stage-steps">
-                <div className="proto-step-item">
-                  <div className="proto-step-header">
-                    <div className="proto-step-time">13:49</div>
-                    <div className="proto-step-name">Step #1</div>
-                  </div>
-                </div>
-                <div className="proto-step-item">
-                  <div className="proto-step-header">
-                    <div className="proto-step-time">13:49</div>
-                    <div className="proto-step-name">Step #1</div>
-                  </div>
-                  <div className="proto-segment-list">
-                    <div className="proto-segment-features" style={{ gridRow: 1 }}>
-                      <span>→</span><span>Biotin BSA</span>
-                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                      <span>⁂</span><span>Button</span>
-                      <span>↬</span><span>Pump 200 µl</span>
-                      <span>⌘</span><span>Confirm action</span>
-                      <span>⧖</span><span>Wait 6 min</span>
-                      <span>✱</span><span>Notify</span>
-                    </div>
-                    <button type="button" className="proto-segment-divider" style={{ gridRow: 1 }}>
-                      <span></span>
-                      <span>Add segment</span>
-                      <span></span>
-                    </button>
-                    <div className="proto-segment-features" style={{ gridRow: 2 }}>
-                      <span>→</span><span>Flow biotin BSA</span>
-                      <span>⧖</span><span>Wait 20 min</span>
-                      <span>⎈</span><span>Enable multiplexer M8<sup>+</sup></span>
-                    </div>
-                    <button type="button" className="proto-segment-divider" style={{ gridRow: 2 }}>
-                      <span></span>
-                      <span>Add segment</span>
-                      <span></span>
-                    </button>
-                    <div className="proto-segment-features">
-                      <span>→</span><span>Biotin BSA</span>
-                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="proto-step-item">
-                  <div className="proto-step-header">
-                    <div className="proto-step-time">13:49</div>
-                    <div className="proto-step-name">Step #1</div>
-                  </div>
-                  <div className="proto-segment-list">
-                    <div className="proto-segment-features">
-                      <span>⌘</span><span>Confirm action</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="proto-stage-root">
-              <div className="proto-stage-header">
-                <Rf.Icon name="expand-more" />
-                <h3 className="proto-stage-name">Preparation</h3>
-                <a href="#" className="proto-stage-expand">⋯</a>
-              </div>
-            </div>
-            <div className="proto-stage-root">
-              <a href="#" className="proto-stage-header">
-                <Rf.Icon name="expand-more" />
-                <h3 className="proto-stage-name">Preparation</h3>
-                <div className="proto-stage-expand">⋯</div>
-              </a>
-            </div>
-          </div>}
-            </section>
-
-            <div className="protocol-header">
-              <span><Rf.Icon name="flag" /></span>
-              <h3>Start</h3>
-
-              {(() => {
-                let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
-                let model = chip && this.host.state.models[chip.modelId];
-
-                return (
-                  <div>
-                    <Rf.MenuSelect
-                      menu={Object.values(this.host.state.chips).map((chip) => ({
-                        id: chip.id,
-                        name: chip.name
-                      }))}
-                      selectedOptionPath={chip ? [chip.id] : null}
-                      onSelect={(selection) => {
-                        this.setState({
-                          engagement: {
-                            chipId: selection.first() as ChipId
-                          }
-                        })
-                      }} />
-                  </div>
-                );
-              })()}
-            </div>
-
-            <section>
-              <div className="protocol-config-root">
-                {(() => {
-                  let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
-                  let model = chip && this.host.state.models[chip.modelId];
-                  return chip && <ControlEngagement chip={chip} draft={this.draft!} model={model!} />;
-                })()}
-                {(() => {
-                  let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
-                  let model = chip && this.host.state.models[chip.modelId];
-                  return chip && <ControlEngagement chip={chip} draft={this.draft!} model={model!} />;
-                })()}
-              </div>
-              <div className="protocol-config-submit">
-                <button type="button">Start</button>
-              </div>
-            </section>
-          </div>
-
-                    {/* <div className="proto-step-featurelist">
-                      <div className="proto-step-feature">
-                        <span>→</span><span>Biotin BSA</span>
-                      </div>
-                      <div className="proto-step-feature">
-                        <span>⧖</span><span>6 min</span>
-                      </div>
-                    </div> */}
-
-          {/* {this.draft && (
+          {this.draft && (
             this.state.mode === 'visual'
               ? <VisualEditor
                 app={this.props.app}
                 draft={this.draft}
+                host={this.host}
+                planData={this.state.planData}
+                setPlanData={(planData) => {
+                  this.setState({ planData });
+                }}
                 setTextMode={() => {
                   this.setState({ mode: 'text' });
                 }} />
@@ -362,7 +293,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                   onSave={(source) => {
                     this.host!.backend.createDraft(this.draft!.id, source);
                   }} />
-          )} */}
+          )}
         </Rf.ViewBody>
       </>
     );
@@ -370,68 +301,13 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
 }
 
 
-interface ControlEngagementProps {
-  chip: Chip;
-  draft: Draft;
-  model: ChipModel;
-}
-
-class ControlEngagement extends React.Component<ControlEngagementProps, { arguments: List<number | null>; }> {
-  constructor(props: ControlEngagementProps) {
-    super(props);
-
-    this.state = {
-      arguments: List(props.draft.protocol!.data.control!.parameters.map(() => null))
-    };
-  }
-
-  // get sheet(): ControlNamespace.Sheet {
-  //   return this.props.model.sheets.control;
-  // }
-
-  render() {
-    let protocol = this.props.draft.protocol!;
-    let sheet = this.props.model.sheets.control;
-
-    return (
-      <>
-        <h4>Control settings</h4>
-        <div className="protocol-config-form">
-          {protocol.data.control?.parameters.map((param, paramIndex) => {
-            let argValveIndex = this.state.arguments.get(paramIndex) as number | null;
-            let argValve = sheet.valves[argValveIndex!];
-
-            return (
-              <label className="protocol-config-entry" key={paramIndex}>
-                <div>{param.label}</div>
-                <Rf.MenuSelect
-                  menu={sheet.groups.map((group, groupIndex) => ({
-                    id: groupIndex,
-                    name: group.name,
-                    children: Array.from(sheet.valves.entries())
-                      .filter(([_valveIndex, valve]) => groupIndex === valve.group)
-                      .map(([valveIndex, valve]) => ({
-                        id: valveIndex,
-                        name: valve.names[0]
-                      }))
-                  }))}
-                  onSelect={(selection) => {
-                    this.setState((state) => ({ arguments: state.arguments.set(paramIndex, selection.get(1) as number) }));
-                  }}
-                  selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} />
-              </label>
-            );
-          })}
-        </div>
-      </>
-    );
-  }
-}
-
 
 interface VisualEditorProps {
   app: Application;
   draft: Draft;
+  host: Host;
+  planData: PlanData | null;
+  setPlanData(planData: PlanData | null): void;
   setTextMode(): void;
 }
 
@@ -444,7 +320,7 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
     super(props);
 
     this.state = {
-      openStageIndices: ImSet([0, 1])
+      openStageIndices: ImSet([0])
     };
   }
 
@@ -462,97 +338,170 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
       </div>
     }
 
+
+    let chip = this.props.planData && this.props.host.state.chips[this.props.planData.chipId];
+    let model = chip && this.props.host.state.models[chip.modelId];
+
     return (
-      <div className="proto-root">
-        {protocol.stages.map((stage, stageIndex) => (
-          <div className={util.formatClass('proto-stage-root', { '_open': this.state.openStageIndices.has(stageIndex) })} key={stageIndex}>
-            <a href="#" className="proto-stage-header" onClick={(event) => {
-              event.preventDefault();
-              this.setState({ openStageIndices: util.toggleSet(this.state.openStageIndices, stageIndex) });
-            }}>
-              <Rf.Icon name="expand-more" />
-              <h3 className="proto-stage-name">{stage.name}</h3>
-              {(stage.steps.length > 0) && <div className="proto-stage-expand">⋯</div>}
-            </a>
-            <div className="proto-stage-steps">
-              {stage.steps.map((step, stepIndex) => (
-                <ContextMenuArea onContextMenu={(event) => {
-                  return this.props.app.showContextMenu(event, [
-                    { id: 'header', name: 'Protocol step', type: 'header' },
-                    { id: 'notify', name: 'Add notification' }
-                  ], (menuPath) => {
+      <div className="protocol-root">
+        <h2>{protocol.name ?? 'Untitled protocol'}</h2>
 
-                  });
-                }} key={stepIndex}>
-                  <div className="proto-step-item">
-                    <div className="proto-step-header">
-                      <div className="proto-step-name">{step.name}</div>
-                      {/* <div className="proto-step-featurelist">
-                        <div className="proto-step-feature">
-                          <span>→</span><span>Biotin BSA</span>
-                        </div>
-                        <div className="proto-step-feature">
-                          <span>⧖</span><span>6 min</span>
-                        </div>
-                      </div> */}
-                    </div>
-                    <div className="proto-segment-list">
-                      {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
-                        let segmentIndex = step.seq[0] + segmentRelIndex;
-                        let segment = protocol!.segments[segmentIndex];
-                        let features = [];
+        <div className="protocol-header">
+          <span><Rf.Icon name="timeline" /></span>
+          <h3>Timeline</h3>
+        </div>
 
-                        switch (segment.processNamespace) {
-                          case 'input': {
-                            features.push(['⌘', segment.data.input!.message]);
-                            break;
-                          }
+        <section>
+          <ProtocolTimeline />
+        </section>
 
-                          case 'timer': {
-                            features.push(['⧖', formatDuration(segment.data.timer!.duration)]);
-                            break;
-                          }
+        <div className="protocol-header">
+          <span><Rf.Icon name="format-list-bulleted" /></span>
+          <h3>Sequence</h3>
+        </div>
 
-                          default: {
-                            features.push(['⦿', 'Unknown process']);
-                            break;
-                          }
-                        }
-
-                        if (segment.data.control) {
-                          let control = segment.data.control;
-
-                          if (control.valves.length > 0) {
-                            features.push(['→', control.valves.map((valveIndex) => protocol!.data.control!.parameters[valveIndex].label).join(', ')]);
-                          }
-                        }
-
-                        return (
-                          <div className="proto-segment-features" key={segmentRelIndex}>
-                            {features.map(([symbol, text], featureIndex) => (
-                              <React.Fragment key={featureIndex}>
-                                <span>{symbol}</span>
-                                <span>{text}</span>
-                              </React.Fragment>
-                            ))}
-                          </div>
-                        );
-                      })}
-                      {/* <div className="proto-segment-features">
-                        <span>→</span><span>Biotin BSA</span>
-                        <span>⎈</span><span>Multiplexer<sup>+</sup></span>
+        <section>
+          <div className="proto-root">
+            {protocol.stages.map((stage, stageIndex) => (
+              <div className={util.formatClass('proto-stage-root', { '_open': this.state.openStageIndices.has(stageIndex) })} key={stageIndex}>
+                <a href="#" className="proto-stage-header" onClick={(event) => {
+                  event.preventDefault();
+                  this.setState({ openStageIndices: util.toggleSet(this.state.openStageIndices, stageIndex) });
+                }}>
+                  <Rf.Icon name="expand-more" />
+                  <h3 className="proto-stage-name">{stage.name}</h3>
+                  {(stage.steps.length > 0) && <div className="proto-stage-expand">⋯</div>}
+                </a>
+                <div className="proto-stage-steps">
+                  {stage.steps.map((step, stepIndex) => (
+                    <div className="proto-step-item" key={stepIndex}>
+                      <div className="proto-step-header">
+                        <div className="proto-step-time">13:15</div>
+                        <div className="proto-step-name">{step.name}</div>
                       </div>
-                      <div className="proto-segment-features">
-                        <span>→</span><span>Biotin BSA</span>
-                        <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                      </div> */}
+                      <div className="proto-segment-list">
+                        {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
+                          let segmentIndex = step.seq[0] + segmentRelIndex;
+                          let segment = protocol!.segments[segmentIndex];
+                          let features = [];
+
+                          switch (segment.processNamespace) {
+                            case 'input': {
+                              features.push(['⌘', segment.data.input!.message]);
+                              break;
+                            }
+
+                            case 'timer': {
+                              features.push(['⧖', formatDuration(segment.data.timer!.duration)]);
+                              break;
+                            }
+
+                            default: {
+                              features.push(['⦿', 'Unknown process']);
+                              break;
+                            }
+                          }
+
+                          if (segment.data.control) {
+                            let control = segment.data.control;
+
+                            if (control.valves.length > 0) {
+                              features.push(['→', control.valves.map((valveIndex) => protocol!.data.control!.parameters[valveIndex].label).join(', ')]);
+                            }
+                          }
+
+                          return (
+                            <React.Fragment key={segmentRelIndex}>
+                              <ContextMenuArea onContextMenu={(event) => {
+                                return this.props.app.showContextMenu(event, [
+                                  { id: 'header', name: 'Protocol step', type: 'header' },
+                                  { id: 'notify', name: 'Add notification' }
+                                ], (menuPath) => {
+
+                                });
+                              }} key={stepIndex}>
+                                <div className="proto-segment-features" style={{ gridRow: segmentRelIndex + 1 }}>
+                                  {features.map(([symbol, text], featureIndex) => (
+                                    <React.Fragment key={featureIndex}>
+                                      <span>{symbol}</span>
+                                      <span>{text}</span>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </ContextMenuArea>
+                              <button type="button" className="proto-segment-divider" style={{ gridRow: segmentRelIndex + 1 }}>
+                                <span></span>
+                                <span>Add segment</span>
+                                <span></span>
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                </ContextMenuArea>
-              ))}
-            </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </section>
+
+        <div className="protocol-header">
+          <span><Rf.Icon name="flag" /></span>
+          <h3>Start</h3>
+
+          <div>
+            <Rf.MenuSelect
+              menu={Object.values(this.props.host.state.chips).map((chip) => ({
+                id: chip.id,
+                name: chip.name
+              }))}
+              selectedOptionPath={chip ? [chip.id] : null}
+              onSelect={(selection) => {
+                this.props.setPlanData({
+                  chipId: selection.first() as ChipId,
+                  data: Object.fromEntries(
+                    Array.from(Units.entries()).map(([namespace, unit]) => [namespace, unit.createCode(protocol)])
+                  )
+                  // data: {
+                  //   control: {
+                  //     arguments: List(protocol.data.control!.parameters.map(() => null))
+                  //   }
+                  // }
+                })
+              }} />
+          </div>
+        </div>
+
+        <section>
+          <div className="protocol-config-root">
+            {chip && Array.from(Units.entries()).map(([namespace, unit]) => {
+              return (
+                <unit.PlanDataComponent
+                  chip={chip!}
+                  draft={this.props.draft}
+                  model={model!}
+                  code={this.props.planData!.data[namespace]}
+                  setCode={(code) => {
+                    this.props.setPlanData({
+                      ...this.props.planData,
+                      data: {
+                        ...this.props.planData?.data,
+                        [namespace]: code
+                      }
+                    });
+                  }}
+                  key={namespace} />
+              );
+            })}
+          </div>
+          <div className="protocol-config-submit">
+            <button type="button" onClick={() => {
+              console.log(this.props.planData);
+            }}>Start</button>
+          </div>
+        </section>
+
       </div>
     );
   }

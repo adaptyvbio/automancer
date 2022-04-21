@@ -66,7 +66,7 @@ export interface Draft {
 
 
 export interface Protocol {
-  name: string;
+  name: string | null;
   segments: ProtocolSegment[];
   stages: ProtocolStage[];
   data: {
@@ -120,6 +120,10 @@ export type RunnerCommand = ControlNamespace.RunnerCommand;
 
 export namespace ControlNamespace {
   export type Signal = string;
+
+  export interface Code {
+    arguments: (number | null)[];
+  }
 
   export interface ExecutorState {
     valves: Record<string, number>;

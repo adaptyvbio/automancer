@@ -1,85 +1,14 @@
-import { List, Set as ImSet } from 'immutable';
+import { Set as ImSet } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
 import type { Chip, ChipId, ChipModel, ControlNamespace, Draft, DraftId, HostId, Protocol } from '../backends/common';
+import { ContextMenuArea } from '../components/context-menu-area';
 import { ProtocolTimeline } from '../components/protocol-timeline';
+import { TextEditor } from '../components/text-editor';
+import Units, { UnitsCode } from '../units';
 import * as util from '../util';
-
-
-interface ControlEngagementProps {
-  chip: Chip;
-  draft: Draft;
-  model: ChipModel;
-
-  code: ControlNamespace.Code;
-  setCode(code: ControlNamespace.Code): void;
-}
-
-class PlanDataComponent extends React.Component<ControlEngagementProps> {
-  constructor(props: ControlEngagementProps) {
-    super(props);
-  }
-
-  render() {
-    let protocol = this.props.draft.protocol!;
-    let sheet = this.props.model.sheets.control;
-
-    let args = this.props.code.arguments;
-
-    return (
-      <>
-        <h4>Control settings</h4>
-        <div className="protocol-config-form">
-          {protocol.data.control?.parameters.map((param, paramIndex) => {
-            let argValveIndex = args[paramIndex];
-            let argValve = sheet.valves[argValveIndex!];
-
-            return (
-              <label className="protocol-config-entry" key={paramIndex}>
-                <div>{param.label}</div>
-                <Rf.MenuSelect
-                  menu={sheet.groups.map((group, groupIndex) => ({
-                    id: groupIndex,
-                    name: group.name,
-                    children: Array.from(sheet.valves.entries())
-                      .filter(([_valveIndex, valve]) => groupIndex === valve.group)
-                      .map(([valveIndex, valve]) => ({
-                        id: valveIndex,
-                        name: valve.names[0]
-                      }))
-                  }))}
-                  onSelect={(selection) => {
-                    // this.setState((state) => ({ arguments: state.arguments.set(paramIndex, selection.get(1) as number) }));
-                    this.props.setCode({
-                      arguments: [
-                        ...args.slice(0, paramIndex),
-                        selection.get(1) as number,
-                        ...args.slice(paramIndex + 1)
-                      ]
-                    });
-                  }}
-                  selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} />
-              </label>
-            );
-          })}
-        </div>
-      </>
-    );
-  }
-}
-
-const Units = new Map([
-  ['control', {
-    PlanDataComponent,
-    createCode(protocol: Protocol): ControlNamespace.Code {
-      return {
-        arguments: protocol.data.control!.parameters.map(() => null)
-      };
-    }
-  }]
-]);
 
 
 declare global {
@@ -107,9 +36,7 @@ stages:
 
 interface PlanData {
   chipId: ChipId;
-  data: {
-    control: ControlNamespace.Code;
-  };
+  data: UnitsCode;
 }
 
 
@@ -266,6 +193,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                 Object.values(this.props.model.hosts).map((host) => ({
                   id: host.id,
                   name: host.state.info.name,
+                  icon: 'storage'
                 }))
               }
               onSelect={([selectedHostId]) => {
@@ -303,7 +231,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
 
 
 interface VisualEditorProps {
-  app: Application;
+  app: Rf.Application;
   draft: Draft;
   host: Host;
   planData: PlanData | null;
@@ -454,190 +382,54 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
             <Rf.MenuSelect
               menu={Object.values(this.props.host.state.chips).map((chip) => ({
                 id: chip.id,
-                name: chip.name
+                name: chip.name,
+                icon: 'memory'
               }))}
               selectedOptionPath={chip ? [chip.id] : null}
               onSelect={(selection) => {
                 this.props.setPlanData({
                   chipId: selection.first() as ChipId,
                   data: Object.fromEntries(
-                    Array.from(Units.entries()).map(([namespace, unit]) => [namespace, unit.createCode(protocol)])
-                  )
-                  // data: {
-                  //   control: {
-                  //     arguments: List(protocol.data.control!.parameters.map(() => null))
-                  //   }
-                  // }
+                    Units.map(([namespace, unit]) => [namespace, unit.createCode(protocol!)])
+                  ) as UnitsCode
                 })
               }} />
           </div>
         </div>
 
-        <section>
-          <div className="protocol-config-root">
-            {chip && Array.from(Units.entries()).map(([namespace, unit]) => {
-              return (
-                <unit.PlanDataComponent
-                  chip={chip!}
-                  draft={this.props.draft}
-                  model={model!}
-                  code={this.props.planData!.data[namespace]}
-                  setCode={(code) => {
-                    this.props.setPlanData({
-                      ...this.props.planData,
-                      data: {
-                        ...this.props.planData?.data,
-                        [namespace]: code
-                      }
-                    });
-                  }}
-                  key={namespace} />
-              );
-            })}
-          </div>
-          <div className="protocol-config-submit">
-            <button type="button" onClick={() => {
-              console.log(this.props.planData);
-            }}>Start</button>
-          </div>
-        </section>
+        {this.props.planData && (
+          <section>
+            <div className="protocol-config-root">
+              {Units.map(([namespace, unit]) => {
+                return (
+                  <unit.CodeEditor
+                    chip={chip!}
+                    draft={this.props.draft}
+                    model={model!}
+                    code={this.props.planData!.data[namespace]}
+                    setCode={(code) => {
+                      this.props.setPlanData({
+                        ...this.props.planData!,
+                        data: {
+                          ...this.props.planData?.data,
+                          [namespace]: code
+                        }
+                      });
+                    }}
+                    key={namespace} />
+                );
+              })}
+            </div>
+            <div className="protocol-config-submit">
+              <button type="button" onClick={() => {
+                console.log(this.props.planData);
+              }}>Start</button>
+            </div>
+          </section>
+        )}
 
       </div>
     );
-  }
-}
-
-
-import * as monaco from 'monaco-editor';
-import { Application } from 'retroflex';
-
-MonacoEnvironment = {
-	getWorkerUrl: function (_moduleId, label) {
-		if (label === 'json') {
-			return './dist/vs/language/json/json.worker.js';
-		}
-		if (label === 'css' || label === 'scss' || label === 'less') {
-			return './dist/vs/language/css/css.worker.js';
-		}
-		if (label === 'html' || label === 'handlebars' || label === 'razor') {
-			return './dist/vs/language/html/html.worker.js';
-		}
-		if (label === 'typescript' || label === 'javascript') {
-			return './dist/vs/language/typescript/ts.worker.js';
-		}
-		return './dist/vs/editor/editor.worker.js';
-	}
-};
-
-
-interface TextEditorProps {
-  draft: Draft;
-  onSave(source: string): void;
-}
-
-class TextEditor extends React.Component<TextEditorProps> {
-  editor!: monaco.editor.IStandaloneCodeEditor;
-  model!: monaco.editor.IModel;
-  ref = React.createRef<HTMLDivElement>();
-
-  componentDidMount() {
-    this.editor = monaco.editor.create(this.ref.current!, {
-      value: this.props.draft.source,
-      automaticLayout: true,
-      contextmenu: false,
-      language: 'yaml',
-      minimap: { enabled: false },
-      occurrencesHighlight: false,
-      renderWhitespace: 'trailing',
-      scrollBeyondLastLine: false,
-      selectionHighlight: false,
-      tabSize: 2
-      // readOnly: true
-    });
-
-    this.model = this.editor.getModel()!;
-
-    this.model.onDidChangeContent(() => {
-      monaco.editor.setModelMarkers(this.model, 'main', []);
-    });
-
-    this.updateErrors();
-  }
-
-  componentDidUpdate() {
-    this.updateErrors({ reveal: true });
-  }
-
-  updateErrors(options?: { reveal?: boolean; }) {
-    monaco.editor.setModelMarkers(this.model, 'main', this.props.draft.errors.map((error) => {
-      let [startIndex, endIndex] = error.range;
-      let start = this.model.getPositionAt(startIndex);
-      let end = this.model.getPositionAt(endIndex);
-
-      if (options?.reveal && (this.props.draft.errors.length === 1)) {
-        this.editor.revealLines(start.lineNumber, end.lineNumber);
-      }
-
-      return {
-        startColumn: start.column,
-        startLineNumber: start.lineNumber,
-
-        endColumn: end.column,
-        endLineNumber: end.lineNumber,
-
-        message: error.message,
-        severity: monaco.MarkerSeverity.Error
-      };
-    }));
-  }
-
-  render() {
-    return (
-      <div ref={this.ref} style={{ height: '100%', overflow: 'hidden' }} onKeyDown={(event) => {
-        if (event.metaKey && (event.key === 's')) {
-          event.preventDefault();
-          this.props.onSave(this.model.getValue());
-        }
-      }}/>
-  //     <style>
-  //        div.hover-row.status-bar {
-  //   display: none !important;
-  // }
-  //     </style>
-    );
-  }
-
-
-  undo() {
-    this.editor.trigger(undefined, 'undo', undefined);
-  }
-}
-
-
-type ContextMenuAreaProps = React.PropsWithChildren<{
-  onContextMenu(event: MouseEvent): Promise<void>;
-}>;
-
-class ContextMenuArea extends React.Component<ContextMenuAreaProps> { // (props: React.PropsWithChildren<{}>) {
-  childRef = React.createRef<HTMLElement>();
-
-  componentDidMount() {
-    let el = this.childRef.current!;
-
-    el.addEventListener('contextmenu', (event) => {
-      el.classList.add('_context');
-
-      event.preventDefault();
-      this.props.onContextMenu(event).finally(() => {
-        el.classList.remove('_context');
-      });
-    });
-  }
-
-  render() {
-    return React.cloneElement(this.props.children as React.ReactElement, {
-      ref: (ref: HTMLElement) => ((this.childRef as any).current = ref)
-    });
   }
 }
 

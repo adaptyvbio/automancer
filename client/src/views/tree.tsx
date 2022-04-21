@@ -59,7 +59,7 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
                   ], (menuPath) => {
                     if (menuPath.first() === 'add') {
                       let modelId = menuPath.get(1)!;
-                      host.backend.createChip({ modelId });
+                      host.backend.createChip({ modelId: modelId as string });
                     }
                   });
                 } else {

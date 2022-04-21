@@ -22,7 +22,7 @@
     section {
       margin: 1.2rem 1rem 0 1rem;
 
-      &:not(:last-of-type) {
+      &:not(:last-child) {
         margin-bottom: 3rem;
       }
 
@@ -216,6 +216,8 @@
     }
 
     &-divider {
+      pointer-events: none; // debug
+
       display: grid;
       align-items: center;
       column-gap: 1rem;

@@ -25,7 +25,7 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
     let chip = this.state.selectedHostChipId && host!.state.chips[this.state.selectedHostChipId[1]];
     let model = host && host.state.models[chip!.modelId];
 
-    let modelControl = model?.sheets.control;
+    let modelControl = model?.sheets.control!;
     let runner = chip?.runners.control;
     let signal = runner && BigInt(runner.signal);
 
@@ -53,13 +53,13 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
                     .filter(([_modelValveIndex, modelValve]) => modelValve.group === groupIndex)
                     .map(([modelValveIndex, modelValve]) => {
                       let modelValveMask = 1n << BigInt(modelValveIndex);
-                      let active = (signal & modelValveMask) > 0;
-                      let status = runner.valves[modelValveIndex];
+                      let active = (signal! & modelValveMask) > 0;
+                      let status = runner!.valves[modelValveIndex];
                       let setValue = (value: number) => {
-                        host.backend.command(chip.id, {
+                        host!.backend.command(chip!.id, {
                           control: {
                             type: 'signal',
-                            signal: String((signal & ~modelValveMask) | (modelValveMask * BigInt(value)))
+                            signal: String((signal! & ~modelValveMask) | (modelValveMask * BigInt(value)))
                           }
                         });
                       };

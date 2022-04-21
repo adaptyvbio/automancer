@@ -33,7 +33,7 @@ export default function SelectChip(props: {
         })
       }
       onSelect={([hostId, chipId]) => {
-        props.onSelect([hostId, chipId]);
+        props.onSelect([hostId as HostId, chipId as ChipId]);
       }} />
   );
 }

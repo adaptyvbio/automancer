@@ -1,9 +1,9 @@
-import { Set as ImSet } from 'immutable';
+import { List, Set as ImSet } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
-import type { ChipId, Draft, DraftId, HostId } from '../backends/common';
+import type { Chip, ChipId, ChipModel, Draft, DraftId, HostId } from '../backends/common';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import * as util from '../util';
 
@@ -36,6 +36,9 @@ type ViewProtocolEditorMode = 'text' | 'visual';
 
 interface ViewProtocolEditorState {
   draftId: DraftId | null;
+  engagement: {
+    chipId: ChipId;
+  } | null;
   mode: ViewProtocolEditorMode;
   selectedHostId: HostId | null;
 }
@@ -47,15 +50,16 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
     super(props);
 
     this.state = {
+      draftId: null,
+      engagement: null,
       mode: 'visual',
-      draftId: null, // debug
       selectedHostId: null
     };
   }
 
   get host(): Host | null {
-    return Object.values(this.props.model.hosts)[0]; // debug
-    // return (this.state.selectedHostId && this.props.model.hosts[this.state.selectedHostId]) || null;
+    // return Object.values(this.props.model.hosts)[0]; // debug
+    return (this.state.selectedHostId && this.props.model.hosts[this.state.selectedHostId]) || null;
   }
 
   get draft(): Draft | null {
@@ -73,8 +77,16 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
     //   host.backend.createProtocol('a', text);
     // }
 
-    if (!this.state.draftId) {
-      this.setState({ draftId: Object.keys(this.host!.state.drafts)[0] });
+    if (!this.state.selectedHostId && Object.keys(this.props.model.hosts).length > 0) {
+      this.setState({ selectedHostId: Object.values(this.props.model.hosts)[0].id });
+    }
+
+    if (this.host && !this.state.draftId) {
+      this.setState({ draftId: Object.keys(this.host.state.drafts)[0] });
+    }
+
+    if (this.draft && !this.state.engagement) {
+      this.setState({ engagement: { chipId: Object.values(this.host!.state.chips)[0].id } });
     }
   }
 
@@ -85,6 +97,10 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
   }
 
   render() {
+    if (!this.host) {
+      return <div />;
+    }
+
     return (
       <>
         <Rf.ViewHeader>
@@ -173,7 +189,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                 }))
               }
               onSelect={([selectedHostId]) => {
-                this.setState({ selectedHostId });
+                this.setState({ selectedHostId: selectedHostId as HostId });
               }} />
           </div>
         </Rf.ViewHeader>
@@ -182,21 +198,21 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
             {/* style={{ border: '1px solid #f000', margin: '1rem' }}> */}
             <h2>Mitomi Main Protocol</h2>
 
-            <h3>Timeline</h3>
-            <ProtocolTimeline />
+            <div className="protocol-header">
+              <span><Rf.Icon name="timeline" /></span>
+              <h3>Timeline</h3>
+            </div>
 
-            <h3>Steps</h3>
-          </div>
+            <section>
+              <ProtocolTimeline />
+            </section>
 
-                    {/* <div className="proto-step-featurelist">
-                      <div className="proto-step-feature">
-                        <span>→</span><span>Biotin BSA</span>
-                      </div>
-                      <div className="proto-step-feature">
-                        <span>⧖</span><span>6 min</span>
-                      </div>
-                    </div> */}
+            <div className="protocol-header">
+              <span><Rf.Icon name="format-list-bulleted" /></span>
+              <h3>Steps</h3>
+            </div>
 
+            <section>
           {true && <div className="proto-root">
             <div className="proto-stage-root _open">
               <a href="#" className="proto-stage-header">
@@ -258,44 +274,6 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                   </div>
                 </div>
               </div>
-
-              <div className="proto-stage-steps">
-                <div className="proto-step-item">
-                  <div className="proto-step-header">
-                    <div className="proto-step-name">Step #2</div>
-                    <div className="proto-step-featurelist">
-                      <div className="proto-step-feature">
-                        <span>→</span><span>Biotin BSA</span>
-                      </div>
-                      <div className="proto-step-feature">
-                        <span>↬</span><span>50 µl</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="proto-step-item">
-                  <div className="proto-step-header">
-                    <div className="proto-step-name">Step #1</div>
-                    <div className="proto-step-process">6 min</div>
-                  </div>
-                  <div className="proto-segment-list">
-                    <div className="proto-segment-features">
-                      <span>→</span><span>Biotin BSA</span>
-                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                      <span>⁂</span><span>Button</span>
-                      <span>↬</span><span>Pump 200 µl</span>
-                      <span>⌘</span><span>Confirm action</span>
-                      <span>⧖</span><span>Wait 6 min</span>
-                      <span>✱</span><span>Notify</span>
-                    </div>
-                    <div className="proto-segment-features">
-                      <span>→</span><span>Biotin BSA</span>
-                      <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
             <div className="proto-stage-root">
               <div className="proto-stage-header">
@@ -312,6 +290,63 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
               </a>
             </div>
           </div>}
+            </section>
+
+            <div className="protocol-header">
+              <span><Rf.Icon name="flag" /></span>
+              <h3>Start</h3>
+
+              {(() => {
+                let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
+                let model = chip && this.host.state.models[chip.modelId];
+
+                return (
+                  <div>
+                    <Rf.MenuSelect
+                      menu={Object.values(this.host.state.chips).map((chip) => ({
+                        id: chip.id,
+                        name: chip.name
+                      }))}
+                      selectedOptionPath={chip ? [chip.id] : null}
+                      onSelect={(selection) => {
+                        this.setState({
+                          engagement: {
+                            chipId: selection.first() as ChipId
+                          }
+                        })
+                      }} />
+                  </div>
+                );
+              })()}
+            </div>
+
+            <section>
+              <div className="protocol-config-root">
+                {(() => {
+                  let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
+                  let model = chip && this.host.state.models[chip.modelId];
+                  return chip && <ControlEngagement chip={chip} draft={this.draft!} model={model!} />;
+                })()}
+                {(() => {
+                  let chip = this.state.engagement && this.host.state.chips[this.state.engagement.chipId];
+                  let model = chip && this.host.state.models[chip.modelId];
+                  return chip && <ControlEngagement chip={chip} draft={this.draft!} model={model!} />;
+                })()}
+              </div>
+              <div className="protocol-config-submit">
+                <button type="button">Start</button>
+              </div>
+            </section>
+          </div>
+
+                    {/* <div className="proto-step-featurelist">
+                      <div className="proto-step-feature">
+                        <span>→</span><span>Biotin BSA</span>
+                      </div>
+                      <div className="proto-step-feature">
+                        <span>⧖</span><span>6 min</span>
+                      </div>
+                    </div> */}
 
           {/* {this.draft && (
             this.state.mode === 'visual'
@@ -329,6 +364,65 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
                   }} />
           )} */}
         </Rf.ViewBody>
+      </>
+    );
+  }
+}
+
+
+interface ControlEngagementProps {
+  chip: Chip;
+  draft: Draft;
+  model: ChipModel;
+}
+
+class ControlEngagement extends React.Component<ControlEngagementProps, { arguments: List<number | null>; }> {
+  constructor(props: ControlEngagementProps) {
+    super(props);
+
+    this.state = {
+      arguments: List(props.draft.protocol!.data.control!.parameters.map(() => null))
+    };
+  }
+
+  // get sheet(): ControlNamespace.Sheet {
+  //   return this.props.model.sheets.control;
+  // }
+
+  render() {
+    let protocol = this.props.draft.protocol!;
+    let sheet = this.props.model.sheets.control;
+
+    return (
+      <>
+        <h4>Control settings</h4>
+        <div className="protocol-config-form">
+          {protocol.data.control?.parameters.map((param, paramIndex) => {
+            let argValveIndex = this.state.arguments.get(paramIndex) as number | null;
+            let argValve = sheet.valves[argValveIndex!];
+
+            return (
+              <label className="protocol-config-entry" key={paramIndex}>
+                <div>{param.label}</div>
+                <Rf.MenuSelect
+                  menu={sheet.groups.map((group, groupIndex) => ({
+                    id: groupIndex,
+                    name: group.name,
+                    children: Array.from(sheet.valves.entries())
+                      .filter(([_valveIndex, valve]) => groupIndex === valve.group)
+                      .map(([valveIndex, valve]) => ({
+                        id: valveIndex,
+                        name: valve.names[0]
+                      }))
+                  }))}
+                  onSelect={(selection) => {
+                    this.setState((state) => ({ arguments: state.arguments.set(paramIndex, selection.get(1) as number) }));
+                  }}
+                  selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} />
+              </label>
+            );
+          })}
+        </div>
       </>
     );
   }

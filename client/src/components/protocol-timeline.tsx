@@ -2,6 +2,7 @@ import * as React from 'react';
 
 
 export class ProtocolTimeline extends React.Component<{}, { width: number | null; }> {
+  observer: ResizeObserver;
   refContainer = React.createRef<HTMLDivElement>();
 
   constructor(props: {}) {
@@ -10,12 +11,23 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
     this.state = {
       width: null
     };
+
+    this.observer = new ResizeObserver((_entries) => {
+      this.updateSize();
+    });
   }
 
   componentDidMount() {
-    if (this.state.width === null) {
-      this.setState({ width: this.refContainer.current!.getBoundingClientRect().width });
-    }
+    this.updateSize();
+    this.observer.observe(this.refContainer.current!);
+  }
+
+  componentWillUnmount() {
+    this.observer.disconnect();
+  }
+
+  updateSize() {
+    this.setState({ width: this.refContainer.current!.getBoundingClientRect().width });
   }
 
   render() {
@@ -65,7 +77,7 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
             let nextSegment = props.segments[stage.seq[1]];
 
             return (
-              <g className="timeline-stage">
+              <g className="timeline-stage" key={stageIndex}>
                 <rect x={marginHor + firstSegment.position * availWidth} y={0} width={((nextSegment?.position ?? 1) - firstSegment.position) * availWidth} height={height} fill="transparent" />
                 <text x={marginHor + (firstSegment.position + (nextSegment?.position ?? 1)) * 0.5 * availWidth} y={10} className="timeline-stagename">{stage.name}</text>
 

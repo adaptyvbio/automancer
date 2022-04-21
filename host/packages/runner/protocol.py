@@ -115,6 +115,8 @@ class Protocol:
     for stage_index, data_stage in enumerate(data.get("stages", list())):
       steps = list()
 
+      # TODO: validate data_stage
+
       # Call enter_stage()
       for parser in self.parsers.values():
         parser.enter_stage(stage_index, data_stage)
@@ -123,10 +125,12 @@ class Protocol:
         return { key: (value, dict()) for key, value in props.items() }
 
       for step_index, data_step in enumerate(data_stage.get("steps", list())):
+        seq, name = self.parse_action(add_context(data_step))
+
         step = Step(
           description=data_step.get("description"),
-          name=data_step.get("name", f"Step #{step_index + 1}"),
-          seq=self.parse_action(add_context(data_step))
+          name=(name or f"Step #{step_index + 1}"),
+          seq=seq
         )
 
         steps.append(step)
@@ -225,7 +229,7 @@ class Protocol:
       start_index = len(self.segments)
 
       for data_action in role['actions']:
-        _, end_index = self.parse_action(data_action)
+        (_, end_index), _ = self.parse_action(data_action)
 
       seq = start_index, end_index
     elif role['role'] is not None:
@@ -236,4 +240,15 @@ class Protocol:
       parser.leave_block(data)
 
 
-    return seq
+    name = data['name'][0] if 'name' in data else None
+
+    # if 'name' in data:
+    #   print(data['name'])
+    #   Valve = namedtuple("Valve", ['query'])
+    #   ev = interpolate(data['name'][0], data['name'][1]).evaluate(globals={ 'Valve': Valve })
+    #   # ev = interpolate(data['name'][0], data['name'][1]).evaluate()
+    #   print(ev)
+    #   print(ev.fragments[1].value.query)
+    #   print()
+
+    return seq, name

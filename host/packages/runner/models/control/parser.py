@@ -56,7 +56,7 @@ class Parser(BaseParser):
 
   def export_protocol(self):
     return {
-      "parameters": [{ "name": param.name } for param in self._valve_parameters],
+      "parameters": [{ "label": param.label } for param in self._valve_parameters],
     }
 
   def export_segment(data):
@@ -142,7 +142,7 @@ class Parser(BaseParser):
           state = 3
           selection = set()
           continue
-        elif (token['kind'] == 'query_atom') or (token['kind'] == 'ref'):
+        elif (token['kind'] == 'query_atom') or (token['kind'] == 'fragment'):
           state = 3
           selection = set()
         else:
@@ -212,7 +212,7 @@ class Parser(BaseParser):
         while index < len(fragment.value):
           ch = fragment[index]
           query_atom_match = regexp_query_atom.match(fragment.value[index:])
-          ref_match = parse_ref(fragment.value[index:])
+          # ref_match = parse_ref(fragment.value[index:])
 
           if query_atom_match:
             groups = query_atom_match.groups()

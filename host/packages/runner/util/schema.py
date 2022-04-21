@@ -79,7 +79,7 @@ class Dict(SchemaType):
         output[new_key] = new_value
         break
       else:
-        raise create_error(test, f"Extraneous key {repr(test_key)}")
+        raise create_error(test_key, f"Extraneous key {repr(test_key)}")
 
     for key, value in self._dict.items():
       if isinstance(key, Exact) and (not isinstance(value, Optional)):
@@ -101,7 +101,7 @@ class Dict(SchemaType):
         value.validate(test_value)
         break
       else:
-        raise create_error(test, f"Extraneous key {repr(test_key)}")
+        raise create_error(test_key, f"Extraneous key {repr(test_key)}")
 
     for key, value in self._dict.items():
       if isinstance(key, Exact) and (not isinstance(value, Optional)):

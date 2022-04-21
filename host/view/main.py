@@ -107,6 +107,26 @@ class Host:
     # debug
     self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
 
+    # debug
+    try:
+      p = Protocol(
+        (Path(__file__).parent.parent / "test.yml").open().read(),
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
+        chip_models=self.models
+      )
+
+      pprint(p.export())
+    except reader.LocatedError as e:
+      e.display()
+
+    # sys.exit()
+
+    self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent / "test.yml").open().read())
+
+    # d = list(self.drafts.values())[0]
+    # pprint(d.protocol.export())
+    # print(d.id)
+
 
   def create_chip(self, model_id, name):
     model = self.models[model_id]
@@ -183,6 +203,7 @@ class Host:
             "message": error.message,
             "range": error.range
           } for error in draft.errors],
+          "protocol": draft.protocol and draft.protocol.export(),
           "source": draft.source
         } for draft in self.drafts.values()
       }

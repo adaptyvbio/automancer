@@ -4,11 +4,10 @@ import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
 import type { Chip, ChipId, ChipModel, ControlNamespace, Draft, DraftId, HostId, Protocol } from '../backends/common';
-import { ContextMenuArea } from '../components/context-menu-area';
+import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
 import Units, { UnitsCode } from '../units';
-import * as util from '../util';
 
 
 declare global {
@@ -321,89 +320,7 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
         </div>
 
         <section>
-          <div className="proto-root">
-            {protocol.stages.map((stage, stageIndex) => (
-              <div className={util.formatClass('proto-stage-root', { '_open': this.state.openStageIndices.has(stageIndex) })} key={stageIndex}>
-                <a href="#" className="proto-stage-header" onClick={(event) => {
-                  event.preventDefault();
-                  this.setState({ openStageIndices: util.toggleSet(this.state.openStageIndices, stageIndex) });
-                }}>
-                  <Rf.Icon name="expand-more" />
-                  <h3 className="proto-stage-name">{stage.name}</h3>
-                  {(stage.steps.length > 0) && <div className="proto-stage-expand">⋯</div>}
-                </a>
-                <div className="proto-stage-steps">
-                  {stage.steps.map((step, stepIndex) => (
-                    <div className="proto-step-item" key={stepIndex}>
-                      <div className="proto-step-header">
-                        <div className="proto-step-time">13:15</div>
-                        <div className="proto-step-name">{step.name}</div>
-                      </div>
-                      <div className="proto-segment-list">
-                        {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
-                          let segmentIndex = step.seq[0] + segmentRelIndex;
-                          let segment = protocol!.segments[segmentIndex];
-                          let features = [];
-
-                          switch (segment.processNamespace) {
-                            case 'input': {
-                              features.push(['⌘', segment.data.input!.message]);
-                              break;
-                            }
-
-                            case 'timer': {
-                              features.push(['⧖', formatDuration(segment.data.timer!.duration)]);
-                              break;
-                            }
-
-                            default: {
-                              features.push(['⦿', 'Unknown process']);
-                              break;
-                            }
-                          }
-
-                          if (segment.data.control) {
-                            let control = segment.data.control;
-
-                            if (control.valves.length > 0) {
-                              features.push(['→', control.valves.map((valveIndex) => protocol!.data.control!.parameters[valveIndex].label).join(', ')]);
-                            }
-                          }
-
-                          return (
-                            <React.Fragment key={segmentRelIndex}>
-                              <ContextMenuArea onContextMenu={(event) => {
-                                return this.props.app.showContextMenu(event, [
-                                  { id: 'header', name: 'Protocol step', type: 'header' },
-                                  { id: 'notify', name: 'Add notification' }
-                                ], (menuPath) => {
-
-                                });
-                              }} key={stepIndex}>
-                                <div className="proto-segment-features" style={{ gridRow: segmentRelIndex + 1 }}>
-                                  {features.map(([symbol, text], featureIndex) => (
-                                    <React.Fragment key={featureIndex}>
-                                      <span>{symbol}</span>
-                                      <span>{text}</span>
-                                    </React.Fragment>
-                                  ))}
-                                </div>
-                              </ContextMenuArea>
-                              <button type="button" className="proto-segment-divider" style={{ gridRow: segmentRelIndex + 1 }}>
-                                <span></span>
-                                <span>Add segment</span>
-                                <span></span>
-                              </button>
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProtocolOverview app={this.props.app} protocol={protocol} />
         </section>
 
         <div className="protocol-header">
@@ -469,17 +386,4 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
       </div>
     );
   }
-}
-
-
-function formatDuration(input: number): string {
-  if (input < 60) {
-    return `${Math.floor(input)} sec`;
-  } if (input < 3600) {
-    let min = Math.floor(input / 60);
-    let sec = Math.floor(input % 60);
-    return `${min} min` + (sec > 0 ? ` ${sec} sec` : '');
-  }
-
-  return input.toString() + ' sec';
 }

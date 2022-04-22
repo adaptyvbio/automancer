@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import appdirs
 import json
@@ -16,6 +17,8 @@ sys.path.insert(0, str(packages_dir))
 
 
 import engine
+from runner.chip import Chip
+from runner.master import Master
 from runner.model import Model
 from runner.protocol import Protocol
 import runner.models
@@ -27,7 +30,6 @@ import runner.reader as reader
 
 from collections import namedtuple
 
-Chip = namedtuple("Chip", ['id', 'matrices', 'model', 'name', 'runners'])
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
 DraftError = namedtuple("DraftError", ['message', 'range'])
 
@@ -72,21 +74,6 @@ class Host:
       namespace: unit.Executor(conf['units'].get(namespace, dict())) for namespace, unit in self.units.items()
     }
 
-    # self.executors = dict()
-
-    # for namespace, unit in units.items():
-    #   executor = unit.Executor(self.conf.get(namespace, dict()))
-    #   self.executors[namespace] = executor
-
-    # for namespace, executor in self.units.items():
-    #   unit_conf = self.conf.get(namespace, dict())
-    #   executor.initialize()
-
-    #   executor = self.manager.executors[device['model']]
-    #   executor.add_device(device)
-
-    # await self.manager.initialize()
-
 
     # -- Load models --------------------------------------
 
@@ -104,34 +91,38 @@ class Host:
         sys.exit(1)
 
 
-    # debug
-    self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+  def _debug(self):
+    # -- Debug --------------------------------------------
 
-    # debug
-    try:
-      p = Protocol(
-        (Path(__file__).parent.parent / "test.yml").open().read(),
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-        chip_models=self.models
-      )
+    chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent / "test.yml").open().read())
 
-      pprint(p.export())
-    except reader.LocatedError as e:
-      e.display()
+    codes = {
+      'control': {
+        'arguments': [None, None, None]
+      }
+    }
 
-    # sys.exit()
+    # self.start_plan(chip, codes, draft)
 
-    self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent / "test.yml").open().read())
+    # asyncio.run(self.start_plan(chip, codes, draft))
 
-    # d = list(self.drafts.values())[0]
-    # pprint(d.protocol.export())
-    # print(d.id)
+    # try:
+    #   protocol = Protocol(
+    #     (Path(__file__).parent.parent / "test.yml").open().read(),
+    #     parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
+    #     chip_models=self.models
+    #   )
+
+    #   pprint(protocol.export())
+    # except reader.LocatedError as e:
+    #   e.display()
 
 
   def create_chip(self, model_id, name):
     model = self.models[model_id]
-    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() }
-    chip = Chip(id=str(uuid.uuid4()), matrices=matrices, model=model, name=name, runners=dict())
+    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if unit.Matrix }
+    chip = Chip(id=str(uuid.uuid4()), master=None, matrices=matrices, model=model, name=name, runners=dict())
 
     for namespace, executor in self.executors.items():
       chip.runners[namespace] = executor.create_runner(chip)
@@ -152,12 +143,38 @@ class Host:
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
 
-    self.drafts[draft_id] = Draft(
+    draft = Draft(
       id=draft_id,
       errors=errors,
       protocol=protocol,
       source=source
     )
+
+    self.drafts[draft_id] = draft
+    return draft
+
+  def start_plan(self, chip, codes, draft, *, update_callback):
+    if chip.master:
+      raise Exception("Already running")
+
+    chip.master = Master(chip=chip, codes=codes, protocol=draft.protocol, update_callback=update_callback)
+    chip.master.start()
+
+    del self.drafts[draft.id]
+
+
+    async def a():
+      # await asyncio.sleep(1.5)
+      # chip.master.pause()
+      # await asyncio.sleep(1)
+      await asyncio.sleep(5)
+      chip.master.resume()
+
+    loop = asyncio.get_event_loop()
+    # loop.create_task(a())
+
+    # import asyncio
+    # asyncio.run(chip.master.wait())
 
 
   def get_state(self):
@@ -170,6 +187,7 @@ class Host:
       "chips": {
         chip.id: {
           "id": chip.id,
+          "master": chip.master and chip.master.export(),
           "matrices": {
             namespace: matrix.export() for namespace, matrix in chip.matrices.items()
           },
@@ -214,7 +232,6 @@ class Host:
 # -------
 
 
-import asyncio
 from pathlib import Path
 import websockets
 
@@ -255,7 +272,16 @@ class App():
         for namespace, matrix_data in message["update"].items():
           chip.matrices[namespace].update(matrix_data)
 
-      self.broadcast(json.dumps(self.host.get_state()))
+      if message["type"] == "startPlan":
+        chip = self.host.chips[message["chipId"]]
+        draft = self.host.drafts[message["draftId"]]
+
+        def update_callback():
+          self.update()
+
+        self.host.start_plan(chip=chip, codes=message["codes"], draft=draft, update_callback=update_callback)
+
+      self.update()
       # await client.send(json.dumps(self.get_state()))
 
     # import asyncio
@@ -264,8 +290,43 @@ class App():
   def broadcast(self, message):
     websockets.broadcast(self.clients, message)
 
+  def update(self):
+    self.broadcast(json.dumps(self.host.get_state()))
+
   def start(self):
-    asyncio.run(self.serve())
+    # asyncio.run(self.serve())
+    # return
+
+    # loop = asyncio.new_event_loop()
+    # asyncio.set_event_loop(loop)
+
+    loop = asyncio.get_event_loop()
+
+    async def a():
+      await asyncio.sleep(1)
+      print('Done')
+
+    # loop.create_task(self.serve())
+    # loop.run_forever()
+
+    # asyncio.ensure_future(a(), loop=loop) # asyncio.get_event_loop())
+    # asyncio.ensure_future(self.serve(), loop=loop) # asyncio.get_event_loop())
+
+    # loop.create_task(self.host._debug())
+
+    self.host._debug()
+
+    loop.create_task(self.serve())
+    loop.run_forever()
+
+    # loop.run_until_complete(self.serve())
+
+    # try:
+    #   loop.run_forever()
+    #   tasks = asyncio.Task.all_tasks()
+    #   print(">>", tasks)
+    # finally:
+    #   loop.close()
 
   async def serve(self):
     async def handler(client):
@@ -278,8 +339,14 @@ class App():
 
     stop = asyncio.Future()
 
-    async with websockets.serve(handler, host=self.hostname, port=self.port):
-      await stop
+    server = await websockets.serve(handler, host=self.hostname, port=self.port)
+    await server.wait_closed()
+
+    # try:
+    #   async with websockets.serve(handler, host=self.hostname, port=self.port):
+    #     await stop
+    # except Exception as e:
+    #   print(">>>", e)
 
 
 app = App()

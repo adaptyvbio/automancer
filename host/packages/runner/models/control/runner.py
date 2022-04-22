@@ -17,6 +17,8 @@ class Runner:
     self._matrix = chip.matrices[namespace]
     self._sheet = chip.model.sheets[namespace]
 
+    self._code = None
+
     # sequence
     self._drive = None
     self._signal = 0
@@ -52,13 +54,6 @@ class Runner:
     }
 
 
-  # Driver communication
-
-  # def _write(self):
-  #   signal = self._signal if self._proto_signal is None else (self._signal & self._drive) | (self._proto_signal & ~self._drive)
-  #   self._driver.write(signal)
-
-
   # Manual control
 
   def accept(self, command):
@@ -79,7 +74,9 @@ class Runner:
 
   # Automated control
 
-  def start_protocol(self):
+  def start_protocol(self, codes):
+    self._code = codes[namespace]
+
     self._drive = 0
     self._proto_signal = 0
 
@@ -90,6 +87,10 @@ class Runner:
   def enter_segment(self, segment, seg_index):
     seg = segment[namespace]
     signal = 0
+
+    print('Control runner ---->', seg)
+
+    return
 
     for valve_index in seg['valves']:
       signal |= (1 << self._sheet.valves[valve_index].channel)

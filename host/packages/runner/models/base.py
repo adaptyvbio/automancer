@@ -68,8 +68,25 @@ class BaseRunner:
 
 
 class BaseProcessRunner(BaseRunner):
-  def run_process(self, segment, seg_index, state, callback):
+  async def run_process(self, segment, seg_index, state):
     pass
 
-  def pause_process(self):
+  def pause_process(self, segment, seg_index):
+    return dict()
+
+
+class BaseExecutor:
+  def __init__(self, conf):
     pass
+
+  def export(self):
+    return dict()
+
+  async def initialize(self):
+    pass
+
+  def get_device_info(self):
+    return list()
+
+  def export(self):
+    return dict()

@@ -26,9 +26,19 @@ export function ProtocolOverview(props: {
             {(stage.steps.length > 0) && <div className="protoview-stage-expand">⋯</div>}
           </a>
           <div className="protoview-stage-steps">
+            <div className="protoview-step-item">
+              <div className="protoview-step-header">
+                <div className="protoview-step-circle" />
+                <div className="protoview-step-time">13:15</div>
+                <div className="protoview-step-name">First step</div>
+              </div>
+              <button type="button" className="protoview-step-hidden">3 past steps</button>
+            </div>
+
             {stage.steps.map((step, stepIndex) => (
               <div className="protoview-step-item" key={stepIndex}>
                 <div className="protoview-step-header">
+                  <div className="protoview-step-circle" />
                   <div className="protoview-step-time">13:15</div>
                   <div className="protoview-step-name">{step.name}</div>
                 </div>
@@ -40,59 +50,54 @@ export function ProtocolOverview(props: {
 
                     switch (segment.processNamespace) {
                       case 'input': {
-                        features.push(['⌘', segment.data.input!.message]);
+                        features.push(['keyboard-command-key', segment.data.input!.message]);
                         break;
                       }
 
                       case 'timer': {
-                        features.push(['⧖', formatDuration(segment.data.timer!.duration)]);
+                        features.push(['hourglass-empty', formatDuration(segment.data.timer!.duration)]);
                         break;
                       }
 
                       default: {
-                        features.push(['⦿', 'Unknown process']);
+                        // features.push(['⦿', 'Unknown process']);
                         break;
                       }
                     }
 
-                    if (segment.data.control) {
-                      let control = segment.data.control;
+                    features.push(['air', 'Biotin']);
+                    // features.push(['speed', '4.2 psi']);
+                    // features.push(['vertical-align-bottom', 'Button']);
 
-                      if (control.valves.length > 0) {
-                        features.push(['→', control.valves.map((valveIndex) => props.protocol.data.control!.parameters[valveIndex].label).join(', ')]);
-                      }
-                    }
+                    // if (segment.data.control) {
+                    //   let control = segment.data.control;
+
+                    //   if (control.valves.length > 0) {
+                    //     features.push(['→', control.valves.map((valveIndex) => props.protocol.data.control!.parameters[valveIndex].label).join(', ')]);
+                    //   }
+                    // }
 
                     return (
-                      <React.Fragment key={segmentRelIndex}>
-                        <ContextMenuArea onContextMenu={(event) => {
-                          return props.app.showContextMenu(event, [
-                            { id: 'header', name: 'Protocol step', type: 'header' },
-                            { id: 'notify', name: 'Add notification' }
-                          ], (menuPath) => {
-
-                          });
-                        }} key={stepIndex}>
-                          <div className="protoview-segment-features" style={{ gridRow: segmentRelIndex + 1 }}>
-                            {features.map(([symbol, text], featureIndex) => (
-                              <React.Fragment key={featureIndex}>
-                                <span>{symbol}</span>
-                                <span>{text}</span>
-                              </React.Fragment>
-                            ))}
-                          </div>
-                        </ContextMenuArea>
-                        <button type="button" className="protoview-segment-divider" style={{ gridRow: segmentRelIndex + 1 }}>
-                          <span></span>
-                          <span>Add segment</span>
-                          <span></span>
-                        </button>
-                      </React.Fragment>
+                      <div className="protoview-segment-features">
+                        {features.map(([icon, text], featureIndex) => (
+                          <React.Fragment key={featureIndex}>
+                            <span><Rf.Icon name={icon} /></span>
+                            <span>{text}</span>
+                          </React.Fragment>
+                        ))}
+                      </div>
                     );
                   })}
                 </div>
               </div>
             ))}
+            <div className="protoview-step-item">
+              <div className="protoview-step-header">
+                <div className="protoview-step-circle" />
+                <div className="protoview-step-time">13:15</div>
+                <div className="protoview-step-name">Done</div>
+              </div>
+            </div>
           </div>
         </div>
       ))}

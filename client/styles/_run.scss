@@ -1,0 +1,182 @@
+@use "./constants" as *;
+
+
+.status {
+  &-subtitle {
+    margin-bottom: 0.2rem;
+    color: #999;
+  }
+
+  &-header {
+    display: flex;
+    align-items: baseline;
+  }
+
+  &-title {
+    font-size: 1.5rem;
+  }
+
+  &-time {
+    margin-left: auto;
+    color: #999;
+  }
+
+
+  &-list {
+    margin: 2rem 0;
+  }
+
+  &-segment {
+    display: grid;
+    align-items: center;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
+    row-gap: 0.4rem;
+
+    padding: 0 1rem;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.8rem;
+
+    font-size: 1.1rem;
+    font-weight: 500;
+
+    &:not(:last-child) {
+      border-bottom: 1px solid #ddd;
+    }
+
+    > :nth-child(odd) {
+      font-size: 1.1em;
+      font-weight: 600;
+    }
+
+    // > :nth-child(1), > :nth-child(2) {
+    > :nth-child(-n+2) {
+      color: $app-blue;
+    }
+
+    .icon {
+      transform: scale(1.2);
+    }
+  }
+}
+
+
+// $border-color: #ddd;
+$background-color: #fff;
+$segment-padding: 0.8rem;
+
+.segments {
+  &-list {
+    display: grid;
+    margin: 2rem 0;
+
+    > * {
+      grid-column: 1;
+    }
+  }
+
+  &-segment {
+    display: grid;
+    align-items: center;
+    grid-template-columns: auto 1fr;
+    column-gap: 1rem;
+    row-gap: 0.4rem;
+
+    padding: $segment-padding 1.2rem;
+    border: 1px solid transparent;
+
+    font-size: 1.1rem;
+    font-weight: 500;
+
+
+    &:not(:first-child) {
+      padding-top: 0.8rem;
+      border-top: 1px solid #ddd;
+    }
+
+    &:hover, &:last-child {
+      padding-bottom: 0.8rem;
+    }
+
+    &:hover {
+      border-color: #ccc;
+      border-radius: 4px;
+
+      + * + * {
+        border-top-color: transparent;
+      }
+    }
+
+    &._context {
+      background-color: lighten($app-blue, 55%);
+      border-color: $app-blue;
+      border-radius: 4px;
+      box-shadow: -1px 1px 6px #0001;
+    }
+
+    > :nth-child(odd) {
+      font-size: 1.1em;
+      font-weight: 600;
+    }
+
+    // > :nth-child(1), > :nth-child(2) {
+    > :nth-child(-n+2) {
+      color: $app-blue;
+    }
+
+    .icon {
+      transform: scale(1.2);
+    }
+  }
+
+  &-divider {
+    display: grid;
+    align-items: center;
+    column-gap: 1rem;
+    grid-template-columns: 1fr auto 1fr;
+
+    align-self: start;
+    height: calc(2 * 0.8rem + 1px);
+    transform: translateY(-50%);
+    // margin-top: calc((2 * 0.8rem + 1px) * -0.5);
+
+    // Hide the divider when not hovered.
+    &:not(:hover) {
+      opacity: 0;
+    }
+
+    // Hide the border behind that belongs to the previous element.
+    &:hover {
+      background-color: $background-color;
+    }
+
+    // The last divider should be positioned after the last segment instead of before.
+    &:last-child {
+      align-self: end;
+      transform: translateY(50%);
+    }
+
+
+    // Style the lines behind the "Add segment" text.
+    > :is(:first-child, :last-child) {
+      height: 2px;
+      background-color: #888;
+    }
+
+    > :first-child { border-radius: 4px 0 0 4px; }
+    > :last-child { border-radius: 0 4px 4px 0; }
+
+    // Style the text and add icon.
+    > :not(:first-child:last-child) {
+      display: flex;
+      align-items: center;
+      column-gap: 0.6rem;
+
+      color: #0074d9;
+      color: #666;
+      // font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+  }
+}

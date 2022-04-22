@@ -48,6 +48,9 @@ export interface Device {
 
 export interface Chip {
   id: ChipId;
+  master: {
+    protocol: Protocol;
+  };
   matrices: {
     control: ControlNamespace.Matrix;
   };

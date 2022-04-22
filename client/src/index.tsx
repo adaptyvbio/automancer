@@ -6,6 +6,7 @@ import { Application, FragmentPaneRecord, ViewBlank, ViewPaneRecord } from 'retr
 import ViewChipSettings from './views/chip-settings';
 import ViewControl from './views/control';
 import ViewProtocolEditor from './views/protocol-editor';
+import ViewProtocolRun from './views/protocol-run';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
@@ -91,6 +92,15 @@ class App extends React.Component {
       shortcut: null
     });
 
+    app.registerViewModel({
+      id: 'protocol-run',
+      name: 'Protocol run',
+      groupId: 'protocol',
+      icon: 'receipt-long',
+      component: ViewProtocolRun,
+      shortcut: null
+    });
+
     // app.registerView({
     //   id: 'tree',
     //   name: 'Tree',
@@ -101,11 +111,12 @@ class App extends React.Component {
     app.setState({
       layout: FragmentPaneRecord({
         horizontal: true,
-        cuts: List([0.75]),
+        cuts: List([0.6]),
         panes: List([
           ViewPaneRecord({ view: 'protocol-editor' }),
+          ViewPaneRecord({ view: 'protocol-run' })
           // ViewPaneRecord({ view: 'chip-settings' }),
-          ViewPaneRecord({ view: 'tree' })
+          // ViewPaneRecord({ view: 'tree' })
         ])
       })
     });

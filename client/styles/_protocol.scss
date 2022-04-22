@@ -91,21 +91,31 @@
 
     &-submit {
       margin: 2rem 0;
-      padding: 1rem;
+      padding: 1rem 1.4rem;
 
       border: 1px solid #ddd;
       border-radius: 4px;
 
       button {
+        display: flex;
+        align-items: center;
+        column-gap: 0.6rem;
+
         width: max-content;
         padding: 0.6rem 1rem;
 
-        background-color: #0074d9;
+        background-color: $app-blue;
         border-radius: 4px;
 
         color: #fff;
         font-size: 1.2rem;
         font-weight: 500;
+
+        transition: background-color 150ms;
+
+        &:hover {
+          background-color: darken($app-blue, 5%);
+        }
       }
     }
   }

@@ -77,7 +77,7 @@ class App extends React.Component {
       id: 'chip-settings',
       name: 'Chip settings',
       groupId: 'general',
-      icon: null,
+      icon: 'tune',
       component: ViewChipSettings,
       shortcut: null
     });
@@ -86,7 +86,7 @@ class App extends React.Component {
       id: 'protocol-editor',
       name: 'Protocol editor',
       groupId: 'protocol',
-      icon: null,
+      icon: 'edit-note',
       component: ViewProtocolEditor,
       shortcut: null
     });

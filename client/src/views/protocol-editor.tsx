@@ -72,28 +72,21 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
     return (this.host && this.state.draftId && this.host.state.drafts[this.state.draftId]) || null;
   }
 
-  componentDidMount() {
-    // this.setState({  })
-  }
-
   componentDidUpdate() {
-    // let host = Object.values(this.props.model.hosts)[0];
-
-    // if (host && !host.state.protocols.a) {
-    //   host.backend.createProtocol('a', text);
-    // }
-
     if (!this.state.selectedHostId && Object.keys(this.props.model.hosts).length > 0) {
       this.setState({ selectedHostId: Object.values(this.props.model.hosts)[0].id });
     }
 
-    if (this.host && !this.state.draftId) {
+    if (this.host && !this.state.draftId && Object.keys(this.host?.state.drafts).length > 0) {
       this.setState({ draftId: Object.keys(this.host.state.drafts)[0] });
     }
 
-    // if (this.draft && !this.state.engagement) {
-    //   this.setState({ engagement: { chipId: Object.values(this.host!.state.chips)[0].id } });
-    // }
+    if (this.draft && !this.state.planData) {
+      this.setState({ planData: {
+        data: { control: { arguments: new Array(10).fill(null) } },
+        chipId: Object.values(this.host!.state.chips)[0].id }
+      });
+    }
   }
 
   createDraft(source: string) {
@@ -103,129 +96,166 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
   }
 
   render() {
-    if (!this.host) {
-      return <div />;
-    }
-
     return (
       <>
         <Rf.ViewHeader>
           <div className="toolbar-root">
-            <div className="toolbar-group">
-              <Rf.MenuTabs
-                menu={[
-                  { id: 'file',
-                    name: 'File',
-                    children: [
-                      { id: 'new', name: 'New', icon: 'note-add' },
-                      { id: 'divider', type: 'divider' },
-                      { id: 'open', name: 'Open file...', icon: 'folder' },
-                      { id: 'recent', name: 'Open recent', children: [
-                        { id: '_none', name: 'No recent protocols', disabled: true }
+            {this.host && (
+              <div className="toolbar-group">
+                <Rf.MenuTabs
+                  menu={[
+                    { id: 'file',
+                      name: 'File',
+                      children: [
+                        { id: 'new', name: 'New', icon: 'note-add' },
+                        { id: 'divider', type: 'divider' },
+                        { id: 'open', name: 'Open file...', icon: 'folder' },
+                        { id: 'recent', name: 'Open recent', children: [
+                            { id: '_none', name: 'No recent protocols', disabled: true }
+                          ] },
+                        { id: 'chip', name: 'Open chip protocol', children: [
+                            { id: '_none', name: 'No chip running', disabled: true }
+                          ] }
                       ] },
-                      { id: 'chip', name: 'Open chip protocol', children: [
-                        { id: '_none', name: 'No chip running', disabled: true }
+                    { id: 'edit',
+                      name: 'Edit',
+                      children: [
+                        { id: 'undo', name: 'Undo', icon: 'undo', shortcut: '⌘ Z', disabled: (!this.draft || (this.state.mode !== 'text')) }
                       ] }
-                    ] },
-                  { id: 'edit',
-                    name: 'Edit',
-                    children: [
-                      { id: 'undo', name: 'Undo', icon: 'undo', shortcut: '⌘ Z', disabled: (this.state.mode !== 'text') }
-                    ] }
-                ]}
-                onSelect={(path) => {
-                  switch (path.get(0)) {
-                    case 'file': {
-                      switch (path.get(1)) {
-                        case 'new': {
-                          this.createDraft(DefaultSource);
-                          break;
+                  ]}
+                  onSelect={(path) => {
+                    switch (path.get(0)) {
+                      case 'file': {
+                        switch (path.get(1)) {
+                          case 'new': {
+                            this.createDraft(DefaultSource);
+                            break;
+                          }
+
+                          case 'open': {
+                            let input = document.createElement('input');
+                            input.setAttribute('type', 'file');
+
+                            input.addEventListener('change', () => {
+                              if (input.files) {
+                                let file = input.files[0];
+
+                                (async () => {
+                                  let source = await file.text();
+                                  this.createDraft(source);
+                                })();
+                              }
+                            });
+
+                            input.click();
+
+                            break;
+                          }
                         }
 
-                        case 'open': {
-                          let input = document.createElement('input');
-                          input.setAttribute('type', 'file');
-
-                          input.addEventListener('change', () => {
-                            if (input.files) {
-                              let file = input.files[0];
-
-                              (async () => {
-                                let source = await file.text();
-                                this.createDraft(source);
-                              })();
-                            }
-                          });
-
-                          input.click();
-
-                          break;
-                        }
+                        break;
                       }
 
-                      break;
-                    }
-
-                    case 'edit': {
-                      switch (path.get(1)) {
-                        case 'undo': {
-                          this.refTextEditor.current!.undo();
+                      case 'edit': {
+                        switch (path.get(1)) {
+                          case 'undo': {
+                            this.refTextEditor.current!.undo();
+                          }
                         }
                       }
                     }
-                  }
-                }} />
-            </div>
+                  }} />
+              </div>
+            )}
           </div>
           <div className="toolbar-root">
-            <Rf.Select
-              selectedOptionPath={[this.state.mode]}
-              menu={[
-                { id: 'visual', name: 'Visual', icon: 'wysiwyg' },
-                { id: 'text', name: 'Code', icon: 'code' }
-              ]}
-              onSelect={([mode]) => {
-                this.setState({ mode: mode as ViewProtocolEditorMode });
-              }} />
+            {this.draft && (
+              <Rf.Select
+                selectedOptionPath={[this.state.mode]}
+                menu={[
+                  { id: 'visual', name: 'Visual', icon: 'wysiwyg' },
+                  { id: 'text', name: 'Code', icon: 'code' }
+                ]}
+                onSelect={([mode]) => {
+                  this.setState({ mode: mode as ViewProtocolEditorMode });
+                }} />
+            )}
             <Rf.Select
               selectedOptionPath={this.state.selectedHostId && [this.state.selectedHostId]}
-              menu={
-                Object.values(this.props.model.hosts).map((host) => ({
+              menu={[
+                { id: '_header', name: 'Hosts', type: 'header' },
+                ...Object.values(this.props.model.hosts).map((host) => ({
                   id: host.id,
                   name: host.state.info.name,
                   icon: 'storage'
-                }))
-              }
+                })),
+                { id: '_divider', type: 'divider' },
+                { id: 'manage', name: 'Manage hosts' }
+              ]}
               onSelect={([selectedHostId]) => {
                 this.setState({ selectedHostId: selectedHostId as HostId });
               }} />
           </div>
         </Rf.ViewHeader>
         <Rf.ViewBody>
-          {this.draft && (
-            this.state.mode === 'visual'
-              ? <VisualEditor
-                app={this.props.app}
-                draft={this.draft}
-                host={this.host}
-                planData={this.state.planData}
-                setPlanData={(planData) => {
-                  this.setState({ planData });
-                }}
-                setTextMode={() => {
-                  this.setState({ mode: 'text' });
-                }} />
-              : <TextEditor
-                  draft={this.draft}
-                  ref={this.refTextEditor}
-                  onSave={(source) => {
-                    this.host!.backend.createDraft(this.draft!.id, source);
-                  }} />
-          )}
+          {this.host
+            ? (
+              this.draft
+                ? (
+                  this.state.mode === 'visual'
+                    ? <VisualEditor
+                      app={this.props.app}
+                      draft={this.draft}
+                      host={this.host}
+                      planData={this.state.planData}
+                      setPlanData={(planData) => {
+                        this.setState({ planData });
+                      }}
+                      setTextMode={() => {
+                        this.setState({ mode: 'text' });
+                      }} />
+                    : <TextEditor
+                        draft={this.draft}
+                        ref={this.refTextEditor}
+                        onSave={(source) => {
+                          this.host!.backend.createDraft(this.draft!.id, source);
+                        }} />
+                ) : (
+                  <div className="view-blank-root">
+                    <div className="view-blank-container">
+                      <div className="view-blank-title">No protocol selected</div>
+                      <button type="button" className="view-blank-action" onClick={() => {
+                        this.createDraft(DefaultSource);
+                      }}>New blank protocol</button>
+                    </div>
+                  </div>
+                )
+            ) : (
+              <div className="view-blank-root">
+                <div className="view-blank-container">
+                  <div className="view-blank-title">No host selected</div>
+                </div>
+              </div>
+            )
+          }
         </Rf.ViewBody>
       </>
     );
   }
+
+  // static getDerivedStateFromProps(props: Rf.ViewProps<Model>, state: ViewProtocolEditorState): Partial<ViewProtocolEditorState> | null {
+  //   let host = (state.selectedHostId && props.model.hosts[state.selectedHostId]) || null;
+
+  //   if (state.selectedHostId && !host) {
+  //     return { draftId: null, selectedHostId: null };
+  //   }
+
+  //   if (!host || (state.draftId && !(state.draftId in host.state.drafts))) {
+  //     return { draftId: null };
+  //   }
+
+  //   return null;
+  // }
 }
 
 
@@ -256,14 +286,16 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
     let protocol = this.props.draft.protocol;
 
     if (!protocol) {
-      return <div className="view-blank-root">
-        <div className="view-blank-container">
-          <div className="view-blank-title">Invalid protocol</div>
-          <button type="button" className="view-blank-action" onClick={() => {
-            this.props.setTextMode();
-          }}>Open code view</button>
+      return (
+        <div className="view-blank-root">
+          <div className="view-blank-container">
+            <div className="view-blank-title">Invalid protocol</div>
+            <button type="button" className="view-blank-action" onClick={() => {
+              this.props.setTextMode();
+            }}>Open code view</button>
+          </div>
         </div>
-      </div>
+      );
     }
 
 
@@ -422,12 +454,18 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
             </div>
             <div className="protocol-config-submit">
               <button type="button" onClick={() => {
-                console.log(this.props.planData);
-              }}>Start</button>
+                this.props.host.backend.startPlan({
+                  chipId: this.props.planData!.chipId,
+                  data: this.props.planData!.data,
+                  draftId: this.props.draft.id
+                });
+              }}>
+                <Rf.Icon name="play-circle" />
+                <span>Start</span>
+              </button>
             </div>
           </section>
         )}
-
       </div>
     );
   }

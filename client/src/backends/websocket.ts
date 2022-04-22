@@ -1,4 +1,5 @@
 import { BackendCommon, Chip, ChipId, ControlNamespace, HostState } from './common';
+import type { UnitsCode } from '../units';
 
 
 export default class WebsocketBackend extends BackendCommon {
@@ -85,5 +86,14 @@ export default class WebsocketBackend extends BackendCommon {
       chipId,
       update
     }));
+  }
+
+  async startPlan(options: { chipId: string; data: UnitsCode; draftId: string; }) {
+    this.#socket.send(JSON.stringify({
+      type: 'startPlan',
+      chipId: options.chipId,
+      codes: options.data,
+      draftId: options.draftId
+    }))
   }
 }

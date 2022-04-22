@@ -1,3 +1,6 @@
+import type { UnitsCode } from '../units';
+
+
 export abstract class BackendCommon {
   private _listeners: Set<() => void> = new Set();
 
@@ -20,6 +23,15 @@ export abstract class BackendCommon {
   abstract createDraft(draftId: string, source: string): Promise<void>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
+  abstract startPlan(options: {
+    chipId: ChipId;
+    data: UnitsCode;
+    draftId: DraftId;
+    // position: {
+    //   progress: number;
+    //   segmentIndex: number;
+    // } | null
+  }): Promise<void>;
 }
 
 

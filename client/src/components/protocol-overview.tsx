@@ -13,9 +13,15 @@ export function ProtocolOverview(props: {
 }) {
   let [openStageIndices, setOpenStageIndices] = React.useState(ImSet([0]));
 
+  let analysis = analyzeProtocol(props.protocol);
+  console.log(analysis);
+
   return (
     <div className="protoview-root">
-      {props.protocol.stages.map((stage, stageIndex) => (
+      {props.protocol.stages.map((stage, stageIndex) => {
+        let nextStage = props.protocol.stages[stageIndex + 1];
+
+        return (
         <div className={util.formatClass('protoview-stage-root', { '_open': openStageIndices.has(stageIndex) })} key={stageIndex}>
           <a href="#" className="protoview-stage-header" onClick={(event) => {
             event.preventDefault();
@@ -28,18 +34,21 @@ export function ProtocolOverview(props: {
           <div className="protoview-stage-steps">
             <div className="protoview-step-item">
               <div className="protoview-step-header">
-                <div className="protoview-step-circle" />
+                <div className="protoview-step-marker" />
                 <div className="protoview-step-time">13:15</div>
                 <div className="protoview-step-name">First step</div>
               </div>
               <button type="button" className="protoview-step-hidden">3 past steps</button>
             </div>
 
-            {stage.steps.map((step, stepIndex) => (
+            {stage.steps.map((step, stepIndex) => {
+              let firstSegmentAnalysis = analysis.segments[step.seq[0]];
+
+              return (
               <div className="protoview-step-item" key={stepIndex}>
                 <div className="protoview-step-header">
-                  <div className="protoview-step-circle" />
-                  <div className="protoview-step-time">13:15</div>
+                  <div className="protoview-step-marker" />
+                  <div className="protoview-step-time">{formatDuration2(firstSegmentAnalysis.time)}</div>
                   <div className="protoview-step-name">{step.name}</div>
                 </div>
                 <div className="protoview-segment-list">
@@ -78,7 +87,7 @@ export function ProtocolOverview(props: {
                     // }
 
                     return (
-                      <div className="protoview-segment-features">
+                      <div className={util.formatClass('protoview-segment-features', { '_active': segmentRelIndex === 0 })} key={segmentRelIndex}>
                         {features.map(([icon, text], featureIndex) => (
                           <React.Fragment key={featureIndex}>
                             <span><Rf.Icon name={icon} /></span>
@@ -90,17 +99,19 @@ export function ProtocolOverview(props: {
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
             <div className="protoview-step-item">
               <div className="protoview-step-header">
-                <div className="protoview-step-circle" />
-                <div className="protoview-step-time">13:15</div>
-                <div className="protoview-step-name">Done</div>
+                <div className="protoview-step-marker" />
+                <div className="protoview-step-time">{formatDuration2(nextStage ? analysis.segments[nextStage.seq[0]].time : analysis.done.time)}</div>
+                <div className="protoview-step-name">{nextStage ? `Continuing to ${nextStage.name}` : 'Done'}</div>
               </div>
             </div>
           </div>
         </div>
-      ))}
+      );
+          })}
     </div>
   );
 }
@@ -116,4 +127,33 @@ function formatDuration(input: number): string {
   }
 
   return input.toString() + ' sec';
+}
+
+function formatDuration2(input: number): string {
+  let hours = Math.floor(input / 3600);
+  let minutes = Math.floor((input % 3600) / 60);
+
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+
+function analyzeProtocol(protocol: Protocol) {
+  let analysisSegments: { time: number; }[] = new Array(protocol.segments.length); // .map((segment) => ({ time: 0 }));
+  let time = 0;
+
+  for (let [segmentIndex, segment] of protocol.segments.entries()) {
+    analysisSegments[segmentIndex] = { time };
+
+    switch (segment.processNamespace) {
+      case 'timer': {
+        time += segment.data.timer!.duration;
+        break;
+      }
+    }
+  }
+
+  return {
+    done: { time },
+    segments: analysisSegments
+  };
 }

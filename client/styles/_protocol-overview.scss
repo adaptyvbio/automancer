@@ -66,6 +66,9 @@ $step-gap: 1.2rem;
   }
 
   &-step {
+    $large-marker: 5px;
+    $small-marker: 3px;
+
     &-item {
       cursor: default;
       transition: background-color 150ms, border-color 150ms, box-shadow 150ms;
@@ -79,15 +82,12 @@ $step-gap: 1.2rem;
         height: calc(100% + #{$step-gap});
 
         position: absolute;
-        left: 4px;
+        left: $large-marker;
         top: 9px;
 
         background-color: #666;
         transform: translateX(-50%);
       }
-
-      // &:first-child::before { background-color: #f00; }
-      // &:nth-last-child(2)::before { background-color: #f00; }
     }
 
     &-header {
@@ -97,15 +97,24 @@ $step-gap: 1.2rem;
       grid-template-columns: auto 3rem 1fr;
     }
 
-    &-circle {
-      width: 8px;
+    &-marker {
+      --radius: #{$small-marker};
+
+      width: calc(2 * var(--radius));
       aspect-ratio: 1;
 
+      margin: 0 calc(#{$large-marker} - var(--radius));
+
       align-self: end;
-      transform: translateY(-4px);
+      transform: translateY(-0.6ex);
 
       background-color: #666;
       border-radius: 50%;
+    }
+
+    &-item:is(:first-child, :last-child) &-marker {
+      --radius: #{$large-marker};
+      transform: translateY(-0.4ex);
     }
 
     &-time {
@@ -152,20 +161,28 @@ $step-gap: 1.2rem;
       column-gap: 1rem;
       row-gap: 0.6rem;
 
+      padding: 0.8rem 1.2rem;
+      border: 1px solid transparent;
+
       font-size: 1.1rem;
       font-weight: 500;
 
       &:not(:first-child) {
-        padding-top: 0.8rem;
-        border-top: 1px solid #ddd;
+        border-top-color: #ddd;
       }
 
-      padding: 0 1.2rem;
-      padding-top: 0.8rem;
-      padding-bottom: 0.8rem;
+      &:not(:last-child) {
+        border-bottom-width: 0;
+      }
 
-      &:hover, &:last-child {
-        padding-bottom: 0.8rem;
+      &:hover, &._active {
+        background-color: #eee;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+
+        + * {
+          border-top: none;
+        }
       }
 
       > :nth-child(-n+2) {
@@ -175,6 +192,39 @@ $step-gap: 1.2rem;
       .icon {
         transform: scale(1.2);
       }
+
+
+      // ---
+
+
+      // To be replaced with &._active
+      // &:first-child {
+      //   background-color: #eee;
+
+      //   border: 1px solid #ddd;
+      //   border-radius: 4px;
+      // }
+
+
+      // position: relative;
+
+      // &:first-child::after {
+      //   $height: 100%;
+
+      //   content: "";
+
+      //   width: 5px;
+      //   height: $height;
+
+      //   position: absolute;
+      //   left: 0;
+      //   // top: 0.4rem;
+
+      //   transform: translateX((100% - $height) * 0.5);
+
+      //   background-color: $app-blue;
+      //   border-radius: 4px;
+      // }
     }
   }
 }

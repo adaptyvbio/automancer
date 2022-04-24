@@ -116,5 +116,6 @@ class Master:
           "segmentIndex": entry['segment_index'],
           "time": round(entry['time'] * 1000)
         } for entry in self._log_data
-      ]
+      ],
+      "protocol": self.protocol.export()
     }

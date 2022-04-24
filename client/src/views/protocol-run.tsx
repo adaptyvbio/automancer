@@ -3,11 +3,12 @@ import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import type { Host, Model } from '..';
+import { analyzeProtocol } from '../analysis';
 import { BlankState } from '../components/blank-state';
 import type { Chip, ChipId, ChipModel, ControlNamespace, Draft, DraftId, HostId, Protocol } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
+import { ProtocolOverview } from '../components/protocol-overview';
 import SelectChip from '../components/select-chip';
-import { Segments } from '../components/visual-editor';
 import * as util from '../util';
 
 interface ViewProtocolRunState {
@@ -21,6 +22,17 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
     this.state = {
       selectedHostChipId: null
     };
+  }
+
+  componentDidUpdate() {
+    if (!this.state.selectedHostChipId) {
+      let host = Object.values(this.props.model.hosts)[0];
+      let chip = host && Object.values(host.state.chips).find((chip) => chip.master);
+
+      if (chip) {
+        this.setState({ selectedHostChipId: [host.id, chip.id] });
+      }
+    }
   }
 
   render() {
@@ -44,49 +56,52 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
           </div>
         </Rf.ViewHeader>
         <Rf.ViewBody>
-          <div className="protocol-root">
-            <div className="status-root">
-              <div className="status-subtitle">Current step</div>
-              <div className="status-header">
-                <h2 className="status-title">Flow Neutravidin</h2>
-                <div className="status-time">14:14 – 14:38 &middot; 20 min</div>
-              </div>
-              {/* <div className="status-list">
-                <div className="status-segment">
-                  <span><Rf.Icon name="hourglass-empty" /></span><span>20 min</span>
-                  <span><Rf.Icon name="air" /></span><span>Biotin BSA</span>
-                </div>
-                <div className="status-segment">
-                  <span><Rf.Icon name="hourglass-empty" /></span><span>20 min</span>
-                  <span><Rf.Icon name="air" /></span><span>Biotin BSA</span>
-                </div>
-              </div> */}
-              {/* <div className="status-list">
-                <div className="status-segment">
-                  <span><Rf.Icon name="hourglass-empty" /></span><span>20 min</span>
-                  <span><Rf.Icon name="air" /></span><span>Biotin BSA</span>
-                  <span><Rf.Icon name="announcement" /></span><span>Biotin BSA</span>
-                  <span><Rf.Icon name="touch-app" /></span><span>Confirm</span>
-                  <span>⎈</span><span>Multiplexer<sup>+</sup></span>
-                </div>
-                <div className="status-segment">
-                  <span>⁂</span><span>Button</span>
-                  <span>↬</span><span>Pump 200 µl</span>
-                  <span>⌘</span><span>Confirm action</span>
-                  <span>⧖</span><span>Wait 6 min</span>
-                  <span>✱</span><span>Notify</span>
-                </div>
-              </div> */}
+          {chip
+            ? (() => {
+              let protocol = chip.master!.protocol;
+              let analysis = analyzeProtocol(protocol, chip.master!.entries);
+              let currentSegmentIndex = analysis.current!.segmentIndex;
+              let currentSegment = protocol.segments[currentSegmentIndex];
 
-              <Segments app={this.props.app} />
-            </div>
-          </div>
+              let currentStage = protocol.stages.find((stage) => (stage.seq[0] <= currentSegmentIndex) && (stage.seq[1] > currentSegmentIndex))!;
+              let currentStep = currentStage.steps.find((step) => (step.seq[0] <= currentSegmentIndex) && (step.seq[1] > currentSegmentIndex))!;
 
-          {/* {chip
-            ? <div />
-            : <BlankState message="No chip selected" />} */}
+              // console.log(analysis.analysisSegments?.map((seg) => {
+              //   return seg.timeRange.map((a) => {
+              //     let d = new Date(a);
+              //     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
+              //   })
+              // }));
+
+              let firstSegmentAnalysis = analysis.segments[currentStep.seq[0]];
+              let lastSegmentAnalysis = analysis.segments[currentStep.seq[1] - 1];
+
+              return (
+                <div className="protocol-root">
+                  <div className="status-root">
+                    <div className="status-subtitle">Current step ({currentSegmentIndex - currentStep.seq[0] + 1}/{currentStep.seq[1] - currentStep.seq[0]})</div>
+                    <div className="status-header">
+                      <h2 className="status-title">{currentStep.name}</h2>
+                      {/* <div className="status-time">{formatTime(analysis.segments[currentStep.seq[0]].timeRange[0])} &ndash; {formatTime(analysis.segments[currentStep.seq[1] - 1].timeRange[1])} &middot; 20 min</div> */}
+                      <div className="status-time">
+                        {firstSegmentAnalysis.timeRange && formatTime(firstSegmentAnalysis.timeRange[0])} &ndash; {formatTime(lastSegmentAnalysis.timeRange![1])} &middot; 20 min
+                      </div>
+                    </div>
+
+                    <ProtocolOverview app={this.props.app} analysis={analysis} protocol={protocol} />
+                  </div>
+                </div>
+              );
+            })() : (
+              <BlankState message="No chip selected" />
+            )}
         </Rf.ViewBody>
       </>
     );
   }
+}
+
+
+function formatTime(input: number): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: undefined, hour12: false, timeStyle: 'short' }).format(input);
 }

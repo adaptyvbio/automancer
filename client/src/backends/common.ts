@@ -48,9 +48,7 @@ export interface Device {
 
 export interface Chip {
   id: ChipId;
-  master: {
-    protocol: Protocol;
-  };
+  master: Master | null;
   matrices: {
     control: ControlNamespace.Matrix;
   };
@@ -77,6 +75,20 @@ export interface Draft {
   }[];
   protocol: Protocol | null;
   source: string;
+}
+
+
+export interface Master {
+  entries: MasterEntry[];
+  protocol: Protocol;
+}
+
+export interface MasterEntry {
+  error: string | null;
+  paused: boolean;
+  processState: { progress: number; };
+  segmentIndex: number;
+  time: number;
 }
 
 

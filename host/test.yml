@@ -1,38 +1,56 @@
-name: Hello
+name: IL6 test
 models:
   - m1024
 parameters:
-  - A1
-  - A2
-  - A3
-
-# defaults: A1, A2, A
-
-shorthands:
-  wash:
-    duration: "1 min {args[1]}"
-  washhh:
-    # duration: 1 min {args[0]}
-    use: wash(xx, {args[0]})
-  # disp:
-  #   actions:
-  #     - defaults: "A3, A2, {args[0]}"
-  #       duration: 3 sec
-
-  p:
-    defaults: A1, {args[0]}
-  def:
-    use: p([{args[0]}, A21])
+  Biotin:
+    name: Biotin BSA
+    # hidden: false
+  Pbs:
+    name: PBS
+  Nv:
+    name: Neutravidin NV
 
 stages:
-  - name: S1
+  - name: Stage A
     steps:
-      # - use: def(A2)
-      # - defaults: A3, {'A2, A1'}
-      # - defaults: +++A1 {'A2'}
-      # - use: wash(a {'c'})
-      # - valves: A1
-      #   use: washhh(35 sec)
+      - duration: 10 sec
+      - actions:
+          - duration: 10 sec
+          - duration: 10 sec
+          - duration: 10 sec
+      - duration: 10 sec
+      - duration: 10 sec
+      - duration: 10 sec
+      - duration: 10 sec
+      - duration: 10 sec
+  - name: Stage X
+    steps:
+      - duration: 20 min
+      - actions:
+          # - confirm: Do something
+          - duration: 20 min
+          - duration: 5 min
+      - duration: 30 min
+      - duration: 20 min
+  - name: Stage Y
+    steps:
+      - duration: 20 min
+      - duration: 5 min
 
-      - duration: 3 sec
-        valves: A2, A3
+# stages:
+#   - name: Surface chemistry
+#     steps:
+#       - name: Pressure initialization
+#         confirm: Set pressure to 4.2 psi
+#       - name: Flow biotin
+#         actions:
+#           - duration: 20 min
+#             valves: Biotin
+#           - duration: 5 min
+#             valves: Pbs
+#       - name: Flow neutravidin
+#         actions:
+#           - duration: 20 min
+#             valves: Biotin
+#           - duration: 5 min
+#             valves: Pbs

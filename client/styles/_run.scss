@@ -1,9 +1,11 @@
+@use "sass:color";
+
 @use "./constants" as *;
 
 
 .status {
   &-subtitle {
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.4rem;
     color: #999;
   }
 
@@ -22,40 +24,58 @@
   }
 
 
-  &-list {
+  &-overview {
     margin: 2rem 0;
   }
+}
 
-  &-segment {
+
+.progress {
+  &-root {
     display: grid;
-    align-items: center;
-    grid-template-columns: auto 1fr;
+    align-items: end;
     column-gap: 1rem;
-    row-gap: 0.4rem;
+    grid-template-columns: 1fr 3rem;
 
-    padding: 0 1rem;
-    margin-bottom: 0.8rem;
-    padding-bottom: 0.8rem;
+    margin: 3rem 0;
+  }
 
-    font-size: 1.1rem;
-    font-weight: 500;
+  &-outer {
+    display: grid;
 
-    &:not(:last-child) {
-      border-bottom: 1px solid #ddd;
-    }
+    // background-color: #eee;
+    border: 1px solid #ddd;
+    border-radius: 6px;
 
-    > :nth-child(odd) {
-      font-size: 1.1em;
-      font-weight: 600;
-    }
+    height: 12px;
+    padding: 0 4px;
 
-    // > :nth-child(1), > :nth-child(2) {
-    > :nth-child(-n+2) {
-      color: $app-blue;
-    }
+    cursor: pointer;
+  }
 
-    .icon {
-      transform: scale(1.2);
-    }
+  &-inner, &-progress, &-select {
+    width: 100%;
+    height: 4px;
+
+    margin: auto 0;
+    border-radius: 4px;
+
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  &-progress {
+    background-color: $app-blue;
+    // background-color: color.adjust($app-blue, $alpha: -0.5);
+  }
+
+  &-select {
+    background-color: #0003;
+  }
+
+  &-text {
+    color: #999;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
   }
 }

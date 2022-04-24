@@ -5,20 +5,16 @@ $step-gap: 1.2rem;
 
 
 .protoview {
-  &-root {
-    padding: 0 1.8rem;
-  }
-
   &-stage {
     &-header {
       display: flex;
       align-items: center;
       column-gap: 1rem;
 
-      width: max-content;
+      padding: 1rem 0 1rem 2rem;
 
-      margin-left: 2rem;
-      padding: 1rem 0;
+      border: 1px solid transparent;
+      border-radius: 4px;
 
       .icon {
         border-radius: 50%;
@@ -30,6 +26,11 @@ $step-gap: 1.2rem;
       transform: scale(1.4) rotate(-90deg);
     }
 
+    &-root._active:not(._open) &-header {
+      background-color: #fafafa;
+      border: 1px solid #eaeaea;
+    }
+
     &-name {
       font-size: 1.3rem;
       font-weight: 600;
@@ -38,6 +39,7 @@ $step-gap: 1.2rem;
     &-expand {
       padding: 0 0.4rem;
 
+      background-color: #fff;
       border: 1px solid #ccc;
       border-radius: 4px;
 
@@ -192,39 +194,6 @@ $step-gap: 1.2rem;
       .icon {
         transform: scale(1.2);
       }
-
-
-      // ---
-
-
-      // To be replaced with &._active
-      // &:first-child {
-      //   background-color: #eee;
-
-      //   border: 1px solid #ddd;
-      //   border-radius: 4px;
-      // }
-
-
-      // position: relative;
-
-      // &:first-child::after {
-      //   $height: 100%;
-
-      //   content: "";
-
-      //   width: 5px;
-      //   height: $height;
-
-      //   position: absolute;
-      //   left: 0;
-      //   // top: 0.4rem;
-
-      //   transform: translateX((100% - $height) * 0.5);
-
-      //   background-color: $app-blue;
-      //   border-radius: 4px;
-      // }
     }
   }
 }

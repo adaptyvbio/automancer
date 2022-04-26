@@ -95,28 +95,31 @@ class Host:
     # -- Debug --------------------------------------------
 
     chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
     draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent / "test.yml").open().read())
 
     codes = {
       'control': {
-        'arguments': [None, None, None]
+        'arguments': [0, 1, None, None]
       }
     }
 
-    # self.start_plan(chip, codes, draft)
+    def update_callback():
+      pass
 
-    # asyncio.run(self.start_plan(chip, codes, draft))
+    # self.start_plan(chip, codes, draft, update_callback=update_callback)
 
     # try:
     #   protocol = Protocol(
     #     (Path(__file__).parent.parent / "test.yml").open().read(),
     #     parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-    #     chip_models=self.models
+    #     models=self.models
     #   )
 
     #   pprint(protocol.export())
     # except reader.LocatedError as e:
     #   e.display()
+    #   # raise e
 
 
   def create_chip(self, model_id, name):
@@ -138,7 +141,7 @@ class Host:
       protocol = Protocol(
         source,
         parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-        chip_models=self.models
+        models=self.models
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))

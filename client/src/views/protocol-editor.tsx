@@ -80,12 +80,12 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
       this.setState({ draftId: Object.keys(this.host.state.drafts)[0] });
     }
 
-    if (this.draft && !this.state.planData) {
-      this.setState({ planData: {
-        data: { control: { arguments: new Array(10).fill(null) } },
-        chipId: Object.values(this.host!.state.chips)[0].id }
-      });
-    }
+    // if (this.draft && !this.state.planData) {
+    //   this.setState({ planData: {
+    //     data: { control: { arguments: new Array(10).fill(null) } },
+    //     chipId: Object.values(this.host!.state.chips)[0].id }
+    //   });
+    // }
   }
 
   createDraft(source: string) {
@@ -332,14 +332,19 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
               menu={Object.values(this.props.host.state.chips).map((chip) => ({
                 id: chip.id,
                 name: chip.name,
-                icon: 'memory'
+                icon: 'memory',
+                disabled: protocol?.modelIds && !protocol.modelIds.includes(chip.modelId)
               }))}
               selectedOptionPath={chip ? [chip.id] : null}
               onSelect={(selection) => {
+                let chipId = selection.first() as ChipId;
+                let chip = this.props.host.state.chips[chipId];
+                let model = this.props.host.state.models[chip.modelId];
+
                 this.props.setPlanData({
-                  chipId: selection.first() as ChipId,
+                  chipId,
                   data: Object.fromEntries(
-                    Units.map(([namespace, unit]) => [namespace, unit.createCode(protocol!)])
+                    Units.map(([namespace, Unit]) => [namespace, Unit.createCode(protocol!, model)])
                   ) as UnitsCode
                 })
               }} />

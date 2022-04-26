@@ -11,7 +11,7 @@ interface Unit {
 
 
 interface Units {
-  control: typeof Control
+  [Control.namespace]: typeof Control
 }
 
 export type UnitsCode = {
@@ -22,4 +22,4 @@ export type UnitsCodeEditor = {
   [namespace in keyof Units]: Units[namespace]['CodeEditor'];
 };
 
-export default [['control', Control]] as [['control', typeof Control]];
+export default [[Control.namespace, Control]] as [['control', typeof Control]];

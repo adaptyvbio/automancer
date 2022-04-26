@@ -187,14 +187,16 @@ class Or:
     self._atoms = [Schema(atom) for atom in atoms]
 
   def transform(self, test):
+    exception = None
+
     for atom in self._atoms:
       try:
         return atom.transform(test)
-      except:
-        pass
+      except Exception as e:
+        if not exception:
+          exception = e
 
-    # Should raise
-    self.validate(test)
+    raise exception
 
   def validate(self, test):
     exception = None

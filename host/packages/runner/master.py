@@ -7,6 +7,7 @@ class Master:
     self.chip = chip
     self.codes = codes
     self.protocol = protocol
+    self.supdata = protocol.create_supdata(chip, codes)
 
     self._paused = False
     self._process_state = None
@@ -117,5 +118,6 @@ class Master:
           "time": round(entry['time'] * 1000)
         } for entry in self._log_data
       ],
+      "supdata": self.protocol.export_supdata(self.supdata),
       "protocol": self.protocol.export()
     }

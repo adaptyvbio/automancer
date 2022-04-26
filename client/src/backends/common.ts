@@ -94,11 +94,12 @@ export interface MasterEntry {
 
 export interface Protocol {
   name: string | null;
+  modelIds: ChipModelId[] | null;
   segments: ProtocolSegment[];
   stages: ProtocolStage[];
   data: {
     control?: ControlNamespace.ProtocolData;
-  }
+  };
 }
 
 export interface ProtocolStage {
@@ -171,18 +172,17 @@ export namespace ControlNamespace {
   }
 
   export interface Sheet {
+    diagram: string | null;
+
     groups: {
-      color: string;
       name: string;
     }[];
 
     valves: {
+      diagramRef: [number, number] | null;
       group: number;
       names: string[];
-      schematic: [number, number] | null;
     }[];
-
-    schematic: string | null;
   }
 
   export enum RunnerValveError {
@@ -198,7 +198,12 @@ export namespace ControlNamespace {
   }
 
   export interface ProtocolData {
-    parameters: { label: string; }[];
+    parameters: {
+      defaultValveIndices: Record<ChipId, number> | null;
+      display: ('delta' | 'hidden' | 'visible') | null;
+      label: string;
+      repr: ('flow' | 'push' | 'unpush' | 'waves') | null;
+    }[];
   }
 
   export interface SegmentData {

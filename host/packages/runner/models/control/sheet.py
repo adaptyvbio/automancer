@@ -4,8 +4,8 @@ from ...util.parser import Identifier, check_identifier
 from ...util import schema as sc
 
 
-Valve = namedtuple("Valve", ["alias", "diagram_ref", "group", "id", "inverse", "name"])
-ValveGroup = namedtuple("ValveGroup", ["id", "inverse", "name", "valve_ids"])
+Valve = namedtuple("Valve", ['alias', 'default_display', 'default_repr', 'diagram_ref', 'group', 'id', 'inverse', 'name'])
+ValveGroup = namedtuple("ValveGroup", ['id', 'inverse', 'name', 'valve_ids'])
 
 
 def parse_diagram_ref(value):
@@ -37,9 +37,18 @@ def parse_valve_id(value):
   return (group_id, valve_id)
 
 
+display_values = ['delta', 'hidden', 'visible']
+repr_values = ['flow', 'push', 'unpush', 'waves']
+
+display_partial_schema = {
+  'display': sc.Optional(sc.Or(*[sc.Exact(value) for value in display_values])),
+  'repr': sc.Optional(sc.Or(*[sc.Exact(value) for value in repr_values]))
+}
+
 
 class Sheet:
   def __init__(self, data, *, dir):
+
     # -- Validate schema ----------------------------------
 
     schema = sc.Dict({
@@ -50,11 +59,12 @@ class Sheet:
         'inverse': sc.Optional(sc.ParseType(bool))
       })),
       'valves': sc.Optional(sc.List({
+        **display_partial_schema,
         'alias': sc.Optional(Identifier()),
+        'diagram': sc.Optional(sc.Transform(parse_diagram_ref, str)),
         'id': sc.Transform(parse_valve_id, str),
         'inverse': sc.Optional(sc.ParseType(bool)),
         'name': sc.Optional(str),
-        'diagram': sc.Optional(sc.Transform(parse_diagram_ref, str))
       }))
     }, allow_extra=True)
 
@@ -91,7 +101,7 @@ class Sheet:
       if not group:
         raise group_id.error(f"Invalid group id '{group_id}'")
 
-      alias=data_valve.get("alias")
+      alias = data_valve.get("alias")
       full_id = f"{group.id}/{valve_id}"
       valve_index = len(self.valves)
 
@@ -111,6 +121,8 @@ class Sheet:
 
       self.valves.append(Valve(
         alias=alias,
+        default_display=data_valve.get("display", "visible"),
+        default_repr=data_valve.get("repr", "flow"),
         diagram_ref=diagram_ref,
         group=group,
         id=valve_id,

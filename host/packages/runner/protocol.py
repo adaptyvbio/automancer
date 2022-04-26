@@ -76,7 +76,7 @@ class FragmentParser(BaseParser):
 
 
 class Protocol:
-  def __init__(self, text, parsers, chip_models):
+  def __init__(self, text, parsers, models):
     data = parse(text)
 
 
@@ -92,7 +92,7 @@ class Protocol:
     self.parser_classes = parsers
     self.parsers = { namespace: Parser(self) for namespace, Parser in parsers.items() }
 
-    self.chip_models = dict()
+    self.models = None
     self.segments = list()
     self.stages = list()
 
@@ -101,11 +101,14 @@ class Protocol:
 
 
     # Get chip model instances from their ids
-    for id in data.get("models", list()):
-      if not (id.value in chip_models):
-        raise id.error(f"Invalid chip model id '{id.value}'")
+    if "models" in data:
+      self.models = dict()
 
-      self.chip_models[id] = chip_models[id]
+      for model_id in data["models"]:
+        if not (model_id in models):
+          raise model_id.error(f"Invalid chip model id '{model_id}'")
+
+        self.models[model_id.value] = models[model_id]
 
 
     # Call enter_protocol()
@@ -154,9 +157,16 @@ class Protocol:
 
       self.stages.append(stage)
 
+  def create_supdata(self, chip, codes):
+    return { namespace: parser.create_supdata(chip, codes) for namespace, parser in self.parsers.items() }
+
+  def export_supdata(self, data):
+    return { namespace: Parser.export_supdata(data[namespace]) for namespace, Parser in self.parser_classes.items() }
+
   def export(self):
     return {
       "name": self.name,
+      "modelIds": self.models and [model_id for model_id in self.models.keys()],
       "data": {
         namespace: parser.export_protocol() for namespace, parser in self.parsers.items()
       },

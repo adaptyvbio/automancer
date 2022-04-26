@@ -85,7 +85,7 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
                     <P />
 
                     <div className="status-overview">
-                      <ProtocolOverview app={this.props.app} analysis={analysis} protocol={protocol} />
+                      <ProtocolOverview app={this.props.app} analysis={analysis} protocol={protocol} master={chip.master!} />
                     </div>
                   </div>
                 </div>

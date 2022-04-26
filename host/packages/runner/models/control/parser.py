@@ -3,6 +3,7 @@ import re
 import regex
 
 from . import namespace
+from .sheet import display_partial_schema, parse_valve_id
 from ..base import BaseParser
 from ...util.parser import EvaluatedCompositeValue, Identifier, interpolate, parse_ref
 from ...util import schema as sc
@@ -11,7 +12,7 @@ from ...util import schema as sc
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
 
 
-ValveParameter = namedtuple("ValveParameter", ['label', 'name'])
+ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'display', 'label', 'name', 'repr'])
 
 
 class Parser(BaseParser):
@@ -28,13 +29,27 @@ class Parser(BaseParser):
 
   def enter_protocol(self, data_protocol):
     schema = sc.Dict({
-      'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({ 'name': sc.Optional(str) })))
+      'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
+        **display_partial_schema,
+        'default': sc.Optional(str),
+        'name': sc.Optional(str)
+      })))
     }, allow_extra=True)
 
-    schema.validate(data_protocol)
+    data_protocol = schema.transform(data_protocol)
 
     for valve_name, valve_info in data_protocol.get('parameters', dict()).items():
-      self._valve_parameters.append(ValveParameter(name=valve_name.value, label=(valve_info['name'].value if valve_info else valve_name.value)))
+      self._valve_parameters.append(
+        ValveParameter(
+          default_valve_indices={
+            model_id: model.sheets[namespace].valve_names.get(valve_info['default']) for model_id, model in self._parent.models.items()
+          } if ('default' in valve_info) and (self._parent.models) else None,
+          display=(valve_info['display'].value if valve_info and ('display' in valve_info) else None),
+          label=(valve_info['name'].value if valve_info and ('name' in valve_info) else valve_name.value),
+          name=valve_name.value,
+          repr=(valve_info['repr'].value if valve_info and ('repr' in valve_info) else None)
+        )
+      )
 
   def enter_block(self, data_block):
     if "valves" in data_block:
@@ -56,7 +71,35 @@ class Parser(BaseParser):
 
   def export_protocol(self):
     return {
-      "parameters": [{ "label": param.label } for param in self._valve_parameters],
+      "parameters": [{
+        "defaultValveIndices": param.default_valve_indices,
+        "display": param.display,
+        "label": param.label,
+        "repr": param.repr
+      } for param in self._valve_parameters],
+    }
+
+  def create_supdata(self, chip, codes):
+    code = codes[namespace]
+
+    def process_arg(param_index, arg):
+      param = self._valve_parameters[param_index]
+      valve = chip.model.sheets[namespace].valves[arg] if arg is not None else None
+
+      return {
+        'display': param.display or (valve and valve.default_display) or 'visible',
+        'repr': param.repr or (valve and valve.default_repr or param.repr) or 'flow'
+      }
+
+    arguments = [process_arg(param_index, arg) for param_index, arg in enumerate(code['arguments'])]
+
+    # for param_index, arg in enumerate(code['arguments']):
+    #   if arg is not None:
+    #     # print(self._sheet.valves[arg], protocol.parsers[namespace]['arguments'])
+    #     print(chip.model.sheets[namespace].valves[arg], self._valve_parameters[param_index])
+
+    return {
+      'arguments': arguments
     }
 
   def export_segment(data):
@@ -64,6 +107,13 @@ class Parser(BaseParser):
       "valves": list(data['valves'])
     }
 
+  def export_supdata(data):
+    return {
+      "arguments": [{
+        "display": arg['display'],
+        "repr": arg['repr']
+      } for arg in data['arguments']]
+    }
 
   def _process_valves(self, expr, context = dict()):
     pop_count, pushes, peak = self._parse_expr(expr, context)

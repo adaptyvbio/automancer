@@ -31,8 +31,17 @@ class BaseParser:
   def handle_segment(self, data_action):
     pass
 
+  def create_supdata(self, chip, codes):
+    return None
+
   def export_protocol(self):
     return dict()
+
+  def export_segment(data):
+    return None
+
+  def export_supdata(data):
+    return None
 
 
   # Return value:

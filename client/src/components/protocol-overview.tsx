@@ -3,14 +3,16 @@ import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import { type Analysis, analyzeProtocol } from '../analysis';
-import type { MasterEntry, Protocol } from '../backends/common';
+import type { Master, MasterEntry, Protocol } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
+import Units, { UnitsCode } from '../units';
 
 
 export function ProtocolOverview(props: {
   analysis?: Analysis;
   app: Rf.Application;
+  master?: Master;
   protocol: Protocol;
 }) {
   let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([]));
@@ -66,12 +68,16 @@ export function ProtocolOverview(props: {
 
                             switch (segment.processNamespace) {
                               case 'input': {
-                                features.push(['keyboard-command-key', segment.data.input!.message]);
+                                // features.push(['keyboard-command-key', segment.data.input!.message]);
                                 break;
                               }
 
                               case 'timer': {
-                                features.push(['hourglass-empty', formatDuration(segment.data.timer!.duration)]);
+                                features.push({
+                                  icon: 'hourglass-empty',
+                                  label: formatDuration(segment.data.timer!.duration)
+                                });
+
                                 break;
                               }
 
@@ -81,24 +87,17 @@ export function ProtocolOverview(props: {
                               }
                             }
 
-                            features.push(['air', 'Biotin']);
-                            // features.push(['speed', '4.2 psi']);
-                            // features.push(['vertical-align-bottom', 'Button']);
-
-                            // if (segment.data.control) {
-                            //   let control = segment.data.control;
-
-                            //   if (control.valves.length > 0) {
-                            //     features.push(['→', control.valves.map((valveIndex) => props.protocol.data.control!.parameters[valveIndex].label).join(', ')]);
-                            //   }
-                            // }
+                            features = [
+                              ...features,
+                              ...Units.flatMap(([namespace, Unit]) => Unit.createFeatures(segment, props.protocol, props.master))
+                            ];
 
                             return (
                               <div className={util.formatClass('protoview-segment-features', { '_active': segmentIndex === analysis.current?.segmentIndex })} key={segmentRelIndex}>
-                                {features.map(([icon, text], featureIndex) => (
+                                {features.map((feature, featureIndex) => (
                                   <React.Fragment key={featureIndex}>
-                                    <span><Rf.Icon name={icon} /></span>
-                                    <span>{text}</span>
+                                    <span><Rf.Icon name={feature.icon} /></span>
+                                    <span>{feature.label}</span>
                                   </React.Fragment>
                                 ))}
                               </div>

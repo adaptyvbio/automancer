@@ -2,7 +2,6 @@ from collections import namedtuple
 import math
 import re
 import regex
-import yaml
 
 from ..reader import LocatedString, LocatedValue
 from .schema import SchemaType

@@ -1,7 +1,6 @@
-# from ..base import BaseRunner
-
-from .runner import BinaryPermutation, Runner
 from .drivers import mock, numato
+from .runner import BinaryPermutation, Runner
+from ..base import BaseExecutor
 from ...device import DeviceInformation
 from ...util.schema import List, Optional, ParseType, Schema
 
@@ -12,7 +11,7 @@ drivers = {
 }
 
 
-class Executor: # (BaseExecutor):
+class Executor(BaseExecutor):
   def __init__(self, conf):
     self._devices = list()
     self._valves = dict()
@@ -45,11 +44,10 @@ class Executor: # (BaseExecutor):
         valve['name']: len(self._valves) + index for index, valve in enumerate(spec['valves'])
       })
 
-  def get_device_info(self):
+  def get_devices(self):
     return [
       DeviceInformation(
         id=str(index),
-        info=dict(),
         name=(device['name'] or "Untitled control device")
       ) for index, device in enumerate(self._devices)
     ]
@@ -58,9 +56,6 @@ class Executor: # (BaseExecutor):
     return {
       "valves": self._valves
     }
-
-  async def initialize(self):
-    pass
 
     # for device in self._devices:
     #   device['driver'].initialize()

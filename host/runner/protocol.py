@@ -2,11 +2,11 @@ from collections import namedtuple
 import math
 import re
 
-from .models.base import BaseParser
+from .units.base import BaseParser
 from .util.parser import interpolate, parse_call
 from .reader import parse
-from .models.input.parser import Parser as InputParser
-from .models.timer.parser import Parser as TimerParser
+from .units.input.parser import Parser as InputParser
+from .units.timer.parser import Parser as TimerParser
 
 
 Stage = namedtuple("Stage", ["name", "seq", "steps"])

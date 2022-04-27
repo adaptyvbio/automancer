@@ -1,5 +1,5 @@
-from .models import control
-from .models.timer import parser as timer
+from .units import control
+from .units.timer import parser as timer
 from .protocol import LocatedError, Protocol
 
 from pathlib import Path

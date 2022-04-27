@@ -85,17 +85,45 @@ class BaseProcessRunner(BaseRunner):
 
 
 class BaseExecutor:
+  """
+  Constructs an executor.
+
+  Parameters
+  ----------
+  conf : dict
+    Section of the setup configuration regarding that unit. An empty dict if not specified in the configuration.
+  """
   def __init__(self, conf):
     pass
 
-  def export(self):
-    return dict()
-
+  """
+  Initializes the executor.
+  """
   async def initialize(self):
     pass
 
-  def get_device_info(self):
+  """
+  Destroys the executor.
+  """
+  async def destroy(self):
+    pass
+
+  """
+  Returns the list of devices associated with the executor.
+
+  Returns
+  -------
+  List<DeviceInformation>
+  """
+  def get_devices(self):
     return list()
 
+  """
+  Exports the executor's data.
+
+  Returns
+  -------
+  Dict
+  """
   def export(self):
     return dict()

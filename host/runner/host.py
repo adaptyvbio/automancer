@@ -1,43 +1,29 @@
-import asyncio
+from collections import namedtuple
 from pathlib import Path
-import appdirs
-import json
-import os
+import asyncio
+import logging
 import platform
 import sys
 import time
 import uuid
-import yaml
 
-from pprint import pprint
+from . import reader, units
+from .chip import Chip
+from .master import Master
+from .model import Model
+from .protocol import Protocol
 
-
-packages_dir = Path(__file__).parent.parent / "packages"
-sys.path.insert(0, str(packages_dir))
-
-
-import engine
-from runner.chip import Chip
-from runner.master import Master
-from runner.model import Model
-from runner.protocol import Protocol
-import runner.models
-import runner.reader as reader
-
-
-# Matrix
-# Node
-
-from collections import namedtuple
 
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
 DraftError = namedtuple("DraftError", ['message', 'range'])
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("pr1-host")
 
 class Host:
-  def __init__(self):
-    self.data_dir = Path(appdirs.site_data_dir("PRn", "LBNC"))
-    self.data_dir.mkdir(exist_ok=True)
+  def __init__(self, backend):
+    self.backend = backend
+    self.data_dir = backend.get_data_dir()
 
     self.chips = dict()
     self.drafts = dict()
@@ -68,7 +54,9 @@ class Host:
     self.id = conf.get('id') or hex(uuid.getnode())[2:]
     self.name = conf['name']
     self.start_time = round(time.time() * 1000)
-    self.units = runner.models.models
+    self.units = units.units
+
+    logger.info(f"Registering {len(self.units)} units: {', '.join(self.units.keys())}")
 
     self.executors = {
       namespace: unit.Executor(conf['units'].get(namespace, dict())) for namespace, unit in self.units.items()
@@ -77,18 +65,35 @@ class Host:
 
     # -- Load models --------------------------------------
 
-    models_dir = self.data_dir / "models"
-    models_dir.mkdir(exist_ok=True)
+    logger.debug(f"Loading models")
 
     self.models = dict()
 
-    for path in models_dir.glob("**/*.yml"):
+    for path in (self.data_dir / "models").glob("**/*.yml"):
       try:
         chip_model = Model.load(path, self.units)
         self.models[chip_model.id] = chip_model
       except reader.LocatedError as e:
         e.display()
         sys.exit(1)
+
+  async def initialize(self):
+    logger.info("Initializing host")
+    logger.debug("Initializing executors")
+
+    for executor in self.executors.values():
+      await executor.initialize()
+
+    logger.debug("Done initializing executors")
+
+  async def destroy(self):
+    logger.info("Destroying host")
+    logger.debug("Destroying executors")
+
+    for executor in self.executors.values():
+      await executor.destroy()
+
+    logger.debug("Done destroying executors")
 
 
   def _debug(self):
@@ -210,13 +215,10 @@ class Host:
           }
         } for model in self.models.values()
       },
-      "devices": [{
-        "id": device.id,
-        "info": device.info,
-        "model": namespace,
-        "name": device.name
-      } for namespace, executor in self.executors.items() for device in executor.get_device_info()],
-      "executors": { namespace: executor.export() for namespace, executor in self.executors.items() },
+      "devices": {
+        namespace: { device.id: device.export() for device in executor.get_devices() }
+        for namespace, executor in self.executors.items()
+      },
       "drafts": {
         draft.id: {
           "id": draft.id,
@@ -229,128 +231,3 @@ class Host:
         } for draft in self.drafts.values()
       }
     }
-
-
-
-# -------
-
-
-from pathlib import Path
-import websockets
-
-
-class App():
-  def __init__(self):
-    self.host = Host()
-    self.clients = set()
-
-    self.hostname = "127.0.0.1"
-    self.port = 4567
-
-  async def connect(self, client):
-    await client.send(json.dumps(self.host.get_state()))
-    # self.broadcast(json.dumps(self.state))
-
-    async for msg in client:
-      message = json.loads(msg)
-
-      if message["type"] == "command":
-        chip = self.host.chips[message["chipId"]]
-        namespace, command = next(iter(message["command"].items()))
-        chip.runners[namespace].command(command)
-
-      if message["type"] == "createChip":
-        self.host.create_chip(model_id=message["modelId"], name="Untitled chip")
-
-      if message["type"] == "createDraft":
-        self.host.create_draft(draft_id=message["draftId"], source=message["source"])
-
-      if message["type"] == "deleteChip":
-        # TODO: checks
-        del self.host.chips[message["chipId"]]
-
-      if message["type"] == "setMatrix":
-        chip = self.host.chips[message["chipId"]]
-
-        for namespace, matrix_data in message["update"].items():
-          chip.matrices[namespace].update(matrix_data)
-
-      if message["type"] == "startPlan":
-        chip = self.host.chips[message["chipId"]]
-        draft = self.host.drafts[message["draftId"]]
-
-        def update_callback():
-          self.update()
-
-        self.host.start_plan(chip=chip, codes=message["codes"], draft=draft, update_callback=update_callback)
-
-      self.update()
-      # await client.send(json.dumps(self.get_state()))
-
-    # import asyncio
-    # await asyncio.Future()
-
-  def broadcast(self, message):
-    websockets.broadcast(self.clients, message)
-
-  def update(self):
-    self.broadcast(json.dumps(self.host.get_state()))
-
-  def start(self):
-    # asyncio.run(self.serve())
-    # return
-
-    # loop = asyncio.new_event_loop()
-    # asyncio.set_event_loop(loop)
-
-    loop = asyncio.get_event_loop()
-
-    async def a():
-      await asyncio.sleep(1)
-      print('Done')
-
-    # loop.create_task(self.serve())
-    # loop.run_forever()
-
-    # asyncio.ensure_future(a(), loop=loop) # asyncio.get_event_loop())
-    # asyncio.ensure_future(self.serve(), loop=loop) # asyncio.get_event_loop())
-
-    # loop.create_task(self.host._debug())
-
-    self.host._debug()
-
-    loop.create_task(self.serve())
-    loop.run_forever()
-
-    # loop.run_until_complete(self.serve())
-
-    # try:
-    #   loop.run_forever()
-    #   tasks = asyncio.Task.all_tasks()
-    #   print(">>", tasks)
-    # finally:
-    #   loop.close()
-
-  async def serve(self):
-    async def handler(client):
-      self.clients.add(client)
-
-      try:
-        await self.connect(client)
-      finally:
-        self.clients.remove(client)
-
-    stop = asyncio.Future()
-
-    server = await websockets.serve(handler, host=self.hostname, port=self.port)
-    await server.wait_closed()
-
-    # try:
-    #   async with websockets.serve(handler, host=self.hostname, port=self.port):
-    #     await stop
-    # except Exception as e:
-    #   print(">>>", e)
-
-
-app = App()
-app.start()

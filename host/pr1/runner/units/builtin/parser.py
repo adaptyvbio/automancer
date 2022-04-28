@@ -2,7 +2,7 @@ from . import namespace
 from ..base import BaseParser
 from ...protocol import Parsers
 from ...reader import LocatedValue
-from ...util.parser import interpolate, parse_call
+from ...util.parser import UnclassifiedExpr, parse_call
 
 
 class ShorthandsParser(BaseParser):
@@ -23,8 +23,7 @@ class ShorthandsParser(BaseParser):
       if not shorthand:
         raise LocatedValue.create_error(f"Invalid shorthand name '{callee}'", shorthand)
 
-      args_composed = [interpolate(arg, context) for arg in args]
-      context = { index: arg for index, arg in enumerate(args_composed) }
+      context = { index: UnclassifiedExpr(arg, context) for index, arg in enumerate(args) }
 
       return {
         'role': 'replace',

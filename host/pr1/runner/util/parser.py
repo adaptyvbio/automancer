@@ -7,206 +7,6 @@ from ..reader import LocatedError, LocatedString, LocatedValue
 from .schema import SchemaType
 
 
-# Location = namedtuple("Location", ["column", "line"])
-
-# class Location:
-#   def __init__(self, column, line):
-#     self.column = column
-#     self.line = line
-
-#   def range(self):
-#     return Range(
-#       self,
-#       Location(self.column + 1, self.line)
-#     )
-
-#   def __repr__(self):
-#     return f"[{self.line}:{self.column}]"
-
-
-# class Range:
-#   def __init__(self, start, end):
-#     self.start = start
-#     self.end = end
-
-#   def __mod__(self, offset):
-#     assert(self.start.line == self.end.line)
-
-#     start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
-
-#     return Range(
-#       Location(line=self.start.line, column=(self.start.column + start)),
-#       Location(line=self.start.line, column=(self.start.column + end))
-#     )
-
-#   def from_node(node):
-#     return Range(
-#       start=Location(column=node.start_mark.column, line=node.start_mark.line),
-#       end=Location(column=node.end_mark.column, line=node.end_mark.line)
-#     )
-
-#   def __repr__(self):
-#     return f"Range({self.start} -> {self.end})"
-
-
-# class LocatedValue(str):
-#   def __new__(cls, value, *args, **kwargs):
-#     return super(LocatedValue, cls).__new__(cls, value)
-
-#   def __init__(self, value, location, source):
-#     self.location = location
-#     self.source = source
-#     self.value = value
-
-#   def error(self, message, offset = None):
-#     return LocatedError(message, location=(self.location % offset if offset else self.location), source=self.source)
-
-#   # def __int__(self):
-#   #   return LocatedValueInt(int(self), self.location, self.source)
-
-#   def __getitem__(self, key):
-#     start, stop, step = key.indices(len(self))
-#     return LocatedValue(self.value[key], location=(self.location % (start, stop)), source=self.source)
-
-
-# # class LocatedValueInt(int):
-# #   def __new__(cls, value, *args, **kwargs):
-# #     return super(LocatedValueInt, cls).__new__(cls, value)
-
-# #   def __init__(self, value, location, source):
-# #     self.location = location
-# #     self.source = source
-# #     self.value = value
-
-# #   def __rmul__(self, other):
-# #     print(self, other)
-
-
-# class _LocatedValue:
-#   def __init__(self, value, location, source):
-#     self.location = location
-#     self.source = source
-#     self.value = value
-
-#   def __hash__(self):
-#     return hash(self.value)
-
-#   def __eq__(self, other):
-#     return self.value == other
-
-#   def __repr__(self):
-#     return self.value.__repr__()
-
-#   def replace(self, *args):
-#     return self
-
-#   def error(self, message):
-#     return LocatedError(message, location=self.location, source=self.source)
-
-#   def split(self, delimiter):
-#     # TODO
-#     # assert(self.value is str)
-
-#     index = 0
-#     segments = list()
-
-#     for segment in self.value.split(delimiter):
-#       segments.append(LocatedValue(
-#         segment,
-#         location=(self.location % (index, index + (len(segment) or 1))),
-#         source=self.source
-#       ))
-
-#       index += len(segment) + len(delimiter)
-
-#     return segments
-
-#   def __getitem__(self, key):
-#     return self.value[key]
-
-#   def startswith(self, prefix):
-#     return self.value.startswith(prefix)
-
-
-# class Source:
-#   def __init__(self, value):
-#     self.value = value
-
-#   def parse_yaml(self):
-#     return yaml.load(self.value, Loader=YamlLoader)
-
-
-# class YamlLoader(yaml.SafeLoader):
-#   def construct_mapping(self, node, deep = False):
-#     mapping = super(YamlLoader, self).construct_mapping(node, deep=deep)
-#     mapping['__location__'] = Range.from_node(node)
-#     mapping['__source__'] = Source(self.buffer)
-#     # print(">", node)
-
-#     return mapping
-
-#   def construct_scalar(self, node):
-#     value = super().construct_scalar(node)
-#     # print(">>", value, type(value), node.tag)
-
-#     if node.tag == "tag:yaml.org,2002:str":
-#       return LocatedValue(value=value, location=Range.from_node(node), source=Source(self.buffer))
-#     # TODO: handle styles, e.g. "foobar" (with inner and outer range)
-#     # print(">", node.style)
-
-#     return value
-
-
-# class LocatedError(Exception):
-#   def __init__(self, message, location, source):
-#     super().__init__(message)
-#     self.location = location
-#     self.source = source
-
-#   # TODO: improve by trying to find block limits
-#   def display(self):
-#     location = self.location
-
-#     # Options
-#     context_before = 4
-#     context_after = 2
-#     target_space = False
-
-#     lines = self.source.value.splitlines()
-#     width_line = math.ceil(math.log(location.end.line + 1 + context_after + 1, 10))
-#     end_line = location.end.line - (1 if location.end.column == 0 else 0)
-
-#     for line_index, line in enumerate(lines):
-#       if (line_index < location.start.line - context_before) or (line_index > end_line + context_after):
-#         continue
-
-#       print(f" {str(line_index + 1).rjust(width_line, ' ')} | {line}")
-
-#       if (line_index >= location.start.line) and (line_index <= end_line):
-#         target_offset = location.start.column if line_index == location.start.line else 0
-#         target_width = (location.end.column if line_index == location.end.line else len(line))\
-#           - (location.start.column if line_index == location.start.line else 0)
-
-#         if not target_space:
-#           target_line = line[target_offset:(target_offset + target_width)]
-#           target_space_width = len(target_line) - len(target_line.lstrip())
-
-#           if target_space_width < target_width:
-#             target_offset += target_space_width
-#             target_width -= target_space_width
-
-#         print(
-#           " " +
-#           " " * width_line +
-#           " | "
-#           "\033[31m" +
-#           " " * target_offset +
-#           # "^" * (location.end.column - location.start.column) +
-#           "^" * target_width +
-#           "\033[39m"
-#         )
-
-
 ## Identifiers
 
 regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*$", re.ASCII)
@@ -239,6 +39,7 @@ class Identifier(SchemaType):
 ## Calls
 
 regexp_call = regex.compile(r"^(?P<n>[a-zA-Z][a-zA-Z0-9]*)\((?:\[(?P<a>.+)]|\\(?P<a>\[[^,]+)|(?P<a>[^,]+?))(?: *, *(?:\[(?P<a>.+)]|\\(?P<a>\[[^,]+)|(?P<a>[^,]+)))*\)$")
+# ^(?P<n>[a-zA-Z][a-zA-Z0-9]*)(:?\(.*\))?$
 
 def parse_call(expr):
   match = regexp_call.match(expr)
@@ -295,31 +96,6 @@ class CompositeValue(LocatedValue):
     super().__init__(self, location)
     self.fragments = fragments
 
-  # def compose(self, globals = dict()):
-  #   return "".join([str(frag.evaluate(globals)) if (index % 2) > 0 else frag for index, frag in enumerate(self.fragments)])
-
-  # def combine(self, globals = dict(), *, compose = False):
-  #   def proc(fragments):
-  #     frags = list()
-
-  #     for index, frag in enumerate(fragments):
-  #       if (index % 2) > 0:
-  #         value = frag.evaluate(globals)
-
-  #         if isinstance(value, CompositeValue):
-  #           frags = [*frags, *proc(value.fragments)]
-  #         else:
-  #           frags.append(str(value) if compose else value)
-  #       else:
-  #         frags.append(frag)
-
-  #     return frags
-
-  #   return proc(self.fragments)
-
-  # def compose(self, globals = dict()):
-  #   return "".join(self.combine(globals, compose=True))
-
   def evaluate(self, globals = dict()):
     frags = list()
 
@@ -328,7 +104,6 @@ class CompositeValue(LocatedValue):
         value = frag.evaluate(globals)
 
         if isinstance(value, CompositeValue):
-          # frags.append(value.evaluate())
           frags += value.evaluate(globals).fragments
         else:
           frags.append(value)
@@ -363,44 +138,22 @@ class EvaluatedCompositeValue(LocatedValue):
 
       if isinstance(value, str) or isinstance(value, int):
         output += str(value)
+      elif isinstance(value, UnclassifiedExpr):
+        output += value.to_str()
       else:
         raise LocatedValue.create_error(f"Unexpected value {repr(value)}, expected str", value)
 
     return output
 
-  def to_value(self):
-    frag_index = None
-
-    if (len(self.fragments) < 3) or self.fragments[0]:
-      frag_index = 0
-    if len(self.fragments) > 3:
-      frag_index = 3
-    if self.fragments[-1]:
-      frag_index = -1
-
-    if frag_index is not None:
-      raise LocatedValue.create_error(f"Cannot extract single value", self.fragments[frag_index])
-
-    return LocatedValue.extract(self.fragments[1])
 
 
+def create_utils(globals):
+  def expr(unclassified_expr):
+    return LocatedValue.extract(unclassified_expr.to_python().evaluate(globals))
 
-# class InterpolatedValue:
-#   def __init__(self, value, location, source):
-#     self.value = value
-#     self.location = location
-#     self.source = source
-
-#   def error(self, message, offset = None):
-#     return LocatedError(message, location=(self.location % offset if offset else self.location), source=self.source)
-
-
-def ac(composite_value):
-  return LocatedValue.extract(composite_value.evaluate().to_value())
-
-permanent_globals = {
-  'ac': ac
-}
+  return {
+    'expr': expr
+  }
 
 
 class PythonExpr:
@@ -410,7 +163,7 @@ class PythonExpr:
 
   def evaluate(self, globals):
     try:
-      result = eval(self.value, { 'args': self.context, **permanent_globals, **globals })
+      result = eval(self.value, { 'args': self.context, **create_utils(globals), **globals })
     except LocatedError:
       raise
     except Exception as e:
@@ -425,3 +178,18 @@ class PythonExpr:
 
   def __repr__(self):
     return f"{{{self.value}}}"
+
+
+class UnclassifiedExpr:
+  def __init__(self, value, context):
+    self.context = context
+    self.value = value
+
+  def to_python(self):
+    return PythonExpr(self.value, self.context)
+
+  def to_str(self):
+    return self.value
+
+  def __str__(self):
+    return LocatedValue.extract(self.to_str())

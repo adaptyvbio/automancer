@@ -117,13 +117,16 @@ class CompositeValue(LocatedValue):
 
     return EvaluatedCompositeValue(frags, location=self.location)
 
+  def get_single_expr(self):
+    if (len(self.fragments) == 3) and (not self.fragments[0]) and (not self.fragments[-1]):
+      return self.fragments[1]
+    else:
+      return None
+
 
   def __repr__(self):
     string = "".join([f"{{{frag}}}" if (index % 2) > 0 else frag for index, frag in enumerate(self.fragments)])
     return f"[Composite \"{string}\"]"
-
-  def compose_value(value, globals = dict()):
-    return value.compose(globals) if isinstance(value, CompositeValue) else value
 
 
 class EvaluatedCompositeValue(LocatedValue):
@@ -195,6 +198,9 @@ class UnclassifiedExpr:
 
   def to_str(self):
     return self.value
+
+  def __repr__(self):
+    return f"{{?? {self.value}}}"
 
   def __str__(self):
     return LocatedValue.extract(self.to_str())

@@ -2,7 +2,8 @@ import regex
 
 from . import namespace
 from ..base import BaseParser
-from ...util.parser import interpolate
+from ...util.parser import UnclassifiedExpr, interpolate
+from ...reader import LocatedError, LocatedValue
 
 
 class Parser(BaseParser):
@@ -10,44 +11,70 @@ class Parser(BaseParser):
     if 'duration' in data_block:
       return { 'role': 'process' }
 
-  def handle_segment(self, data_action):
-    if "duration" in data_action:
-      expr, context = data_action["duration"]
-      # expr_composed = interpolate(expr, context).compose()
-      # print(expr_composed)
-      value = parse_duration(expr, context)
+  def handle_segment(self, data_block):
+    if 'duration' in data_block:
+      raw_expr, context = data_block['duration']
 
       return {
-        namespace: { 'duration': value }
+        namespace: { 'duration': parse_duration(raw_expr, context) }
       }
 
   def export_segment(data):
     return {
-      "duration": data['duration']
+      'duration': data['duration']
     }
 
+
+def parse_duration(raw_expr, context):
+  python_expr = interpolate(raw_expr, context).get_single_expr()
+
+  if python_expr:
+    def dur(input):
+      if isinstance(input, UnclassifiedExpr):
+        return parse_duration(input.value, input.context)
+
+      try:
+        return parse_duration_expr(input, context)
+      except LocatedError:
+        raise
+      except Exception as e:
+        raise raw_expr.error(e.args[0])
+
+    evaluated = python_expr.evaluate({
+      'dur': dur
+    })
+
+    duration = evaluated.value
+
+    if (not isinstance(duration, float)) and (not isinstance(duration, int)):
+      raise evaluated.error(f"Unexpected value {repr(duration)}, expected scalar")
+  else:
+    duration = parse_duration_expr(raw_expr, context)
+
+  return round(duration)
 
 
 # ---
 
 
 time_factors = {
-  1: ["s", "sec", "second", "seconds"],
-  60: ["m", "min", "minute", "minutes"],
-  3600: ["h", "hr", "hrs", "hour", "hours"]
+  1: ["ms", "millsecond", "milliseconds"],
+  1_000: ["s", "sec", "second", "seconds"],
+  60_000: ["m", "min", "minute", "minutes"],
+  3600_000: ["h", "hr", "hrs", "hour", "hours"]
 }.items()
 
 time_regexp = regex.compile(r"^ *(?:(\d+(?:\.\d*)?|\d*\.\d+) *([a-z]+) *)+$")
 time_regexp = regex.compile(r"^ *(?:(?:(\d+(?:\.\d*)?|\d*\.\d+) *([a-z]+)|\$(\d+)) *)+$")
 
 
-def parse_duration(expr, context = dict()):
+def parse_duration_expr(expr, context = dict()):
   output = 0.0
 
   match = time_regexp.match(expr)
 
   if not match:
-    raise expr.error("Invalid duration expression")
+    raise LocatedValue.create_error(f"Invalid duration expression", expr)
 
   for quant, factor_name, factor_span in zip(match.captures(1), match.captures(2), match.spans(2)):
     factor = next(
@@ -56,13 +83,13 @@ def parse_duration(expr, context = dict()):
     )
 
     if not factor:
-      raise expr[factor_span[0]:factor_span[1]].error("Invalid duration keyword")
+      raise LocatedValue.create_error(f"Invalid duration keyword '{factor_name}'", expr[factor_span[0]:factor_span[1]])
 
     output += float(quant) * factor
 
   for ref_name, ref_span in zip(match.captures(3), match.spans(3)):
     if not (ref_name in context):
-      raise expr[ref_span[0]:ref_span[1]].error(f"Invalid reference to '${ref_name}'")
+      raise LocatedValue.create_error(f"Invalid reference to '${ref_name}'", expr[ref_span[0]:ref_span[1]])
 
     ref_value = context[ref_name]
     output += parse_duration(ref_value)

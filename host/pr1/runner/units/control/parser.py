@@ -66,7 +66,9 @@ class Parser(BaseParser):
 
   def handle_segment(self, data_action):
     return {
-      'valves': self._valve_stack[-1]
+      namespace: {
+        'valves': self._valve_stack[-1]
+      }
     }
 
   def export_protocol(self):

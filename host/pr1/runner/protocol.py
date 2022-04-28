@@ -2,11 +2,11 @@ from collections import namedtuple
 import math
 import re
 
+from . import reader
+from .reader import LocatedValue
 from .units.base import BaseParser
-from .util.parser import interpolate, parse_call
-from .reader import parse
-from .units.input.parser import Parser as InputParser
-from .units.timer.parser import Parser as TimerParser
+from .util import schema as sc
+from .util.parser import interpolate
 
 
 Stage = namedtuple("Stage", ["name", "seq", "steps"])
@@ -15,52 +15,8 @@ Step = namedtuple("Step", ["description", "name", "seq"])
 Segment = namedtuple("Segment", ["data", "process_namespace"])
 
 
-class BuiltinParser(BaseParser):
-  def __init__(self, parent):
-    self._parent = parent
-    self._shorthands = dict()
-
-  def enter_protocol(self, data_protocol):
-    for name, data_shorthand in data_protocol.get("shorthands", dict()).items():
-      self._shorthands[name] = data_shorthand
-
-  def parse_action(self, data_action):
-    if "use" in data_action:
-      call_expr, context = data_action["use"]
-      callee, args = parse_call(call_expr)
-      shorthand = self._shorthands.get(callee)
-
-      if not shorthand:
-        raise callee.error(f"Invalid shorthand name '{callee}'")
-
-      args_composed = [interpolate(arg, context) for arg in args]
-      context = { index: arg for index, arg in enumerate(args_composed) }
-
-      return {
-        'role': 'replace',
-        'depth': 0,
-        'data': {
-          **{ key: value for key, value in data_action.items() if key != "use" },
-          **{ key: (value, context) for key, value in shorthand.items() }
-        }
-      }
-
-
-class FragmentParser(BaseParser):
-  def __init__(self, master):
-    self._master = master
-
-  def parse_action(self, data_action):
-    if "actions" in data_action:
-      actions, context = data_action["actions"]
-
-      return {
-        'role': 'collection',
-        'actions': [{ key: (value, context) for key, value in action.items() } for action in actions]
-      }
-
 # class RepeatParser(BaseParser):
-#   def parse_action(self, data_action):
+#   def parse_block(self, data_action):
 #     if "repeat" in data_action:
 #       repeat, context = data_action["repeat"]
 
@@ -71,40 +27,94 @@ class FragmentParser(BaseParser):
 #         ] * repeat
 #       }
 
+protocol_schema = sc.Dict({
+  'name': sc.Optional(str),
+  'models': sc.Optional(sc.List(str)),
+  'stages': sc.List(sc.Dict({
+    'name': sc.Optional(str),
+    'steps': sc.List(sc.Dict({
+      'name': sc.Optional(str)
+    }, allow_extra=True))
+  }, allow_extra=True))
+}, allow_extra=True)
+
+
+class Parsers(BaseParser):
+  def __init__(self, protocol, Parsers):
+    self.parsers = {
+      namespace: Parser(protocol) for namespace, Parser in sorted(Parsers.items(), key=lambda item: -item[1].priority)
+    }
+
+  def enter_protocol(self, data_protocol):
+    for parser in self.parsers.values():
+      parser.enter_protocol(data_protocol)
+
+  def enter_stage(self, stage_index, data_stage):
+    for parser in self.parsers.values():
+      parser.enter_stage(stage_index, data_stage)
+
+  def leave_stage(self, stage_index, data_stage):
+    for parser in self.parsers.values():
+      parser.leave_stage(stage_index, data_stage)
+
+  def parse_block(self, data_block):
+    claim = None
+    claim_namespace = None
+
+    for namespace, parser in self.parsers.items():
+      parser_result = parser.parse_block(data_block)
+
+      if parser_result:
+        if isinstance(parser_result, tuple):
+          parser_claim, parser_claim_namespace = parser_result
+        else:
+          parser_claim = parser_result
+          parser_claim_namespace = namespace
+
+        if claim:
+          raise LocatedValue.create_error(f"Block role is already claimed as '{claim['role']}' by unit '{claim_namespace}', cannot be reclaimed as '{parser_claim['role']}' by unit '{parser_claim_namespace}'", data_block)
+
+        claim = parser_claim
+        claim_namespace = parser_claim_namespace
+
+    return claim, claim_namespace
+
+  def handle_segment(self, data_segment):
+    data = dict()
+
+    for parser in self.parsers.values():
+      parser_data = parser.handle_segment(data_segment)
+
+      if parser_data:
+        data.update(parser_data)
+
+    return data
+
+
 
 # ---
 
 
 class Protocol:
   def __init__(self, text, parsers, models):
-    data = parse(text)
-
-
-    parsers = {
-      "builtin": BuiltinParser,
-      "fragment": FragmentParser,
-      # "repeat": RepeatParser,
-      "input": InputParser,
-      "timer": TimerParser,
-      **parsers
-    }
+    data = reader.parse(text)
+    data = protocol_schema.transform(data)
 
     self.parser_classes = parsers
-    self.parsers = { namespace: Parser(self) for namespace, Parser in parsers.items() }
+    self.parser = Parsers(self, parsers)
 
     self.models = None
     self.segments = list()
     self.stages = list()
 
-    # self.name = data.get("name")
-    self.name = data["name"].value if "name" in data else None
+    self.name = data['name'].value if 'name' in data else None
 
 
     # Get chip model instances from their ids
-    if "models" in data:
+    if 'models' in data:
       self.models = dict()
 
-      for model_id in data["models"]:
+      for model_id in data['models']:
         if not (model_id in models):
           raise model_id.error(f"Invalid chip model id '{model_id}'")
 
@@ -112,26 +122,22 @@ class Protocol:
 
 
     # Call enter_protocol()
-    for parser in self.parsers.values():
-      parser.enter_protocol(data)
+    self.parser.enter_protocol(data)
 
-    for stage_index, data_stage in enumerate(data.get("stages", list())):
+    for stage_index, data_stage in enumerate(data.get('stages', list())):
       steps = list()
 
-      # TODO: validate data_stage
-
       # Call enter_stage()
-      for parser in self.parsers.values():
-        parser.enter_stage(stage_index, data_stage)
+      self.parser.enter_stage(stage_index, data_stage)
 
       def add_context(props):
-        return { key: (value, dict()) for key, value in props.items() }
+        return LocatedValue.transfer({ key: (value, dict()) for key, value in props.items() }, props)
 
-      for step_index, data_step in enumerate(data_stage.get("steps", list())):
-        seq, name = self.parse_action(add_context(data_step))
+      for step_index, data_step in enumerate(data_stage.get('steps', list())):
+        seq, name = self.parse_block(add_context(data_step))
 
         step = Step(
-          description=data_step.get("description"),
+          description=data_step.get('description'),
           name=(name or f"Step #{step_index + 1}"),
           seq=seq
         )
@@ -146,8 +152,7 @@ class Protocol:
         seq = (seq_start, seq_start)
 
       # Call leave_stage()
-      for parser in self.parsers.values():
-        parser.leave_stage(stage_index, data_stage)
+      self.parser.leave_stage(stage_index, data_stage)
 
       stage = Stage(
         name=data_stage.get("name", f"Stage #{stage_index + 1}"),
@@ -187,47 +192,37 @@ class Protocol:
     }
 
 
-  def parse_action(self, data):
-    # Call prepare_block()
-    role = None
-    role_namespace = None
+  def parse_block(self, data_block, depth = 0):
+    if depth > 50:
+      raise LocatedValue.create_error("Maximum recursion depth exceeded", data_block)
 
-    for namespace, parser in self.parsers.items():
-      parser_role = parser.parse_action(data)
+    # Call parse_block()
+    claim, claim_namespace = self.parser.parse_block(data_block)
 
-      if parser_role:
-        if role:
-          raise Exception(f"Block role is already defined as '{role['role']}' by '{role_namespace}', cannot be redefined to '{parser_role['role']}' by '{namespace}'")
+    if not claim:
+      raise LocatedValue.create_error("No role claimed for block", data_block)
 
-        role = parser_role
-        role_namespace = namespace
+    role = claim['role']
 
-    # Start again if a model returned a replacement
-    if role['role'] == 'replace':
-      return self.parse_action(role['data'])
+    # Start again if a unit returned a replacement block
+    if role == 'replace':
+      return self.parse_block(claim['data'], depth=(depth + 1))
 
     # Store current segment index
     start_index = len(self.segments)
     seq = start_index, start_index
 
     # Call enter_block()
-    for namespace, parser in self.parsers.items():
-      parser.enter_block(data)
+    self.parser.enter_block(data_block)
 
     # Create a segment if a model declared itself responsible for a process
-    if role['role'] == 'process':
-      segment_data = dict()
-
+    if role == 'process':
       # Call handle_segment()
-      for namespace, parser in self.parsers.items():
-        segment_data_model = parser.handle_segment(data)
-
-        if segment_data_model:
-          segment_data[namespace] = segment_data_model
+      segment_data = self.parser.handle_segment(data_block)
 
       segment = Segment(
         data=segment_data,
-        process_namespace=role_namespace
+        process_namespace=claim_namespace
       )
 
       self.segments.append(segment)
@@ -235,30 +230,19 @@ class Protocol:
       seq = start_index, start_index + 1
 
     # Enumerate children blocks if a model returned a collection
-    elif role['role'] == 'collection':
+    elif role == 'collection':
       start_index = len(self.segments)
 
-      for data_action in role['actions']:
-        (_, end_index), _ = self.parse_action(data_action)
+      for data_action in claim['actions']:
+        (_, end_index), _ = self.parse_block(data_action, depth=(depth + 1))
 
       seq = start_index, end_index
-    elif role['role'] is not None:
-      raise Exception(f"Unknown role '{role['role']}'")
+    else:
+      raise LocatedValue.create_error(f"Unknown role '{role}' claimed by unit '{claim_namespace}'", data_block)
 
     # Call leave_block()
-    for namespace, parser in self.parsers.items():
-      parser.leave_block(data)
+    self.parser.leave_block(data_block)
 
-
-    name = data['name'][0] if 'name' in data else None
-
-    # if 'name' in data:
-    #   print(data['name'])
-    #   Valve = namedtuple("Valve", ['query'])
-    #   ev = interpolate(data['name'][0], data['name'][1]).evaluate(globals={ 'Valve': Valve })
-    #   # ev = interpolate(data['name'][0], data['name'][1]).evaluate()
-    #   print(ev)
-    #   print(ev.fragments[1].value.query)
-    #   print()
+    name = interpolate(data_block['name'][0], data_block['name'][1]).evaluate().to_str() if 'name' in data_block else None
 
     return seq, name

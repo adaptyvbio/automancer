@@ -1,13 +1,13 @@
 import regex
 
-
+from . import namespace
 from ..base import BaseParser
 from ...util.parser import interpolate
 
 
 class Parser(BaseParser):
-  def parse_action(self, data_action):
-    if "duration" in data_action:
+  def parse_block(self, data_block):
+    if 'duration' in data_block:
       return { 'role': 'process' }
 
   def handle_segment(self, data_action):
@@ -18,7 +18,7 @@ class Parser(BaseParser):
       value = parse_duration(expr, context)
 
       return {
-        'duration': value
+        namespace: { 'duration': value }
       }
 
   def export_segment(data):

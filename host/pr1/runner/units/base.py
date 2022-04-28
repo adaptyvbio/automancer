@@ -6,8 +6,10 @@ Device = namedtuple("Device", ["description", "build", "id", "name"])
 
 
 class BaseParser:
-  def __init__(self, master):
-    self._master = master
+  priority = 1
+
+  def __init__(self, protocol):
+    self._master = protocol
 
   def enter_protocol(self, data_protocol):
     pass
@@ -18,9 +20,9 @@ class BaseParser:
   def leave_stage(self, stage_index, data_stage):
     pass
 
-  # def prepare_block(self, data_action):
-  def parse_action(self, data_action):
-    pass
+
+  def parse_block(self, data_block):
+    return None
 
   def enter_block(self, data_block):
     pass
@@ -28,8 +30,10 @@ class BaseParser:
   def leave_block(self, data_block):
     pass
 
-  def handle_segment(self, data_action):
-    pass
+
+  def handle_segment(self, data_segment):
+    return None
+
 
   def create_supdata(self, chip, codes):
     return None

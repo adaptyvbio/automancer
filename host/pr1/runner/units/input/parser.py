@@ -1,3 +1,4 @@
+from . import namespace
 from ..base import BaseParser
 
 
@@ -5,8 +6,8 @@ class Parser(BaseParser):
   def __init__(self, master):
     self._master = master
 
-  def parse_action(self, data_action):
-    if 'confirm' in data_action:
+  def parse_block(self, data_block):
+    if 'confirm' in data_block:
       return {
         'role': 'process'
       }
@@ -16,7 +17,9 @@ class Parser(BaseParser):
       message, _context = data_action['confirm']
 
       return {
-        'message': message
+        namespace: {
+          'message': message
+        }
       }
 
   def export_segment(data):

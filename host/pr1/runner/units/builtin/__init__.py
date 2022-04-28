@@ -1,3 +1,3 @@
-namespace = "input"
+namespace = "builtin"
 
 from .parser import Parser

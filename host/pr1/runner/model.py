@@ -26,6 +26,6 @@ class Model:
       id=model_id,
       name=data.get('name', f"Model {model_id}"),
       sheets={
-        namespace: unit.Sheet(data, dir=path.parent) for namespace, unit in units.items() if unit.Sheet
+        namespace: unit.Sheet(data, dir=path.parent) for namespace, unit in units.items() if hasattr(unit, 'Sheet')
       }
     )

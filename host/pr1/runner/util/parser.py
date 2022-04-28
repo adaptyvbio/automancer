@@ -3,7 +3,7 @@ import math
 import re
 import regex
 
-from ..reader import LocatedString, LocatedValue
+from ..reader import LocatedError, LocatedString, LocatedValue
 from .schema import SchemaType
 
 
@@ -298,27 +298,27 @@ class CompositeValue(LocatedValue):
   # def compose(self, globals = dict()):
   #   return "".join([str(frag.evaluate(globals)) if (index % 2) > 0 else frag for index, frag in enumerate(self.fragments)])
 
-  def combine(self, globals = dict(), *, compose = False):
-    def proc(fragments):
-      frags = list()
+  # def combine(self, globals = dict(), *, compose = False):
+  #   def proc(fragments):
+  #     frags = list()
 
-      for index, frag in enumerate(fragments):
-        if (index % 2) > 0:
-          value = frag.evaluate(globals)
+  #     for index, frag in enumerate(fragments):
+  #       if (index % 2) > 0:
+  #         value = frag.evaluate(globals)
 
-          if isinstance(value, CompositeValue):
-            frags = [*frags, *proc(value.fragments)]
-          else:
-            frags.append(str(value) if compose else value)
-        else:
-          frags.append(frag)
+  #         if isinstance(value, CompositeValue):
+  #           frags = [*frags, *proc(value.fragments)]
+  #         else:
+  #           frags.append(str(value) if compose else value)
+  #       else:
+  #         frags.append(frag)
 
-      return frags
+  #     return frags
 
-    return proc(self.fragments)
+  #   return proc(self.fragments)
 
-  def compose(self, globals = dict()):
-    return "".join(self.combine(globals, compose=True))
+  # def compose(self, globals = dict()):
+  #   return "".join(self.combine(globals, compose=True))
 
   def evaluate(self, globals = dict()):
     frags = list()
@@ -328,7 +328,8 @@ class CompositeValue(LocatedValue):
         value = frag.evaluate(globals)
 
         if isinstance(value, CompositeValue):
-          frags.append(value.evaluate())
+          # frags.append(value.evaluate())
+          frags += value.evaluate(globals).fragments
         else:
           frags.append(value)
       else:
@@ -338,7 +339,7 @@ class CompositeValue(LocatedValue):
 
 
   def __repr__(self):
-    string = "".join([f"{frag}" if (index % 2) > 0 else frag for index, frag in enumerate(self.fragments)])
+    string = "".join([f"{{{frag}}}" if (index % 2) > 0 else frag for index, frag in enumerate(self.fragments)])
     return f"[Composite \"{string}\"]"
 
   def compose_value(value, globals = dict()):
@@ -354,6 +355,35 @@ class EvaluatedCompositeValue(LocatedValue):
     string = ", ".join([repr(frag) for index, frag in enumerate(self.fragments)])
     return f"[EvComposite {string}]"
 
+  def to_str(self):
+    output = str()
+
+    for frag in self.fragments:
+      value = frag.value if isinstance(frag, LocatedValue) else value
+
+      if isinstance(value, str) or isinstance(value, int):
+        output += str(value)
+      else:
+        raise LocatedValue.create_error(f"Unexpected value {repr(value)}, expected str", value)
+
+    return output
+
+  def to_value(self):
+    frag_index = None
+
+    if (len(self.fragments) < 3) or self.fragments[0]:
+      frag_index = 0
+    if len(self.fragments) > 3:
+      frag_index = 3
+    if self.fragments[-1]:
+      frag_index = -1
+
+    if frag_index is not None:
+      raise LocatedValue.create_error(f"Cannot extract single value", self.fragments[frag_index])
+
+    return LocatedValue.extract(self.fragments[1])
+
+
 
 # class InterpolatedValue:
 #   def __init__(self, value, location, source):
@@ -365,6 +395,14 @@ class EvaluatedCompositeValue(LocatedValue):
 #     return LocatedError(message, location=(self.location % offset if offset else self.location), source=self.source)
 
 
+def ac(composite_value):
+  return LocatedValue.extract(composite_value.evaluate().to_value())
+
+permanent_globals = {
+  'ac': ac
+}
+
+
 class PythonExpr:
   def __init__(self, value, context):
     self.context = context
@@ -372,7 +410,9 @@ class PythonExpr:
 
   def evaluate(self, globals):
     try:
-      result = eval(self.value, { 'args': self.context, **globals })
+      result = eval(self.value, { 'args': self.context, **permanent_globals, **globals })
+    except LocatedError:
+      raise
     except Exception as e:
       raise self.value.error(f"Invalid Python expression '{self.value}'; {f'{type(e).__name__}: {e.args[0]}' if hasattr(e, 'args') else repr(e)}")
 

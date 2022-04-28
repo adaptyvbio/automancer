@@ -12,6 +12,7 @@ from .chip import Chip
 from .master import Master
 from .model import Model
 from .protocol import Protocol
+from .util import schema as sc
 
 
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
@@ -33,17 +34,25 @@ class Host:
 
     # -- Load configuration -------------------------------
 
+    conf_schema = sc.Schema({
+      'id': str,
+      'name': str,
+      'units': sc.Noneable(dict),
+      'version': sc.ParseType(int)
+    })
+
     conf_path = self.data_dir / "setup.yml"
 
     if conf_path.exists():
       try:
         conf = reader.loads((self.data_dir / "setup.yml").open().read())
+        conf = conf_schema.transform(conf)
       except reader.LocatedError as e:
         e.display()
         sys.exit(1)
     else:
       conf = {
-        'id': str(uuid.uuid4()),
+        'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
         'units': dict(),
         'version': 1
@@ -51,15 +60,20 @@ class Host:
 
       conf_path.open("w").write(reader.dumps(conf))
 
-    self.id = conf.get('id') or hex(uuid.getnode())[2:]
+    self.id = conf['id']
     self.name = conf['name']
     self.start_time = round(time.time() * 1000)
     self.units = units.units
 
+
+    # -- Load units ---------------------------------------
+
     logger.info(f"Registering {len(self.units)} units: {', '.join(self.units.keys())}")
 
+    conf_units = conf['units'] or dict()
+
     self.executors = {
-      namespace: unit.Executor(conf['units'].get(namespace, dict())) for namespace, unit in self.units.items()
+      namespace: unit.Executor(conf_units.get(namespace, dict())) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
     }
 
 
@@ -97,13 +111,11 @@ class Host:
 
 
   def _debug(self):
-    return
-
     # -- Debug --------------------------------------------
 
     chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
     _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
-    draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent / "test.yml").open().read())
+    draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent.parent / "test.yml").open().read())
 
     codes = {
       'control': {
@@ -131,7 +143,7 @@ class Host:
 
   def create_chip(self, model_id, name):
     model = self.models[model_id]
-    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if unit.Matrix }
+    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if hasattr(unit, 'Matrix') }
     chip = Chip(id=str(uuid.uuid4()), master=None, matrices=matrices, model=model, name=name, runners=dict())
 
     for namespace, executor in self.executors.items():
@@ -152,6 +164,7 @@ class Host:
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
+      e.display() # debug
 
     draft = Draft(
       id=draft_id,

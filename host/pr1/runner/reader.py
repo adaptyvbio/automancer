@@ -104,6 +104,35 @@ class LocatedValue:
   def error(self, message):
     return LocatedError(message, self.location)
 
+  def create_error(message, object):
+    if isinstance(object, LocatedValue):
+      return object.error(message)
+    else:
+      return Exception(message)
+
+  def extract(object):
+    if isinstance(object, LocatedValue):
+      return object.value
+    else:
+      return object
+
+  def locate(object, location):
+    if isinstance(object, dict):
+      return LocatedDict(object, location)
+    elif isinstance(object, list):
+      return LocatedList(object, location)
+    elif isinstance(object, str):
+      return LocatedString(object, location)
+    else:
+      return object
+      # return LocatedValue(object, location)
+
+  def transfer(dest, source):
+    if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
+      return LocatedValue.locate(dest, source.location)
+    else:
+      return dest
+
 
 class LocatedString(str, LocatedValue):
   def __new__(cls, value, *args, **kwargs):
@@ -379,6 +408,9 @@ def dumps(obj, depth = 0, cont = True):
 
 def loads(raw_source):
   return analyze(tokenize(raw_source))
+
+
+# create_error = LocatedValue.create_error
 
 
 if __name__ == "__main__":

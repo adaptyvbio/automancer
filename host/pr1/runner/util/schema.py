@@ -86,7 +86,7 @@ class Dict(SchemaType):
         if not (key._value in test):
           raise create_error(test, f"Missing key {key}")
 
-    return output
+    return LocatedValue.transfer(output, test)
 
   def validate(self, test):
     super().validate(test)
@@ -279,7 +279,7 @@ class List(SchemaType):
 
   def transform(self, test):
     super().validate(test)
-    return [self._schema.transform(item) for item in test]
+    return LocatedValue.transfer([self._schema.transform(item) for item in test], test)
 
   def validate(self, test):
     super().validate(test)

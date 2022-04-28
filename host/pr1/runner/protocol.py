@@ -58,9 +58,6 @@ class Parsers(BaseParser):
       parser.leave_stage(stage_index, data_stage)
 
   def parse_block(self, data_block):
-    claim = None
-    claim_namespace = None
-
     for namespace, parser in self.parsers.items():
       parser_result = parser.parse_block(data_block)
 
@@ -71,13 +68,9 @@ class Parsers(BaseParser):
           parser_claim = parser_result
           parser_claim_namespace = namespace
 
-        if claim:
-          raise LocatedValue.create_error(f"Block role is already claimed as '{claim['role']}' by unit '{claim_namespace}', cannot be reclaimed as '{parser_claim['role']}' by unit '{parser_claim_namespace}'", data_block)
+        return parser_claim, parser_claim_namespace
 
-        claim = parser_claim
-        claim_namespace = parser_claim_namespace
-
-    return claim, claim_namespace
+    return None
 
   def handle_segment(self, data_segment):
     data = dict()
@@ -162,6 +155,9 @@ class Protocol:
 
       self.stages.append(stage)
 
+    # from pprint import pprint
+    # pprint(self.segments)
+
   def create_supdata(self, chip, codes):
     return { namespace: parser.create_supdata(chip, codes) for namespace, parser in self.parsers.items() }
 
@@ -197,10 +193,12 @@ class Protocol:
       raise LocatedValue.create_error("Maximum recursion depth exceeded", data_block)
 
     # Call parse_block()
-    claim, claim_namespace = self.parser.parse_block(data_block)
+    claim_result = self.parser.parse_block(data_block)
 
-    if not claim:
+    if not claim_result:
       raise LocatedValue.create_error("No role claimed for block", data_block)
+
+    claim, claim_namespace = claim_result
 
     role = claim['role']
 
@@ -237,6 +235,11 @@ class Protocol:
         (_, end_index), _ = self.parse_block(data_action, depth=(depth + 1))
 
       seq = start_index, end_index
+
+    # Ignore block
+    elif role == 'none':
+      seq = start_index, start_index
+
     else:
       raise LocatedValue.create_error(f"Unknown role '{role}' claimed by unit '{claim_namespace}'", data_block)
 

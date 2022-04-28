@@ -2,55 +2,37 @@ name: IL6 test
 models:
   - m1024
 parameters:
+  Button:
+    default: inlet/1
+    display: visible
+    repr: push
   Biotin:
+    default: inlet/2
     name: Biotin BSA
-    # hidden: false
+  # in3: inlet/3
   Pbs:
     name: PBS
+    display: hidden
   Nv:
     name: Neutravidin NV
+
+shorthands:
+  p:
+    # name: Foo {3 + 4} {args[0]} {args[1].evaluate().to_value() + 9}
+    name: The name is {str(args[0]).upper()} and {expr(args[1]) * 2}
+    duration: 10 sec
+  x:
+    use: pp(bar, 16 + expr(args[0]) + delta, [34 + 52])
+
+  cycle:
+    if: expr(args[0]) > 0
+    actions:
+      - duration: 10 sec
+      - use: cycle(expr(args[0]) - 1)
+
 
 stages:
   - name: Stage A
     steps:
-      - duration: 10 sec
-      - actions:
-          - duration: 10 sec
-          - duration: 10 sec
-          - duration: 10 sec
-      - duration: 10 sec
-      - duration: 10 sec
-      - duration: 10 sec
-      - duration: 10 sec
-      - duration: 10 sec
-  - name: Stage X
-    steps:
-      - duration: 20 min
-      - actions:
-          # - confirm: Do something
-          - duration: 20 min
-          - duration: 5 min
-      - duration: 30 min
-      - duration: 20 min
-  - name: Stage Y
-    steps:
-      - duration: 20 min
-      - duration: 5 min
-
-# stages:
-#   - name: Surface chemistry
-#     steps:
-#       - name: Pressure initialization
-#         confirm: Set pressure to 4.2 psi
-#       - name: Flow biotin
-#         actions:
-#           - duration: 20 min
-#             valves: Biotin
-#           - duration: 5 min
-#             valves: Pbs
-#       - name: Flow neutravidin
-#         actions:
-#           - duration: 20 min
-#             valves: Biotin
-#           - duration: 5 min
-#             valves: Pbs
+      - use: cycle(3)
+      - use: p(foo, 3)

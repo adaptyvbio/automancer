@@ -38,8 +38,13 @@ class Identifier(SchemaType):
 
 ## Calls
 
-regexp_call = regex.compile(r"^(?P<n>[a-zA-Z][a-zA-Z0-9]*)\((?:\[(?P<a>.+)]|\\(?P<a>\[[^,]+)|(?P<a>[^,]+?))(?: *, *(?:\[(?P<a>.+)]|\\(?P<a>\[[^,]+)|(?P<a>[^,]+)))*\)$")
-# ^(?P<n>[a-zA-Z][a-zA-Z0-9]*)(:?\(.*\))?$
+regexp_arg = r"(?P<a>(:?[^,]|(?<=\\).)+?)"
+regexp_args = rf"(?:{regexp_arg} *(?:(?<!\\), *{regexp_arg} *)*)?"
+regexp_call = regex.compile(rf"^(?P<n>[a-zA-Z][a-zA-Z0-9]*)(?:\( *{regexp_args}\))?$")
+regexp_escape = regex.compile(r"\\(.)")
+
+def unescape(value):
+  return LocatedValue.transfer(regexp_escape.sub(r"\1", value), value)
 
 def parse_call(expr):
   match = regexp_call.match(expr)
@@ -51,7 +56,7 @@ def parse_call(expr):
   callee = expr[callee_span[0]:callee_span[1]]
   # callee = match.captures('n')[0]
 
-  args = [expr[span[0]:span[1]] for span in match.spans('a')]
+  args = [unescape(expr[span[0]:span[1]]) for span in match.spans('a')]
 
   return callee, args
 
@@ -141,7 +146,7 @@ class EvaluatedCompositeValue(LocatedValue):
       elif isinstance(value, UnclassifiedExpr):
         output += value.to_str()
       else:
-        raise LocatedValue.create_error(f"Unexpected value {repr(value)}, expected str", value)
+        raise frag.error(f"Unexpected value {repr(value)}, expected str")
 
     return output
 
@@ -161,7 +166,7 @@ class PythonExpr:
     self.context = context
     self.value = value
 
-  def evaluate(self, globals):
+  def evaluate(self, globals = dict()):
     try:
       result = eval(self.value, { 'args': self.context, **create_utils(globals), **globals })
     except LocatedError:
@@ -193,3 +198,18 @@ class UnclassifiedExpr:
 
   def __str__(self):
     return LocatedValue.extract(self.to_str())
+
+
+if __name__ == "__main__":
+  for x in [
+    "foo",
+    "foo()",
+    "foo( )",
+    "foo(3 sec)",
+    "foo( 3 sec )",
+    r"foo(3\, sec)",
+    "foo([3 sec])",
+    r"foo( 3 sec \\, 6 sec )"
+  ]:
+    p = parse_call(x)
+    print(p)

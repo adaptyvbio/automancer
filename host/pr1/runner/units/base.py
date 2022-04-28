@@ -6,7 +6,7 @@ Device = namedtuple("Device", ["description", "build", "id", "name"])
 
 
 class BaseParser:
-  priority = 1
+  priority = 0
 
   def __init__(self, protocol):
     self._master = protocol

@@ -1,4 +1,0 @@
-appdirs==1.4.4
-pyserial==3.5
-regex==2022.3.2
-websockets==10.2

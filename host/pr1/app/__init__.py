@@ -5,7 +5,7 @@ import json
 import logging
 import websockets
 
-from runner import Host
+from ..runner import Host
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -102,5 +102,6 @@ class App():
     await server.wait_closed()
 
 
-app = App()
-app.start()
+def main():
+  app = App()
+  app.start()

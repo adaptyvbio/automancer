@@ -97,6 +97,8 @@ class Host:
 
 
   def _debug(self):
+    return
+
     # -- Debug --------------------------------------------
 
     chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")

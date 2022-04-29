@@ -245,3 +245,50 @@ class Host:
         namespace: executor.export() for namespace, executor in self.executors.items()
       }
     }
+
+  def process_message(self, message, *, update_callback):
+    if message["type"] == "command":
+      chip = self.chips[message["chipId"]]
+      namespace, command = next(iter(message["command"].items()))
+      chip.runners[namespace].command(command)
+
+    if message["type"] == "createChip":
+      self.create_chip(model_id=message["modelId"], name="Untitled chip")
+
+    if message["type"] == "createDraft":
+      self.create_draft(draft_id=message["draftId"], source=message["source"])
+
+    if message["type"] == "deleteChip":
+      # TODO: checks
+      del self.chips[message["chipId"]]
+
+    if message["type"] == "pause":
+      chip = self.chips[message["chipId"]]
+      chip.master.pause({
+        'neutral': message["options"]["neutral"]
+      })
+
+    if message["type"] == "resume":
+      chip = self.chips[message["chipId"]]
+      chip.master.resume()
+
+    if message["type"] == "setMatrix":
+      chip = self.chips[message["chipId"]]
+
+      for namespace, matrix_data in message["update"].items():
+        chip.matrices[namespace].update(matrix_data)
+
+    if message["type"] == "skipSegment":
+      chip = self.chips[message["chipId"]]
+      chip.master.skip_segment(
+        process_state=message["processState"],
+        segment_index=message["segmentIndex"]
+      )
+
+    if message["type"] == "startPlan":
+      chip = self.chips[message["chipId"]]
+      draft = self.drafts[message["draftId"]]
+
+      self.start_plan(chip=chip, codes=message["codes"], draft=draft, update_callback=update_callback)
+
+    update_callback()

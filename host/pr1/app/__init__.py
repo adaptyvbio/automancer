@@ -34,63 +34,10 @@ class App():
 
   async def connect(self, client):
     await client.send(json.dumps(self.host.get_state()))
-    # self.broadcast(json.dumps(self.state))
 
     async for msg in client:
       message = json.loads(msg)
-
-      if message["type"] == "command":
-        chip = self.host.chips[message["chipId"]]
-        namespace, command = next(iter(message["command"].items()))
-        chip.runners[namespace].command(command)
-
-      if message["type"] == "createChip":
-        self.host.create_chip(model_id=message["modelId"], name="Untitled chip")
-
-      if message["type"] == "createDraft":
-        self.host.create_draft(draft_id=message["draftId"], source=message["source"])
-
-      if message["type"] == "deleteChip":
-        # TODO: checks
-        del self.host.chips[message["chipId"]]
-
-      if message["type"] == "pause":
-        chip = self.host.chips[message["chipId"]]
-        chip.master.pause({
-          'neutral': message["options"]["neutral"]
-        })
-
-      if message["type"] == "resume":
-        chip = self.host.chips[message["chipId"]]
-        chip.master.resume()
-
-      if message["type"] == "setMatrix":
-        chip = self.host.chips[message["chipId"]]
-
-        for namespace, matrix_data in message["update"].items():
-          chip.matrices[namespace].update(matrix_data)
-
-      if message["type"] == "skipSegment":
-        chip = self.host.chips[message["chipId"]]
-        chip.master.skip_segment(
-          process_state=message["processState"],
-          segment_index=message["segmentIndex"]
-        )
-
-      if message["type"] == "startPlan":
-        chip = self.host.chips[message["chipId"]]
-        draft = self.host.drafts[message["draftId"]]
-
-        def update_callback():
-          self.update()
-
-        self.host.start_plan(chip=chip, codes=message["codes"], draft=draft, update_callback=update_callback)
-
-      self.update()
-      # await client.send(json.dumps(self.get_state()))
-
-    # import asyncio
-    # await asyncio.Future()
+      self.host.process_message(message, update_callback=self.update)
 
   def broadcast(self, message):
     websockets.broadcast(self.clients, message)
@@ -111,7 +58,7 @@ class App():
 
     # Debug
     chip, codes, draft = self.host._debug()
-    self.host.start_plan(chip=chip, codes=codes, draft=draft, update_callback=self.update)
+    # self.host.start_plan(chip=chip, codes=codes, draft=draft, update_callback=self.update)
 
     loop.run_until_complete(self.host.initialize())
     # loop.run_until_complete(self.host.destroy())

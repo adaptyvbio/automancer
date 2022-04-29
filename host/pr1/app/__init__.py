@@ -8,7 +8,7 @@ import websockets
 from ..runner import Host
 
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pr1-app")
 
 
@@ -29,6 +29,8 @@ class App():
 
     self.hostname = "127.0.0.1"
     self.port = 4567
+
+    self._updating = False
 
   async def connect(self, client):
     await client.send(json.dumps(self.host.get_state()))
@@ -77,14 +79,25 @@ class App():
     websockets.broadcast(self.clients, message)
 
   def update(self):
-    self.broadcast(json.dumps(self.host.get_state()))
+    if not self._updating:
+      self._updating = True
+
+      def send_state():
+        self.broadcast(json.dumps(self.host.get_state()))
+        self._updating = False
+
+      loop = asyncio.get_event_loop()
+      loop.call_soon(send_state)
 
   def start(self):
     loop = asyncio.get_event_loop()
 
-    self.host._debug()
+    # Debug
+    chip, codes, draft = self.host._debug()
+    self.host.start_plan(chip=chip, codes=codes, draft=draft, update_callback=self.update)
 
     loop.run_until_complete(self.host.initialize())
+    # loop.run_until_complete(self.host.destroy())
 
     loop.create_task(self.serve())
     loop.run_forever()

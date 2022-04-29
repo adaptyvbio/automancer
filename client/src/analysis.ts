@@ -53,7 +53,7 @@ export function analyzeProtocol(protocol: Protocol, entries?: MasterEntry[]): An
         analysisSegments[segmentIndex] = { timeRange: null };
       }
     } else if (entries && (segmentIndex === currentEntry.segmentIndex)) {
-      let timeLeft = segment.data.timer!.duration * 1000 * (1 - currentEntry.processState.progress);
+      let timeLeft = segment.data.timer!.duration * (1 - currentEntry.processState.progress);
       let [startEntryIndex, startEntry] = util.findLastEntry(entries, (entry, entryIndex) =>
         (entry.segmentIndex === segmentIndex) && (entries[entryIndex - 1]?.segmentIndex !== segmentIndex)
       )!;
@@ -64,7 +64,7 @@ export function analyzeProtocol(protocol: Protocol, entries?: MasterEntry[]): An
 
       futureTime = currentEntry.time + timeLeft;
     } else {
-      let duration = segment.data.timer!.duration * 1000;
+      let duration = segment.data.timer!.duration;
 
       analysisSegments[segmentIndex] = {
         timeRange: [futureTime, futureTime + duration]

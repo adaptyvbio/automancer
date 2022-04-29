@@ -132,11 +132,13 @@ export function ProtocolOverview(props: {
 
 
 function formatDuration(input: number): string {
-  if (input < 60) {
-    return `${Math.floor(input)} sec`;
-  } if (input < 3600) {
-    let min = Math.floor(input / 60);
-    let sec = Math.floor(input % 60);
+  if (input < 1000) {
+    return `${input} ms`;
+  } else if (input < 60e3) {
+    return `${input / 1000} sec`;
+  } if (input < 3600e3) {
+    let min = Math.floor(input / 60e3);
+    let sec = Math.round(Math.floor(input % 60e3) / 1000);
     return `${min} min` + (sec > 0 ? ` ${sec} sec` : '');
   }
 

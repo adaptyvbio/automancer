@@ -18,7 +18,7 @@ class Runner(BaseProcessRunner):
     if not self._start_time:
       return { 'progress': 0.0 }
 
-    current_time = time.time()
+    current_time = time.time() * 1000
 
     start_progress = self._start_state['progress'] if self._start_state else 0.0
     new_progress = (current_time - self._start_time) / self._nominal_duration
@@ -32,10 +32,10 @@ class Runner(BaseProcessRunner):
     duration = self._nominal_duration * ((1.0 - state['progress']) if state else 1.0)
 
     self._start_state = state
-    self._start_time = time.time()
+    self._start_time = time.time() * 1000
 
     if duration > 0.0:
-      await asyncio.sleep(duration)
+      await asyncio.sleep(duration / 1000)
       # raise Exception("Foo")
 
   def pause_process(self, segment, seg_index):

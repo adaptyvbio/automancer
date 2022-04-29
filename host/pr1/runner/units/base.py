@@ -14,6 +14,9 @@ class BaseParser:
   def enter_protocol(self, data_protocol):
     pass
 
+  def leave_protocol(self, data_protocol):
+    pass
+
   def enter_stage(self, stage_index, data_stage):
     pass
 

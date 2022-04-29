@@ -3,40 +3,42 @@ import re
 import regex
 
 from . import namespace
-from .sheet import display_partial_schema, parse_valve_id
+from .sheet import display_partial_schema
 from ..base import BaseParser
-from ...util.parser import EvaluatedCompositeValue, Identifier, interpolate, parse_ref
+from ...util.parser import Identifier, UnclassifiedExpr, interpolate
 from ...util import schema as sc
 
 
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
 
-
 ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'display', 'label', 'name', 'repr'])
+
+
+# Schemas
+
+protocol_schema = sc.Dict({
+  'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
+    **display_partial_schema,
+    'default': sc.Optional(str),
+    'name': sc.Optional(str)
+  }))),
+  'valves': sc.Optional(str)
+}, allow_extra=True)
 
 
 class Parser(BaseParser):
   def __init__(self, parent):
-    self._depth_stack = list()
-    self._valve_stack = [set()]
+    self._block_stack = list()
+    self._valve_stack = list()
     self._parent = parent
     self._valve_parameters = list()
 
   @property
-  def _depth(self) -> int:
+  def _depth(self):
     return len(self._valve_stack)
 
-
   def enter_protocol(self, data_protocol):
-    schema = sc.Dict({
-      'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
-        **display_partial_schema,
-        'default': sc.Optional(str),
-        'name': sc.Optional(str)
-      })))
-    }, allow_extra=True)
-
-    data_protocol = schema.transform(data_protocol)
+    data_protocol = protocol_schema.transform(data_protocol)
 
     for valve_name, valve_info in data_protocol.get('parameters', dict()).items():
       self._valve_parameters.append(
@@ -51,23 +53,34 @@ class Parser(BaseParser):
         )
       )
 
+    if 'valves' in data_protocol:
+      self._process_valves(data_protocol['valves'])
+    else:
+      self._process_valves()
+
+  def leave_protocol(self, data_protocol):
+    self._block_stack.pop()
+
+    # if self._depth > 0:
+    #   raise data_protocol['stages'].error("Final depth is non-null")
+
+
   def enter_block(self, data_block):
-    if "valves" in data_block:
-      data_valves, context = data_block["valves"]
+    if 'valves' in data_block:
+      data_valves, context = data_block['valves']
+      sc.Schema(str).validate(data_valves)
       self._process_valves(data_valves, context)
     else:
-      self._depth_stack.append(None)
+      self._process_valves()
 
   def leave_block(self, data_block):
-    target_depth = self._depth_stack.pop()
+    self._block_stack.pop()
 
-    if target_depth is not None:
-      self._valve_stack = self._valve_stack[0:target_depth]
-
-  def handle_segment(self, data_action):
+  def handle_segment(self, data_segment):
     return {
       namespace: {
-        'valves': self._valve_stack[-1]
+        'valves': self._block_stack[-1] ^ (self._valve_stack[-1] if self._valve_stack else set())
+        # 'valves': self._block_stack[-1] ^ (self._valve_stack[-1:] or [set()])[0]
       }
     }
 
@@ -95,11 +108,6 @@ class Parser(BaseParser):
 
     arguments = [process_arg(param_index, arg) for param_index, arg in enumerate(code['arguments'])]
 
-    # for param_index, arg in enumerate(code['arguments']):
-    #   if arg is not None:
-    #     # print(self._sheet.valves[arg], protocol.parsers[namespace]['arguments'])
-    #     print(chip.model.sheets[namespace].valves[arg], self._valve_parameters[param_index])
-
     return {
       'arguments': arguments
     }
@@ -117,19 +125,23 @@ class Parser(BaseParser):
       } for arg in data['arguments']]
     }
 
-  def _process_valves(self, expr, context = dict()):
-    pop_count, pushes, peak = self._parse_expr(expr, context)
+  def _process_valves(self, expr = None, context = dict()):
+    if expr:
+      pop_count, pushes, peak = self._parse_expr(expr, context)
 
-    for _ in range(pop_count):
-      if len(self._valve_stack) <= 1:
-        raise expr.error(f"Invalid pop instruction, stack is already empty")
+      for _ in range(pop_count):
+        if len(self._valve_stack) <= 1:
+          raise expr.error(f"Invalid pop instruction, stack is already empty")
 
-      self._valve_stack.pop()
+        self._valve_stack.pop()
+    else:
+      pushes = list()
+      peak = None
 
-    for push in pushes + ([peak] if peak else list()):
-      self._valve_stack.append(push ^ self._valve_stack[-1])
+    for push in pushes:
+      self._valve_stack.append(push ^ (self._valve_stack[-1] if self._valve_stack else set()))
 
-    self._depth_stack.append(self._depth - 1 if peak else None)
+    self._block_stack.append((peak if peak else set()) ^ (self._block_stack[-1] if self._block_stack else set()))
 
 
   def _resolve_atom_query(self, token):
@@ -299,8 +311,8 @@ class Parser(BaseParser):
 
           index += 1
       else:
-        if isinstance(fragment, EvaluatedCompositeValue):
-          query = fragment.fragments
+        if isinstance(fragment.value, UnclassifiedExpr):
+          query = fragment.value.interpolate().evaluate().fragments
         elif isinstance(fragment, str):
           query = [fragment]
         else:

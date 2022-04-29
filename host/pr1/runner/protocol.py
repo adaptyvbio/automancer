@@ -15,18 +15,6 @@ Step = namedtuple("Step", ["description", "name", "seq"])
 Segment = namedtuple("Segment", ["data", "process_namespace"])
 
 
-# class RepeatParser(BaseParser):
-#   def parse_block(self, data_action):
-#     if "repeat" in data_action:
-#       repeat, context = data_action["repeat"]
-
-#       return {
-#         'role': 'fragment',
-#         'actions': [
-#           { key: value for key, value in data_action.items() if key != "repeat" }
-#         ] * repeat
-#       }
-
 protocol_schema = sc.Dict({
   'name': sc.Optional(str),
   'models': sc.Optional(sc.List(str)),
@@ -49,6 +37,10 @@ class Parsers(BaseParser):
     for parser in self.parsers.values():
       parser.enter_protocol(data_protocol)
 
+  def leave_protocol(self, data_protocol):
+    for parser in self.parsers.values():
+      parser.leave_protocol(data_protocol)
+
   def enter_stage(self, stage_index, data_stage):
     for parser in self.parsers.values():
       parser.enter_stage(stage_index, data_stage)
@@ -56,6 +48,7 @@ class Parsers(BaseParser):
   def leave_stage(self, stage_index, data_stage):
     for parser in self.parsers.values():
       parser.leave_stage(stage_index, data_stage)
+
 
   def parse_block(self, data_block):
     for namespace, parser in self.parsers.items():
@@ -71,6 +64,15 @@ class Parsers(BaseParser):
         return parser_claim, parser_claim_namespace
 
     return None
+
+  def enter_block(self, data_block):
+    for parser in self.parsers.values():
+      parser.enter_block(data_block)
+
+  def leave_block(self, data_block):
+    for parser in self.parsers.values():
+      parser.leave_block(data_block)
+
 
   def handle_segment(self, data_segment):
     data = dict()
@@ -154,6 +156,9 @@ class Protocol:
       )
 
       self.stages.append(stage)
+
+    # Call leave_protocol()
+    self.parser.leave_protocol(data)
 
     # from pprint import pprint
     # pprint(self.segments)

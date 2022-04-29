@@ -34,7 +34,7 @@ def parse_duration(raw_expr, context):
         return parse_duration(input.value, input.context)
 
       try:
-        return parse_duration_expr(input, context)
+        return parse_duration_expr(input)
       except LocatedError:
         raise
       except Exception as e:
@@ -49,7 +49,7 @@ def parse_duration(raw_expr, context):
     if (not isinstance(duration, float)) and (not isinstance(duration, int)):
       raise evaluated.error(f"Unexpected value {repr(duration)}, expected scalar")
   else:
-    duration = parse_duration_expr(raw_expr, context)
+    duration = parse_duration_expr(raw_expr)
 
   return round(duration)
 
@@ -65,10 +65,8 @@ time_factors = {
 }.items()
 
 time_regexp = regex.compile(r"^ *(?:(\d+(?:\.\d*)?|\d*\.\d+) *([a-z]+) *)+$")
-time_regexp = regex.compile(r"^ *(?:(?:(\d+(?:\.\d*)?|\d*\.\d+) *([a-z]+)|\$(\d+)) *)+$")
 
-
-def parse_duration_expr(expr, context = dict()):
+def parse_duration_expr(expr):
   output = 0.0
 
   match = time_regexp.match(expr)
@@ -86,12 +84,5 @@ def parse_duration_expr(expr, context = dict()):
       raise LocatedValue.create_error(f"Invalid duration keyword '{factor_name}'", expr[factor_span[0]:factor_span[1]])
 
     output += float(quant) * factor
-
-  for ref_name, ref_span in zip(match.captures(3), match.spans(3)):
-    if not (ref_name in context):
-      raise LocatedValue.create_error(f"Invalid reference to '${ref_name}'", expr[ref_span[0]:ref_span[1]])
-
-    ref_value = context[ref_name]
-    output += parse_duration(ref_value)
 
   return output

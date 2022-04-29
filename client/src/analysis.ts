@@ -30,6 +30,10 @@ export function analyzeProtocol(protocol: Protocol, entries?: MasterEntry[]): An
   let futureTime = 0;
 
   for (let [segmentIndex, segment] of protocol.segments.entries()) {
+    let segmentDuration = (segment.processNamespace === 'timer')
+      ? segment.data.timer!.duration
+      : 0;
+
     if (entries && (segmentIndex < currentEntry.segmentIndex)) {
       let start = util.findLastEntry(entries, (entry) => entry.segmentIndex === segmentIndex);
 
@@ -53,7 +57,7 @@ export function analyzeProtocol(protocol: Protocol, entries?: MasterEntry[]): An
         analysisSegments[segmentIndex] = { timeRange: null };
       }
     } else if (entries && (segmentIndex === currentEntry.segmentIndex)) {
-      let timeLeft = segment.data.timer!.duration * (1 - currentEntry.processState.progress);
+      let timeLeft = segmentDuration * (1 - (currentEntry.processState.progress ?? 0));
       let [startEntryIndex, startEntry] = util.findLastEntry(entries, (entry, entryIndex) =>
         (entry.segmentIndex === segmentIndex) && (entries[entryIndex - 1]?.segmentIndex !== segmentIndex)
       )!;
@@ -64,13 +68,11 @@ export function analyzeProtocol(protocol: Protocol, entries?: MasterEntry[]): An
 
       futureTime = currentEntry.time + timeLeft;
     } else {
-      let duration = segment.data.timer!.duration;
-
       analysisSegments[segmentIndex] = {
-        timeRange: [futureTime, futureTime + duration]
+        timeRange: [futureTime, futureTime + segmentDuration]
       };
 
-      futureTime += duration;
+      futureTime += segmentDuration;
     }
   }
 

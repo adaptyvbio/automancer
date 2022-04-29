@@ -22,15 +22,14 @@ export abstract class BackendCommon {
   abstract createChip(options: { modelId: ChipModelId; }): Promise<void>;
   abstract createDraft(draftId: string, source: string): Promise<void>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
+  abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
+  abstract resume(chipId: ChipId): Promise<void>;
   abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
+  abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
     chipId: ChipId;
     data: UnitsCode;
     draftId: DraftId;
-    // position: {
-    //   progress: number;
-    //   segmentIndex: number;
-    // } | null
   }): Promise<void>;
 }
 

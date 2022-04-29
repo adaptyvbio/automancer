@@ -80,11 +80,35 @@ export default class WebsocketBackend extends BackendCommon {
     }));
   }
 
+  async pause(chipId: string, options: { neutral: boolean; }) {
+    this.#socket.send(JSON.stringify({
+      type: 'pause',
+      chipId,
+      options
+    }));
+  }
+
+  async resume(chipId: string) {
+    this.#socket.send(JSON.stringify({
+      type: 'resume',
+      chipId
+    }));
+  }
+
   async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
     this.#socket.send(JSON.stringify({
       type: 'setMatrix',
       chipId,
       update
+    }));
+  }
+
+  async skipSegment(chipId: ChipId, segmentIndex: number, processState?: object) {
+    this.#socket.send(JSON.stringify({
+      type: 'skipSegment',
+      chipId,
+      processState: processState ?? null,
+      segmentIndex
     }));
   }
 

@@ -15,7 +15,7 @@ export function ProtocolOverview(props: {
   master?: Master;
   protocol: Protocol;
 }) {
-  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([]));
+  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([0]));
   let analysis = props.analysis ?? analyzeProtocol(props.protocol);
   let currentSegmentIndex = analysis.current?.segmentIndex!; // !
 
@@ -89,7 +89,7 @@ export function ProtocolOverview(props: {
 
                             features = [
                               ...features,
-                              ...Units.flatMap(([namespace, Unit]) => Unit.createFeatures(segment, props.protocol, props.master))
+                              ...Units.flatMap(([namespace, Unit]) => Unit.createFeatures?.(segment, props.protocol, props.master) ?? [])
                             ];
 
                             return (

@@ -9,7 +9,7 @@ class Master:
     self.protocol = protocol
     self.supdata = protocol.create_supdata(chip, codes)
 
-    self._paused = False
+    self._pause_options = None
     self._process_state = None
     self._seg_index = 0
     self._task = None
@@ -23,6 +23,10 @@ class Master:
     return self.protocol.segments[self._seg_index]
 
   @property
+  def _paused(self):
+    return self._pause_options is not None
+
+  @property
   def _process_runner(self):
     return self.chip.runners[self._segment.process_namespace]
 
@@ -30,25 +34,29 @@ class Master:
   def _log(self, error = None):
     self._log_data.append({
       'error': error,
-      'paused': self._paused,
+      'pause_options': self._pause_options,
       'process_state': self._process_state or self._process_runner.get_state(),
       'segment_index': self._seg_index,
       'time': time.time()
     })
 
-    # print(f"[{time.time()}] {'Paused' if self._paused else str()} {self._seg_index}")
     print(self._log_data[-1])
     self._update_callback()
 
   def _enter_segment(self):
-    for runner in self.chip.runners.values():
-      runner.enter_segment(self._segment.data, self._seg_index)
+    if self._paused:
+      options = self._pause_options
+      self._pause_options = None
+
+      for runner in self.chip.runners.values():
+        runner.resume_segment(options, self._segment.data, self._seg_index)
+    else:
+      for runner in self.chip.runners.values():
+        runner.enter_segment(self._segment.data, self._seg_index)
 
     self._log()
 
     async def coroutine():
-      # TODO: exceptions raised here are silent
-
       process_state = self._process_state
       self._process_state = None
 
@@ -56,18 +64,25 @@ class Master:
         await self._process_runner.run_process(
           self._segment.data, self._seg_index, process_state
         )
+      except asyncio.exceptions.CancelledError:
+        pass
       except Exception as e:
-        self._paused = True
+        self._pause_options = { 'neutral': False }
         self._process_state = self._process_runner.get_state()
         self._task = None
         self._log(error=str(e))
       else:
         self._leave_segment()
 
+    def done_callback(future):
+      if future.exception():
+        future.result()
+
     loop = asyncio.get_event_loop()
     self._task = loop.create_task(coroutine())
+    self._task.add_done_callback(done_callback)
 
-  def _leave_segment(self) -> None:
+  def _leave_segment(self, next_segment_index = None, next_process_state = None):
     segment = self._segment
 
     self._log()
@@ -75,7 +90,8 @@ class Master:
     for runner in self.chip.runners.values():
       runner.leave_segment(segment.data, self._seg_index)
 
-    self._seg_index += 1
+    self._process_state = next_process_state
+    self._seg_index = (next_segment_index if next_segment_index is not None else self._seg_index + 1)
     self._task = None
 
     if self._seg_index < len(self.protocol.segments):
@@ -89,16 +105,18 @@ class Master:
 
     self._enter_segment()
 
-  def pause(self):
+  def pause(self, options):
     if self._paused:
       raise Exception("Already paused")
 
-    self._paused = True
+    self._pause_options = options
     self._process_state = self._process_runner.get_state()
-    # self._process_runner.pause_process(self._segment.data, self._seg_index)
 
     if self._task:
       self._task.cancel()
+
+    for runner in self.chip.runners.values():
+      runner.pause(options)
 
     self._log()
 
@@ -106,15 +124,27 @@ class Master:
     if not self._paused:
       raise Exception("Not paused")
 
-    self._paused = False
     self._enter_segment()
+
+  def skip_segment(self, segment_index, process_state = None):
+    if self._task:
+      self._task.cancel()
+
+    self._leave_segment(segment_index, process_state)
+
+    # self._log()
+
+    # self._process_state = process_state
+    # self._seg_index = segment_index
+
+    # self._enter_segment()
 
   def export(self):
     return {
       "entries": [
         {
           "error": entry['error'],
-          "paused": entry['paused'],
+          "paused": entry['pause_options'] is not None,
           "processState": entry['process_state'],
           "segmentIndex": entry['segment_index'],
           "time": round(entry['time'] * 1000)

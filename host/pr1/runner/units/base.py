@@ -61,9 +61,6 @@ class BaseRunner:
   async def initialize(self):
     pass
 
-  def get_log(self):
-    return dict()
-
   def get_state(self):
     return dict()
 
@@ -79,7 +76,10 @@ class BaseRunner:
   def leave_segment(self, segment, seg_index):
     pass
 
-  def pause(self):
+  def resume_segment(self, segment, seg_index, options):
+    pass
+
+  def pause(self, options):
     pass
 
 

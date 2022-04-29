@@ -46,7 +46,7 @@ export default class ViewControl extends React.Component<Rf.ViewProps<Model>, Vi
         <Rf.ViewBody>
           {modelControl && <div className="control-root">
             {modelControl.groups.map((group, groupIndex) => (
-              <div className="control-group" style={{ '--group-color': group.color } as React.CSSProperties} key={groupIndex}>
+              <div className="control-group" key={groupIndex}>
                 <h2>{group.name}</h2>
                 <div className="control-list">
                   {Array.from(modelControl.valves.entries())

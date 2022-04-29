@@ -1,4 +1,5 @@
 import type { ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } from '../../backends/common';
+import type { Features } from '..';
 
 
 export { CodeEditor } from './code-editor';
@@ -13,10 +14,7 @@ export function createCode(protocol: Protocol, model: ChipModel): ControlNamespa
   };
 }
 
-export function createFeatures(segment: ProtocolSegment, protocol: Protocol, master?: Master): {
-  icon: string;
-  label: string;
-}[] {
+export function createFeatures(segment: ProtocolSegment, protocol: Protocol, master?: Master): Features {
   let data = segment.data[namespace]!;
   let protodata = protocol.data[namespace]!;
   let supdata = (master as any)?.supdata[namespace];

@@ -344,8 +344,10 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
                 this.props.setPlanData({
                   chipId,
                   data: Object.fromEntries(
-                    Units.map(([namespace, Unit]) => [namespace, Unit.createCode(protocol!, model)])
-                  ) as UnitsCode
+                    Units
+                      .filter(([_namespace, Unit]) => Unit.createCode)
+                      .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!, model)])
+                  ) as unknown as UnitsCode
                 })
               }} />
           </div>
@@ -354,14 +356,20 @@ class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState>
         {this.props.planData && (
           <section>
             <div className="protocol-config-root">
-              {Units.map(([namespace, unit]) => {
+              {Units.map(([rawNamespace, unit]) => {
+                if (!unit.CodeEditor || !(rawNamespace in this.props.planData!.data)) {
+                  return null;
+                }
+
+                let namespace = rawNamespace as (keyof UnitsCode);
+
                 return (
                   <unit.CodeEditor
                     chip={chip!}
                     draft={this.props.draft}
                     model={model!}
                     code={this.props.planData!.data[namespace]}
-                    setCode={(code) => {
+                    setCode={(code: UnitsCode[typeof namespace]) => {
                       this.props.setPlanData({
                         ...this.props.planData!,
                         data: {

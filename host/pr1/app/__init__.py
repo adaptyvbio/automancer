@@ -54,11 +54,28 @@ class App():
         # TODO: checks
         del self.host.chips[message["chipId"]]
 
+      if message["type"] == "pause":
+        chip = self.host.chips[message["chipId"]]
+        chip.master.pause({
+          'neutral': message["options"]["neutral"]
+        })
+
+      if message["type"] == "resume":
+        chip = self.host.chips[message["chipId"]]
+        chip.master.resume()
+
       if message["type"] == "setMatrix":
         chip = self.host.chips[message["chipId"]]
 
         for namespace, matrix_data in message["update"].items():
           chip.matrices[namespace].update(matrix_data)
+
+      if message["type"] == "skipSegment":
+        chip = self.host.chips[message["chipId"]]
+        chip.master.skip_segment(
+          process_state=message["processState"],
+          segment_index=message["segmentIndex"]
+        )
 
       if message["type"] == "startPlan":
         chip = self.host.chips[message["chipId"]]

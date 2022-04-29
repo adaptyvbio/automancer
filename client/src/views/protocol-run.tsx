@@ -60,8 +60,11 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
         <Rf.ViewBody>
           {chip
             ? (() => {
-              let protocol = chip.master!.protocol;
-              let analysis = analyzeProtocol(protocol, chip.master!.entries);
+              let master = chip.master!;
+              let protocol = master.protocol;
+              let lastEntry = master.entries.at(-1);
+
+              let analysis = analyzeProtocol(protocol, master.entries);
               let currentSegmentIndex = analysis.current!.segmentIndex;
               let _currentSegment = protocol.segments[currentSegmentIndex];
 
@@ -82,7 +85,30 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
                       </div>
                     </div>
 
-                    <P />
+                    <div className="status-progress">
+                      <P />
+                    </div>
+
+                    <div className="status-actions">
+                      {lastEntry.paused
+                        ? (
+                          <button type="button" className="status-button" onClick={() => {
+                            host!.backend.resume(chip!.id);
+                          }}>Resume</button>
+                        ) : (
+                          <>
+                            <button type="button" className="status-button" onClick={() => {
+                              host!.backend.pause(chip!.id, { neutral: false });
+                            }}>Pause (extend)</button>
+                            <button type="button" className="status-button" onClick={() => {
+                              host!.backend.pause(chip!.id, { neutral: true });
+                            }}>Pause (neutral)</button>
+                          </>
+                        )}
+                      <button type="button" className="status-button" onClick={() => {
+                        host!.backend.skipSegment(chip!.id, currentSegmentIndex + 1);
+                      }}>Skip</button>
+                    </div>
 
                     <div className="status-overview">
                       <ProtocolOverview app={this.props.app} analysis={analysis} protocol={protocol} master={chip.master!} />

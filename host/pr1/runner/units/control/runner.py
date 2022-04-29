@@ -88,15 +88,23 @@ class Runner(BaseRunner):
     self._proto_permutation = None
 
   def enter_segment(self, segment, seg_index):
+    self._handle_segment(segment)
+
+  def pause(self, options):
+    if not options['neutral']:
+      self._chip_signal = 0
+      self._write()
+
+  def resume_segment(self, options, segment, seg_index):
+    if not options['neutral']:
+      self._handle_segment(segment)
+
+  def _handle_segment(self, segment):
     seg = segment[namespace]
     proto_signal = sum([1 << arg_index for arg_index in seg['valves']])
 
     self._chip_signal = self._proto_permutation.permute(proto_signal)
     self._write()
-
-  def pause(self):
-    self._driver.set(0)
-    self._value = 0
 
 
 class BinaryPermutation:

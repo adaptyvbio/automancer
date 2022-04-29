@@ -23,7 +23,7 @@ export default class ViewTree extends React.Component<ViewProps<Model>> {
           return [List([host.id, 'chips', chip.id]), TreeEntryRecord({ name: `${chip.name} (${model.name})` })]
         }),
         [List([host.id, 'devices']), TreeEntryRecord({ name: 'Devices', selectable: false })],
-        ...host.state.devices.map((device): [TreePath, TreeEntryDef] =>
+        ...Object.values(host.state.devices).map((device): [TreePath, TreeEntryDef] =>
           [List([host.id, 'devices', device.id]), TreeEntryRecord({ name: device.name })]
         )
       ])

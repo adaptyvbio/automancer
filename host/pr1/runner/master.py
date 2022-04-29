@@ -47,6 +47,8 @@ class Master:
     self._log()
 
     async def coroutine():
+      # TODO: exceptions raised here are silent
+
       process_state = self._process_state
       self._process_state = None
 

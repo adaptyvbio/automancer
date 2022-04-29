@@ -135,7 +135,7 @@ export interface HostState {
   chips: Record<ChipId, Chip>;
   drafts: Record<DraftId, Draft>;
   models: Record<ChipModelId, ChipModel>;
-  devices: Device[];
+  devices: Record<DeviceId, Device>;
 
   executors: {
     control: ControlNamespace.ExecutorState;

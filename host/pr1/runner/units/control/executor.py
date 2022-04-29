@@ -47,7 +47,7 @@ class Executor(BaseExecutor):
   def get_devices(self):
     return [
       DeviceInformation(
-        id=str(index),
+        id=("control." + str(index)),
         name=(device['name'] or "Untitled control device")
       ) for index, device in enumerate(self._devices)
     ]

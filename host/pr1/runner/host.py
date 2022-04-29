@@ -18,7 +18,6 @@ from .util import schema as sc
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
 DraftError = namedtuple("DraftError", ['message', 'range'])
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("pr1-host")
 
 class Host:
@@ -114,17 +113,16 @@ class Host:
     # -- Debug --------------------------------------------
 
     chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
-    _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
+    # _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
     draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent.parent / "test.yml").open().read())
 
     codes = {
       'control': {
-        'arguments': [0, 1, None, None]
+        'arguments': [None, 0, None, 1]
       }
     }
 
-    def update_callback():
-      pass
+    return chip, codes, draft
 
     # self.start_plan(chip, codes, draft, update_callback=update_callback)
 
@@ -164,7 +162,6 @@ class Host:
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
-      e.display() # debug
 
     draft = Draft(
       id=draft_id,
@@ -231,8 +228,7 @@ class Host:
         } for model in self.models.values()
       },
       "devices": {
-        namespace: { device.id: device.export() for device in executor.get_devices() }
-        for namespace, executor in self.executors.items()
+        device.id: device.export() for namespace, executor in self.executors.items() for device in executor.get_devices()
       },
       "drafts": {
         draft.id: {
@@ -244,5 +240,8 @@ class Host:
           "protocol": draft.protocol and draft.protocol.export(),
           "source": draft.source
         } for draft in self.drafts.values()
+      },
+      "executors": {
+        namespace: executor.export() for namespace, executor in self.executors.items()
       }
     }

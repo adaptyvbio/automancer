@@ -164,7 +164,7 @@ class Protocol:
     # pprint(self.segments)
 
   def create_supdata(self, chip, codes):
-    return { namespace: parser.create_supdata(chip, codes) for namespace, parser in self.parsers.items() }
+    return { namespace: parser.create_supdata(chip, codes) for namespace, parser in self.parser.parsers.items() }
 
   def export_supdata(self, data):
     return { namespace: Parser.export_supdata(data[namespace]) for namespace, Parser in self.parser_classes.items() }
@@ -174,7 +174,7 @@ class Protocol:
       "name": self.name,
       "modelIds": self.models and [model_id for model_id in self.models.keys()],
       "data": {
-        namespace: parser.export_protocol() for namespace, parser in self.parsers.items()
+        namespace: parser.export_protocol() for namespace, parser in self.parser.parsers.items()
       },
       "segments": [{
         "data": {

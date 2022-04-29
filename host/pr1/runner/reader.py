@@ -125,21 +125,12 @@ class LocatedValue:
       return LocatedString(object, location)
     else:
       return object
-      # return LocatedValue(object, location)
 
   def transfer(dest, source):
     if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
       return LocatedValue.locate(dest, source.location)
 
     return dest
-
-  # def transfer(dest, *sources):
-  #   if not isinstance(dest, LocatedValue):
-  #     for source in sources:
-  #       if isinstance(source, LocatedValue):
-  #         return LocatedValue.locate(dest, source.location)
-
-  #   return dest
 
 
 class LocatedString(str, LocatedValue):

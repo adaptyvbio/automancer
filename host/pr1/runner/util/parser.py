@@ -56,6 +56,7 @@ def parse_call(expr):
   callee = expr[callee_span[0]:callee_span[1]]
   # callee = match.captures('n')[0]
 
+  # TODO: handle detached location
   args = [unescape(expr[span[0]:span[1]]) for span in match.spans('a')]
 
   return callee, args
@@ -192,6 +193,9 @@ class UnclassifiedExpr:
   def __init__(self, value, context):
     self.context = context
     self.value = value
+
+  def interpolate(self):
+    return interpolate(self.to_str(), self.context)
 
   def to_python(self):
     return PythonExpr(self.value, self.context)

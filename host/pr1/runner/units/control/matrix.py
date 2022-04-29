@@ -1,13 +1,23 @@
 from collections import namedtuple
 
+from .runner import BinaryPermutation
 
-Valve = namedtuple("Valve", ["aliases", "host_valve_index"])
+
+Valve = namedtuple("Valve", ['aliases', 'host_valve_index'])
 
 
 class Matrix:
   def __init__(self, sheet, valves):
     self._sheet = sheet
     self.valves = valves
+
+    # self.valves[0] = Valve(aliases=list(), host_valve_index=2)
+    # self.valves[1] = Valve(aliases=list(), host_valve_index=0)
+
+    self._set_permutation()
+
+  def _set_permutation(self):
+    self.permutation = BinaryPermutation([valve.host_valve_index for valve in self.valves])
 
   def export(self):
     return {
@@ -23,6 +33,8 @@ class Matrix:
       host_valve_index=data["valves"][index]["hostValveIndex"]
     ) for index in range(len(self._sheet.valves))]
 
+    self._set_permutation()
+
   def load(sheet):
     return Matrix(
       sheet,
@@ -31,14 +43,3 @@ class Matrix:
         host_valve_index=None
       ) for _ in range(len(sheet.valves))]
     )
-
-    # sheet,
-    # valves=[Valve(
-    #   aliases=(data["valves"][index]["aliases"] if data else list()),
-    #   host_valve_index=(data["valves"][index]["hostValveIndex"] if data else None)
-    # ) for index in range(len(sheet.valves))]
-
-    # valves=[Valve(
-    #   aliases=list(),
-    #   host_valve_index=valve["hostValveIndex"]
-    # ) for valve in data["valves"]]

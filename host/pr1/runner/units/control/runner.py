@@ -9,7 +9,7 @@ class ValveError(IntEnum):
   Unresponsive = 1
 
 
-class Runner:
+class Runner(BaseRunner):
   def __init__(self, executor, chip):
     self._chip = chip
     self._executor = executor
@@ -21,14 +21,14 @@ class Runner:
 
     # sequence
     self._drive = None
-    self._signal = 0
+
+    self._chip_signal = 0
+    self._default_chip_signal = sum([1 << valve_index for valve_index, valve in enumerate(self._sheet.valves) if valve.inverse])
 
 
   # Client communication
 
   def command(self, command):
-    self._permutation = BinaryPermutation([valve.host_valve_index for valve in self._matrix.valves])
-
     if command["type"] == "signal":
       self._signal = int(command["signal"])
       self._write()
@@ -36,7 +36,7 @@ class Runner:
   def export(self):
     return {
       "drive": self._drive,
-      "signal": str(self._signal),
+      "signal": str(self._chip_signal),
       "valves": [{
         "error": ValveError.Unbound if (self._matrix.valves[valve_index].host_valve_index is None) else None
       } for valve_index, valve in enumerate(self._matrix.valves)]
@@ -44,7 +44,8 @@ class Runner:
 
 
   def _write(self):
-    self._executor.write(self._permutation.permute(self._signal))
+    device_signal = self._matrix.permutation.permute(self._chip_signal ^ self._default_chip_signal)
+    self._executor.write(device_signal)
 
   def log(self):
     return {
@@ -79,28 +80,19 @@ class Runner:
 
     self._drive = 0
     self._proto_signal = 0
+    self._proto_permutation = BinaryPermutation([arg for arg in self._code['arguments']])
 
   def end_protocol(self):
     self._drive = None
     self._proto_signal = None
+    self._proto_permutation = None
 
   def enter_segment(self, segment, seg_index):
     seg = segment[namespace]
-    signal = 0
+    proto_signal = sum([1 << arg_index for arg_index in seg['valves']])
 
-    print('Control runner ---->', seg)
-
-    return
-
-    for valve_index in seg['valves']:
-      signal |= (1 << self._sheet.valves[valve_index].channel)
-
-    self._proto_signal = signal
-    self._signal = (self._signal & self._drive) | (signal & ~self._drive)
+    self._chip_signal = self._proto_permutation.permute(proto_signal)
     self._write()
-
-  def leave_segment(self, segment, seg_index):
-    pass
 
   def pause(self):
     self._driver.set(0)
@@ -110,7 +102,6 @@ class Runner:
 class BinaryPermutation:
   def __init__(self, indices):
     self._indices = indices
-    pass
 
   def permute(self, value):
     return sum([(1 << dest_index) for source_index, dest_index in enumerate(self._indices) if (dest_index is not None) and (value & (1 << source_index)) > 0])

@@ -11,8 +11,8 @@ class Matrix:
     self._sheet = sheet
     self.valves = valves
 
-    # self.valves[0] = Valve(aliases=list(), host_valve_index=2)
-    # self.valves[1] = Valve(aliases=list(), host_valve_index=0)
+    # self.valves[0] = Valve(aliases=list(), host_valve_index=4)
+    # self.valves[1] = Valve(aliases=list(), host_valve_index=5)
 
     self._set_permutation()
 

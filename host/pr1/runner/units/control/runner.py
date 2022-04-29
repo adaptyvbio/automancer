@@ -44,8 +44,8 @@ class Runner(BaseRunner):
 
 
   def _write(self):
-    device_signal = self._matrix.permutation.permute(self._chip_signal ^ self._default_chip_signal)
-    self._executor.write(device_signal)
+    executor_signal = self._matrix.permutation.permute(self._chip_signal ^ self._default_chip_signal)
+    self._executor.write(executor_signal)
 
   def log(self):
     return {

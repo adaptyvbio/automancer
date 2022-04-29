@@ -6,6 +6,9 @@ class Driver:
     self._name = name
     self._signal = 0
 
+  def get_name(self):
+    return None
+
   def read(self):
     return self._signal
 

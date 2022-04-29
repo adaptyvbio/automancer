@@ -1,33 +1,26 @@
 import serial
 
-from ....drivers.serial import SerialDriver, SerialDriverDevice
 
-
-class Driver(SerialDriver):
-  device = SerialDriverDevice(product_id=0x0c04, vendor_id=0x2a19)
-
-  def __init__(self, path: str):
-    super().__init__(path)
-
+class Driver:
+  def __init__(self, port):
+    self._serial = serial.Serial(port, timeout=0.5)
     self._signal = 0
+
+    self._onlost = None
 
     if self.get_version() != 8:
       raise Exception("Unknown version")
 
-  # def read(self) -> int:
-  #   return self._signal
-
-  # def write(self, signal: int):
-  #   self._signal = signal
-
+  def get_name(self):
+    return self._serial.name
 
   def get_version(self):
     return int(self._request("ver"))
 
-  def read(self) -> int:
+  def read(self):
     return int(self._request("relay readall"), 16)
 
-  def write(self, signal: int) -> None:
+  def write(self, signal):
     self._order("relay writeall " + format(signal, '08x'))
 
 
@@ -54,4 +47,4 @@ class Driver(SerialDriver):
 
 
   def from_spec(spec):
-    return Driver(spec['path'])
+    return Driver(spec['port'])

@@ -26,7 +26,7 @@ esbuild.build({
 esbuild.build({
 	entryPoints: ['src/index.tsx'],
 	bundle: true,
-	format: 'iife',
+	format: 'esm',
 	outdir: path.join(__dirname, 'dist'),
   define: { this: 'window' },
 	minify: !argv.watch,

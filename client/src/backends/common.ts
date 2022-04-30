@@ -129,6 +129,9 @@ export interface HostState {
     id: HostId;
     name: string;
     startTime: number;
+
+    hardware: string | null;
+    software: string | null;
   };
 
   chips: Record<ChipId, Chip>;

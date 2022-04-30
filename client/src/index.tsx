@@ -7,6 +7,7 @@ import ViewChipSettings from './views/chip-settings';
 import ViewControl from './views/control';
 import ViewProtocolEditor from './views/protocol-editor';
 import ViewProtocolRun from './views/protocol-run';
+import ViewSettings from './views/settings';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
@@ -23,6 +24,19 @@ export interface Host {
 
 export interface Model {
   hosts: Record<HostId, Host>;
+  settings: {
+    hosts: ({
+      id: HostId;
+      name: string;
+      hidden: boolean;
+      locked: boolean;
+    } & ({
+      type: 'remote';
+      address: string;
+    } | {
+      type: 'local';
+    }))[];
+  }
 }
 
 class App extends React.Component {
@@ -84,6 +98,15 @@ class App extends React.Component {
     });
 
     app.registerViewModel({
+      id: 'settings',
+      name: 'Settings',
+      groupId: 'general',
+      icon: 'settings',
+      component: ViewSettings,
+      shortcut: null
+    });
+
+    app.registerViewModel({
       id: 'protocol-editor',
       name: 'Protocol editor',
       groupId: 'protocol',
@@ -111,10 +134,10 @@ class App extends React.Component {
     app.setState({
       layout: FragmentPaneRecord({
         horizontal: true,
-        cuts: List([0.6]),
+        cuts: List([0.65]),
         panes: List([
           ViewPaneRecord({ view: 'protocol-editor' }),
-          ViewPaneRecord({ view: 'protocol-run' })
+          ViewPaneRecord({ view: 'settings' })
           // ViewPaneRecord({ view: 'chip-settings' }),
           // ViewPaneRecord({ view: 'tree' })
         ])
@@ -162,7 +185,9 @@ class App extends React.Component {
 }
 
 
-ReactDOM.render(
-  <App />,
-  document.querySelector('#root')
-);
+export default function createClient(element: Element, options: {}) {
+  ReactDOM.render(
+    <App />,
+    element
+  );
+}

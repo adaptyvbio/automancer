@@ -6,6 +6,10 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="dist/index.js"></script>
+    <script type="module">
+      import createClient from './dist/index.js';
+
+      createClient(document.getElementById('root'));
+    </script>
   </body>
 </html>

@@ -4,7 +4,13 @@ import * as React from 'react';
 import type { Draft } from '../backends/common';
 
 
-MonacoEnvironment = {
+declare global {
+  interface Window {
+    MonacoEnvironment?: monaco.Environment | undefined;
+  }
+}
+
+window.MonacoEnvironment = {
 	getWorkerUrl: function (_moduleId, label) {
 		if (label === 'json') {
 			return './dist/vs/language/json/json.worker.js';

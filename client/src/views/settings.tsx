@@ -2,22 +2,29 @@ import { setIn } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
-import type { Host, Model } from '..';
-import type { Chip, ChipId, HostId } from '../backends/common';
+import type { Environment, Host, Model } from '..';
 
 
 interface ViewSettingsState {
 
 }
 
-export default class ViewSettings extends React.Component<Rf.ViewProps<Model>, ViewSettingsState> {
-  constructor(props: Rf.ViewProps<Model>) {
+export default class ViewSettings extends React.Component<Rf.ViewProps<Model, Environment>, ViewSettingsState> {
+  constructor(props: Rf.ViewProps<Model, Environment>) {
     super(props);
 
     this.state = {};
   }
 
   render() {
+    let head = this.props.app.environment.head;
+    let hosts = Object.values(this.props.model.hosts);
+
+    let settings = this.props.model.settings;
+    let setInSettings = (path: Iterable<unknown>, value: unknown) => {
+      this.props.app.setModel((model) => setIn(model, ['settings', ...path], value));
+    };
+
     return (
       <>
         <Rf.ViewHeader>
@@ -30,66 +37,152 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model>, V
             <Rf.PropertiesSection name="Hosts">
               <Rf.PropertiesSection name="General">
                 <div className="pr-form-root">
-                  <Rf.PropertiesEntry name="Detection">
+                  <Rf.PropertiesEntry name="Detection" group>
                     <Rf.Input.Checkbox name="Listen for hosts advertising themselves" disabled />
+                    <Rf.Input.Checkbox name="Listen for hosts relayed by known hosts" disabled />
                   </Rf.PropertiesEntry>
-                  <Rf.PropertiesEntry>
-                    <Rf.Input.Checkbox name="Listen for hosts relayed by known hosts" />
-                  </Rf.PropertiesEntry>
-                  <Rf.PropertiesEntry name="Main host">
+                  <Rf.PropertiesEntry name="Default host">
                     <Rf.MenuSelect
-                      menu={[
-                        { id: 'pane', name: 'A' },
-                        { id: 'local', name: 'B' },
-                        { id: 'window', name: 'C', disabled: true }
-                      ]}
-                      onSelect={(selection) => {}}
-                      selectedOptionPath={['pane']} />
+                      menu={hosts.length > 0
+                        ? hosts.map((host) => ({
+                          id: host.id,
+                          name: host.state.info.name
+                        }))
+                        : [{ id: '_none', name: 'No hosts defined', disabled: true }]}
+                      onSelect={(selection) => {
+                        setInSettings(['defaultHostId'], selection.first()!);
+                      }}
+                      selectedOptionPath={settings.defaultHostId && [settings.defaultHostId]} />
                   </Rf.PropertiesEntry>
-                  <Rf.PropertiesEntry name="Actions">
-                    <Rf.Input.Button icon="bolt" text="Reboot" />
-                  </Rf.PropertiesEntry>
-                  <Rf.PropertiesEntry name="Actions">
-                    <Rf.Input.Button text="Reboot" />
+                  <Rf.PropertiesEntry name="Manage">
+                    <Rf.Input.Button text="Add host" onClick={() => {
+                      let id = crypto.randomUUID();
+
+                      setInSettings(['hosts', id], {
+                        id,
+                        name: null,
+                        builtin: false,
+                        disabled: false,
+                        locked: false,
+
+                        location: {
+                          type: 'inactive'
+                        }
+                      });
+                    }} />
                   </Rf.PropertiesEntry>
                 </div>
               </Rf.PropertiesSection>
-              <Rf.PropertiesSection name="Alpha setup">
-                  <div className="pr-form-root">
-                    <Rf.PropertiesEntry name="Name">
-                      <Rf.Input.Text value={'Alpha setup'} />
-                    </Rf.PropertiesEntry>
-                    <Rf.PropertiesEntry name="Status">
-                      <Rf.Input.Output icon="bolt" text="Online" />
-                    </Rf.PropertiesEntry>
-                    <Rf.PropertiesEntry name="Other">
-                      <Rf.Input.Checkbox name="Lock actions on host" />
-                    </Rf.PropertiesEntry>
-                    <Rf.PropertiesEntry>
-                      <Rf.Input.Checkbox name="Hide host" />
-                    </Rf.PropertiesEntry>
-                  </div>
-                <Rf.PropertiesSection name="Protocol">
-                  <div className="pr-form-root">
-                    <Rf.PropertiesEntry name="Type">
-                      <Rf.MenuSelect
-                        menu={[
-                          { id: 'pane', name: 'Remote server' },
-                          { id: 'local', name: 'Local' },
-                          { id: 'window', name: 'Internal', disabled: true }
-                        ]}
-                        onSelect={(selection) => {}}
-                        selectedOptionPath={['pane']} />
-                    </Rf.PropertiesEntry>
-                    <Rf.PropertiesEntry name="Address">
-                      <Rf.Input.Text value="192.168.26.147" />
-                    </Rf.PropertiesEntry>
-                    <Rf.PropertiesEntry name="Actions">
-                      <Rf.Input.Button text="Reboot" />
-                    </Rf.PropertiesEntry>
-                  </div>
-                </Rf.PropertiesSection>
-              </Rf.PropertiesSection>
+              {Object.values(settings.hosts).map((hostSettings) => {
+                let hostPath = ['settings', 'hosts', hostSettings.id];
+
+                let proto = hostSettings.location;
+                let protoPath = [...hostPath, 'location'];
+
+                return (
+                  <Rf.PropertiesSection name={hostSettings.name ?? 'Untitled host'} key={hostSettings.id}>
+                    <div className="pr-form-root">
+                      <Rf.PropertiesEntry name="Name">
+                        <Rf.Input.Text value={hostSettings.name ?? ''} onChange={(name) => {
+                          this.props.app.setModel({
+                            settings: setIn(settings, ['hosts', hostSettings.id, 'name'], name || null)
+                          });
+                        }} />
+                      </Rf.PropertiesEntry>
+                      <Rf.PropertiesEntry name="Status">
+                        <Rf.Input.Output {...(() => {
+                          if (!hostSettings.hostId) {
+                            return { text: 'Inactive' };
+                          }
+
+                          return { text: 'Active' };
+                        })()} />
+                      </Rf.PropertiesEntry>
+                      <Rf.PropertiesEntry name="Other" group>
+                        <Rf.Input.Checkbox name="Read-only mode" value={hostSettings.locked} onChange={(value) => {
+                          this.props.app.setModel((model) => setIn(model, [...hostPath, 'locked'], value));
+                        }} />
+                        <Rf.Input.Checkbox name="Disable" value={hostSettings.disabled} onChange={(value) => {
+                          this.props.app.setModel((model) => setIn(model, [...hostPath, 'disabled'], value));
+                        }} />
+                      </Rf.PropertiesEntry>
+                    </div>
+                    <Rf.PropertiesSection name="Location">
+                      <div className="pr-form-root">
+                        <Rf.PropertiesEntry name="Type">
+                          <Rf.MenuSelect
+                            menu={[
+                              { id: 'inactive', name: 'Inactive' },
+                              { id: 'remote', name: 'Remote' },
+                              { id: 'local', name: 'Local', disabled: true },
+                              { id: 'internal', name: 'Internal', disabled: true }
+                            ]}
+                            onSelect={(selection) => {
+                              let type = selection.first()!;
+
+                              let opts = (() => {
+                                switch (type) {
+                                  case 'remote': return {
+                                    address: '',
+                                    secure: true
+                                  };
+                                  default: return {}
+                                }
+                              })();
+
+                              let updatedSettings = {
+                                ...hostSettings,
+                                location: {
+                                  type,
+                                  ...opts
+                                }
+                              };
+
+                              this.props.app.setModel((model) => setIn(model, hostPath, updatedSettings));
+
+                              if (type === 'inactive') {
+                                head.updateHostLocation(updatedSettings as any);
+                              }
+                            }}
+                            selectedOptionPath={[proto.type]} />
+                        </Rf.PropertiesEntry>
+                        {(proto.type === 'remote') && (
+                          <>
+                            <Rf.PropertiesEntry name="Protocol">
+                              <Rf.MenuSelect
+                                menu={[
+                                  { id: 'auto', name: 'Automatic' },
+                                  { id: '_divider', type: 'divider' },
+                                  { id: 'default', name: 'PR-1 server', disabled: true }
+                                ]}
+                                onSelect={(selection) => {}}
+                                selectedOptionPath={['auto']} />
+                            </Rf.PropertiesEntry>
+                            <Rf.PropertiesEntry name="Address">
+                              <Rf.Input.Text value={proto.address} onChange={(address) => {
+                                this.props.app.setModel((model) => setIn(model, [...protoPath, 'address'], address));
+                              }} />
+                            </Rf.PropertiesEntry>
+                            <Rf.PropertiesEntry>
+                              <Rf.Input.Checkbox name="Secure connection" value={proto.secure} onChange={(secure) => {
+                                this.props.app.setModel((model) => setIn(model, [...protoPath, 'secure'], secure));
+                              }} />
+                            </Rf.PropertiesEntry>
+                            <Rf.PropertiesEntry name="Actions">
+                              <Rf.Input.Button text="Connect" onClick={() => {
+                                head.updateHostLocation(hostSettings);
+                              }} />
+                            </Rf.PropertiesEntry>
+                            <Rf.PropertiesEntry>
+                              <Rf.Input.Button text="Reboot" disabled={hostSettings.locked} />
+                            </Rf.PropertiesEntry>
+                          </>
+                        )}
+                      </div>
+                    </Rf.PropertiesSection>
+                  </Rf.PropertiesSection>
+                );
+              })}
             </Rf.PropertiesSection>
             <Rf.PropertiesSection name="User interface">
               <div className="pr-form-root">
@@ -102,10 +195,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model>, V
                     onSelect={(selection) => {}}
                     selectedOptionPath={['pane']} />
                 </Rf.PropertiesEntry>
-                <Rf.PropertiesEntry name="Other">
-                  <Rf.Input.Checkbox name="Prevent device lock" />
-                </Rf.PropertiesEntry>
-                <Rf.PropertiesEntry>
+                <Rf.PropertiesEntry name="Other" group>
                   <Rf.Input.Checkbox name="Prevent device lock" />
                 </Rf.PropertiesEntry>
               </div>

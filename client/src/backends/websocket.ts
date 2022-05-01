@@ -2,16 +2,24 @@ import { BackendCommon, Chip, ChipId, ControlNamespace, HostState } from './comm
 import type { UnitsCode } from '../units';
 
 
+interface Options {
+  address: string;
+  secure: boolean;
+}
+
 export default class WebsocketBackend extends BackendCommon {
+  #options: Options;
   #socket!: WebSocket;
   state!: HostState;
 
-  constructor() {
+  constructor(options: Options) {
     super();
+
+    this.#options = options;
   }
 
   async start() {
-    this.#socket = new WebSocket("ws://localhost:4567", "alpha");
+    this.#socket = new WebSocket(`${this.#options.secure ? 'wss' : 'ws'}://${this.#options.address}`, 'alpha');
 
     await new Promise<void>((resolve) => {
       this.#socket.addEventListener('open', () => {

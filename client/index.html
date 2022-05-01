@@ -9,7 +9,27 @@
     <script type="module">
       import createClient from './dist/index.js';
 
-      createClient(document.getElementById('root'));
+      let id = crypto.randomUUID();
+
+      createClient(document.getElementById('root'), {
+        settings: {
+          hosts: {
+            [id]: {
+              id,
+              builtin: false,
+              disabled: false,
+              hostId: null,
+              locked: false,
+              name: null,
+              location: {
+                type: 'remote',
+                address: 'localhost:4567',
+                secure: false
+              }
+            }
+          }
+        }
+      });
     </script>
   </body>
 </html>

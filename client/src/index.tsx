@@ -1,4 +1,4 @@
-import { List } from 'immutable';
+import { List, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Application, FragmentPaneRecord, ViewBlank, ViewPaneRecord } from 'retroflex';
@@ -22,31 +22,60 @@ export interface Host {
   state: HostState;
 }
 
-export interface Model {
-  hosts: Record<HostId, Host>;
-  settings: {
-    hosts: ({
-      id: HostId;
-      name: string;
-      hidden: boolean;
-      locked: boolean;
-    } & ({
-      type: 'remote';
-      address: string;
-    } | {
-      type: 'local';
-    }))[];
-  }
+export interface Environment {
+  head: App;
 }
 
-class App extends React.Component {
-  ref: React.RefObject<Application<Model>> = React.createRef();
+export interface HostSettingsEntry {
+  id: string;
+  builtin: boolean;
+  disabled: boolean;
+  hostId: HostId | null;
+  locked: boolean;
+  name: string | null;
+
+  location: {
+    type: 'remote';
+    address: string;
+    secure: boolean;
+  } | {
+    type: 'local';
+  } | {
+    type: 'inactive'
+  };
+}
+
+export interface Settings {
+  defaultHostId: HostId | null;
+  hosts: Record<string, HostSettingsEntry>;
+}
+
+export interface Model {
+  hosts: Record<HostId, Host>;
+  settings: Settings;
+}
+
+export interface AppProps {
+  initialSettings: Settings;
+}
+
+class App extends React.Component<AppProps> {
+  ref: React.RefObject<Application<Model, Environment>> = React.createRef();
+
+  get app() {
+    return this.ref.current!;
+  }
 
   componentDidMount() {
     let app = this.ref.current!;
 
+    for (let hostSettings of Object.values(this.props.initialSettings.hosts)) {
+      this.updateHostLocation(hostSettings);
+    }
+
     app.setModel({
-      hosts: {}
+      hosts: {},
+      settings: this.props.initialSettings
     });
 
     app.registerViewGroup({
@@ -143,51 +172,60 @@ class App extends React.Component {
         ])
       })
     });
+  }
 
+  updateHostLocation(hostSettings: HostSettingsEntry) {
+    if (hostSettings.hostId) {
+      this.app.setModel((model) => ({
+        hosts: removeIn(model.hosts, [hostSettings.hostId]),
+        settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], null)
+      }));
+    }
 
-    let addHost = async () => {
-      let backend = new WebsocketBackend();
-      await backend.start();
-
-      console.log('Initial state ->', backend.state);
-
-      app.setModel({
-        hosts: {
-          [backend.state.info.id]: {
-            backend,
-            id: backend.state.info.id,
-            state: backend.state
-          }
-        }
+    if (hostSettings.location.type === 'remote') {
+      let backend = new WebsocketBackend({
+        address: hostSettings.location.address,
+        secure: hostSettings.location.secure
       });
 
-      backend.onUpdate(() => {
-        console.log('New state ->', backend.state);
+      (async () => {
+        await backend.start();
 
-        app.setModel({
-          hosts: {
-            ...app.state.model.hosts,
-            [backend.state.info.id]: {
-              ...app.state.model.hosts[backend.state.info.id],
-              state: backend.state
-            }
-          }
+        console.log('Initial state ->', backend.state);
+
+        let host = {
+          backend,
+          id: backend.state.info.id,
+          state: backend.state
+        };
+
+        this.app.setModel((model) => ({
+          hosts: setIn(model.hosts, [host.id], host),
+          settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], host.id)
+        }));
+
+        backend.onUpdate(() => {
+          console.log('New state ->', backend.state);
+
+          this.app.setModel((model) => ({
+            hosts: setIn(model.hosts, [host.id, 'state'], backend.state)
+          }));
         });
-      });
-    };
-
-    addHost();
+      })();
+    }
   }
 
   render() {
-    return <Application ref={this.ref} />;
+    return <Application environment={{ head: this }} ref={this.ref} />;
   }
 }
 
 
-export default function createClient(element: Element, options: {}) {
+export default function createClient(element: Element, options: {
+  settings: Settings;
+}) {
   ReactDOM.render(
-    <App />,
+    <App initialSettings={options.settings} />,
     element
   );
 }

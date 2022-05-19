@@ -1,6 +1,7 @@
 import { List, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
+import * as Rf from 'retroflex';
 import { Application, FragmentPaneRecord, ViewBlank, ViewPaneRecord } from 'retroflex';
 
 import ViewChipSettings from './views/chip-settings';
@@ -12,9 +13,10 @@ import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
 
-import 'retroflex/tmp/styles.css';
 import '../lib/styles.css';
 
+
+export { BackendCommon };
 
 export interface Host {
   backend: BackendCommon;
@@ -39,7 +41,8 @@ export interface HostSettingsEntry {
     address: string;
     secure: boolean;
   } | {
-    type: 'local';
+    type: 'internal';
+    Backend: { new(): BackendCommon; };
   } | {
     type: 'inactive'
   };
@@ -59,47 +62,52 @@ export interface AppProps {
   initialSettings: Settings;
 }
 
-class App extends React.Component<AppProps> {
-  ref: React.RefObject<Application<Model, Environment>> = React.createRef();
+class App extends Rf.Application<Model, {}, AppProps> {
+  constructor(props: AppProps) {
+    super({
+      layout: FragmentPaneRecord({
+        horizontal: true,
+        cuts: List([0.65]),
+        panes: List([
+          ViewPaneRecord({ view: 'blank' }),
+          ViewPaneRecord({ view: 'blank' })
+          // ViewPaneRecord({ view: 'chip-settings' }),
+          // ViewPaneRecord({ view: 'tree' })
+        ])
+      }),
+      model: {
+        hosts: {},
+        settings: props.initialSettings
+      },
+      props
+    });
 
-  get app() {
-    return this.ref.current!;
-  }
-
-  componentDidMount() {
-    let app = this.ref.current!;
-
-    for (let hostSettings of Object.values(this.props.initialSettings.hosts)) {
+    for (let hostSettings of Object.values(props.initialSettings.hosts)) {
       this.updateHostLocation(hostSettings);
     }
 
-    app.setModel({
-      hosts: {},
-      settings: this.props.initialSettings
-    });
-
-    app.registerViewGroup({
+    this.registerViewGroup({
       id: 'general',
       name: 'General',
       compact: false
     });
 
-    app.registerViewGroup({
+    this.registerViewGroup({
       id: 'protocol',
       name: 'Protocol',
       compact: false
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'blank',
       name: 'Blank',
       groupId: 'general',
       icon: 'apps',
-      component: ViewBlank as any,
+      component: ViewBlank,
       shortcut: null
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'tree',
       name: 'Tree',
       groupId: 'general',
@@ -108,7 +116,7 @@ class App extends React.Component<AppProps> {
       shortcut: 'T'
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'control',
       name: 'Control',
       groupId: 'general',
@@ -117,7 +125,7 @@ class App extends React.Component<AppProps> {
       shortcut: 'C'
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'chip-settings',
       name: 'Chip settings',
       groupId: 'general',
@@ -126,7 +134,7 @@ class App extends React.Component<AppProps> {
       shortcut: null
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'settings',
       name: 'Settings',
       groupId: 'general',
@@ -135,7 +143,7 @@ class App extends React.Component<AppProps> {
       shortcut: null
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'protocol-editor',
       name: 'Protocol editor',
       groupId: 'protocol',
@@ -144,7 +152,7 @@ class App extends React.Component<AppProps> {
       shortcut: null
     });
 
-    app.registerViewModel({
+    this.registerViewModel({
       id: 'protocol-run',
       name: 'Protocol run',
       groupId: 'protocol',
@@ -152,42 +160,27 @@ class App extends React.Component<AppProps> {
       component: ViewProtocolRun,
       shortcut: null
     });
-
-    // app.registerView({
-    //   id: 'tree',
-    //   name: 'Tree',
-    //   icon: 'memory',
-    //   view: ViewTree
-    // });
-
-    app.setState({
-      layout: FragmentPaneRecord({
-        horizontal: true,
-        cuts: List([0.65]),
-        panes: List([
-          ViewPaneRecord({ view: 'protocol-editor' }),
-          ViewPaneRecord({ view: 'settings' })
-          // ViewPaneRecord({ view: 'chip-settings' }),
-          // ViewPaneRecord({ view: 'tree' })
-        ])
-      })
-    });
   }
 
   updateHostLocation(hostSettings: HostSettingsEntry) {
     if (hostSettings.hostId) {
-      this.app.setModel((model) => ({
+      this.setModel((model) => ({
         hosts: removeIn(model.hosts, [hostSettings.hostId]),
         settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], null)
       }));
     }
 
-    if (hostSettings.location.type === 'remote') {
-      let backend = new WebsocketBackend({
-        address: hostSettings.location.address,
-        secure: hostSettings.location.secure
-      });
+    let backend = (() => {
+      switch (hostSettings.location.type) {
+        case 'internal': return new hostSettings.location.Backend();
+        case 'remote': return new WebsocketBackend({
+          address: hostSettings.location.address,
+          secure: hostSettings.location.secure
+        });
+      }
+    })();
 
+    if (backend) {
       (async () => {
         await backend.start();
 
@@ -199,24 +192,20 @@ class App extends React.Component<AppProps> {
           state: backend.state
         };
 
-        this.app.setModel((model) => ({
+        this.setModel((model) => ({
           hosts: setIn(model.hosts, [host.id], host),
           settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], host.id)
         }));
 
         backend.onUpdate(() => {
-          console.log('New state ->', backend.state);
+          console.log('New state ->', backend!.state);
 
-          this.app.setModel((model) => ({
-            hosts: setIn(model.hosts, [host.id, 'state'], backend.state)
+          this.setModel((model) => ({
+            hosts: setIn(model.hosts, [host.id, 'state'], backend!.state)
           }));
         });
       })();
     }
-  }
-
-  render() {
-    return <Application environment={{ head: this }} ref={this.ref} />;
   }
 }
 

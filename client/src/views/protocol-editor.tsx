@@ -260,7 +260,7 @@ export default class ViewProtocolEditor extends React.Component<Rf.ViewProps<Mod
 
 
 interface VisualEditorProps {
-  app: Rf.Application;
+  app: Rf.ApplicationUnknown;
   draft: Draft;
   host: Host;
   planData: PlanData | null;

@@ -11,7 +11,7 @@ import Units, { UnitsCode } from '../units';
 
 export function ProtocolOverview(props: {
   analysis?: Analysis;
-  app: Rf.Application;
+  app: Rf.ApplicationUnknown;
   master?: Master;
   protocol: Protocol;
 }) {

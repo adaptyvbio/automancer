@@ -33,6 +33,7 @@ esbuild.build({
 	sourcemap: argv.watch,
   watch: argv.watch,
 	loader: {
-		'.ttf': 'file'
+		'.ttf': 'file',
+		'.woff2': 'file'
 	}
 });

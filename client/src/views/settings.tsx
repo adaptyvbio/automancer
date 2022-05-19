@@ -111,6 +111,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
                       <div className="pr-form-root">
                         <Rf.PropertiesEntry name="Type">
                           <Rf.MenuSelect
+                            disabled={hostSettings.builtin}
                             menu={[
                               { id: 'inactive', name: 'Inactive' },
                               { id: 'remote', name: 'Remote' },

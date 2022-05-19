@@ -1,4 +1,7 @@
 {
+  "name": "pr1-client",
+  "version": "0.0.0",
+  "main": "dist/index.js",
   "scripts": {
     "build:js": "node build.js",
     "build:js:watch": "node build.js --watch",

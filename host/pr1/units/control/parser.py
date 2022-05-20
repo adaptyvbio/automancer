@@ -144,7 +144,7 @@ class Parser(BaseParser):
     self._block_stack.append((peak if peak else set()) ^ (self._block_stack[-1] if self._block_stack else set()))
 
 
-  def _resolve_atom_query(self, token):
+  def _resolve_atom_query(self, token): # <--------- TODO: Remove that
     query_name = token['value']
     range_end = token['range_end']
     wildcard = token['wildcard']

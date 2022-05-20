@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "build": "esbuild index.js --bundle --outfile=dist/index.js --format=iife --loader:.ttf=file --loader:.woff2=file",
+    "build-other": "zsh -c 'esbuild node_modules/pr1-client/dist/*/**/*.js --outbase=node_modules/pr1-client/dist --outdir=dist'",
+    "download-host": "mkdir -p dist && cd dist && pip3 download ../../../host"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.1.0",
+    "pr1-client": "file:../../client"
+  },
+  "devDependencies": {
+    "esbuild": "^0.14.38"
+  }
+}

@@ -1,8 +1,7 @@
-import serial
-
-
 class Driver:
   def __init__(self, port):
+    import serial
+
     self._serial = serial.Serial(port, timeout=0.5)
     self._signal = 0
 
@@ -25,6 +24,8 @@ class Driver:
 
 
   def _order(self, text):
+    import serial
+
     try:
       self._serial.write((text + "\r").encode("utf-8"))
     except serial.serialutil.SerialException as e:

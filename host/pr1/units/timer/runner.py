@@ -36,7 +36,6 @@ class Runner(BaseProcessRunner):
 
     if duration > 0.0:
       await asyncio.sleep(duration / 1000)
-      # raise Exception("Foo")
 
   def pause_process(self, segment, seg_index):
     pass

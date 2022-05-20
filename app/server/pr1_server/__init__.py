@@ -5,7 +5,7 @@ import json
 import logging
 import websockets
 
-from ..runner import Host
+from pr1 import Host
 
 
 # logging.basicConfig(level=logging.INFO)
@@ -57,7 +57,7 @@ class App():
     loop = asyncio.get_event_loop()
 
     # Debug
-    chip, codes, draft = self.host._debug()
+    # chip, codes, draft = self.host._debug()
     # self.host.start_plan(chip=chip, codes=codes, draft=draft, update_callback=self.update)
 
     loop.run_until_complete(self.host.initialize())

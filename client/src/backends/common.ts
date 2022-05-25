@@ -6,6 +6,7 @@ export abstract class BackendCommon {
 
   state!: HostState;
 
+  async sync(): Promise<void> { }
   async start(): Promise<void> { }
 
   onUpdate(listener: () => void, options?: { signal?: AbortSignal; }) {

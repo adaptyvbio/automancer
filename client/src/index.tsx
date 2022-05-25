@@ -12,8 +12,11 @@ import ViewSettings from './views/settings';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
+// import { PyodideBackend } from './backends/pyodide';
+import { HostCreator } from './components/host-creator';
 
 import '../lib/styles.css';
+import { PyodideBackend } from './backends/pyodide';
 
 
 export { BackendCommon };
@@ -24,9 +27,30 @@ export interface Host {
   state: HostState;
 }
 
-export interface Environment {
-  head: App;
-}
+export type LocalBackendStorage = {
+  type: 'filesystem';
+  handle: FileSystemDirectoryHandle;
+} | {
+  type: 'persistent';
+} | {
+  type: 'memory';
+};
+
+export type HostSettingsEntryBackendOptions = {
+  type: 'remote';
+  address: string;
+  port: number;
+  secure: boolean;
+} | {
+  type: 'internal';
+  Backend: { new(): BackendCommon; };
+} | {
+  type: 'local';
+  id: string;
+  storage: LocalBackendStorage;
+} | {
+  type: 'inactive';
+};
 
 export interface HostSettingsEntry {
   id: string;
@@ -36,16 +60,7 @@ export interface HostSettingsEntry {
   locked: boolean;
   name: string | null;
 
-  location: {
-    type: 'remote';
-    address: string;
-    secure: boolean;
-  } | {
-    type: 'internal';
-    Backend: { new(): BackendCommon; };
-  } | {
-    type: 'inactive'
-  };
+  backendOptions: HostSettingsEntryBackendOptions;
 }
 
 export interface Settings {
@@ -56,6 +71,8 @@ export interface Settings {
 export interface Model {
   hosts: Record<HostId, Host>;
   settings: Settings;
+
+  doneInitializing: boolean;
 }
 
 export interface AppProps {
@@ -70,14 +87,14 @@ class App extends Rf.Application<Model, {}, AppProps> {
         cuts: List([0.65]),
         panes: List([
           ViewPaneRecord({ view: 'blank' }),
-          ViewPaneRecord({ view: 'blank' })
-          // ViewPaneRecord({ view: 'chip-settings' }),
-          // ViewPaneRecord({ view: 'tree' })
+          ViewPaneRecord({ view: 'settings' })
         ])
       }),
       model: {
         hosts: {},
-        settings: props.initialSettings
+        settings: props.initialSettings,
+
+        doneInitializing: Object.keys(props.initialSettings.hosts).length > 0
       },
       props
     });
@@ -162,20 +179,31 @@ class App extends Rf.Application<Model, {}, AppProps> {
     });
   }
 
-  updateHostLocation(hostSettings: HostSettingsEntry) {
-    if (hostSettings.hostId) {
+  componentDidMount() {
+
+  }
+
+  updateHostLocation(hostSettingsEntry: HostSettingsEntry) {
+    if (hostSettingsEntry.hostId) {
       this.setModel((model) => ({
-        hosts: removeIn(model.hosts, [hostSettings.hostId]),
-        settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], null)
+        hosts: removeIn(model.hosts, [hostSettingsEntry.hostId]),
+        settings: setIn(model.settings, ['hosts', hostSettingsEntry.id, 'hostId'], null)
       }));
     }
 
     let backend = (() => {
-      switch (hostSettings.location.type) {
-        case 'internal': return new hostSettings.location.Backend();
+      switch (hostSettingsEntry.backendOptions.type) {
+        case 'internal': return new hostSettingsEntry.backendOptions.Backend();
+
+        case 'local': return new PyodideBackend({
+          id: hostSettingsEntry.backendOptions.id,
+          storage: hostSettingsEntry.backendOptions.storage
+        });
+
         case 'remote': return new WebsocketBackend({
-          address: hostSettings.location.address,
-          secure: hostSettings.location.secure
+          address: hostSettingsEntry.backendOptions.address,
+          port: hostSettingsEntry.backendOptions.port,
+          secure: hostSettingsEntry.backendOptions.secure
         });
       }
     })();
@@ -194,7 +222,7 @@ class App extends Rf.Application<Model, {}, AppProps> {
 
         this.setModel((model) => ({
           hosts: setIn(model.hosts, [host.id], host),
-          settings: setIn(model.settings, ['hosts', hostSettings.id, 'hostId'], host.id)
+          settings: setIn(model.settings, ['hosts', hostSettingsEntry.id, 'hostId'], host.id)
         }));
 
         backend.onUpdate(() => {
@@ -207,14 +235,49 @@ class App extends Rf.Application<Model, {}, AppProps> {
       })();
     }
   }
+
+  render() {
+    return (
+      <>
+        {super.render()}
+        {!this.state.model.doneInitializing && (
+          <HostCreator
+            onCancel={() => {
+              this.setModel({ doneInitializing: true });
+            }}
+            onDone={({ backend, settings: hostSettingsEntry }) => {
+              let host = {
+                backend,
+                id: backend.state.info.id,
+                state: backend.state
+              };
+
+              this.setModel((model) => ({
+                hosts: setIn(model.hosts, [host.id], host),
+                settings: setIn(model.settings, ['hosts', hostSettingsEntry.id], { ...hostSettingsEntry, hostId: host.id }),
+                doneInitializing: true
+              }));
+
+              backend.onUpdate(() => {
+                this.setModel((model) => ({
+                  hosts: setIn(model.hosts, [host.id, 'state'], backend.state)
+                }));
+              });
+            }} />
+        )}
+      </>
+    );
+  }
 }
 
 
 export default function createClient(element: Element, options: {
   settings: Settings;
+  saveSettings?(settings: Settings): void;
 }) {
   ReactDOM.render(
     <App initialSettings={options.settings} />,
+    // <HostCreator localAvailable={true} />,
     element
   );
 }

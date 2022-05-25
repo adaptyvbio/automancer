@@ -2,22 +2,21 @@ import { setIn } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
-import type { Environment, Host, Model } from '..';
+import type { Host, Model } from '..';
 
 
 interface ViewSettingsState {
 
 }
 
-export default class ViewSettings extends React.Component<Rf.ViewProps<Model, Environment>, ViewSettingsState> {
-  constructor(props: Rf.ViewProps<Model, Environment>) {
+export default class ViewSettings extends React.Component<Rf.ViewProps<Model>, ViewSettingsState> {
+  constructor(props: Rf.ViewProps<Model>) {
     super(props);
 
     this.state = {};
   }
 
   render() {
-    let head = this.props.app.environment.head;
     let hosts = Object.values(this.props.model.hosts);
 
     let settings = this.props.model.settings;
@@ -65,7 +64,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
                         disabled: false,
                         locked: false,
 
-                        location: {
+                        backendOptions: {
                           type: 'inactive'
                         }
                       });
@@ -76,8 +75,8 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
               {Object.values(settings.hosts).map((hostSettings) => {
                 let hostPath = ['settings', 'hosts', hostSettings.id];
 
-                let proto = hostSettings.location;
-                let protoPath = [...hostPath, 'location'];
+                let proto = hostSettings.backendOptions;
+                let protoPath = [...hostPath, 'backendOptions'];
 
                 return (
                   <Rf.PropertiesSection name={hostSettings.name ?? 'Untitled host'} key={hostSettings.id}>
@@ -125,6 +124,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
                                 switch (type) {
                                   case 'remote': return {
                                     address: '',
+                                    port: 4567,
                                     secure: true
                                   };
                                   default: return {}
@@ -133,7 +133,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
 
                               let updatedSettings = {
                                 ...hostSettings,
-                                location: {
+                                backendOptions: {
                                   type,
                                   ...opts
                                 }
@@ -142,7 +142,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
                               this.props.app.setModel((model) => setIn(model, hostPath, updatedSettings));
 
                               if (type === 'inactive') {
-                                head.updateHostLocation(updatedSettings as any);
+                                this.props.app.updateHostLocation(updatedSettings as any);
                               }
                             }}
                             selectedOptionPath={[proto.type]} />
@@ -171,7 +171,7 @@ export default class ViewSettings extends React.Component<Rf.ViewProps<Model, En
                             </Rf.PropertiesEntry>
                             <Rf.PropertiesEntry name="Actions">
                               <Rf.Input.Button text="Connect" onClick={() => {
-                                head.updateHostLocation(hostSettings);
+                                this.props.app.updateHostLocation(hostSettings);
                               }} />
                             </Rf.PropertiesEntry>
                             <Rf.PropertiesEntry>

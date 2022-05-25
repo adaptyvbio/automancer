@@ -35,5 +35,6 @@ esbuild.build({
 	loader: {
 		'.ttf': 'file',
 		'.woff2': 'file'
-	}
+	},
+	external: ['vm', 'path', 'fs/promises'] // For pyodide
 });

@@ -23,10 +23,10 @@ driver_partial_schemas = [
 ]
 
 schema = sc.Schema({
-  'devices': sc.List(sc.Or(*[{
+  'devices': sc.Optional(sc.List(sc.Or(*[{
     **driver_partial_schema,
     **device_partial_schema
-  } for driver_partial_schema in driver_partial_schemas]))
+  } for driver_partial_schema in driver_partial_schemas])))
 })
 
 

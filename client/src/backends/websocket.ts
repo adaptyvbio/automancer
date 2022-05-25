@@ -1,16 +1,17 @@
-import { BackendCommon, Chip, ChipId, ControlNamespace, HostState } from './common';
-import type { UnitsCode } from '../units';
+import { HostState } from './common';
+import { MessageBackend } from './message';
 
 
 interface Options {
   address: string;
+  port: number;
   secure: boolean;
 }
 
-export default class WebsocketBackend extends BackendCommon {
+export default class WebsocketBackend extends MessageBackend {
   #options: Options;
   #socket!: WebSocket;
-  state!: HostState;
+  state!: HostState; // ?
 
   constructor(options: Options) {
     super();
@@ -18,14 +19,30 @@ export default class WebsocketBackend extends BackendCommon {
     this.#options = options;
   }
 
-  async start() {
-    this.#socket = new WebSocket(`${this.#options.secure ? 'wss' : 'ws'}://${this.#options.address}`, 'alpha');
+  protected _send(message: unknown) {
+    this.#socket.send(JSON.stringify(message));
+  }
 
-    await new Promise<void>((resolve) => {
+  async start() {
+    this.#socket = new WebSocket(`${this.#options.secure ? 'wss' : 'ws'}://${this.#options.address}:${this.#options.port}`, 'alpha');
+
+    let initialController = new AbortController();
+    let promise = new Promise<void>((resolve, reject) => {
       this.#socket.addEventListener('open', () => {
         resolve();
-      });
+      }, { signal: initialController.signal });
+
+      this.#socket.addEventListener('error', (err) => {
+        reject(new Error());
+      }, { signal: initialController.signal });
     });
+
+    promise.finally(() => {
+      initialController.abort();
+    });
+
+    await promise;
+
 
     let controller = new AbortController();
 
@@ -56,76 +73,5 @@ export default class WebsocketBackend extends BackendCommon {
     //     }, 1000);
     //   }
     // });
-  }
-
-  async command(chipId: string, command: ControlNamespace.RunnerCommand) {
-    this.#socket.send(JSON.stringify({
-      type: 'command',
-      chipId,
-      command
-    }));
-  }
-
-  async createChip(options: { modelId: string; }) {
-    this.#socket.send(JSON.stringify({
-      type: 'createChip',
-      modelId: options.modelId
-    }));
-  }
-
-  async createDraft(draftId: string, source: string) {
-    this.#socket.send(JSON.stringify({
-      type: 'createDraft',
-      draftId,
-      source
-    }));
-  }
-
-  async deleteChip(chipId: ChipId) {
-    this.#socket.send(JSON.stringify({
-      type: 'deleteChip',
-      chipId
-    }));
-  }
-
-  async pause(chipId: string, options: { neutral: boolean; }) {
-    this.#socket.send(JSON.stringify({
-      type: 'pause',
-      chipId,
-      options
-    }));
-  }
-
-  async resume(chipId: string) {
-    this.#socket.send(JSON.stringify({
-      type: 'resume',
-      chipId
-    }));
-  }
-
-  async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
-    this.#socket.send(JSON.stringify({
-      type: 'setMatrix',
-      chipId,
-      update
-    }));
-  }
-
-  async skipSegment(chipId: ChipId, segmentIndex: number, processState?: object) {
-    this.#socket.send(JSON.stringify({
-      type: 'skipSegment',
-      chipId,
-      processState: processState ?? null,
-      segmentIndex
-    }));
-  }
-
-  async startPlan(options: { chipId: string; data: UnitsCode; draftId: string; }) {
-    this.#socket.send(JSON.stringify({
-      type: 'startPlan',
-      chipId: options.chipId,
-      codes: options.data,
-      draftId: options.draftId
-    }))
   }
 }

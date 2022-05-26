@@ -1,16 +1,11 @@
-import { Set as ImSet } from 'immutable';
+import { List, Set as ImSet } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
 import type { Model } from '..';
 import { ProtocolSeq } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
-// import { Segments } from '../components/visual-editor';
 import * as util from '../util';
-
-
-let blankImage = new Image();
-blankImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
 
 
 export default class ViewTest extends React.Component<Rf.ViewProps<Model>> {
@@ -55,7 +50,7 @@ export interface VisualEditorProps {
 }
 
 export interface VisualEditorState {
-  segments: Segment[];
+  segments: List<Segment>;
   steps: Step[];
 
   drag: {
@@ -80,7 +75,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     super(props);
 
     this.state = {
-      segments: [a(), a(), a(), a()],
+      segments: List([a(), a(), a(), a()]),
       steps: [
         { id: crypto.randomUUID(), name: 'Alpha', seq: [0, 3] },
         { id: crypto.randomUUID(), name: 'Beta', seq: [3, 4] },
@@ -97,17 +92,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
       let steps = state.steps.map((step, stepIndex) => {
         let isCurrent = (stepIndex === targetStepIndex);
-        let isPast = !isCurrent && (step.seq[0] >= segmentIndex);
+        let isPast = (stepIndex > targetStepIndex); // = is created segment past
 
         let delta0 = isPast ? createCount : 0;
         let delta1 = (isPast || isCurrent) ? createCount : 0;
-
-        // if (stepIndex === targetStepIndex) {
-        //   seq = [step.seq[0], step.seq[1] + createCount];
-        // } else {
-        //   let delta = (step.seq[0] >= segmentIndex) ? createCount : 0;
-        //   seq = [step.seq[0] + delta, step.seq[1] + delta];
-        // }
 
         return {
           ...step,
@@ -116,11 +104,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       });
 
       return {
-        segments: [
-          ...state.segments.slice(0, segmentIndex),
-          a(),
-          ...state.segments.slice(segmentIndex)
-        ],
+        segments: state.segments.insert(segmentIndex, a()),
         selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex),
         steps
       };
@@ -128,59 +112,86 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
   }
 
   deleteSelected() {
-    let segmentIndices = this.state.selectedSegmentIndices;
-    let indexMap = arrayMutator(this.state.segments.length, ...segmentIndices.map((index) => [index, -1] as [number, number]));
-
-    this.setState((state) => ({
-      segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
-      selectedSegmentIndices: state.selectedSegmentIndices.clear(),
-      steps: state.steps.map((step) => ({
-        ...step,
-        seq: console.log([indexMap(step.seq[0]), indexMap(step.seq[1])]) || [indexMap(step.seq[0]), indexMap(step.seq[1])]
-      }))
-    }));
-  }
-
-  moveSelected(insertionIndex: number) {
-    console.log('move to', insertionIndex);
-
-    let segmentIndices = this.state.selectedSegmentIndices;
-    let indexMap = arrayMutator(this.state.segments.length, ...segmentIndices.map((index) => [index, -1] as [number, number]), [insertionIndex, segmentIndices.size]);
-    return;
-
     this.setState((state) => {
-      let movedSegments = state.segments.filter((segment) => state.selectedSegmentIds.has(segment.id));
-      let actualInsertionIndex = 0;
+      let segmentIndices = (state.selectedSegmentIndices.toJS() as number[]).sort((a, b) => a - b);
+      let segmentIndexIndex = 0;
+      let delta = 0;
 
-      let otherSegments = state.segments.filter((segment, segmentIndex) => {
-        let other = !state.selectedSegmentIds.has(segment.id);
+      let steps = state.steps.map((step, stepIndex) => {
+        let delta0 = -delta;
 
-        if (other && (segmentIndex < insertionIndex)) {
-          actualInsertionIndex += 1;
+        for (; (step.seq[0] <= segmentIndices[segmentIndexIndex])
+          && (step.seq[1] > segmentIndices[segmentIndexIndex])
+          && (segmentIndexIndex < segmentIndices.length); segmentIndexIndex += 1) {
+          delta += 1;
         }
 
-        return other;
+        let delta1 = -delta;
+
+        return {
+          ...step,
+          seq: [step.seq[0] + delta0, step.seq[1] + delta1] as ProtocolSeq
+        };
       });
 
       return {
-        segments: [
-          ...otherSegments.slice(0, actualInsertionIndex),
-          ...movedSegments,
-          ...otherSegments.slice(actualInsertionIndex)
-        ]
+        segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
+        selectedSegmentIndices: state.selectedSegmentIndices.clear(),
+        steps
+      };
+    });
+  }
+
+  moveSelected(targetSegmentIndex: number, targetStepIndex: number) {
+    this.setState((state) => {
+      let segmentIndices = (state.selectedSegmentIndices.toJS() as number[]).sort((a, b) => a - b);
+      let segmentIndexIndex = 0;
+      let delta = 0;
+      let insertionIndex!: number;
+
+      let steps = state.steps.map((step, stepIndex) => {
+        let delta0 = delta;
+
+        for (; (step.seq[0] <= segmentIndices[segmentIndexIndex])
+          && (Math.min(targetSegmentIndex, step.seq[1]) > segmentIndices[segmentIndexIndex])
+          && (segmentIndexIndex < segmentIndices.length); segmentIndexIndex += 1) {
+          delta -= 1;
+        }
+
+        if (stepIndex === targetStepIndex) {
+          insertionIndex = targetSegmentIndex + delta;
+          delta += segmentIndices.length;
+        }
+
+        for (; (step.seq[1] > segmentIndices[segmentIndexIndex])
+          && (segmentIndexIndex < segmentIndices.length); segmentIndexIndex += 1) {
+          delta -= 1;
+        }
+
+        let delta1 = delta;
+
+        return {
+          ...step,
+          seq: [step.seq[0] + delta0, step.seq[1] + delta1] as ProtocolSeq
+        };
+      });
+
+      let stillSegments = state.segments.filter((_segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex));
+      let movedSegments = state.segments.filter((_segment, segmentIndex) => state.selectedSegmentIndices.has(segmentIndex));
+
+      return {
+        segments: stillSegments.splice(insertionIndex, 0, ...movedSegments),
+        selectedSegmentIndices: state.selectedSegmentIndices.clear(),
+        steps
       };
     });
   }
 
   render() {
-    // let draggingSegment = this.state.segments.find((segment) => segment.id === this.state.draggingSegmentId);
+    // console.log(...this.state.steps.map((s) => s.seq));
 
     return (
       <div className="protoview-root vedit-root">
-        {/* {this.state.drag && <GhostSegment
-          offset={this.state.drag.offset}
-          start={this.state.drag.start}
-          segment={this.state.segments.find((segment) => segment.id === this.state.drag!.segmentId)!} />} */}
         <div className="vedit-stage-root _open">
           <a href="#" className="vedit-stage-header">
             <Rf.Icon name="expand-more" />
@@ -203,40 +214,45 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                 </div>
                 <div className="vedit-segment-list">
                   <SegmentsDivider
-                    onDrop={() => void this.moveSelected(step.seq[0])}
+                    onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
                     onTrigger={() => void this.create(step.seq[0], stepIndex)} />
 
                   {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                     let segmentIndex = step.seq[0] + segmentRelIndex;
-                    let segment = this.state.segments[segmentIndex];
+                    let segment = this.state.segments.get(segmentIndex)!;
 
                     return (
                       <React.Fragment key={segment.id}>
                         <ContextMenuArea onContextMenu={async (event) => {
                           event.stopPropagation();
 
+                          // TODO: DRY
+                          let selectedSegmentIndices = this.state.selectedSegmentIndices.has(segmentIndex)
+                            ? this.state.selectedSegmentIndices
+                            : this.state.selectedSegmentIndices.clear().add(segmentIndex);
+
+                          this.setState({ selectedSegmentIndices });
+
                           await this.props.app.showContextMenu(event, [
                             { id: '_header', name: 'Protocol segment', type: 'header' },
                             { id: 'delete', name: 'Delete', shortcut: 'X' }
                           ], (menuPath) => {
-                            // if (menuPath.first() === 'delete') {
-                            //   this.deleteSegment();
-                            // }
+                            if (menuPath.first() === 'delete') {
+                              this.deleteSelected();
+                            }
                           });
                         }}>
                           <div
-                            className={util.formatClass('vedit-segment-features', { '_selected': this.state.selectedSegmentIndices.includes(segmentIndex) })}
+                            className={util.formatClass('vedit-segment-features', { '_selected': this.state.selectedSegmentIndices.has(segmentIndex) })}
                             key={segment.id}
                             draggable
                             tabIndex={-1}
                             onBlur={(event) => {
-                              if (!event.currentTarget.parentElement!.parentElement!.parentElement!.contains(event.relatedTarget)) {
-                                this.setState((state) => ({
-                                  selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                }));
-
-                                // console.log('CLEAR', event.relatedTarget)
-                              }
+                              // if (!event.currentTarget.parentElement!.parentElement!.parentElement!.contains(event.relatedTarget)) {
+                              //   this.setState((state) => ({
+                              //     selectedSegmentIndices: state.selectedSegmentIndices.clear()
+                              //   }));
+                              // }
                             }}
                             onKeyDown={(event) => {
                               switch (event.key) {
@@ -312,17 +328,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         </ContextMenuArea>
 
                         <SegmentsDivider
-                          onDrop={() => void this.moveSelected(segmentIndex + 1)}
+                          onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
                           onTrigger={() => void this.create(segmentIndex + 1, stepIndex)} />
-
-                        {/* <button type="button" className="vedit-segment-dropzone">
-                          <div />
-                          <div>
-                            <Rf.Icon name="add-circle" />
-                            <div>Add segment</div>
-                          </div>
-                          <div />
-                        </button> */}
                       </React.Fragment>
                     );
                   })}
@@ -351,22 +358,17 @@ function SegmentsDivider(props: {
         event.preventDefault();
       }}
       onDragEnter={(event) => {
-        // if (event.target === event.currentTarget) {
         if (!event.currentTarget.contains(event.relatedTarget as Node)) {
           setOver(true);
-          console.log('Enter', event);
         }
       }}
       onDragLeave={(event) => {
-        // if (event.target === event.currentTarget) {
         if (!event.currentTarget.contains(event.relatedTarget as Node)) {
           setOver(false);
-          console.log('Leave', event);
         }
       }}
       onDrop={(event) => {
         event.preventDefault();
-        console.log('Drop from', event.dataTransfer.getData('text/plain'));
         setOver(false);
         props.onDrop();
       }}>
@@ -379,91 +381,3 @@ function SegmentsDivider(props: {
     </button>
   );
 }
-
-
-/* export interface GhostSegmentProps {
-  offset: { x: number; y: number; };
-  start: { x: number; y: number; };
-  segment: Segment;
-}
-
-export class GhostSegment extends React.Component<GhostSegmentProps> {
-  controller = new AbortController();
-  state = {
-    position: { x: 0, y: 0 }
-  };
-
-  componentDidMount() {
-    document.addEventListener('mousemove', (event) => {
-      event.preventDefault();
-      console.log(event.clientX, event.clientY);
-    }, { capture: true, signal: this.controller.signal });
-  }
-
-  componentWillUnmount() {
-    this.controller.abort();
-  }
-
-  render() {
-    return (
-      <div className="vedit-segment-features" style={{
-        position: 'absolute',
-        left: `${this.props.start.x - this.props.offset.x}px`,
-        top: `${this.props.start.y - this.props.offset.y}px`,
-        backgroundColor: '#fff',
-        width: '412px',
-        zIndex: 1000,
-        pointerEvents: 'none'
-      }}>
-        {this.props.segment.features.map((feature, featureIndex) => (
-          <React.Fragment key={featureIndex}>
-            <Rf.Icon name={feature.icon} />
-            <span>{feature.label}</span>
-          </React.Fragment>
-        ))}
-      </div>
-    );
-  }
-} */
-
-
-function arrayMutator(oldSize: number, ...actions: [number, number][]): (oldIndex: number) => number {
-// function arrayMutator(oldSize: number, ...actions: [number, number][]): Record<number, number | null> {
-  let map: Record<number, number | null> = Object.fromEntries(new Array(oldSize).fill(0).map((_, index) => [index, index]));
-  let size = oldSize;
-
-  for (let [oldPos, delta] of actions) {
-    for (let i = oldPos; i < oldSize; i++) {
-      if (map[i] !== null) {
-        map[i] += delta;
-      }
-    }
-
-    for (let i = oldPos; i < oldPos - Math.min(delta, 0); i++) {
-      // map[i] = null;
-      map[i] = map[oldPos - delta] ?? (size + delta);
-    }
-
-    size += delta;
-  }
-
-  map[oldSize] = size;
-
-  console.log('MAP', map);
-
-  let query = (oldIndex: number): number => {
-    // if (oldIndex === oldSize) {
-    //   return size;
-    // }
-
-    return map[oldIndex];
-  };
-
-  return query;
-}
-
-
-arrayMutator(3, [0, -1]);
-arrayMutator(3, [0, -1], [1, 1]);
-
-// arrayMutator(3, [1, -1], [0, 1]);

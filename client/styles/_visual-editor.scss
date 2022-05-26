@@ -98,55 +98,9 @@
       &:not(._over):not(:hover):is(:first-child, :last-child) > * {
         display: none;
       }
-
-      // &:not(:hover) {
-      //   > :first-child {
-      //     height: 1px;
-      //     background-color: proto.$segment-border;
-      //   }
-
-      //   > :nth-child(n+2) {
-      //     display: none;
-      //   }
-
-      //   &:is(:first-child, :last-child) > * {
-      //     // display: none;
-      //   }
-      // }
-
-      // &:hover {
-      //   grid-template-columns: 1fr auto 1fr;
-
-      //   > :not(:nth-child(2)) {
-      //     height: 2px;
-      //     background-color: currentColor;
-      //   }
-
-      //   > :nth-child(2) {
-      //     display: flex;
-      //     column-gap: 0.4rem;
-      //   }
-      // }
     }
 
-    // &-dropzone {
-    //   padding: 0.6rem 0;
-
-    //   &:not(:hover) > * {
-    //     height: 1px;
-    //     margin-bottom: 1px;
-
-    //     background-color: proto.$segment-border;
-    //   }
-
-    //   &:hover > * {
-    //     height: 2px;
-    //     background-color: $app-blue;
-    //   }
-    // }
-
     &-features {
-      // @extend .protoview-segment-features;
       @extend %features;
 
       border-radius: proto.$segment-radius;

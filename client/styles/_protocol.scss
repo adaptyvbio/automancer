@@ -45,7 +45,8 @@
       font-size: 1.3rem;
     }
 
-    > :first-child {
+    > :first-child .icon {
+      width: auto;
       padding: 0.6rem;
 
       background-color: #333;
@@ -53,10 +54,6 @@
 
       color: #fff;
       transform: translateY(2px);
-    }
-
-    .icon {
-      transform: scale(1.2);
     }
 
     h3:last-child {

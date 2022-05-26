@@ -9,6 +9,7 @@ import ViewControl from './views/control';
 import ViewProtocolEditor from './views/protocol-editor';
 import ViewProtocolRun from './views/protocol-run';
 import ViewSettings from './views/settings';
+import ViewTest from './views/test';
 import ViewTree from './views/tree';
 import WebsocketBackend from './backends/websocket';
 import { BackendCommon, HostId, HostState } from './backends/common';
@@ -86,7 +87,7 @@ class App extends Rf.Application<Model, {}, AppProps> {
         horizontal: true,
         cuts: List([0.65]),
         panes: List([
-          ViewPaneRecord({ view: 'blank' }),
+          ViewPaneRecord({ view: 'test' }),
           ViewPaneRecord({ view: 'settings' })
         ])
       }),
@@ -175,6 +176,15 @@ class App extends Rf.Application<Model, {}, AppProps> {
       groupId: 'protocol',
       icon: 'receipt-long',
       component: ViewProtocolRun,
+      shortcut: null
+    });
+
+    this.registerViewModel({
+      id: 'test',
+      name: 'Test',
+      groupId: 'protocol',
+      icon: 'receipt-long',
+      component: ViewTest,
       shortcut: null
     });
   }

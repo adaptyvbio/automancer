@@ -2,6 +2,11 @@
 
 
 $step-gap: 1.2rem;
+$step-background: #f6f6f6;
+$step-radius: 4px;
+
+$segment-border: #ddd;
+$segment-radius: 4px;
 
 
 .protoview {
@@ -58,8 +63,8 @@ $step-gap: 1.2rem;
       margin-bottom: 1.4rem;
       padding: 1.4rem 1.8rem;
 
-      background-color: #f6f6f6;
-      border-radius: 4px;
+      background-color: $step-background;
+      border-radius: $step-radius;
     }
 
     &-root:not(._open) &-steps {
@@ -177,14 +182,27 @@ $step-gap: 1.2rem;
         border-bottom-width: 0;
       }
 
-      &:hover, &._active {
-        background-color: #eee;
+      &:hover, &._active, &._context, &._selected {
         border: 1px solid #ddd;
-        border-radius: 4px;
+        border-radius: $segment-radius;
 
         + * {
           border-top: none;
         }
+      }
+
+      &:hover {
+        background-color: #f3f3f3;
+      }
+
+      &._active {
+        background-color: #eee;
+      }
+
+      &._context, &._selected {
+        background-color: lighten($app-blue, 55%);
+        border-color: $app-blue;
+        box-shadow: -1px 1px 6px #0001;
       }
 
       > :nth-child(-n+2) {
@@ -195,5 +213,28 @@ $step-gap: 1.2rem;
         transform: scale(1.2);
       }
     }
+  }
+}
+
+
+%features {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;
+  row-gap: 0.6rem;
+
+  padding: 0.8rem 1.2rem;
+  border: 1px solid transparent;
+
+  font-size: 1.1rem;
+  font-weight: 500;
+
+  > :nth-child(-n+2) {
+    color: $app-blue;
+  }
+
+  .icon {
+    transform: scale(1.2);
   }
 }

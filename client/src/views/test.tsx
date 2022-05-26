@@ -1,4 +1,4 @@
-import { List, Set as ImSet } from 'immutable';
+import { List, Range, Set as ImSet } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 
@@ -58,6 +58,8 @@ export interface VisualEditorState {
     offset: { x: number; y: number; };
     start: { x: number; y: number; };
   } | null;
+
+  activeSegmentIndex: number | null;
   selectedSegmentIndices: ImSet<number>;
 }
 
@@ -82,6 +84,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       ],
 
       drag: null,
+
+      activeSegmentIndex: null,
       selectedSegmentIndices: ImSet()
     };
   }
@@ -104,6 +108,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       });
 
       return {
+        activeSegmentIndex: segmentIndex,
         segments: state.segments.insert(segmentIndex, a()),
         selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex),
         steps
@@ -135,6 +140,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       });
 
       return {
+        activeSegmentIndex: null,
         segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
         selectedSegmentIndices: state.selectedSegmentIndices.clear(),
         steps
@@ -181,7 +187,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
       return {
         segments: stillSegments.splice(insertionIndex, 0, ...movedSegments),
-        selectedSegmentIndices: state.selectedSegmentIndices.clear(),
+        selectedSegmentIndices: state.selectedSegmentIndices.clear().union(Range(insertionIndex, insertionIndex + movedSegments.size)),
         steps
       };
     });
@@ -235,7 +241,29 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
                           await this.props.app.showContextMenu(event, [
                             { id: '_header', name: 'Protocol segment', type: 'header' },
-                            { id: 'delete', name: 'Delete', shortcut: 'X' }
+                            { id: 'process', name: 'Process', children: [
+                              { id: 'noop', name: 'No-op' },
+                            { id: '_divider', type: 'divider' },
+                              { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
+                              { id: 'pump', name: 'Pump...' }
+                            ] },
+                            { id: '_divider', type: 'divider' },
+                            { id: 'control', name: 'Valve control', children: [
+                              { id: 'recent', name: 'Recent', children: [
+                                { id: 'inlet1', name: 'Inlet 1' },
+                                { id: 'inlet2', name: 'Inlet 2' },
+                              ] },
+                              { id: 'clear', name: 'Clear' },
+                              { id: 'set', name: 'Set', children: [
+                                { id: 'inlet1', name: 'Inlet 1' },
+                                { id: 'inlet2', name: 'Inlet 2' },
+                              ] }
+                            ] },
+                            { id: '_divider2', type: 'divider' },
+                            { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete', shortcut: 'X' },
+                            // { id: '_divider3', type: 'divider' },
+                            // { id: 'undo', name: 'Undo', icon: 'undo' },
+                            // { id: 'redo', name: 'Redo', icon: 'redo' },
                           ], (menuPath) => {
                             if (menuPath.first() === 'delete') {
                               this.deleteSelected();
@@ -243,7 +271,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                           });
                         }}>
                           <div
-                            className={util.formatClass('vedit-segment-features', { '_selected': this.state.selectedSegmentIndices.has(segmentIndex) })}
+                            className={util.formatClass('vedit-segment-features', {
+                              '_active': this.state.activeSegmentIndex === segmentIndex,
+                              '_selected': this.state.selectedSegmentIndices.has(segmentIndex)
+                            })}
                             key={segment.id}
                             draggable
                             tabIndex={-1}
@@ -282,10 +313,27 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                             }}
                             onClick={(event) => {
                               this.setState((state) => {
-                                if (event.metaKey) {
-                                  return { selectedSegmentIndices: util.toggleSet(state.selectedSegmentIndices, segmentIndex) };
+                                if (event.shiftKey && (state.activeSegmentIndex !== null)) {
+                                  let added = Range(segmentIndex, state.activeSegmentIndex);
+
+                                  return {
+                                    activeSegmentIndex: segmentIndex,
+                                    selectedSegmentIndices: state.selectedSegmentIndices.isSuperset(added)
+                                      ? state.selectedSegmentIndices.subtract(Range(state.activeSegmentIndex, segmentIndex))
+                                      : state.selectedSegmentIndices.union(added)
+                                  };
+                                } else if (event.metaKey) {
+                                  return {
+                                    activeSegmentIndex: state.selectedSegmentIndices.has(segmentIndex)
+                                      ? state.activeSegmentIndex
+                                      : segmentIndex,
+                                    selectedSegmentIndices: util.toggleSet(state.selectedSegmentIndices, segmentIndex)
+                                  };
                                 } else {
-                                  return { selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex) };
+                                  return {
+                                    activeSegmentIndex: segmentIndex,
+                                    selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex)
+                                  };
                                 }
                               });
                             }}
@@ -310,6 +358,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                   offset,
                                   start
                                 },
+
+                                activeSegmentIndex: segmentIndex,
                                 selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
                                   ? state.selectedSegmentIndices
                                   : state.selectedSegmentIndices.clear().add(segmentIndex)
@@ -366,6 +416,9 @@ function SegmentsDivider(props: {
         if (!event.currentTarget.contains(event.relatedTarget as Node)) {
           setOver(false);
         }
+      }}
+      onDragOverCapture={(event) => {
+        event.dataTransfer.dropEffect = 'copy';
       }}
       onDrop={(event) => {
         event.preventDefault();

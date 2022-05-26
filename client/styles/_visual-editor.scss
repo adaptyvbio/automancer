@@ -56,7 +56,7 @@
       display: grid;
       align-items: center;
       column-gap: 1rem;
-      grid-template-columns: 1fr auto 1fr;
+      grid-template-columns: 1fr;
 
       height: 2rem;
       margin: -0.4rem 0;
@@ -65,34 +65,68 @@
       color: $app-blue;
       font-weight: 500;
 
-      &:not(:hover) {
-        grid-template-columns: 1fr;
+      > :first-child { border-radius: 4px 0 0 4px; }
+      > :last-child { border-radius: 0 4px 4px 0; }
 
-        > :first-child {
-          height: 1px;
-          background-color: proto.$segment-border;
-        }
+      > :nth-child(2) {
+        display: flex;
+        column-gap: 0.4rem;
+      }
 
+      > :not(:nth-child(2)) {
+        height: 1px;
+        background-color: proto.$segment-border;
+      }
+
+      &._over, &:not(:hover) {
         > :nth-child(n+2) {
-          display: none;
-        }
-
-        &:is(:first-child, :last-child) > * {
           display: none;
         }
       }
 
-      &:hover {
+      &._over, &:hover {
         > :not(:nth-child(2)) {
           height: 2px;
           background-color: currentColor;
         }
-
-        > :nth-child(2) {
-          display: flex;
-          column-gap: 0.4rem;
-        }
       }
+
+      &:hover {
+        grid-template-columns: 1fr auto 1fr;
+      }
+
+      &:not(._over):not(:hover):is(:first-child, :last-child) > * {
+        display: none;
+      }
+
+      // &:not(:hover) {
+      //   > :first-child {
+      //     height: 1px;
+      //     background-color: proto.$segment-border;
+      //   }
+
+      //   > :nth-child(n+2) {
+      //     display: none;
+      //   }
+
+      //   &:is(:first-child, :last-child) > * {
+      //     // display: none;
+      //   }
+      // }
+
+      // &:hover {
+      //   grid-template-columns: 1fr auto 1fr;
+
+      //   > :not(:nth-child(2)) {
+      //     height: 2px;
+      //     background-color: currentColor;
+      //   }
+
+      //   > :nth-child(2) {
+      //     display: flex;
+      //     column-gap: 0.4rem;
+      //   }
+      // }
     }
 
     // &-dropzone {
@@ -126,6 +160,11 @@
         background-color: lighten($app-blue, 55%);
         border-color: $app-blue;
         box-shadow: -1px 1px 6px #0001;
+      }
+
+      &._selected {
+        background-color: lighten($app-blue, 55%);
+        border-color: $app-blue;
       }
     }
   }

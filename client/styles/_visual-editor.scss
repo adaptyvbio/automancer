@@ -9,8 +9,26 @@
   }
 
   &-stage {
-    &-header { @extend .protoview-stage-header; }
+    &-header {
+      @extend .protoview-stage-header;
+
+      &._context {
+        background-color: lighten($app-blue, 55%);
+        border-color: $app-blue;
+        box-shadow: -1px 1px 6px #0001;
+      }
+    }
+
     &-name { @extend .protoview-stage-name; }
+    &-expand { @extend .protoview-stage-expand; }
+
+    &-root:not(._open) &-header .icon {
+      transform: scale(1.4) rotate(-90deg);
+    }
+
+    &-root._open &-expand {
+      display: none;
+    }
 
     &-steps {
       display: flex;
@@ -18,6 +36,10 @@
       row-gap: proto.$step-gap;
 
       margin-bottom: 1.4rem;
+    }
+
+    &-root:not(._open) &-steps {
+      display: none;
     }
   }
 

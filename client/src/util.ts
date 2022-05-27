@@ -1,4 +1,4 @@
-import type { Set as ImSet } from 'immutable';
+import { Range, type Set as ImSet } from 'immutable';
 
 
 export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => unknown): [number, T] | undefined {
@@ -36,5 +36,42 @@ export function toggleSet<T>(set: ImSet<T>, item: T): ImSet<T> {
     return set.delete(item);
   } else {
     return set.add(item);
+  }
+}
+
+
+export namespace renumber {
+  type Operator = (seq: Seq, index: number) => Seq;
+  type Seq = [number, number];
+
+  export function deleteItems(items: number[]): Operator {
+    let itemIndex = 0;
+    let delta = 0;
+
+    return (seq: Seq, _parentIndex: number) => {
+      let delta0 = delta;
+
+      for (; (seq[0] <= items[itemIndex])
+        && (seq[1] > items[itemIndex])
+        && (itemIndex < items.length); itemIndex += 1) {
+        delta += 1;
+      }
+
+      return [seq[0] - delta0, seq[1] - delta];
+    };
+  }
+
+  export function deleteParent(deletedParentIndex: number, deletedParentSeq: Seq): Operator {
+    let deletedItemCount = deletedParentSeq[1] - deletedParentSeq[0];
+
+    return (seq: Seq, parentIndex: number) => {
+      return parentIndex >= deletedParentIndex
+        ? [seq[0] - deletedItemCount, seq[1] - deletedItemCount]
+        : seq;
+    };
+  }
+
+  export function deleteRange(a: number, b: number): Operator {
+    return deleteItems(Range(a, b).toArray());
   }
 }

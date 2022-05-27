@@ -27,7 +27,7 @@ $segment-radius: 4px;
       }
     }
 
-    &-root:not(._open) .icon {
+    &-root:not(._open) &-header .icon {
       transform: scale(1.4) rotate(-90deg);
     }
 
@@ -220,11 +220,11 @@ $segment-radius: 4px;
 %features {
   display: grid;
   align-items: center;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto 1fr;
   column-gap: 1rem;
   row-gap: 0.6rem;
 
-  padding: 0.8rem 1.2rem;
+  padding: 0.6rem 1.2rem;
   border: 1px solid transparent;
 
   font-size: 1.1rem;

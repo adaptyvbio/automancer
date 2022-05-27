@@ -77,6 +77,7 @@ let a = () => ({
   id: crypto.randomUUID(),
   features: [
     { icon: 'memory', label: Math.floor(Math.random() * 100).toString() + ' Gb' },
+    // { icon: 'face', label: 'Alice' },
     { icon: 'face', label: 'Bob' }
   ]
 });
@@ -108,21 +109,6 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       activeSegmentIndex: null,
       selectedSegmentIndices: ImSet()
     };
-
-    // Object.assign(this.state, {
-    //   stages: List([
-    //     { id: crypto.randomUUID(),
-    //       name: 'Stage A',
-    //       stepSeq: [0, 0] },
-    //     { id: crypto.randomUUID(),
-    //       name: 'Stage B',
-    //       stepSeq: [0, 1] }
-    //   ]),
-    //   steps: List([
-    //     { id: crypto.randomUUID(), name: 'Delta', seq: [0, 1] },
-    //   ]),
-    //   segments: List([a()]),
-    // });
   }
 
   deleteStage(targetStageIndex: number) {
@@ -130,32 +116,19 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       let stage = state.stages.get(targetStageIndex)!;
 
       let segmentSeq = [
-        state.steps.get(stage.stepSeq[0])!.seq[0],
+        state.steps.get(stage.stepSeq[0])?.seq[0] ?? state.segments.size,
         stage.stepSeq[1] !== stage.stepSeq[0]
           ? state.steps.get(stage.stepSeq[1] - 1)!.seq[1]
-          : state.steps.get(stage.stepSeq[1])!.seq[0]
+          : state.steps.get(stage.stepSeq[1])?.seq[0] ?? state.segments.size
       ];
 
-      // console.log('->', segmentSeq);
-
-      let renumberSteps = util.renumber.deleteParent(targetStageIndex, stage.stepSeq);
-      let renumberSegments = util.renumber.deleteRange(segmentSeq[0], segmentSeq[1]);
+      let deletedSegmentCount = segmentSeq[1] - segmentSeq[0];
 
       return {
         activeSegmentIndex: null,
-        stages: state.stages
-          .delete(targetStageIndex)
-          .map((stage, stageIndex) => ({
-            ...stage,
-            stepSeq: renumberSteps(stage.stepSeq, stageIndex)
-          })),
-        steps: state.steps
-          .map((step, stepIndex) => ({
-            ...step,
-            seq: renumberSegments(step.seq, stepIndex)
-          }))
-          .filter((_step, stepIndex) => (stepIndex < stage.stepSeq[0]) || (stepIndex >= stage.stepSeq[1])),
-        segments: state.segments.filter((_segment, segmentIndex) => (segmentIndex < segmentSeq[0]) || (segmentIndex >= segmentSeq[1])),
+        stages: util.renumber.deleteItem(state.stages, 'stepSeq', targetStageIndex),
+        steps: util.renumber.deleteRange(state.steps, 'seq', stage.stepSeq[0], stage.stepSeq[1], deletedSegmentCount),
+        segments: state.segments.splice(segmentSeq[0], deletedSegmentCount),
         selectedSegmentIndices: state.selectedSegmentIndices.clear()
       };
     });
@@ -165,42 +138,37 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     this.setState((state) => {
       let targetStep = state.steps.get(targetStepIndex)!;
 
-      let renumberSteps = util.renumber.deleteItems([targetStepIndex]);
-      let renumberSegments = util.renumber.deleteParent(targetStepIndex, targetStep.seq);
-
       return {
-        stages: state.stages.map((stage, stageIndex) => ({ ...stage, stepSeq: renumberSteps(stage.stepSeq, stageIndex) })),
-        steps: state.steps
-          .delete(targetStepIndex)
-          .map((step, stepIndex) => ({ ...step, seq: renumberSegments(step.seq, stepIndex) })),
-        segments: state.segments.filter((_segment, segmentIndex) => (segmentIndex < targetStep.seq[0]) || (segmentIndex >= targetStep.seq[1])),
+        stages: util.renumber.deleteChildItem(state.stages, 'stepSeq', targetStepIndex),
+        steps: util.renumber.deleteItem(state.steps, 'seq', targetStepIndex),
+        segments: state.segments.splice(targetStep.seq[0], targetStep.seq[1] - targetStep.seq[0])
       };
     });
   }
 
-
-  create(segmentIndex: number, targetStepIndex: number) {
+  createStep(targetStepIndex: number, targetStageIndex: number) {
     this.setState((state) => {
-      let createCount = 1;
-
-      let steps = state.steps.map((step, stepIndex) => {
-        let isCurrent = (stepIndex === targetStepIndex);
-        let isPast = (stepIndex > targetStepIndex); // = is created segment past
-
-        let delta0 = isPast ? createCount : 0;
-        let delta1 = (isPast || isCurrent) ? createCount : 0;
-
-        return {
-          ...step,
-          seq: [step.seq[0] + delta0, step.seq[1] + delta1] as ProtocolSeq
-        };
-      });
+      let targetSegmentIndex = state.steps.get(targetStepIndex)?.seq[0] ?? state.segments.size;
 
       return {
-        activeSegmentIndex: segmentIndex,
-        segments: state.segments.insert(segmentIndex, a()),
-        selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex),
-        steps
+        stages: util.renumber.createChildItem(state.stages, 'stepSeq', targetStageIndex),
+        steps: state.steps.insert(targetStepIndex, {
+          id: crypto.randomUUID(),
+          name: 'New step',
+          seq: [targetSegmentIndex, targetSegmentIndex]
+        })
+      };
+    });
+  }
+
+  createSegment(targetSegmentIndex: number, targetStepIndex: number) {
+    this.setState((state) => {
+      return {
+        steps: util.renumber.createChildItem(state.steps, 'seq', targetStepIndex),
+        segments: state.segments.insert(targetSegmentIndex, a()),
+
+        activeSegmentIndex: targetSegmentIndex,
+        selectedSegmentIndices: state.selectedSegmentIndices.clear().add(targetSegmentIndex),
       };
     });
   }
@@ -342,12 +310,17 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                 </a>
               </ContextMenuArea>
               <div className="vedit-stage-steps">
+                <SegmentsDivider step
+                  onDrop={() => void this.moveSelectedStep(stage.stepSeq[0], stageIndex)}
+                  onTrigger={() => void this.createStep(stage.stepSeq[0], stageIndex)} />
+
                 {new Array(stepCount).fill(0).map((_, stepRelIndex) => {
                   let stepIndex = stage.stepSeq[0] + stepRelIndex;
                   let step = this.state.steps.get(stepIndex)!;
 
                   return (
-                    <ContextMenuArea key={step.id} onContextMenu={async (event) => {
+                    <React.Fragment key={step.id}>
+                    <ContextMenuArea onContextMenu={async (event) => {
                       await this.props.app.showContextMenu(event, [
                         { id: '_header', name: 'Protocol step', type: 'header' },
                         { id: 'delete', name: 'Delete' }
@@ -357,7 +330,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         }
                       });
                     }}>
-                      <div className="vedit-step-item" key={step.id}>
+                      <div className="vedit-step-item">
                         <div className="vedit-step-header">
                           <div className="vedit-step-time">00:00</div>
                           <div className="vedit-step-name">{step.name}</div>
@@ -365,7 +338,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         <div className="vedit-segment-list">
                           <SegmentsDivider
                             onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
-                            onTrigger={() => void this.create(step.seq[0], stepIndex)} />
+                            onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
 
                           {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                             let segmentIndex = step.seq[0] + segmentRelIndex;
@@ -531,13 +504,18 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
                                 <SegmentsDivider
                                   onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
-                                  onTrigger={() => void this.create(segmentIndex + 1, stepIndex)} />
+                                  onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
                               </React.Fragment>
                             );
                           })}
                         </div>
                       </div>
                     </ContextMenuArea>
+
+                      <SegmentsDivider step
+                        onDrop={() => void this.moveSelectedStep(stepIndex + 1, stageIndex)}
+                        onTrigger={() => void this.createStep(stepIndex + 1, stageIndex)} />
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -553,11 +531,12 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 function SegmentsDivider(props: {
   onDrop(): void;
   onTrigger?(): void;
+  step?: unknown;
 }) {
   let [over, setOver] = React.useState(false);
 
   return (
-    <button type="button" className={util.formatClass('vedit-segment-dropzone', { '_over': over })}
+    <button type="button" className={util.formatClass(props.step ? 'vedit-step-dropzone' : 'vedit-segment-dropzone', { '_over': over })}
       onClick={props.onTrigger}
       onDragOver={(event) => {
         event.preventDefault();
@@ -583,7 +562,7 @@ function SegmentsDivider(props: {
       <div />
       <div>
         <Rf.Icon name="add-circle" />
-        <div>Add segment</div>
+        <div>{props.step ? 'Add step' : 'Add segment'}</div>
       </div>
       <div />
     </button>

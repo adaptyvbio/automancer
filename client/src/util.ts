@@ -1,4 +1,4 @@
-import { Range, type Set as ImSet } from 'immutable';
+import { List, Range, type Set as ImSet } from 'immutable';
 
 
 export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => unknown): [number, T] | undefined {
@@ -71,7 +71,59 @@ export namespace renumber {
     };
   }
 
-  export function deleteRange(a: number, b: number): Operator {
-    return deleteItems(Range(a, b).toArray());
+  // export function deleteRange(a: number, b: number): Operator {
+  //   return deleteItems(Range(a, b).toArray());
+  // }
+
+
+  export function deleteItem<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, targetIndex: number): List<T> {
+    let target = list.get(targetIndex)!;
+    let deletedChildrenCount = target[seqKey][1] - target[seqKey][0];
+
+    return list
+      .delete(targetIndex)
+      .map((item, itemIndex) => ({
+        ...item,
+        [seqKey]: itemIndex >= targetIndex
+          ? [item[seqKey][0] - deletedChildrenCount, item[seqKey][1] - deletedChildrenCount]
+          : item[seqKey]
+      }));
+
+    // return deleteRange(list, seqKey, targetIndex, targetIndex + 1);
+  }
+
+  export function deleteRange<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, start: number, end: number, deletedChildrenCount: number = 1 /* ... */): List<T> {
+    // let deletedChildrenCount = list.get(end - 1)![seqKey][1] - (list.get(start)?.[seqKey][0] ?? );
+
+    return list
+      .slice(0, start)
+      .concat(list.slice(end).map((item) => ({
+        ...item,
+        [seqKey]: [item[seqKey][0] - deletedChildrenCount, item[seqKey][1] - deletedChildrenCount]
+      })));
+  }
+
+  export function deleteChildItem<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, targetIndex: number): List<T> {
+    return list.map((item) => {
+      let itemSeq = item[seqKey];
+
+      return {
+        ...item,
+        [seqKey]: [
+          itemSeq[0] + (itemSeq[0] > targetIndex ? -1 : 0),
+          itemSeq[1] + (itemSeq[1] > targetIndex ? -1 : 0)
+        ]
+      };
+    });
+  }
+
+  export function createChildItem<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, targetIndex: number): List<T> {
+    return list.map((item, itemIndex) => ({
+      ...item,
+      [seqKey]: [
+        item[seqKey][0] + (itemIndex > targetIndex ? 1 : 0),
+        item[seqKey][1] + (itemIndex >= targetIndex ? 1 : 0)
+      ]
+    }));
   }
 }

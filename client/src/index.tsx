@@ -88,7 +88,7 @@ class App extends Rf.Application<Model, {}, AppProps> {
         cuts: List([0.65]),
         panes: List([
           ViewPaneRecord({ view: 'test' }),
-          ViewPaneRecord({ view: 'settings' })
+          ViewPaneRecord({ view: 'blank' })
         ])
       }),
       model: {
@@ -187,10 +187,6 @@ class App extends Rf.Application<Model, {}, AppProps> {
       component: ViewTest,
       shortcut: null
     });
-  }
-
-  componentDidMount() {
-
   }
 
   updateHostLocation(hostSettingsEntry: HostSettingsEntry) {

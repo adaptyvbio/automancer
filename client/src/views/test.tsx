@@ -67,6 +67,7 @@ export interface VisualEditorState {
   } | null;
 
   openStageIndices: ImSet<number>;
+  openStepIds: ImSet<Step['id']>;
 
   activeSegmentIndex: number | null;
   selectedSegmentIndices: ImSet<number>;
@@ -86,6 +87,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
   constructor(props: VisualEditorProps) {
     super(props);
 
+    let x = crypto.randomUUID();
+
     this.state = {
       stages: List([
         { id: crypto.randomUUID(),
@@ -93,18 +96,21 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           stepSeq: [0, 2] },
         { id: crypto.randomUUID(),
           name: 'Stage B',
-          stepSeq: [2, 3] }
+          stepSeq: [2, 18] }
       ]),
       steps: List([
-        { id: crypto.randomUUID(), name: 'Alpha', seq: [0, 3] },
+        { id: x, name: 'Alpha', seq: [0, 3] },
         { id: crypto.randomUUID(), name: 'Beta', seq: [3, 4] },
-        { id: crypto.randomUUID(), name: 'Delta', seq: [4, 5] },
+        ...new Array(16).fill(0).map((_, i) => (
+          { id: crypto.randomUUID(), name: 'Delta', seq: [4 + i, 5 + i] }
+        ))
       ]),
-      segments: List([a(), a(), a(), a(), a()]),
+      segments: List(new Array(20).fill(0).map(a)),
 
       drag: null,
 
       openStageIndices: ImSet([0]),
+      openStepIds: ImSet([x]),
 
       activeSegmentIndex: null,
       selectedSegmentIndices: ImSet()
@@ -310,211 +316,248 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                 </a>
               </ContextMenuArea>
               <div className="vedit-stage-steps">
-                <SegmentsDivider step
+                {/* <SegmentsDivider step
                   onDrop={() => void this.moveSelectedStep(stage.stepSeq[0], stageIndex)}
-                  onTrigger={() => void this.createStep(stage.stepSeq[0], stageIndex)} />
+                  onTrigger={() => void this.createStep(stage.stepSeq[0], stageIndex)} /> */}
 
                 {new Array(stepCount).fill(0).map((_, stepRelIndex) => {
                   let stepIndex = stage.stepSeq[0] + stepRelIndex;
                   let step = this.state.steps.get(stepIndex)!;
+                  let segmentCount = step.seq[1] - step.seq[0];
 
                   return (
                     <React.Fragment key={step.id}>
-                    <ContextMenuArea onContextMenu={async (event) => {
-                      await this.props.app.showContextMenu(event, [
-                        { id: '_header', name: 'Protocol step', type: 'header' },
-                        { id: 'delete', name: 'Delete' }
-                      ], (menuPath) => {
-                        if (menuPath.first() === 'delete') {
-                          this.deleteStep(stepIndex);
-                        }
-                      });
-                    }}>
-                      <div className="vedit-step-item">
-                        <div className="vedit-step-header">
+                      <ContextMenuArea onContextMenu={async (event) => {
+                        await this.props.app.showContextMenu(event, [
+                          { id: '_header', name: 'Protocol step', type: 'header' },
+                          { id: 'delete', name: 'Delete' }
+                        ], (menuPath) => {
+                          if (menuPath.first() === 'delete') {
+                            this.deleteStep(stepIndex);
+                          }
+                        });
+                      }}>
+                        <div className={util.formatClass('vedit-step-item', { '_open': this.state.openStepIds.has(step.id) })}
+                          onDoubleClick={(event) => {
+                            event.preventDefault();
+
+                            this.setState((state) => ({
+                              openStepIds: util.toggleSet(state.openStepIds, step.id)
+                            }));
+                          }}>
                           <div className="vedit-step-time">00:00</div>
                           <div className="vedit-step-name">{step.name}</div>
-                        </div>
-                        <div className="vedit-segment-list">
-                          <SegmentsDivider
-                            onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
-                            onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
+                          {/* <div className="vedit-step-info"> */}
+                          {/* <div className="vedit-step-segment"></div> */}
+                          {/* </div> */}
 
-                          {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
-                            let segmentIndex = step.seq[0] + segmentRelIndex;
-                            let segment = this.state.segments.get(segmentIndex)!;
+                          <button type="button" className="vedit-step-expand vedit-step-expand--open" onClick={() => {
+                            this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
+                          }}>
+                            <div>Open</div>
+                            <Rf.Icon name="expand-more" />
+                          </button>
 
-                            return (
-                              <React.Fragment key={segment.id}>
-                                <ContextMenuArea onContextMenu={async (event) => {
-                                  event.stopPropagation();
+                          <button type="button" className="vedit-step-expand vedit-step-expand--close" onClick={() => {
+                            this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
+                          }}>
+                            <div>Close</div>
+                            <Rf.Icon name="expand-less" />
+                          </button>
 
-                                  // TODO: DRY
-                                  let selectedSegmentIndices = this.state.selectedSegmentIndices.has(segmentIndex)
-                                    ? this.state.selectedSegmentIndices
-                                    : this.state.selectedSegmentIndices.clear().add(segmentIndex);
+                          {segmentCount !== 1
+                            ? <div className="vedit-step-summary">{segmentCount > 1 ? `${segmentCount} segments` : 'no segment'}</div>
+                            : <div className="vedit-step-preview"></div>}
 
-                                  this.setState({ selectedSegmentIndices });
+                          <div className="vedit-segment-list">
+                            <SegmentsDivider
+                              onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
+                              onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
 
-                                  await this.props.app.showContextMenu(event, [
-                                    { id: '_header', name: 'Protocol segment', type: 'header' },
-                                    {
-                                      id: 'process', name: 'Process', children: [
-                                        { id: 'noop', name: 'No-op' },
-                                        { id: '_divider', type: 'divider' },
-                                        { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
-                                        { id: 'pump', name: 'Pump...' }
-                                      ]
-                                    },
-                                    { id: '_divider', type: 'divider' },
-                                    {
-                                      id: 'control', name: 'Valve control', children: [
-                                        {
-                                          id: 'recent', name: 'Recent', children: [
-                                            { id: 'inlet1', name: 'Inlet 1' },
-                                            { id: 'inlet2', name: 'Inlet 2' },
-                                          ]
-                                        },
-                                        { id: 'clear', name: 'Clear' },
-                                        {
-                                          id: 'set', name: 'Set', children: [
-                                            { id: 'inlet1', name: 'Inlet 1' },
-                                            { id: 'inlet2', name: 'Inlet 2' },
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    { id: '_divider2', type: 'divider' },
-                                    { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete', shortcut: 'X' },
-                                    // { id: '_divider3', type: 'divider' },
-                                    // { id: 'undo', name: 'Undo', icon: 'undo' },
-                                    // { id: 'redo', name: 'Redo', icon: 'redo' },
-                                  ], (menuPath) => {
-                                    if (menuPath.first() === 'delete') {
-                                      this.deleteSelected();
-                                    }
-                                  });
-                                }}>
-                                  <div
-                                    className={util.formatClass('vedit-segment-features', {
-                                      '_active': this.state.activeSegmentIndex === segmentIndex,
-                                      '_selected': this.state.selectedSegmentIndices.has(segmentIndex)
-                                    })}
-                                    key={segment.id}
-                                    draggable
-                                    tabIndex={-1}
-                                    onBlur={(event) => {
-                                      // if (!event.currentTarget.parentElement!.parentElement!.parentElement!.contains(event.relatedTarget)) {
-                                      //   this.setState((state) => ({
-                                      //     selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                      //   }));
-                                      // }
-                                    }}
-                                    onKeyDown={(event) => {
-                                      switch (event.key) {
-                                        case 'Backspace': {
-                                          this.deleteSelected();
+                            {new Array(segmentCount).fill(0).map((_, segmentRelIndex) => {
+                              let segmentIndex = step.seq[0] + segmentRelIndex;
+                              let segment = this.state.segments.get(segmentIndex)!;
 
-                                          // this.setState((state) => ({
-                                          //   segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
-                                          //   selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                          // }));
+                              return (
+                                <React.Fragment key={segment.id}>
+                                  <ContextMenuArea onContextMenu={async (event) => {
+                                    event.stopPropagation();
 
-                                          break;
-                                        }
+                                    // TODO: DRY
+                                    let selectedSegmentIndices = this.state.selectedSegmentIndices.has(segmentIndex)
+                                      ? this.state.selectedSegmentIndices
+                                      : this.state.selectedSegmentIndices.clear().add(segmentIndex);
 
-                                        case 'Escape': {
+                                    this.setState({ selectedSegmentIndices });
+
+                                    await this.props.app.showContextMenu(event, [
+                                      { id: '_header', name: 'Protocol segment', type: 'header' },
+                                      // {
+                                      //   id: 'process', name: 'Process', children: [
+                                      //     { id: 'noop', name: 'No-op' },
+                                      //     { id: '_divider', type: 'divider' },
+                                      //     { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
+                                      //     { id: 'pump', name: 'Pump...' }
+                                      //   ]
+                                      // },
+                                      // { id: '_divider', type: 'divider' },
+                                      // {
+                                      //   id: 'control', name: 'Valve control', children: [
+                                      //     {
+                                      //       id: 'recent', name: 'Recent', children: [
+                                      //         { id: 'inlet1', name: 'Inlet 1' },
+                                      //         { id: 'inlet2', name: 'Inlet 2' },
+                                      //       ]
+                                      //     },
+                                      //     { id: 'clear', name: 'Clear' },
+                                      //     {
+                                      //       id: 'set', name: 'Set', children: [
+                                      //         { id: 'inlet1', name: 'Inlet 1' },
+                                      //         { id: 'inlet2', name: 'Inlet 2' },
+                                      //       ]
+                                      //     }
+                                      //   ]
+                                      // },
+                                      // { id: '_divider2', type: 'divider' },
+                                      { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete' }
+                                    ], (menuPath) => {
+                                      if (menuPath.first() === 'delete') {
+                                        this.deleteSelected();
+                                      }
+                                    }, (selected) => {
+                                      if (!selected) {
+                                        this.setState((state) => ({ selectedSegmentIndices: state.selectedSegmentIndices.clear() }));
+                                      }
+                                    });
+                                  }}>
+                                    <div
+                                      className={util.formatClass('vedit-segment-features', {
+                                        '_active': this.state.activeSegmentIndex === segmentIndex,
+                                        '_selected': this.state.selectedSegmentIndices.has(segmentIndex)
+                                      })}
+                                      key={segment.id}
+                                      draggable
+                                      tabIndex={-1}
+                                      onBlur={(event) => {
+                                        if (!event.relatedTarget?.classList.contains('vedit-segment-features') && !event.relatedTarget?.classList.contains('ctxmenu')) {
                                           this.setState((state) => ({
                                             selectedSegmentIndices: state.selectedSegmentIndices.clear()
                                           }));
+                                        }
+                                      }}
+                                      onKeyDown={(event) => {
+                                        switch (event.key) {
+                                          case 'Backspace': {
+                                            this.deleteSelected();
 
-                                          break;
+                                            // this.setState((state) => ({
+                                            //   segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
+                                            //   selectedSegmentIndices: state.selectedSegmentIndices.clear()
+                                            // }));
+
+                                            break;
+                                          }
+
+                                          case 'Escape': {
+                                            this.setState((state) => ({
+                                              selectedSegmentIndices: state.selectedSegmentIndices.clear()
+                                            }));
+
+                                            break;
+                                          }
+
+                                          default: return;
                                         }
 
-                                        default: return;
-                                      }
+                                        event.preventDefault();
+                                      }}
+                                      onClick={(event) => {
+                                        this.setState((state) => {
+                                          if (event.shiftKey && (state.activeSegmentIndex !== null)) {
+                                            let added = Range(segmentIndex, state.activeSegmentIndex);
 
-                                      event.preventDefault();
-                                    }}
-                                    onClick={(event) => {
-                                      this.setState((state) => {
-                                        if (event.shiftKey && (state.activeSegmentIndex !== null)) {
-                                          let added = Range(segmentIndex, state.activeSegmentIndex);
+                                            return {
+                                              activeSegmentIndex: segmentIndex,
+                                              selectedSegmentIndices: state.selectedSegmentIndices.isSuperset(added)
+                                                ? state.selectedSegmentIndices.subtract(Range(state.activeSegmentIndex, segmentIndex))
+                                                : state.selectedSegmentIndices.union(added)
+                                            };
+                                          } else if (event.metaKey) {
+                                            return {
+                                              activeSegmentIndex: state.selectedSegmentIndices.has(segmentIndex)
+                                                ? state.activeSegmentIndex
+                                                : segmentIndex,
+                                              selectedSegmentIndices: util.toggleSet(state.selectedSegmentIndices, segmentIndex)
+                                            };
+                                          } else {
+                                            return {
+                                              activeSegmentIndex: segmentIndex,
+                                              selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex)
+                                            };
+                                          }
+                                        });
+                                      }}
+                                      onDragStart={(event) => {
+                                        event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
+                                        // event.dataTransfer.setDragImage(blankImage, 0, 0);
 
-                                          return {
-                                            activeSegmentIndex: segmentIndex,
-                                            selectedSegmentIndices: state.selectedSegmentIndices.isSuperset(added)
-                                              ? state.selectedSegmentIndices.subtract(Range(state.activeSegmentIndex, segmentIndex))
-                                              : state.selectedSegmentIndices.union(added)
-                                          };
-                                        } else if (event.metaKey) {
-                                          return {
-                                            activeSegmentIndex: state.selectedSegmentIndices.has(segmentIndex)
-                                              ? state.activeSegmentIndex
-                                              : segmentIndex,
-                                            selectedSegmentIndices: util.toggleSet(state.selectedSegmentIndices, segmentIndex)
-                                          };
-                                        } else {
-                                          return {
-                                            activeSegmentIndex: segmentIndex,
-                                            selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex)
-                                          };
-                                        }
-                                      });
-                                    }}
-                                    onDragStart={(event) => {
-                                      event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
-                                      // event.dataTransfer.setDragImage(blankImage, 0, 0);
+                                        // this.setState({ draggingSegmentId: segment.id });
+                                        // event.dataTransfer.dropEffect = "copy";
+                                        let rect = event.currentTarget.getBoundingClientRect();
 
-                                      // this.setState({ draggingSegmentId: segment.id });
-                                      // event.dataTransfer.dropEffect = "copy";
-                                      let rect = event.currentTarget.getBoundingClientRect();
+                                        let offset = {
+                                          x: event.clientX - rect.x,
+                                          y: event.clientY - rect.y
+                                        };
 
-                                      let offset = {
-                                        x: event.clientX - rect.x,
-                                        y: event.clientY - rect.y
-                                      };
+                                        let start = { x: event.clientX, y: event.clientY };
 
-                                      let start = { x: event.clientX, y: event.clientY };
+                                        this.setState((state) => ({
+                                          drag: {
+                                            segmentId: segment.id,
+                                            offset,
+                                            start
+                                          },
 
-                                      this.setState((state) => ({
-                                        drag: {
-                                          segmentId: segment.id,
-                                          offset,
-                                          start
-                                        },
+                                          activeSegmentIndex: segmentIndex,
+                                          selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
+                                            ? state.selectedSegmentIndices
+                                            : state.selectedSegmentIndices.clear().add(segmentIndex)
+                                        }));
+                                      }}
+                                      onDragEnd={() => {
+                                        this.setState({ drag: null });
+                                      }}>
+                                      {segment.features.map((feature, featureIndex) => (
+                                        <React.Fragment key={featureIndex}>
+                                          <Rf.Icon name={feature.icon} />
+                                          <span>{feature.label}</span>
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                  </ContextMenuArea>
 
-                                        activeSegmentIndex: segmentIndex,
-                                        selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
-                                          ? state.selectedSegmentIndices
-                                          : state.selectedSegmentIndices.clear().add(segmentIndex)
-                                      }));
-                                    }}
-                                    onDragEnd={() => {
-                                      this.setState({ drag: null });
-                                    }}>
-                                    {segment.features.map((feature, featureIndex) => (
-                                      <React.Fragment key={featureIndex}>
-                                        <Rf.Icon name={feature.icon} />
-                                        <span>{feature.label}</span>
-                                      </React.Fragment>
-                                    ))}
-                                  </div>
-                                </ContextMenuArea>
-
-                                <SegmentsDivider
-                                  onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
-                                  onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
-                              </React.Fragment>
-                            );
+                                  <SegmentsDivider
+                                    onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
+                                    onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
+                                </React.Fragment>
+                              );
                           })}
                         </div>
                       </div>
                     </ContextMenuArea>
 
-                      <SegmentsDivider step
+                      {/* <SegmentsDivider step
                         onDrop={() => void this.moveSelectedStep(stepIndex + 1, stageIndex)}
-                        onTrigger={() => void this.createStep(stepIndex + 1, stageIndex)} />
+                        onTrigger={() => void this.createStep(stepIndex + 1, stageIndex)} /> */}
+
+                      {/* <div className="vedit-step-dropzone">
+                        <Rf.Icon name="chevron-right" />
+                        <div />
+                        <Rf.Icon name="chevron-left" />
+                      </div> */}
+
+                      <StepDivider active={this.state.drag !== null} />
                     </React.Fragment>
                   );
                 })}
@@ -527,6 +570,40 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
   }
 }
 
+
+function StepDivider(props: { active: boolean; }) {
+  let [over, setOver] = React.useState(false);
+
+  return (
+    <div className={util.formatClass('vedit-step-dropzone', { '_active': props.active, '_over': over })}
+      // onClick={props.onTrigger}
+      onDragOver={(event) => {
+        event.preventDefault();
+      }}
+      onDragEnter={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          setOver(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+          setOver(false);
+        }
+      }}
+      onDragOverCapture={(event) => {
+        event.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        // props.onDrop();
+      }}>
+      <Rf.Icon name="chevron-right" />
+      <div />
+      <Rf.Icon name="chevron-left" />
+    </div>
+  );
+}
 
 function SegmentsDivider(props: {
   onDrop(): void;

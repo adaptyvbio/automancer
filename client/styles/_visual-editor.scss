@@ -2,10 +2,19 @@
 @use "./protocol-overview" as proto;
 
 
+%selection-highlight {
+  background-color: lighten($app-blue, 55%);
+  border-color: $app-blue;
+  box-shadow: -1px 1px 6px #0001;
+}
+
+
 .vedit {
   &-root {
     margin: 1rem 2rem;
     max-width: 500px;
+
+    // :focus { background-color: #f003 !important; }
   }
 
   &-stage {
@@ -33,7 +42,7 @@
     &-steps {
       display: flex;
       flex-direction: column;
-      row-gap: proto.$step-gap;
+      row-gap: 0rem; // proto.$step-gap;
 
       margin-bottom: 1.4rem;
     }
@@ -45,37 +54,128 @@
 
   &-step {
     &-item {
+      display: grid;
+      align-items: center;
+      gap: 0 1rem;
+      grid-template-columns: 3rem auto 1fr;
+
       padding: 1rem 1.8rem;
 
       background-color: proto.$step-background;
       border: 1px solid transparent;
+      border-color: #0002;
       border-radius: proto.$step-radius;
 
+      user-select: none;
+
+      &:not(._context):is(._open, :hover) {
+        box-shadow: 1px 1px 3px #0001;
+      }
+
       &._context {
-        border-color: $app-blue;
+        @extend %selection-highlight;
+        pointer-events: none;
       }
     }
 
-    &-header {
-      @extend .protoview-step-header;
-      grid-template-columns: 3rem 1fr;
-    }
+    // &-header {
+    //   @extend .protoview-step-header;
+    //   grid-template-columns: 3rem 1fr;
+    // }
 
     &-time { @extend .protoview-step-time; }
     &-name { @extend .protoview-step-name; }
 
+    // &-info {
+    //   display: flex;
+    // }
+
+    &-expand {
+      display: flex;
+      align-items: center;
+      column-gap: 0.4rem;
+
+      width: auto;
+      justify-self: end;
+
+      color: #666;
+      font-weight: 500;
+
+      &:hover {
+        color: #333;
+      }
+    }
+
+    &-summary {
+      justify-self: end;
+    }
+
+    &-item:is(:hover, ._open) &-summary {
+      display: none;
+    }
+
+    &-item:is(._open, :not(:hover)) &-expand--open,
+    &-item:not(._open) &-expand--close {
+      display: none;
+    }
+
     &-dropzone {
-      @extend .vedit-segment-dropzone;
+      display: grid;
+      align-items: center;
+      column-gap: 1rem;
+      grid-template-columns: auto 1fr auto;
+
+      // margin: -0.4rem -1rem;
+      margin: -0.4rem 0;
+      z-index: 1;
+
+      color: $app-blue;
+
+      // background-color: #f003;
+
+      &:not(._over) {
+        opacity: 0;
+      }
+
+      &._over {
+        padding: 0.4rem 0;
+      }
+
+      &:not(._active) {
+        pointer-events: none;
+      }
+
+      $dur: 150ms;
+      $delay: 150ms;
+
+      transition: opacity $dur $delay, padding $dur $delay;
+
+      > :nth-child(1) { --dir: -1; }
+      > :nth-child(3) { --dir: 1; --y-offset: -1px; }
+
+      &:not(._over) > :nth-child(2n+1) { --delta: 1.4rem; }
+      &._over > :nth-child(2n+1) { --delta: 1rem; }
+
+      > :nth-child(2n+1) {
+        transform: translate(calc(var(--delta) * var(--dir)), var(--y-offset, 0)) scale(1.4);
+        transition: transform $dur $delay;
+      }
+
+      > :nth-child(2) {
+        height: 2px;
+        background-color: currentColor;
+      }
     }
   }
 
   &-segment {
     &-list {
-      display: grid;
+      grid-column: 2 / 4;
+      // display: grid;
 
-      margin-bottom: 0;
-      margin-top: 0.4rem;
-      margin-left: 3rem;
+      // margin-bottom: 0;
+      // margin-top: 0.4rem;
+      // margin-left: 3rem;
     }
 
     &-dropzone {
@@ -140,19 +240,21 @@
       }
 
       &._context {
-        background-color: lighten($app-blue, 55%);
-        border-color: $app-blue;
+        @extend %selection-highlight;
         box-shadow: -1px 1px 6px #0001;
       }
 
       &._selected {
-        background-color: lighten($app-blue, 55%);
-        border-color: $app-blue;
+        @extend %selection-highlight;
       }
 
       &._active {
         // background-color: #f003;
       }
     }
+  }
+
+  &-step-item:not(._open) &-segment-list {
+    display: none;
   }
 }

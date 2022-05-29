@@ -17,6 +17,14 @@ type InboundMessage = {
   type: 'response';
   id: number;
   data: unknown;
+} | {
+  type: 'app.session.close';
+  id: string;
+  status: number;
+} | {
+  type: 'app.session.data';
+  id: string;
+  data: TerminalSessionData;
 };
 
 export default class WebsocketBackend extends MessageBackend {
@@ -26,6 +34,7 @@ export default class WebsocketBackend extends MessageBackend {
   #options: Options;
   #transport!: WebSocketTransport;
   #requests: Record<number, Deferred<unknown>> = {};
+  #sessions: Record<TerminalSession['id'], TerminalSession> = {};
 
   closed!: Promise<void>;
   state!: HostState;
@@ -38,7 +47,7 @@ export default class WebsocketBackend extends MessageBackend {
 
   protected async _request(request: unknown) {
     let id = this.#nextRequestId++;
-    let deferred = util.defer();
+    let deferred = util.defer<unknown>();
     this.#requests[id] = deferred;
 
     this.#transport.send({
@@ -93,15 +102,101 @@ export default class WebsocketBackend extends MessageBackend {
 
             break;
           }
+
           case 'response': {
             this.#requests[message.id].resolve(message.data);
             delete this.#requests[message.id];
+            break;
+          }
+
+          case 'app.session.close': {
+            this.#sessions[message.id]._handleClose(message.status);
+            break;
+          }
+
+          case 'app.session.data': {
+            this.#sessions[message.id]._handleChunk(message.data);
             break;
           }
         }
       }
     });
   }
+
+
+  async createSession(options: { size: TerminalSessionSize; }): Promise<TerminalSession> {
+    let { id } = await this._request({
+      type: 'app.session.create',
+      size: options.size
+    }) as { id: string; };
+
+    let chunkDeferred!: Deferred<TerminalSessionData>;
+    let closedDeferred = util.defer<{ status: number; }>();
+
+    let session = {
+      id,
+      close: async () => {
+        await this._request({
+          type: 'app.session.close',
+          id
+        });
+      },
+      closed: closedDeferred.promise,
+      resize: async (size: TerminalSessionSize) => {
+
+      },
+      write: async (chunk: Uint8Array) => {
+        await this._request({
+          type: 'app.session.data',
+          id,
+          data: Array.from(chunk)
+        });
+      },
+
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            chunkDeferred = util.defer<TerminalSessionData>();
+
+            return await Promise.race([
+              closedDeferred.promise.then(() => ({ done: true, value: undefined as unknown as Uint8Array })),
+              chunkDeferred.promise.then((value) => ({ done: false, value: new Uint8Array(value) }))
+            ]);
+          }
+        };
+      },
+
+      _handleChunk: (chunk: TerminalSessionData) => {
+        chunkDeferred.resolve(chunk);
+      },
+      _handleClose: (status: number) => {
+        closedDeferred.resolve({ status });
+      }
+    };
+
+    this.#sessions[session.id] = session;
+
+    return session;
+  }
+}
+
+
+export type TerminalSession = AsyncIterable<Uint8Array> & {
+  id: string;
+  close(): Promise<void>;
+  closed: Promise<{ status: number; }>;
+  resize(size: TerminalSessionSize): Promise<void>;
+  write(chunk: Uint8Array): Promise<void>;
+
+  _handleChunk(chunk: TerminalSessionData): void;
+  _handleClose(status: number): void;
+}
+
+export type TerminalSessionData = number[];
+
+export interface TerminalSessionSize {
+  columns: number;
+  rows: number;
 }
 
 

@@ -1,0 +1,13 @@
+.termsession {
+  height: 100%;
+  background-color: #003847;
+
+  .xterm {
+    display: flex;
+    height: 100%;
+  }
+
+  .xterm-screen, .xterm-viewport {
+    margin: auto auto auto 0;
+  }
+}

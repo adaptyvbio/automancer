@@ -6,16 +6,21 @@ import json
 import logging
 import subprocess
 import sys
+import uuid
 import websockets
 
 from pr1 import Host, reader
 from pr1.util import schema as sc
 
 from .auth import agents as auth_agents
+from .session import Session
 
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s :: %(name)-18s :: %(message)s")
 logger = logging.getLogger("pr1.app")
+
+for handler in logging.root.handlers:
+  handler.addFilter(logging.Filter("pr1"))
 
 
 class Backend:
@@ -26,6 +31,7 @@ class Client:
   def __init__(self, *, authenticated, conn):
     self.authenticated = authenticated
     self.conn = conn
+    self.sessions = dict()
 
   @property
   def id(self):
@@ -156,13 +162,57 @@ class App():
       message = json.loads(msg)
 
       if message["type"] == "request":
-        response_data = await self.host.process_request(message["data"])
+        response_data = await self.process_request(client, message["data"])
 
         await client.conn.send(json.dumps({
           "type": "response",
           "id": message["id"],
           "data": response_data
         }))
+
+  async def process_request(self, client, request):
+    if request["type"] == "app.session.create":
+      id = str(uuid.uuid4())
+      session = Session(size=(request["size"]["columns"], request["size"]["rows"]))
+
+      client.sessions[id] = session
+      logger.info(f"Created terminal session with id '{id}'")
+
+      async def start_session():
+        try:
+          async for chunk in session.start():
+            await client.conn.send(json.dumps({
+              "type": "app.session.data",
+              "id": id,
+              "data": list(chunk)
+            }))
+
+          del client.sessions[id]
+          logger.info(f"Closed terminal session with id '{id}'")
+
+          await client.conn.send(json.dumps({
+            "type": "app.session.close",
+            "id": id,
+            "status": session.status
+          }))
+        except websockets.ConnectionClosed:
+          pass
+
+      loop = asyncio.get_event_loop()
+      loop.create_task(start_session())
+
+      return {
+        "id": id
+      }
+
+    elif request["type"] == "app.session.data":
+      client.sessions[request["id"]].write(bytes(request["data"]))
+
+    elif request["type"] == "app.session.close":
+      client.sessions[request["id"]].close()
+
+    else:
+      return await self.host.process_request(request)
 
   def broadcast(self, message):
     websockets.broadcast([client.conn for client in self.clients.values()], message)
@@ -234,6 +284,9 @@ class App():
       try:
         await self.handle_client(client)
       finally:
+        for session in client.sessions.values():
+          session.close()
+
         del self.clients[client.id]
 
     hostname = self.conf['hostname']

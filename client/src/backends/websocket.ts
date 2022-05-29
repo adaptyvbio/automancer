@@ -24,7 +24,7 @@ type InboundMessage = {
 } | {
   type: 'app.session.data';
   id: string;
-  data: TerminalSessionData;
+  data: number[];
 };
 
 export default class WebsocketBackend extends MessageBackend {
@@ -115,7 +115,7 @@ export default class WebsocketBackend extends MessageBackend {
           }
 
           case 'app.session.data': {
-            this.#sessions[message.id]._handleChunk(message.data);
+            this.#sessions[message.id]._handleChunk(new Uint8Array(message.data));
             break;
           }
         }
@@ -130,7 +130,7 @@ export default class WebsocketBackend extends MessageBackend {
       size: options.size
     }) as { id: string; };
 
-    let chunkDeferred!: Deferred<TerminalSessionData>;
+    let chunkDeferred!: Deferred<Uint8Array>;
     let closedDeferred = util.defer<{ status: number; }>();
 
     let session = {
@@ -143,7 +143,11 @@ export default class WebsocketBackend extends MessageBackend {
       },
       closed: closedDeferred.promise,
       resize: async (size: TerminalSessionSize) => {
-
+        await this._request({
+          type: 'app.session.resize',
+          id,
+          size
+        })
       },
       write: async (chunk: Uint8Array) => {
         await this._request({
@@ -156,17 +160,17 @@ export default class WebsocketBackend extends MessageBackend {
       [Symbol.asyncIterator]() {
         return {
           async next() {
-            chunkDeferred = util.defer<TerminalSessionData>();
+            chunkDeferred = util.defer<Uint8Array>();
 
             return await Promise.race([
               closedDeferred.promise.then(() => ({ done: true, value: undefined as unknown as Uint8Array })),
-              chunkDeferred.promise.then((value) => ({ done: false, value: new Uint8Array(value) }))
+              chunkDeferred.promise.then((value) => ({ done: false, value }))
             ]);
           }
         };
       },
 
-      _handleChunk: (chunk: TerminalSessionData) => {
+      _handleChunk: (chunk: Uint8Array) => {
         chunkDeferred.resolve(chunk);
       },
       _handleClose: (status: number) => {
@@ -188,11 +192,9 @@ export type TerminalSession = AsyncIterable<Uint8Array> & {
   resize(size: TerminalSessionSize): Promise<void>;
   write(chunk: Uint8Array): Promise<void>;
 
-  _handleChunk(chunk: TerminalSessionData): void;
+  _handleChunk(chunk: Uint8Array): void;
   _handleClose(status: number): void;
 }
-
-export type TerminalSessionData = number[];
 
 export interface TerminalSessionSize {
   columns: number;

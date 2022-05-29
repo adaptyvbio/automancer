@@ -129,6 +129,22 @@ export namespace renumber {
 }
 
 
+export function debounce(delay: number, callback: () => void): (() => void) {
+  let timeout: number | null = null;
+
+  return () => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+
+    timeout = setTimeout(() => {
+      timeout = null;
+      callback();
+    }, delay);
+  };
+}
+
+
 export function defer<T = void>(): Deferred<T> {
   let resolve!: Deferred<T>['resolve'];
   let reject!: Deferred<T>['reject'];

@@ -1,13 +1,12 @@
-import { setIn } from 'immutable';
 import * as React from 'react';
 import * as Rf from 'retroflex';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 
 import type { Host, Model } from '..';
-import type { Chip, ChipId, ChipModel, HostId } from '../backends/common';
+import type { HostId } from '../backends/common';
 import WebsocketBackend, { type TerminalSession } from '../backends/websocket';
-import SelectChip from '../components/select-chip';
+import * as util from '../util';
 
 import 'xterm/css/xterm.css';
 
@@ -92,15 +91,26 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
     let container = this.refContainer.current!;
 
     this.terminal.open(container);
-    // this.terminal.write('[No host selected]');
     this.terminal.focus();
-
     this.fitAddon.fit();
 
     this.writeMessage('[No host selected]');
 
-    this.observer = new ResizeObserver((entries) => {
+    let resize = util.debounce(200, () => {
       this.fitAddon.fit();
+
+      if (this.session) {
+        this.session.resize({
+          columns: this.terminal.cols,
+          rows: this.terminal.rows
+        });
+      }
+
+      this.terminal.focus();
+    });
+
+    this.observer = new ResizeObserver((_entries) => {
+      resize();
     });
 
     this.observer.observe(container);
@@ -124,6 +134,10 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
   componentWillUnmount() {
     this.terminal.dispose();
     this.observer.disconnect();
+
+    if (this.session) {
+      this.session.close();
+    }
   }
 
   async createSession() {

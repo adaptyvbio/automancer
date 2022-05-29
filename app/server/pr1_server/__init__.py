@@ -211,6 +211,9 @@ class App():
     elif request["type"] == "app.session.close":
       client.sessions[request["id"]].close()
 
+    elif request["type"] == "app.session.resize":
+      client.sessions[request["id"]].resize((request["size"]["columns"], request["size"]["rows"]))
+
     else:
       return await self.host.process_request(request)
 

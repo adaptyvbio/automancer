@@ -1,31 +1,38 @@
+import array
 import asyncio
+import fcntl
 import os
 import pty
 import subprocess
+import termios
 
 
 class Session:
   def __init__(self, size):
     self._master = None
     self._proc = None
-    self._size = size
+    self._size = size # (columns, rows)
 
   @property
   def status(self):
     return self._proc.poll()
 
+  def resize(self, new_size = None):
+    if new_size:
+      self._size = new_size
+
+    buf = array.array('H', [self._size[1], self._size[0], 0, 0])
+    fcntl.ioctl(self._master, termios.TIOCSWINSZ, buf)
+
   async def start(self):
     master, slave = pty.openpty()
     self._master = master
 
-    self._proc = subprocess.Popen(["fish"], stdout=slave, stderr=slave, stdin=slave, universal_newlines=True, preexec_fn=os.setsid, shell=True, close_fds=True, env={
-      **os.environ,
-      "COLUMNS": str(self._size[0]),
-      "COLS": str(self._size[0]),
-      "LINES": str(self._size[1])
-    })
+    self._proc = subprocess.Popen(["fish"], stdout=slave, stderr=slave, stdin=slave, universal_newlines=True, preexec_fn=os.setsid, shell=True, close_fds=True)
 
     os.close(slave)
+
+    self.resize()
 
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()

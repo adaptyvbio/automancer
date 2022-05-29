@@ -4,8 +4,10 @@ import type { UnitsCode } from '../units';
 export abstract class BackendCommon {
   private _listeners: Set<() => void> = new Set();
 
-  state!: HostState;
+  abstract closed: Promise<void>;
+  abstract state: HostState;
 
+  async close(): Promise<void> { }
   async sync(): Promise<void> { }
   async start(): Promise<void> { }
 

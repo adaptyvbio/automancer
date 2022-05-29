@@ -3,10 +3,10 @@ import type { UnitsCode } from '../units';
 
 
 export abstract class MessageBackend extends BackendCommon {
-  protected abstract _send(message: unknown): void;
+  protected abstract _request(message: unknown): Promise<unknown>;
 
   async command(chipId: string, command: ControlNamespace.RunnerCommand) {
-    this._send({
+    await this._request({
       type: 'command',
       chipId,
       command
@@ -14,14 +14,14 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async createChip(options: { modelId: string; }) {
-    this._send({
+    await this._request({
       type: 'createChip',
       modelId: options.modelId
     });
   }
 
   async createDraft(draftId: string, source: string) {
-    this._send({
+    await this._request({
       type: 'createDraft',
       draftId,
       source
@@ -29,14 +29,14 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async deleteChip(chipId: ChipId) {
-    this._send({
+    await this._request({
       type: 'deleteChip',
       chipId
     });
   }
 
   async pause(chipId: string, options: { neutral: boolean; }) {
-    this._send({
+    await this._request({
       type: 'pause',
       chipId,
       options
@@ -44,14 +44,14 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async resume(chipId: string) {
-    this._send({
+    await this._request({
       type: 'resume',
       chipId
     });
   }
 
   async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
-    this._send({
+    await this._request({
       type: 'setMatrix',
       chipId,
       update
@@ -59,7 +59,7 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async skipSegment(chipId: ChipId, segmentIndex: number, processState?: object) {
-    this._send({
+    await this._request({
       type: 'skipSegment',
       chipId,
       processState: processState ?? null,
@@ -68,11 +68,11 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async startPlan(options: { chipId: string; data: UnitsCode; draftId: string; }) {
-    this._send({
+    await this._request({
       type: 'startPlan',
       chipId: options.chipId,
       codes: options.data,
       draftId: options.draftId
-    })
+    });
   }
 }

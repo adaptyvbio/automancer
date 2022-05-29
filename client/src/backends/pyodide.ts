@@ -5,21 +5,6 @@ import { HostState } from './common';
 import { MessageBackend } from './message';
 
 
-// interface Pyodide {
-//   FS: FS & {
-//     filesystems: {
-//       IDBFS: RegularFS;
-//       MEMFS: RegularFS;
-//       PROXYFS: RegularFS;
-//     };
-
-//     mount(fs: {
-//       mount(options: {}): RegularFS;
-//       syncfs(mount: { mountpoint: string; }, populate: boolean, callback: (err?: any) => void): void;
-//     }, options: {}, path: string): void;
-//   };
-// }
-
 interface FS {
   isDir(mode: number): boolean;
   mkdir(path: string): void;
@@ -34,45 +19,25 @@ interface FS {
   unlink(path: string): void;
   utime(path: string, time1: number, time2: number): void;
   writeFile(path: string, contents: Uint8Array): void;
-
-  // mount(fs: RegularFS, options: {
-  //   root: string;
-  //   fs: RegularFS;
-  // }): RegularFS;
 }
-
-// interface RegularFS extends FS {
-//   mount(options: {}): RegularFS;
-// }
-
-// declare global {
-//   interface Window {
-//     loadPyodide(): Promise<Pyodide>;
-//   }
-// }
 
 
 export interface PyodideBackendOptions {
   id: string;
   storage: LocalBackendStorage;
-
-  // storage: {
-  //   type: 'filesystem';
-  //   handle: FileSystemDirectoryHandle;
-  // } | {
-  //   type: 'persistent';
-  // } | {
-  //   type: 'memory';
-  // };
 }
 
 export class PyodideBackend extends MessageBackend {
-  options: PyodideBackendOptions;
+  #options: PyodideBackendOptions;
+  #pyodide!: Awaited<ReturnType<typeof loadPyodide>>;
+
+  closed = new Promise<void>(() => {});
+  state!: HostState;
 
   constructor(options: PyodideBackendOptions) {
     super();
 
-    this.options = options;
+    this.#options = options;
   }
 
   async start() {
@@ -82,8 +47,10 @@ export class PyodideBackend extends MessageBackend {
       indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.20.0/full'
     });
 
-    let mountPath = `/data/${this.options.id}`;
-    let storage = this.options.storage;
+    this.#pyodide = pyodide;
+
+    let mountPath = `/data/${this.#options.id}`;
+    let storage = this.#options.storage;
 
     pyodide.FS.mkdir('/data');
     pyodide.FS.mkdir(mountPath);
@@ -115,7 +82,30 @@ export class PyodideBackend extends MessageBackend {
       }
 
       case 'memory': {
-
+        pyodide.FS.mkdir(`${mountPath}/models`);
+        pyodide.FS.mkdir(`${mountPath}/models/mitomi1024`);
+        pyodide.FS.writeFile(`${mountPath}/models/mitomi1024/definition.yml`, `id: m1024
+name: Mitomi 1024
+groups:
+  - id: inlet
+    name: Inlet controls
+    inverse: false
+  - id: special
+    name: Special controls
+valves:
+  - id: inlet/1
+    alias: in1
+    name: Inlet 1
+    inverse: false
+    display: visible
+  - id: inlet/2
+    alias: in2
+    name: Inlet 2
+  - id: inlet/3
+    alias: in3
+    name: Inlet 3
+  - id: special/button
+    name: Button`);
       }
     }
 
@@ -129,31 +119,8 @@ export class PyodideBackend extends MessageBackend {
       }
     }));
 
-    // function fsReadAllFiles(folder) {
-    //   const files = [];
-
-    //   function impl(curFolder) {
-    //     for (const name of pyodide.FS.readdir(curFolder)) {
-    //       if (name === '.' || name === '..') continue;
-
-    //       const path = `${curFolder}/${name}`;
-    //       const { mode, timestamp } = pyodide.FS.lookupPath(path).node;
-    //       if (pyodide.FS.isFile(mode)) {
-    //         files.push({path, timestamp});
-    //       } else if (pyodide.FS.isDir(mode)) {
-    //         impl(path);
-    //       }
-    //     }
-    //   }
-
-    //   impl(folder);
-    //   return files;
-    // }
-
 
     await sync(true);
-
-    // console.log(fsReadAllFiles(mountPath));
 
 
     let resolve!: () => void;
@@ -163,38 +130,43 @@ export class PyodideBackend extends MessageBackend {
 
     pyodide.globals.set('update_state', (state: string) => {
       this.state = JSON.parse(state);
-      console.log('->', JSON.parse(state));
+      this._update();
       resolve();
     });
 
     await pyodide.loadPackage('micropip');
     await pyodide.runPythonAsync(`
 import micropip
+import pyodide
+
 await micropip.install('../host/dist/pr1-0.0.0-py3-none-any.whl')
 
 from pr1 import Host
 from pathlib import Path
+import json
 
 class Backend:
   def __init__(self):
     self.data_dir = Path("${mountPath}")
 
-  def get_data_dir(self):
-    return self.data_dir
+def update_callback():
+  update_state(json.dumps(host.get_state()))
 
-host = Host(backend=Backend())
+async def process_request(request):
+  return pyodide.to_js(await host.process_request(json.loads(request)))
 
-import json
-update_state(json.dumps(host.get_state()))`);
+host = Host(backend=Backend(), update_callback=update_callback)
+
+await host.initialize()
+update_callback()
+`)
 
     await promise;
     await sync(false);
-
-    await pyodide.runPythonAsync(`print(host)`);
   }
 
-  protected _send(message: unknown) {
-
+  protected async _request(request: unknown) {
+    return await this.#pyodide.globals.get('process_request')(JSON.stringify(request));
   }
 }
 

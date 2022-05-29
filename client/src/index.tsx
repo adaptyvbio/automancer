@@ -81,6 +81,8 @@ export interface AppProps {
 }
 
 class App extends Rf.Application<Model, {}, AppProps> {
+  controller = new AbortController();
+
   constructor(props: AppProps) {
     super({
       layout: FragmentPaneRecord({
@@ -216,7 +218,13 @@ class App extends Rf.Application<Model, {}, AppProps> {
 
     if (backend) {
       (async () => {
-        await backend.start();
+        try {
+          await backend.start();
+        } catch (err) {
+          console.error(`Backend of host failed to start with error: ${(err as Error).message}`);
+          console.error(err);
+          return;
+        }
 
         console.log('Initial state ->', backend.state);
 
@@ -238,8 +246,35 @@ class App extends Rf.Application<Model, {}, AppProps> {
             hosts: setIn(model.hosts, [host.id, 'state'], backend!.state)
           }));
         });
+
+        backend.closed
+          .catch((err) => {
+            console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
+            console.error(err);
+          })
+          .finally(() => {
+            this.setModel((model) => ({
+              hosts: removeIn(model.hosts, [host.id]),
+              settings: setIn(model.settings, ['hosts', hostSettingsEntry.id, 'hostId'], null)
+            }));
+          });
       })();
     }
+  }
+
+  componentDidMount() {
+    super.componentDidMount();
+
+    window.addEventListener('beforeunload', () => {
+      for (let host of Object.values(this.state.model.hosts)) {
+        host.backend.close();
+      }
+    }, { signal: this.controller.signal });
+  }
+
+  componentWillUnmount() {
+    super.componentWillUnmount();
+    this.controller.abort();
   }
 
   render() {

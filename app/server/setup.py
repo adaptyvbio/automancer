@@ -16,6 +16,7 @@ setup(
   },
 
   install_requires=[
+    "bcrypt==3.2.2",
     "websockets==10.2"
   ]
 )

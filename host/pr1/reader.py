@@ -401,6 +401,9 @@ def dumps(obj, depth = 0, cont = True):
 
     return output
 
+  if isinstance(obj, bool):
+    return "true" if obj else "false"
+
 
   return str(obj)
 

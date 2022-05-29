@@ -1,5 +1,7 @@
 import { HostState } from './common';
 import { MessageBackend } from './message';
+import type { Deferred } from '../util';
+import * as util from '../util';
 
 
 interface Options {
@@ -8,10 +10,25 @@ interface Options {
   secure: boolean;
 }
 
+type InboundMessage = {
+  type: 'state';
+  data: HostState;
+} | {
+  type: 'response';
+  id: number;
+  data: unknown;
+};
+
 export default class WebsocketBackend extends MessageBackend {
+  readonly version = 1;
+
+  #nextRequestId = 0;
   #options: Options;
-  #socket!: WebSocket;
-  state!: HostState; // ?
+  #transport!: WebSocketTransport;
+  #requests: Record<number, Deferred<unknown>> = {};
+
+  closed!: Promise<void>;
+  state!: HostState;
 
   constructor(options: Options) {
     super();
@@ -19,59 +36,180 @@ export default class WebsocketBackend extends MessageBackend {
     this.#options = options;
   }
 
-  protected _send(message: unknown) {
-    this.#socket.send(JSON.stringify(message));
+  protected async _request(request: unknown) {
+    let id = this.#nextRequestId++;
+    let deferred = util.defer();
+    this.#requests[id] = deferred;
+
+    this.#transport.send({
+      type: 'request',
+      id,
+      data: request
+    });
+
+    return await deferred.promise;
+  }
+
+  async close() {
+    await this.#transport.close();
   }
 
   async start() {
-    this.#socket = new WebSocket(`${this.#options.secure ? 'wss' : 'ws'}://${this.#options.address}:${this.#options.port}`, 'alpha');
+    this.#transport = new WebSocketTransport(`${this.#options.secure ? 'wss' : 'ws'}://${this.#options.address}:${this.#options.port}`);
 
-    let initialController = new AbortController();
-    let promise = new Promise<void>((resolve, reject) => {
-      this.#socket.addEventListener('open', () => {
-        resolve();
-      }, { signal: initialController.signal });
+    let handleState = (state: HostState) => {
+      this.state = state;
+      this._update();
+    };
 
-      this.#socket.addEventListener('error', (err) => {
-        reject(new Error());
-      }, { signal: initialController.signal });
+    await this.#transport.listen(async (conn) => {
+      let iter = conn.iter();
+
+      let initMessage = (await iter.next()).value;
+
+      if (initMessage.authMethods) {
+        await this.#transport.send({
+          authMethodIndex: 0,
+          data: { password: 'foobar' }
+        });
+
+        let authResultMessage = (await iter.next()).value;
+
+        if (!authResultMessage.ok) {
+          throw new Error('Authentication not ok');
+        }
+      }
+
+      let stateMessage = (await iter.next()).value;
+
+      handleState(stateMessage.data);
     });
 
-    promise.finally(() => {
-      initialController.abort();
+    this.closed = this.#transport.listen(async (conn) => {
+      for await (let message of conn.iter<InboundMessage>()) {
+        switch (message.type) {
+          case 'state': {
+            handleState(message.data);
+
+            break;
+          }
+          case 'response': {
+            this.#requests[message.id].resolve(message.data);
+            delete this.#requests[message.id];
+            break;
+          }
+        }
+      }
+    });
+  }
+}
+
+
+export class WebSocketTransport {
+  readonly #socket: WebSocket;
+
+  readonly closed: Promise<void>;
+  readonly ready: Promise<void>;
+
+  constructor(url: string, options?: { signal?: AbortSignal; }) {
+    this.#socket = new WebSocket(url);
+
+    let readyDeferred = util.defer();
+    this.ready = readyDeferred.promise;
+
+    let closedDeferred = util.defer();
+    this.closed = closedDeferred.promise;
+
+    let ready = false;
+
+    this.#socket.addEventListener('open', () => {
+      ready = true;
+      readyDeferred.resolve();
+    }, { once: true });
+
+    this.#socket.addEventListener('close', (event) => {
+      if (event.code === 1000) {
+        closedDeferred.resolve();
+      } else {
+        let err = new Error(`Closed with code ${event.code}`);
+
+        if (ready) {
+          closedDeferred.reject(err);
+        } else {
+          readyDeferred.reject(err);
+        }
+      }
     });
 
-    await promise;
+    options?.signal?.addEventListener('abort', () => {
+      this.#socket.close(1000);
+    });
+  }
+
+  async close(options?: { error: boolean; }) {
+    this.#socket.close(options?.error ? 4000 : 1000);
+    await this.closed;
+  }
 
 
+  iter<T>(): AsyncIterator<T> & AsyncIterable<T> {
     let controller = new AbortController();
-
-    await new Promise<void>((resolve) => {
-      this.#socket.addEventListener('message', (event) => {
-        let data = JSON.parse(event.data);
-
-        this.state = data;
-        this._update();
-
-        resolve();
-      }, { signal: controller.signal });
-    });
-
-    controller.abort();
+    let messageDeferred!: Deferred<T>;
 
     this.#socket.addEventListener('message', (event) => {
-      let data = JSON.parse(event.data);
+      if (!messageDeferred) {
+        return;
+      }
 
-      this.state = data;
-      this._update();
-    });
+      let message!: T;
 
-    // this.#socket.addEventListener('close', (event) => {
-    //   if (event.code === 1006) {
-    //     setTimeout(() => {
-    //       this.start();
-    //     }, 1000);
-    //   }
-    // });
+      try {
+        message = JSON.parse(event.data);
+      } catch (err) {
+        messageDeferred.reject(new Error('Invalid message'));
+        this.#socket.close(4000);
+
+        return;
+      }
+
+      messageDeferred.resolve(message);
+    }, { signal: controller.signal });
+
+    let iter = {
+      next: async () => {
+        messageDeferred = util.defer<T>();
+
+        return await Promise.race([
+          this.closed.then(() => ({ done: true, value: undefined as unknown as T })),
+          messageDeferred.promise.then((value) => ({ done: false, value }))
+        ]);
+      },
+      return: async () => {
+        controller.abort();
+        return { done: true, value: undefined as unknown as T };
+      }
+    };
+
+    return {
+      ...iter,
+      [Symbol.asyncIterator]: () => iter
+    };
+  }
+
+  async send(message: unknown) {
+    this.#socket.send(JSON.stringify(message));
+  }
+
+  async listen<T = void>(func: (conn: { iter: WebSocketTransport['iter']; }) => Promise<T>): Promise<T> {
+    await this.ready;
+
+    try {
+      return await func({
+        iter: () => this.iter()
+      });
+    } catch (err) {
+      this.#socket.close(4000);
+      throw err;
+    }
   }
 }

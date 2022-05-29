@@ -18,12 +18,13 @@ from .util import schema as sc
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
 DraftError = namedtuple("DraftError", ['message', 'range'])
 
-logger = logging.getLogger("pr1-host")
+logger = logging.getLogger("pr1.host")
 
 class Host:
-  def __init__(self, backend):
+  def __init__(self, backend, update_callback):
     self.backend = backend
-    self.data_dir = backend.get_data_dir()
+    self.data_dir = backend.data_dir
+    self.update_callback = update_callback
 
     self.chips = dict()
     self.drafts = dict()
@@ -98,6 +99,12 @@ class Host:
       await executor.initialize()
 
     logger.debug("Done initializing executors")
+
+  async def start(self):
+    try:
+      await asyncio.Future()
+    except asyncio.CancelledError:
+      await self.destroy()
 
   async def destroy(self):
     logger.info("Destroying host")
@@ -246,49 +253,51 @@ class Host:
       }
     }
 
-  def process_message(self, message, *, update_callback):
-    if message["type"] == "command":
-      chip = self.chips[message["chipId"]]
-      namespace, command = next(iter(message["command"].items()))
+  async def process_request(self, request):
+    if request["type"] == "command":
+      chip = self.chips[request["chipId"]]
+      namespace, command = next(iter(request["command"].items()))
       chip.runners[namespace].command(command)
 
-    if message["type"] == "createChip":
-      self.create_chip(model_id=message["modelId"], name="Untitled chip")
+    if request["type"] == "createChip":
+      self.create_chip(model_id=request["modelId"], name="Untitled chip")
 
-    if message["type"] == "createDraft":
-      self.create_draft(draft_id=message["draftId"], source=message["source"])
+    if request["type"] == "createDraft":
+      self.create_draft(draft_id=request["draftId"], source=request["source"])
 
-    if message["type"] == "deleteChip":
+    if request["type"] == "deleteChip":
       # TODO: checks
-      del self.chips[message["chipId"]]
+      del self.chips[request["chipId"]]
 
-    if message["type"] == "pause":
-      chip = self.chips[message["chipId"]]
+    if request["type"] == "pause":
+      chip = self.chips[request["chipId"]]
       chip.master.pause({
-        'neutral': message["options"]["neutral"]
+        'neutral': request["options"]["neutral"]
       })
 
-    if message["type"] == "resume":
-      chip = self.chips[message["chipId"]]
+    if request["type"] == "resume":
+      chip = self.chips[request["chipId"]]
       chip.master.resume()
 
-    if message["type"] == "setMatrix":
-      chip = self.chips[message["chipId"]]
+    if request["type"] == "setMatrix":
+      chip = self.chips[request["chipId"]]
 
-      for namespace, matrix_data in message["update"].items():
+      for namespace, matrix_data in request["update"].items():
         chip.matrices[namespace].update(matrix_data)
 
-    if message["type"] == "skipSegment":
-      chip = self.chips[message["chipId"]]
+    if request["type"] == "skipSegment":
+      chip = self.chips[request["chipId"]]
       chip.master.skip_segment(
-        process_state=message["processState"],
-        segment_index=message["segmentIndex"]
+        process_state=request["processState"],
+        segment_index=request["segmentIndex"]
       )
 
-    if message["type"] == "startPlan":
-      chip = self.chips[message["chipId"]]
-      draft = self.drafts[message["draftId"]]
+    if request["type"] == "startPlan":
+      chip = self.chips[request["chipId"]]
+      draft = self.drafts[request["draftId"]]
 
-      self.start_plan(chip=chip, codes=message["codes"], draft=draft, update_callback=update_callback)
+      self.start_plan(chip=chip, codes=request["codes"], draft=draft, update_callback=self.update_callback)
 
-    update_callback()
+    self.update_callback()
+
+    return None

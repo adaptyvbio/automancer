@@ -9,6 +9,8 @@
     <script type="module">
       import createClient from './dist/index.js';
 
+      navigator.serviceWorker.register('./service-worker.js');
+
       let id = crypto.randomUUID();
 
       createClient(document.getElementById('root'), {
@@ -22,6 +24,10 @@
               locked: false,
               name: null,
               backendOptions: {
+                // type: 'local',
+                // storage: {
+                //   type: 'memory'
+                // }
                 type: 'remote',
                 address: 'localhost',
                 port: 4567,

@@ -69,8 +69,15 @@ export interface VisualEditorState {
   openStageIndices: ImSet<number>;
   openStepIds: ImSet<Step['id']>;
 
-  activeSegmentIndex: number | null;
-  selectedSegmentIndices: ImSet<number>;
+  selection: {
+    type: 'steps';
+    activeIndex: number;
+    indices: ImSet<number>;
+  } | {
+    type: 'segments';
+    activeIndex: number;
+    indices: ImSet<number>;
+  } | null;
 }
 
 
@@ -286,6 +293,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     if ((this.state.steps.last()?.seq[1] ?? 0) !== this.state.segments.size) throw new Error();
 
 
+    let selection = this.state.selection;
+
     return (
       <div className="protoview-root vedit-root">
         {this.state.stages.map((stage, stageIndex) => {
@@ -328,6 +337,18 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                   return (
                     <React.Fragment key={step.id}>
                       <ContextMenuArea onContextMenu={async (event) => {
+                        let selectedStepIndices = (selection?.type === 'steps') && selection.indices.has(stepIndex)
+                          ? selection.indices
+                          : ImSet([stepIndex]);
+
+                        this.setState({
+                          selection: {
+                            type: 'steps',
+                            activeIndex: stepIndex,
+                            indices: selectedStepIndices
+                          }
+                        });
+
                         await this.props.app.showContextMenu(event, [
                           { id: '_header', name: 'Protocol step', type: 'header' },
                           { id: 'delete', name: 'Delete' }
@@ -337,7 +358,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                           }
                         });
                       }}>
-                        <div className={util.formatClass('vedit-step-item', { '_open': this.state.openStepIds.has(step.id) })}
+                        <div className={util.formatClass('vedit-step-item', {
+                          '_open': this.state.openStepIds.has(step.id),
+                          '_selected': (selection?.type === 'steps') && selection.indices.has(stepIndex)
+                        })}
                           onDoubleClick={(event) => {
                             event.preventDefault();
 
@@ -383,12 +407,17 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                   <ContextMenuArea onContextMenu={async (event) => {
                                     event.stopPropagation();
 
-                                    // TODO: DRY
-                                    let selectedSegmentIndices = this.state.selectedSegmentIndices.has(segmentIndex)
-                                      ? this.state.selectedSegmentIndices
-                                      : this.state.selectedSegmentIndices.clear().add(segmentIndex);
+                                    let selectedSegmentIndices = (selection?.type === 'segments') && selection.indices.has(segmentIndex)
+                                      ? selection.indices
+                                      : ImSet([segmentIndex]);
 
-                                    this.setState({ selectedSegmentIndices });
+                                    this.setState({
+                                      selection: {
+                                        type: 'segments',
+                                        activeIndex: segmentIndex,
+                                        indices: selectedSegmentIndices
+                                      }
+                                    });
 
                                     await this.props.app.showContextMenu(event, [
                                       { id: '_header', name: 'Protocol segment', type: 'header' },
@@ -426,43 +455,32 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                       }
                                     }, (selected) => {
                                       if (!selected) {
-                                        this.setState((state) => ({ selectedSegmentIndices: state.selectedSegmentIndices.clear() }));
+                                        this.setState((_state) => ({ selection: null }));
                                       }
                                     });
                                   }}>
                                     <div
                                       className={util.formatClass('vedit-segment-features', {
-                                        '_active': this.state.activeSegmentIndex === segmentIndex,
-                                        '_selected': this.state.selectedSegmentIndices.has(segmentIndex)
+                                        '_active': (this.state.selection?.type === 'segments') && this.state.selection.activeIndex === segmentIndex,
+                                        '_selected': (this.state.selection?.type === 'segments') && this.state.selection.indices.has(segmentIndex)
                                       })}
                                       key={segment.id}
                                       draggable
                                       tabIndex={-1}
                                       onBlur={(event) => {
                                         if (!event.relatedTarget?.classList.contains('vedit-segment-features') && !event.relatedTarget?.classList.contains('ctxmenu')) {
-                                          this.setState((state) => ({
-                                            selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                          }));
+                                          this.setState((_state) => ({ selection: null }));
                                         }
                                       }}
                                       onKeyDown={(event) => {
                                         switch (event.key) {
                                           case 'Backspace': {
                                             this.deleteSelected();
-
-                                            // this.setState((state) => ({
-                                            //   segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
-                                            //   selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                            // }));
-
                                             break;
                                           }
 
                                           case 'Escape': {
-                                            this.setState((state) => ({
-                                              selectedSegmentIndices: state.selectedSegmentIndices.clear()
-                                            }));
-
+                                            this.setState((_state) => ({ selection: null }));
                                             break;
                                           }
 
@@ -473,26 +491,37 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                       }}
                                       onClick={(event) => {
                                         this.setState((state) => {
-                                          if (event.shiftKey && (state.activeSegmentIndex !== null)) {
-                                            let added = Range(segmentIndex, state.activeSegmentIndex);
+                                          let selection = state.selection;
+
+                                          if (event.shiftKey && (selection?.type === 'segments')) {
+                                            let added = Range(segmentIndex, selection.activeIndex);
 
                                             return {
-                                              activeSegmentIndex: segmentIndex,
-                                              selectedSegmentIndices: state.selectedSegmentIndices.isSuperset(added)
-                                                ? state.selectedSegmentIndices.subtract(Range(state.activeSegmentIndex, segmentIndex))
-                                                : state.selectedSegmentIndices.union(added)
+                                              selection: {
+                                                type: 'segments',
+                                                activeIndex: segmentIndex,
+                                                indices: selection.indices.isSuperset(added)
+                                                  ? selection.indices.subtract(Range(selection.activeIndex, segmentIndex))
+                                                  : selection.indices.union(added)
+                                              }
                                             };
-                                          } else if (event.metaKey) {
+                                          } else if (event.metaKey && (selection?.type === 'segments')) {
                                             return {
-                                              activeSegmentIndex: state.selectedSegmentIndices.has(segmentIndex)
-                                                ? state.activeSegmentIndex
-                                                : segmentIndex,
-                                              selectedSegmentIndices: util.toggleSet(state.selectedSegmentIndices, segmentIndex)
+                                              selection: {
+                                                type: 'segments',
+                                                activeIndex: selection.indices.has(segmentIndex)
+                                                  ? selection.activeIndex
+                                                  : segmentIndex,
+                                                indices: util.toggleSet(selection.indices, segmentIndex)
+                                              }
                                             };
                                           } else {
                                             return {
-                                              activeSegmentIndex: segmentIndex,
-                                              selectedSegmentIndices: state.selectedSegmentIndices.clear().add(segmentIndex)
+                                              selection: {
+                                                type: 'segments',
+                                                activeIndex: segmentIndex,
+                                                indices: ImSet([segmentIndex])
+                                              }
                                             };
                                           }
                                         });

@@ -85,9 +85,9 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
                       </div>
                     </div>
 
-                    <div className="status-progress">
+                    {/* <div className="status-progress">
                       <P />
-                    </div>
+                    </div> */}
 
                     <div className="status-actions">
                       {lastEntry.paused
@@ -99,7 +99,7 @@ export default class ViewProtocolRun extends React.Component<Rf.ViewProps<Model>
                           <>
                             <button type="button" className="status-button" onClick={() => {
                               host!.backend.pause(chip!.id, { neutral: false });
-                            }}>Pause (extend)</button>
+                            }}>Pause</button>
                             <button type="button" className="status-button" onClick={() => {
                               host!.backend.pause(chip!.id, { neutral: true });
                             }}>Pause (neutral)</button>

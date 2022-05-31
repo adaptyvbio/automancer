@@ -68,13 +68,16 @@
 
       user-select: none;
 
-      &:not(._context):is(._open, :hover) {
+      &._context, &._open, &:hover {
         box-shadow: 1px 1px 3px #0001;
       }
 
-      &._context {
+      // &._context {
+      //   @extend %selection-highlight;
+      // }
+
+      &._selected {
         @extend %selection-highlight;
-        pointer-events: none;
       }
     }
 
@@ -234,13 +237,12 @@
       // Prevent hover from reaching overlapping dropzones
       z-index: 1;
 
-      &:hover {
+      &:not(._selected):hover {
         background-color: #f3f3f3;
         border-color: proto.$segment-border;
       }
 
       &._context {
-        @extend %selection-highlight;
         box-shadow: -1px 1px 6px #0001;
       }
 

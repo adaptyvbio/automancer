@@ -1,17 +1,21 @@
-import { List } from 'immutable';
+import { Set as ImSet, List } from 'immutable';
 import * as React from 'react';
 
-import { Host, Route } from '../application';
+import { Draft, DraftId, Host, Route } from '../application';
 import { HostId } from '../backends/common';
 import * as util from '../util';
 
 
 export interface SidebarProps {
   currentRoute: Route | null;
+  setRoute(route: Route): void;
+
   hosts: Record<HostId, Host>;
   selectedHostId: HostId | null;
-  onSelectRoute(route: Route): void;
   onSelectHost(id: HostId | null): void;
+
+  drafts: Record<DraftId, Draft>;
+  openDraftIds: ImSet<DraftId>;
 }
 
 export class Sidebar extends React.Component<SidebarProps> {
@@ -51,6 +55,17 @@ export class Sidebar extends React.Component<SidebarProps> {
               label: chip.name,
               route: ['chip', chip.id]
             })) },
+          { id: 'protocol',
+            label: 'Protocols',
+            icon: 'receipt_long',
+            route: ['protocol'],
+            children: this.props.openDraftIds.toArray()
+              .map((draftId) => this.props.drafts[draftId])
+              .map((draft) => ({
+                id: draft.id,
+                label: draft.name,
+                route: ['protocol', draft.id]
+              })) },
           { id: 'terminal',
             label: 'Terminal',
             icon: 'terminal',
@@ -107,7 +122,7 @@ export class Sidebar extends React.Component<SidebarProps> {
                     })}
                     key={entry.id}
                     onClick={(entry.route ?? undefined) && (() => {
-                      this.props.onSelectRoute(entry.route!);
+                      this.props.setRoute(entry.route!);
                     })}>
                     <div className="sidebar-item-icon">
                       <span className="material-symbols-rounded">{entry.icon}</span>
@@ -126,7 +141,7 @@ export class Sidebar extends React.Component<SidebarProps> {
                             className={util.formatClass('sidebar-child', { '_selected': child.route && currentRoute?.equals(List(child.route)) })}
                             key={child.id}
                             onClick={(child.route ?? undefined) && (() => {
-                              this.props.onSelectRoute(child.route!);
+                              this.props.setRoute(child.route!);
                             })}>
                               {child.label}
                           </button>

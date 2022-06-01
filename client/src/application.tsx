@@ -1,14 +1,18 @@
-import { List, removeIn, setIn } from 'immutable';
+import * as idb from 'idb-keyval';
+import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
-import { BackendCommon, ChipId, HostId, HostState } from './backends/common';
+import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/common';
 import WebsocketBackend from './backends/websocket';
 import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
 import { ViewChip } from './views/chip';
 import { ViewChipSettings } from './views/chip-settings';
 import { ViewChips } from './views/chips';
+import { ViewDraft } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
+import { ViewProtocols } from './views/protocols';
+import { Pool } from './util';
 
 
 
@@ -65,6 +69,39 @@ export interface Settings {
 
 export type Route = (number | string)[];
 
+export type DraftId = string;
+
+export interface Draft {
+  id: DraftId;
+  name: string;
+  lastModified: number;
+  source: string;
+
+  analysis: {
+    errors: {
+      message: string;
+      range: [number, number];
+    }[];
+    protocol: Protocol | null;
+  } | null;
+
+  location: {
+    type: 'host';
+  } | {
+    type: 'filesystem';
+    handle: FileSystemFileHandle;
+    path: string;
+  } | {
+    type: 'memory';
+  };
+}
+
+
+export interface DraftsRecord {
+  draftIds: DraftId[];
+}
+
+
 
 // ---
 
@@ -77,12 +114,16 @@ export interface ApplicationState {
   hosts: Record<HostId, Host>;
   settings: Settings;
 
+  drafts: Record<DraftId, Draft>;
+  openDraftIds: ImSet<DraftId>;
+
   currentRoute: Route | null;
   selectedHostId: HostId | null;
 }
 
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
   controller = new AbortController();
+  pool = new Pool();
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -90,6 +131,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.state = {
       hosts: {},
       settings: props.initialSettings,
+
+      drafts: {},
+      openDraftIds: ImSet(),
 
       currentRoute: ['dashboard'],
       selectedHostId: null
@@ -191,6 +235,24 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }, { signal: this.controller.signal });
 
 
+    this.pool.add(async () => {
+      let record = await idb.get<DraftsRecord>('drafts');
+
+      if (record) {
+        let drafts = await idb.getMany(record.draftIds);
+
+        this.setState({
+          drafts: {
+            ...this.state.drafts,
+            ...Object.fromEntries(
+              drafts.map((draft) => [draft.id, draft])
+            )
+          }
+        });
+      }
+    });
+
+
     let route;
 
     try {
@@ -206,9 +268,17 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.controller.abort();
   }
 
+  setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
+    this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
+  }
+
   setRoute(route: Route) {
     this.setState({ currentRoute: route });
     window.localStorage['route'] = JSON.stringify(route);
+
+    if ((route[0] === 'protocol') && (route.length === 2)) {
+      this.setOpenDraftIds((openDraftIds) => openDraftIds.add(route[1] as DraftId));
+    }
   }
 
   render() {
@@ -223,17 +293,63 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       if (route.length === 1) {
         switch (route[0]) {
-          case 'chip': return <ViewChips host={this.host} onRouteChange={setRoute} />;
-          case 'terminal': return <ViewTerminalSession
-            host={this.host}
-            setRoute={setRoute} />
+          case 'chip': return (
+            <ViewChips
+              host={this.host}
+              onRouteChange={setRoute} />
+          );
+
+          case 'protocol': return (
+            <ViewProtocols
+              drafts={this.state.drafts}
+              host={this.host}
+              setDraft={(draft) => {
+                this.setState({
+                  drafts: setIn(this.state.drafts, [draft.id], draft),
+                  openDraftIds: this.state.openDraftIds.add(draft.id)
+                });
+
+                if (draft.location.type === 'memory') {
+                  let isNewDraft = !(draft.id in this.state.drafts);
+
+                  // TODO: make this an atomic operation
+                  this.pool.add(async () => {
+                    await idb.set(draft.id, draft);
+
+                    if (isNewDraft) {
+                      await idb.update<DraftsRecord>('drafts', (record) => {
+                        return {
+                          draftIds: Array.from(new Set([...(record?.draftIds ?? []), draft.id]))
+                        };
+                      });
+                    }
+                  });
+                }
+              }}
+              setRoute={setRoute} />
+          )
+
+          case 'terminal': return (
+            <ViewTerminalSession
+              host={this.host}
+              setRoute={setRoute} />
+          );
         }
       } else {
         switch (route[0]) {
-          case 'chip': return <ViewChip
-            chipId={route[1] as ChipId}
-            host={this.host}
-            setRoute={setRoute} />
+          case 'chip': return (
+            <ViewChip
+              chipId={route[1] as ChipId}
+              host={this.host}
+              setRoute={setRoute} />
+          );
+
+          case 'protocol': return (
+            <ViewDraft
+              draft={this.state.drafts[route[1]]}
+              host={this.host}
+              setRoute={setRoute} />
+          );
         }
       }
     })();
@@ -242,12 +358,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       <>
         <Sidebar
           currentRoute={this.state.currentRoute}
+          setRoute={setRoute}
+
           hosts={this.state.hosts}
           selectedHostId={this.state.selectedHostId}
           onSelectHost={(id) => {
             this.setState({ selectedHostId: id });
           }}
-          onSelectRoute={setRoute} />
+
+          drafts={this.state.drafts}
+          openDraftIds={this.state.openDraftIds} />
         {contents}
       </>
     );

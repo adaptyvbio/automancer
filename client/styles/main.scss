@@ -1,11 +1,13 @@
 @use "./constants" as *;
 
 @use "./card";
+@use "./components/diagram";
 @use "./form";
 @use "./mcontrol";
 @use "./reset";
 @use "./sidebar";
 @use "./terminal-session";
+@use "./views/chip";
 
 
 html {

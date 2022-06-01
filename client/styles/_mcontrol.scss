@@ -3,16 +3,28 @@
 
 .mcontrol {
   &-root {
-    max-width: 500px;
     margin: 1rem 0;
-  }
 
-  &-grouptitle {
-    margin: 1.4rem 0 1rem 0;
-    font-size: 1.4rem;
+    column-count: 2;
+    column-gap: 2rem;
   }
 
   &-group {
+    &:not(:first-child) {
+      margin-top: 1.4rem;
+    }
+
+    * {
+      -webkit-column-break-inside: avoid;
+    }
+  }
+
+  &-group-title {
+    margin-bottom: 1rem;
+    font-size: 1.4rem;
+  }
+
+  &-group-entries {
     display: flex;
     flex-direction: column;
     row-gap: 1rem;

@@ -1,0 +1,20 @@
+@use "../constants" as *;
+
+
+.diagram {
+  &:not(._target) g._active path {
+    fill: $app-blue;
+  }
+
+  &:where(._target) g._active path {
+    fill: darken($app-blue, 10%);
+  }
+
+  g._target path {
+    fill: $app-red;
+  }
+
+  // [data-layer-index="0"][data-group-index="0"] path {
+  //   filter: url(#demo6);
+  // }
+}

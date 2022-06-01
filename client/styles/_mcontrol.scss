@@ -1,0 +1,163 @@
+@use "./constants" as *;
+
+
+.mcontrol {
+  &-root {
+    max-width: 500px;
+    margin: 1rem 0;
+  }
+
+  &-grouptitle {
+    margin: 1.4rem 0 1rem 0;
+    font-size: 1.4rem;
+  }
+
+  &-group {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1rem;
+  }
+
+  &-entry {
+    display: grid;
+    align-items: center;
+    column-gap: 1rem;
+    grid-template: auto auto / auto 1fr auto auto;
+
+    padding: 1rem 1.4rem;
+
+    background-color: #f0f0f0;
+    border-radius: 6px;
+
+    > * {
+      grid-row: 1 / -1;
+    }
+  }
+
+  &-icon {
+    display: flex;
+  }
+
+  &-label {
+    grid-row: 1;
+    font-size: 1.1rem;
+    font-weight: 500;
+  }
+
+  &-sublabel {
+    grid-column: 2;
+    grid-row: 2;
+    color: #666;
+  }
+
+
+  &-statuses {
+    display: flex;
+    column-gap: 0.4rem;
+  }
+
+  &-status {
+    display: flex;
+    align-items: center;
+    column-gap: 0.4rem;
+
+    user-select: none;
+
+    &-icon {
+      display: flex;
+
+      // font-variation-settings:
+      //   'FILL' 0,
+      //   'wght' 400,
+      //   'GRAD' 0,
+      //   'opsz' 48;
+    }
+
+    &-label {
+      font-weight: 500;
+    }
+
+    &:not(:last-child) &-label {
+      margin-right: 0.4rem;
+    }
+
+    &:not(:hover) &-label {
+      display: none;
+    }
+
+    &--warning {
+      color: $app-orange;
+    }
+  }
+
+
+  &-switches {
+    display: flex;
+    column-gap: 0.4rem;
+  }
+
+  &-switch {
+    display: grid;
+    align-items: center;
+    column-gap: 0.6rem;
+    grid-template-columns: auto 1fr;
+    // justify-content: center;
+
+    flex-shrink: 0;
+
+    width: auto;
+    min-width: 90px;
+    padding: 0.4rem 1rem;
+
+    background-color: #fff;
+    border: 1px solid #000;
+    border-radius: 4px;
+
+    > :only-child {
+      grid-column: 1 / -1;
+    }
+
+    &-icon {
+      display: flex;
+    }
+
+    &-label {
+      justify-self: start;
+
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+  }
+
+  &-entry._on &-switch {
+    background-color: #000;
+    color: #fff;
+  }
+
+  &-entry:not(._on) &-switch-icon {
+    > * {
+      @extend ._disabled;
+      --background: #fff;
+    }
+  }
+}
+
+
+.material-symbols-rounded._disabled {
+  position: relative;
+
+  &::before {
+    content: "";
+
+    width: 1.25em;
+
+    border-bottom: 1.5px solid currentColor;
+    border-top: 1px solid var(--background);
+    // border-top: 1px solid color-contrast(#000 vs #fff, currentColor);
+
+    position: absolute;
+    top: 50%;
+    left: $icon-size * 0.5;
+    transform: translateX(-50%) rotate(45deg);
+  }
+}

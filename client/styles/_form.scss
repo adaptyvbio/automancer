@@ -1,0 +1,44 @@
+@use "./constants" as *;
+
+
+.form {
+  &-container {
+    max-width: 600px;
+
+    p {
+      margin: 1rem 0;
+      color: #666;
+    }
+  }
+
+  &-control {
+    margin: 1rem 0;
+    padding: 0.8rem 1.4rem;
+
+    background-color: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 4px;
+
+    &:focus-within {
+      box-shadow: 1px 1px 3px #0000000a;
+    }
+
+    > :first-child {
+      color: #666;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    input, textarea {
+      margin: 0.2rem 0;
+
+      &::placeholder {
+        color: #aaa;
+      }
+    }
+
+    textarea {
+      resize: vertical;
+    }
+  }
+}

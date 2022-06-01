@@ -1,0 +1,58 @@
+@use "./constants" as *;
+
+
+.card {
+  &-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+
+    margin: 1rem 0;
+  }
+
+  &-item {
+    width: 300px;
+    padding: 1rem;
+
+    border: 1px solid #ddd;
+    border-radius: 6px;
+
+    &:hover {
+      background-color: #fff;
+      filter: brightness(98%);
+    }
+  }
+
+  &-image {
+    display: flex;
+    height: 160px;
+    // background-color: #eee;
+
+    img {
+      margin: 0 auto;
+    }
+  }
+
+  &-body {
+    padding: 1.4rem 1rem 1rem 1rem;
+  }
+
+  &-title {
+    font-size: 1.2rem;
+    font-weight: 500;
+  }
+
+
+  &-blank {
+    display: flex;
+    height: 200px;
+
+    p {
+      margin: auto;
+
+      color: #999;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+  }
+}

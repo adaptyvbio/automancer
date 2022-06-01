@@ -1,13 +1,29 @@
-.termsession {
-  height: 100%;
-  background-color: #003847;
+@use "./constants" as *;
 
-  .xterm {
-    display: flex;
+
+.termsession {
+  &-outer {
     height: 100%;
+
+    margin-right: $border-gap;
+    padding: 1rem;
+
+    background-color: #003847;
+    border-radius: 12px;
+
+    overflow: hidden;
   }
 
-  .xterm-screen, .xterm-viewport {
-    margin: auto auto auto 0;
+  &-inner {
+    height: 100%;
+
+    .xterm {
+      display: flex;
+      height: 100%;
+    }
+
+    .xterm-screen, .xterm-viewport {
+      margin: auto auto auto 0;
+    }
   }
 }

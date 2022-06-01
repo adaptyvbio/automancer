@@ -1,0 +1,172 @@
+@layer reset {
+  *, *::before, *::after {
+    box-sizing: inherit;
+  }
+
+  html {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: initial;
+  }
+
+  a {
+    display: block;
+
+    color: inherit;
+    text-decoration: initial;
+
+    &:focus {
+      outline: initial;
+    }
+  }
+
+  ul {
+    margin: initial;
+    padding: initial;
+  }
+
+  li {
+    display: block;
+    list-style-type: none;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    margin: initial;
+  }
+
+  h1 {
+    // Overrides user agent stylesheet such as section > h1.
+    font-size: 2em;
+  }
+
+  p {
+    margin: initial;
+  }
+
+  input, button, select, textarea {
+    display: block;
+    inline-size: 100%;
+
+    margin: initial;
+    padding: initial;
+
+    appearance: none;
+    background: initial;
+    border: initial;
+    outline: initial;
+
+    color: inherit;
+    font: inherit;
+    text-align: initial;
+
+    &:disabled {
+      color: inherit;
+      opacity: initial;
+      pointer-events: none;
+    }
+
+    &:active {
+      color: currentColor;
+    }
+  }
+
+  option {
+    padding: initial;
+  }
+
+  input::placeholder {
+    opacity: initial;
+  }
+
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+
+  input[type="submit"], button {
+    cursor: pointer;
+
+    &:disabled {
+      pointer-events: none;
+    }
+  }
+
+  output {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :invalid {
+    box-shadow: initial;
+  }
+
+  dialog {
+    margin: initial;
+    padding: initial;
+
+    background: transparent;
+    border: initial;
+
+    &:not([open]) {
+      display: none;
+    }
+  }
+
+  a, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  dl, dd {
+    margin: initial;
+  }
+
+  samp {
+    display: block;
+
+    margin: 1em 0;
+  }
+
+  label {
+    display: block;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  th {
+    font-weight: initial;
+    text-align: initial;
+  }
+
+  video {
+    display: block;
+  }
+
+  svg {
+    display: block;
+    width: 100%; // Fix for Firefox
+    height: intrinsic; // Fix for Safari
+  }
+
+  strong {
+    font-weight: unset;
+  }
+
+  iframe, object {
+    display: block;
+    width: 100%;
+  }
+
+  iframe {
+    height: 100%;
+    border: initial;
+  }
+}

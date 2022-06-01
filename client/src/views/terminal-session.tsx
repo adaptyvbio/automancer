@@ -1,23 +1,29 @@
 import * as React from 'react';
-import * as Rf from 'retroflex';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 
-import type { Host, Model } from '..';
-import type { HostId } from '../backends/common';
+import type { Host, Route } from '../application';
 import WebsocketBackend, { type TerminalSession } from '../backends/websocket';
 import * as util from '../util';
+import { Pool } from '../util';
 
 import 'xterm/css/xterm.css';
 
 
-interface ViewTerminalSessionState {
-  selectedHostId: HostId | null;
+interface ViewTerminalSessionProps {
+  host: Host;
+  setRoute(route: Route): void;
 }
 
-export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Model>, ViewTerminalSessionState> {
+interface ViewTerminalSessionState {
+
+}
+
+export class ViewTerminalSession extends React.Component<ViewTerminalSessionProps, ViewTerminalSessionState> {
   fitAddon = new FitAddon();
   observer!: ResizeObserver;
+  pool = new Pool();
+
   terminal = new Terminal({
     fontFamily: '"Menlo for Powerline"',
     fontSize: 12,
@@ -47,11 +53,11 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
   session: TerminalSession | null = null;
   sessionLoading = false;
 
-  constructor(props: Rf.ViewProps<Model>) {
+  constructor(props: ViewTerminalSessionProps) {
     super(props);
 
     this.state = {
-      selectedHostId: null
+
     };
 
     this.terminal.loadAddon(this.fitAddon);
@@ -62,7 +68,7 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
     this.terminal.onData((data) => {
       if (this.session) {
         this.session.write(encoder.encode(data));
-      } else if (this.host && !this.sessionLoading) {
+      } else if (!this.sessionLoading) {
         this.createSession();
       }
     });
@@ -74,17 +80,13 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
         let type = 'text/plain';
         let blob = new Blob([selection], { type });
 
-        navigator.clipboard.write([
-          new ClipboardItem({ [type]: blob })
-        ]);
+        this.pool.add(async () => {
+          await navigator.clipboard.write([
+            new ClipboardItem({ [type]: blob })
+          ]);
+        });
       }
     });
-  }
-
-  get host(): Host | null {
-    return this.state.selectedHostId
-      ? this.props.model.hosts[this.state.selectedHostId]
-      : null;
   }
 
   componentDidMount() {
@@ -93,8 +95,6 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
     this.terminal.open(container);
     this.terminal.focus();
     this.fitAddon.fit();
-
-    this.writeMessage('[No host selected]');
 
     let resize = util.debounce(200, () => {
       this.fitAddon.fit();
@@ -114,21 +114,8 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
     });
 
     this.observer.observe(container);
-  }
 
-  componentDidUpdate() {
-    if (this.host && !this.session) {
-      this.createSession();
-    }
-
-    if (!this.state.selectedHostId && (Object.keys(this.props.model.hosts).length > 0)) {
-      let host = Object.values(this.props.model.hosts)[0];
-      console.log('Debug: selected', host.state.info.id);
-
-      this.setState({
-        selectedHostId: host.state.info.id
-      });
-    }
+    this.createSession();
   }
 
   componentWillUnmount() {
@@ -144,7 +131,7 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
     await this.writeMessage('[Loading]');
     this.sessionLoading = true;
 
-    let session = await (this.host!.backend as WebsocketBackend).createSession({
+    let session = await (this.props.host.backend as WebsocketBackend).createSession({
       size: { columns: this.terminal.cols, rows: this.terminal.rows }
     });
 
@@ -181,35 +168,10 @@ export default class ViewTerminalSession extends React.Component<Rf.ViewProps<Mo
   }
 
   render() {
-    let host = this.host!;
-
     return (
-      <>
-        <Rf.ViewHeader>
-          <div className="toolbar-root">
-            <div className="toolbar-group">
-              <Rf.Select
-                selectedOptionPath={this.state.selectedHostId && [this.state.selectedHostId]}
-                menu={[
-                  { id: '_header', name: 'Hosts', type: 'header' },
-                  ...Object.values(this.props.model.hosts).map((host) => ({
-                    id: host.id,
-                    name: host.state.info.name,
-                    icon: 'storage'
-                  })),
-                  { id: '_divider', type: 'divider' },
-                  { id: 'manage', name: 'Manage hosts' }
-                ]}
-                onSelect={([selectedHostId]) => {
-                  this.setState({ selectedHostId: selectedHostId as HostId });
-                }} />
-            </div>
-          </div>
-        </Rf.ViewHeader>
-        <Rf.ViewBody>
-          <div className="termsession" ref={this.refContainer} />
-        </Rf.ViewBody>
-      </>
+      <div className="termsession-outer">
+        <div className="termsession-inner" ref={this.refContainer} />
+      </div>
     );
   }
 }

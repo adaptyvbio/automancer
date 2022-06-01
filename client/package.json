@@ -12,6 +12,7 @@
   "dependencies": {
     "error-stack-parser": "^2.0.7",
     "immutable": "^4.0.0",
+    "material-symbols": "^0.1.0",
     "monaco-editor": "^0.33.0",
     "pyodide": "^0.20.0",
     "retroflex": "file:../../retroflex",

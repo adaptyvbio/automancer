@@ -30,7 +30,7 @@ class Runner(BaseRunner):
 
   def command(self, command):
     if command["type"] == "signal":
-      self._signal = int(command["signal"])
+      self._chip_signal = int(command["signal"])
       self._write()
 
   def export(self):
@@ -47,30 +47,30 @@ class Runner(BaseRunner):
     executor_signal = self._matrix.permutation.permute(self._chip_signal ^ self._default_chip_signal)
     self._executor.write(executor_signal)
 
-  def log(self):
-    return {
-      # Current state
-      "drive": str(self._drive) if self._proto_signal is not None else None,
-      "signal": str(self._signal)
-    }
+  # def log(self):
+  #   return {
+  #     # Current state
+  #     "drive": str(self._drive) if self._proto_signal is not None else None,
+  #     "signal": str(self._signal)
+  #   }
 
 
   # Manual control
 
-  def accept(self, command):
-    if command['type'] == "set":
-      mask = int(command['mask'])
+  # def accept(self, command):
+  #   if command['type'] == "set":
+  #     mask = int(command['mask'])
 
-      self._signal = (self._signal & ~mask) | (int(command['signal']) & mask)
+  #     self._signal = (self._signal & ~mask) | (int(command['signal']) & mask)
 
-      if self._drive is not None:
-        self._drive |= mask
+  #     if self._drive is not None:
+  #       self._drive |= mask
 
-      self._write()
+  #     self._write()
 
-    if command['type'] == "undrive":
-      self._drive = self._drive & ~int(command['sequence'])
-      self._write()
+  #   if command['type'] == "undrive":
+  #     self._drive = self._drive & ~int(command['sequence'])
+  #     self._write()
 
 
   # Automated control

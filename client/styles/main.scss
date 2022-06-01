@@ -1,6 +1,67 @@
-@use "./control";
-@use "./protocol";
-@use "./protocol-overview";
-@use "./run";
+@use "./constants" as *;
+
+@use "./card";
+@use "./form";
+@use "./mcontrol";
+@use "./reset";
+@use "./sidebar";
 @use "./terminal-session";
-@use "./visual-editor";
+
+
+html {
+  block-size: 100%;
+
+  font-size: 14px;
+  line-height: $line-height;
+}
+
+body {
+  block-size: 100%;
+
+  font-family: system-ui, Helvetica;
+}
+
+
+#root {
+  display: grid;
+  column-gap: $border-gap;
+  grid-template-columns: 280px 1fr;
+  padding: $border-gap 0 $border-gap $border-gap;
+
+  height: 100%;
+}
+
+main {
+  padding: 1.4rem 3rem;
+  overflow-y: auto;
+
+  h1 {
+    margin-bottom: 1rem;
+    font-size: 2.8rem;
+  }
+
+  h2 {
+    font-size: 2rem;
+  }
+}
+
+.header2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin: 2.4rem 0 1.2rem 0;
+
+  button {
+    width: auto;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+
+    color: $app-blue;
+    font-weight: 500;
+
+    &:hover {
+      background-color: lighten($app-blue, 55%);
+    }
+  }
+}

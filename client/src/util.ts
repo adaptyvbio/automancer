@@ -162,3 +162,19 @@ export interface Deferred<T> {
   resolve(value: T): void;
   reject(err: any): void;
 }
+
+
+export class Pool {
+  #promises = new Set<Promise<unknown>>();
+
+  add<T>(func: () => Promise<T>): Promise<T> {
+    let promise = func();
+    this.#promises.add(promise);
+
+    promise.finally(() => {
+      this.#promises.delete(promise);
+    });
+
+    return promise;
+  }
+}

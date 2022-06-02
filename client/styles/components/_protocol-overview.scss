@@ -1,4 +1,4 @@
-@use "./constants" as *;
+@use "../constants" as *;
 
 
 $step-gap: 1.2rem;
@@ -9,7 +9,7 @@ $segment-border: #ddd;
 $segment-radius: 4px;
 
 
-.protoview {
+.poverview {
   &-stage {
     &-header {
       display: flex;
@@ -27,8 +27,8 @@ $segment-radius: 4px;
       }
     }
 
-    &-root:not(._open) &-header .icon {
-      transform: scale(1.4) rotate(-90deg);
+    &-root:not(._open) &-expand {
+      transform: rotate(-90deg);
     }
 
     &-root._active:not(._open) &-header {
@@ -36,22 +36,27 @@ $segment-radius: 4px;
       border: 1px solid #eaeaea;
     }
 
+    &-expand {
+      display: flex;
+    }
+
     &-name {
       font-size: 1.3rem;
       font-weight: 600;
     }
 
-    &-expand {
+    &-ellipsis {
       padding: 0 0.4rem;
 
       background-color: #fff;
       border: 1px solid #ccc;
       border-radius: 4px;
 
+      color: #666;
       font-size: 1.1rem;
     }
 
-    &-root._open &-expand {
+    &-root._open &-ellipsis {
       display: none;
     }
 
@@ -213,6 +218,14 @@ $segment-radius: 4px;
         transform: scale(1.2);
       }
     }
+  }
+
+  &-feature {
+    &-icon {
+      display: flex;
+    }
+
+    // &-label { }
   }
 }
 

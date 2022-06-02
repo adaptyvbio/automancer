@@ -119,59 +119,6 @@
 }
 
 
-.timeline {
-  &-root {
-    margin: 1rem 0;
-
-    text {
-      dominant-baseline: middle;
-      text-anchor: middle;
-    }
-  }
-
-  &-line:first-of-type, &-line:last-of-type {
-    stroke-dasharray: 0 4 100000;
-    stroke-dashoffset: 4;
-
-    transition: opacity 150ms, stroke-dashoffset 150ms;
-  }
-
-  &-line:last-of-type {
-    stroke-dashoffset: 0;
-  }
-
-  &-line, &-stagename, &-segment * {
-    opacity: var(--opacity);
-    transition: opacity 150ms;
-  }
-
-  &-root:hover &-stage, &-root:hover > &-segment {
-    --opacity: 0.4;
-  }
-
-  &-root:hover &-stage:hover, &-root:hover &-stage:hover + &-stage &-segment:first-of-type, &-root:hover &-stage:hover + &-segment {
-    --opacity: 1;
-  }
-
-  &-stage:hover &-line:last-of-type {
-    stroke-dashoffset: 4;
-  }
-
-  &-stage:hover + &-stage &-line:first-of-type {
-    stroke-dashoffset: 0;
-  }
-
-  &-stagename {
-    cursor: default;
-    font-weight: 500;
-  }
-
-  &-segmentlabel {
-    font-weight: 500;
-  }
-}
-
-
 // ???
 
 

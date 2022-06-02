@@ -1,26 +1,25 @@
 import { Set as ImSet } from 'immutable';
 import * as React from 'react';
-import * as Rf from 'retroflex';
 
+import { Icon } from './icon';
 import { type Analysis, analyzeProtocol } from '../analysis';
 import type { Master, MasterEntry, Protocol } from '../backends/common';
-import { ContextMenuArea } from '../components/context-menu-area';
+// import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
 import Units, { UnitsCode } from '../units';
 
 
 export function ProtocolOverview(props: {
   analysis?: Analysis;
-  app: Rf.ApplicationUnknown;
   master?: Master;
   protocol: Protocol;
 }) {
-  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([0]));
+  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([]));
   let analysis = props.analysis ?? analyzeProtocol(props.protocol);
   let currentSegmentIndex = analysis.current?.segmentIndex!; // !
 
   return (
-    <div className="protoview-root">
+    <div className="poverview-root">
       {props.protocol.stages.map((stage, stageIndex) => {
         let nextStage = props.protocol.stages[stageIndex + 1];
         let nextStageSegmentAnalysis = nextStage && analysis.segments[nextStage.seq[0]];
@@ -30,19 +29,21 @@ export function ProtocolOverview(props: {
         let currentStepIndex = isCurrentStage ? stage.steps.findIndex((step) => (step.seq[0] <= currentSegmentIndex) && (step.seq[1] > currentSegmentIndex))! : null;
 
         return (
-          <div className={util.formatClass('protoview-stage-root', {
+          <div className={util.formatClass('poverview-stage-root', {
             '_active': isCurrentStage,
             '_open': openStageIndices.has(stageIndex)
           })} key={stageIndex}>
-            <a href="#" className="protoview-stage-header" onClick={(event) => {
+            <a href="#" className="poverview-stage-header" onClick={(event) => {
               event.preventDefault();
               setOpenStageIndices(util.toggleSet(openStageIndices, stageIndex));
             }}>
-              <Rf.Icon name="expand-more" />
-              <h3 className="protoview-stage-name">{stage.name}</h3>
-              {(stage.steps.length > 0) && <div className="protoview-stage-expand">⋯</div>}
+              <div className="poverview-stage-expand">
+                <Icon name="expand_more" />
+              </div>
+              <h3 className="poverview-stage-name">{stage.name}</h3>
+              {(stage.steps.length > 0) && <div className="poverview-stage-ellipsis">⋯</div>}
             </a>
-            <div className="protoview-stage-steps">
+            <div className="poverview-stage-steps">
               {stage.steps.map((step, stepIndex) => {
                 let firstSegmentAnalysis = analysis.segments[step.seq[0]];
                 let isStepHidden = isCurrentStage && hidden && (step.seq[1] <= currentSegmentIndex);
@@ -52,15 +53,15 @@ export function ProtocolOverview(props: {
                 }
 
                 return (
-                  <div className="protoview-step-item" key={stepIndex}>
-                    <div className="protoview-step-header">
-                      <div className="protoview-step-marker" />
-                      <div className="protoview-step-time">{firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
-                      <div className="protoview-step-name">{step.name}</div>
+                  <div className="poverview-step-item" key={stepIndex}>
+                    <div className="poverview-step-header">
+                      <div className="poverview-step-marker" />
+                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
+                      <div className="poverview-step-name">{step.name}</div>
                     </div>
                     {!isStepHidden
                       ? (
-                        <div className="protoview-segment-list">
+                        <div className="poverview-segment-list">
                           {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                             let segmentIndex = step.seq[0] + segmentRelIndex;
                             let segment = props.protocol.segments[segmentIndex];
@@ -74,7 +75,7 @@ export function ProtocolOverview(props: {
 
                               case 'timer': {
                                 features.push({
-                                  icon: 'hourglass-empty',
+                                  icon: 'hourglass_empty',
                                   label: formatDuration(segment.data.timer!.duration)
                                 });
 
@@ -93,11 +94,11 @@ export function ProtocolOverview(props: {
                             ];
 
                             return (
-                              <div className={util.formatClass('protoview-segment-features', { '_active': segmentIndex === analysis.current?.segmentIndex })} key={segmentRelIndex}>
+                              <div className={util.formatClass('poverview-segment-features', { '_active': segmentIndex === analysis.current?.segmentIndex })} key={segmentRelIndex}>
                                 {features.map((feature, featureIndex) => (
                                   <React.Fragment key={featureIndex}>
-                                    <span><Rf.Icon name={feature.icon} /></span>
-                                    <span>{feature.label}</span>
+                                    <div className="poverview-feature-icon"><Icon name={feature.icon} /></div>
+                                    <div className="poverview-feature-label">{feature.label}</div>
                                   </React.Fragment>
                                 ))}
                               </div>
@@ -105,21 +106,21 @@ export function ProtocolOverview(props: {
                           })}
                         </div>
                       ) : (
-                        <button type="button" className="protoview-step-hidden">{currentStepIndex!} past steps</button>
+                        <button type="button" className="poverview-step-hidden">{currentStepIndex!} past steps</button>
                       )
                     }
                   </div>
                 );
               })}
-              <div className="protoview-step-item">
-                <div className="protoview-step-header">
-                  <div className="protoview-step-marker" />
-                  <div className="protoview-step-time">
+              <div className="poverview-step-item">
+                <div className="poverview-step-header">
+                  <div className="poverview-step-marker" />
+                  <div className="poverview-step-time">
                     {nextStageSegmentAnalysis
                       ? (nextStageSegmentAnalysis.timeRange ? formatTime(nextStageSegmentAnalysis.timeRange[0]) : '–')
                       : formatTime(analysis.done.time)}
                   </div>
-                  <div className="protoview-step-name">{nextStage ? `Continuing to ${nextStage.name}` : 'Done'}</div>
+                  <div className="poverview-step-name">{nextStage ? `Continuing to ${nextStage.name}` : 'Done'}</div>
                 </div>
               </div>
             </div>
@@ -152,6 +153,13 @@ function formatDuration2(input: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
+
+const dtf = new Intl.DateTimeFormat('en', {
+  dateStyle: undefined,
+  hour12: false,
+  timeStyle: 'short'
+});
+
 function formatTime(input: number): string {
-  return new Intl.DateTimeFormat('en-US', { dateStyle: undefined, hour12: false, timeStyle: 'short' }).format(input);
+  return dtf.format(input);
 }

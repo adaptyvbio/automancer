@@ -1,10 +1,7 @@
 .teditor {
-  &-root {
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-
   &-inner {
+    margin: 1rem 0;
+
     > * {
       height: 100%;
     }

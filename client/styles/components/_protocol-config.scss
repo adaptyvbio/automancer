@@ -1,0 +1,46 @@
+@use "../constants" as *;
+
+
+.pconfig {
+  &-root {
+    display: grid;
+    align-items: baseline;
+    grid-template-columns: 200px 1fr;
+    row-gap: 1rem;
+
+    margin: 1rem 0;
+  }
+
+  &-section {
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+
+  &-form {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0;
+  }
+
+  &-entry {
+    display: grid;
+    align-items: center;
+    justify-items: start;
+    grid-template-columns: 100px auto;
+
+    &-label {
+      font-weight: 500;
+    }
+
+    // &-input { }
+  }
+
+  &-submit {
+    margin: 2rem 0 1rem 0;
+    padding: 0.8rem 1.4rem;
+
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+}

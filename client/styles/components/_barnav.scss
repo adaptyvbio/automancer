@@ -1,0 +1,53 @@
+@use "../constants" as *;
+
+
+.barnav {
+  &-root {
+    display: flex;
+    column-gap: 0.6rem;
+
+    margin: 1rem 0;
+    padding: 0.4rem 2rem;
+
+    border-bottom: 2px solid #eee;
+  }
+
+  &-entry {
+    display: flex;
+    align-items: center;
+    column-gap: 0.6rem;
+
+    width: auto;
+    padding: 0.4rem 1rem;
+
+    border-radius: 4px;
+
+    &:hover {
+      background-color: #fafafa;
+    }
+
+    &._selected {
+      background-color: #eee;
+    }
+
+    &:not(._selected, :hover) {
+      color: #666;
+    }
+  }
+
+  &-icon {
+    display: flex;
+  }
+
+  // &-entry._selected &-icon {
+  //   font-variation-settings:
+  //     'FILL' 0,
+  //     'wght' 400,
+  //     'GRAD' 200,
+  //     'opsz' 48;
+  // }
+
+  &-label {
+    font-weight: 500;
+  }
+}

@@ -1,0 +1,33 @@
+@use "./buttons";
+
+
+.illustrated {
+  &-root {
+    display: flex;
+    align-items: center;
+    column-gap: 0.4rem;
+  }
+
+  &-icon {
+    display: flex;
+  }
+}
+
+.superimposed {
+  &-root {
+    display: grid;
+  }
+
+  &-target, &-visible {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  &-target {
+    opacity: 0;
+  }
+
+  &-root:hover &-visible.btn {
+    @extend :hover;
+  }
+}

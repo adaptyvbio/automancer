@@ -2,7 +2,8 @@ import * as React from 'react';
 
 import * as Control from './control';
 import * as Input from './input';
-import type { Chip, ChipModel, Draft, Master, Protocol, ProtocolSegment } from '../backends/common';
+import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
+import type { Draft } from '../application';
 
 
 export interface Feature {

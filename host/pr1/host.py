@@ -27,7 +27,6 @@ class Host:
     self.update_callback = update_callback
 
     self.chips = dict()
-    self.drafts = dict()
 
     # os.chmod(self.data_dir, 0o775)
 
@@ -179,14 +178,12 @@ class Host:
     self.chips[chip.id] = chip
     return chip
 
-  def start_plan(self, chip, codes, draft, *, update_callback):
+  def start_plan(self, chip, codes, protocol):
     if chip.master:
       raise Exception("Already running")
 
-    chip.master = Master(chip=chip, codes=codes, protocol=draft.protocol, update_callback=update_callback)
+    chip.master = Master(chip=chip, codes=codes, protocol=protocol, update_callback=self.update_callback)
     chip.master.start()
-
-    del self.drafts[draft.id]
 
 
     async def a():
@@ -235,17 +232,6 @@ class Host:
       },
       "devices": {
         device.id: device.export() for namespace, executor in self.executors.items() for device in executor.get_devices()
-      },
-      "drafts": {
-        draft.id: {
-          "id": draft.id,
-          "errors": [{
-            "message": error.message,
-            "range": error.range
-          } for error in draft.errors],
-          "protocol": draft.protocol and draft.protocol.export(),
-          "source": draft.source
-        } for draft in self.drafts.values()
       },
       "executors": {
         namespace: executor.export() for namespace, executor in self.executors.items()
@@ -301,9 +287,14 @@ class Host:
 
     if request["type"] == "startPlan":
       chip = self.chips[request["chipId"]]
-      draft = self.drafts[request["draftId"]]
 
-      self.start_plan(chip=chip, codes=request["codes"], draft=draft, update_callback=self.update_callback)
+      protocol = Protocol(
+        request["source"],
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
+        models=self.models
+      )
+
+      self.start_plan(chip=chip, codes=request["codes"], protocol=protocol)
 
     self.update_callback()
 

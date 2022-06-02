@@ -2,13 +2,6 @@ import type { MasterEntry, Protocol } from './backends/common';
 import * as util from './util';
 
 
-declare global {
-  interface Array<T> {
-    at(index: number): T;
-  }
-}
-
-
 export interface Analysis {
   current?: {
     segmentIndex: number;

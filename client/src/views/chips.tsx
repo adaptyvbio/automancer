@@ -70,7 +70,9 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
         <header className="header2">
           <h2>Add a chip</h2>
-          <button type="button">Manage models</button>
+          <button type="button" className="btn">
+            <div>Manage models</div>
+          </button>
         </header>
 
         <div className="card-list">

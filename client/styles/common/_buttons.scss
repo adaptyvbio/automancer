@@ -1,0 +1,26 @@
+@use "../constants" as *;
+
+
+.btn {
+  display: flex;
+  align-items: center;
+  column-gap: 0.4rem;
+
+  width: auto;
+  height: 2.4rem;
+
+  padding: 0 1rem;
+  border-radius: 4px;
+
+  color: $app-blue;
+  font-weight: 500;
+
+  &:hover {
+    background-color: lighten($app-blue, 55%);
+  }
+
+  .btn-icon {
+    display: flex;
+    width: $icon-size;
+  }
+}

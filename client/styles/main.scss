@@ -1,13 +1,21 @@
 @use "./constants" as *;
 
 @use "./card";
+@use "./common/buttons";
+@use "./common/header";
+@use "./common/inputs";
+@use "./common/misc";
+@use "./components/barnav";
 @use "./components/diagram";
+@use "./components/protocol-config";
+@use "./components/protocol-overview";
+@use "./components/protocol-timeline";
 @use "./form";
 @use "./mcontrol";
 @use "./reset";
 @use "./sidebar";
 @use "./terminal-session";
-@use "./views/chip";
+@use "./views/draft";
 @use "./views/protocols";
 @use "./views/text-editor";
 
@@ -40,32 +48,11 @@ main {
   overflow-y: auto;
 
   h1 {
-    margin-bottom: 1rem;
+    margin-bottom: 2rem;
     font-size: 2.8rem;
   }
 
   h2 {
     font-size: 2rem;
-  }
-}
-
-.header2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  margin: 2.4rem 0 1.2rem 0;
-
-  button {
-    width: auto;
-    padding: 0.6rem 1.2rem;
-    border-radius: 4px;
-
-    color: $app-blue;
-    font-weight: 500;
-
-    &:hover {
-      background-color: lighten($app-blue, 55%);
-    }
   }
 }

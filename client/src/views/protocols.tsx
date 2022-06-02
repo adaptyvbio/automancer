@@ -31,19 +31,21 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
         <div className="header2">
           <h2>Recent protocols</h2>
-          <button type="button" onClick={() => {
+          <button type="button" className="btn" onClick={() => {
             let draft: Draft = {
               id: crypto.randomUUID(),
               name: 'Untitled protocol',
               lastModified: Date.now(),
               source: `name: Untitled protocol\n`,
-              analysis: null,
+              compiled: null,
               location: { type: 'memory' }
             };
 
             this.props.setDraft(draft);
             this.props.setRoute(['protocol', draft.id]);
-          }}>New protocol</button>
+          }}>
+            <div>New protocol</div>
+          </button>
         </div>
 
         <div className="lproto-root">

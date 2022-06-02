@@ -1,3 +1,4 @@
+import type { Draft as AppDraft } from '../application';
 import type { UnitsCode } from '../units';
 
 
@@ -26,8 +27,8 @@ export abstract class BackendCommon {
   }
 
   abstract command(chipId: ChipId, command: RunnerCommand): Promise<void>;
+  abstract compileDraft(draftId: string, source: string): Promise<AppDraft['compiled']>;
   abstract createChip(options: { modelId: ChipModelId; }): Promise<void>;
-  abstract createDraft(draftId: string, source: string): Promise<void>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;

@@ -1,3 +1,4 @@
+import type { Draft } from '../application';
 import { BackendCommon, Chip, ChipId, ControlNamespace } from './common';
 import type { UnitsCode } from '../units';
 
@@ -13,18 +14,18 @@ export abstract class MessageBackend extends BackendCommon {
     });
   }
 
+  async compileDraft(draftId: string, source: string) {
+    return await this._request({
+      type: 'compileDraft',
+      draftId,
+      source
+    }) as Draft['compiled'];
+  }
+
   async createChip(options: { modelId: string; }) {
     await this._request({
       type: 'createChip',
       modelId: options.modelId
-    });
-  }
-
-  async createDraft(draftId: string, source: string) {
-    await this._request({
-      type: 'createDraft',
-      draftId,
-      source
     });
   }
 

@@ -146,18 +146,7 @@ class Host:
     #   # raise e
 
 
-  def create_chip(self, model_id, name):
-    model = self.models[model_id]
-    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if hasattr(unit, 'Matrix') }
-    chip = Chip(id=str(uuid.uuid4()), master=None, matrices=matrices, model=model, name=name, runners=dict())
-
-    for namespace, executor in self.executors.items():
-      chip.runners[namespace] = executor.create_runner(chip)
-
-    self.chips[chip.id] = chip
-    return chip
-
-  def create_draft(self, draft_id, source):
+  def compile_draft(self, draft_id, source):
     errors = list()
     protocol = None
 
@@ -177,8 +166,18 @@ class Host:
       source=source
     )
 
-    self.drafts[draft_id] = draft
     return draft
+
+  def create_chip(self, model_id, name):
+    model = self.models[model_id]
+    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if hasattr(unit, 'Matrix') }
+    chip = Chip(id=str(uuid.uuid4()), master=None, matrices=matrices, model=model, name=name, runners=dict())
+
+    for namespace, executor in self.executors.items():
+      chip.runners[namespace] = executor.create_runner(chip)
+
+    self.chips[chip.id] = chip
+    return chip
 
   def start_plan(self, chip, codes, draft, *, update_callback):
     if chip.master:
@@ -254,6 +253,17 @@ class Host:
     }
 
   async def process_request(self, request):
+    if request["type"] == "compileDraft":
+      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+
+      return {
+        "errors": [{
+          "message": error.message,
+          "range": error.range
+        } for error in draft.errors],
+        "protocol": draft.protocol and draft.protocol.export()
+      }
+
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       namespace, command = next(iter(request["command"].items()))
@@ -261,9 +271,6 @@ class Host:
 
     if request["type"] == "createChip":
       self.create_chip(model_id=request["modelId"], name="Untitled chip")
-
-    if request["type"] == "createDraft":
-      self.create_draft(draft_id=request["draftId"], source=request["source"])
 
     if request["type"] == "deleteChip":
       # TODO: checks

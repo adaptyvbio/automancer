@@ -77,7 +77,7 @@ export interface Draft {
   lastModified: number;
   source: string;
 
-  analysis: {
+  compiled: {
     errors: {
       message: string;
       range: [number, number];
@@ -268,6 +268,30 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.controller.abort();
   }
 
+  setDraft(draft: Draft) {
+    this.setState({
+      drafts: setIn(this.state.drafts, [draft.id], draft),
+      openDraftIds: this.state.openDraftIds.add(draft.id)
+    });
+
+    if (draft.location.type === 'memory') {
+      let isNewDraft = !(draft.id in this.state.drafts);
+
+      // TODO: make this an atomic operation
+      this.pool.add(async () => {
+        await idb.set(draft.id, { ...draft, analysis: null });
+
+        if (isNewDraft) {
+          await idb.update<DraftsRecord>('drafts', (record) => {
+            return {
+              draftIds: Array.from(new Set([...(record?.draftIds ?? []), draft.id]))
+            };
+          });
+        }
+      });
+    }
+  }
+
   setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
     this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
   }
@@ -282,6 +306,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   render() {
+    let setDraft = this.setDraft.bind(this);
     let setRoute = this.setRoute.bind(this);
 
     let contents = (() => {
@@ -303,29 +328,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewProtocols
               drafts={this.state.drafts}
               host={this.host}
-              setDraft={(draft) => {
-                this.setState({
-                  drafts: setIn(this.state.drafts, [draft.id], draft),
-                  openDraftIds: this.state.openDraftIds.add(draft.id)
-                });
-
-                if (draft.location.type === 'memory') {
-                  let isNewDraft = !(draft.id in this.state.drafts);
-
-                  // TODO: make this an atomic operation
-                  this.pool.add(async () => {
-                    await idb.set(draft.id, draft);
-
-                    if (isNewDraft) {
-                      await idb.update<DraftsRecord>('drafts', (record) => {
-                        return {
-                          draftIds: Array.from(new Set([...(record?.draftIds ?? []), draft.id]))
-                        };
-                      });
-                    }
-                  });
-                }
-              }}
+              setDraft={setDraft}
               setRoute={setRoute} />
           )
 
@@ -348,6 +351,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewDraft
               draft={this.state.drafts[route[1]]}
               host={this.host}
+              setDraft={setDraft}
               setRoute={setRoute} />
           );
         }

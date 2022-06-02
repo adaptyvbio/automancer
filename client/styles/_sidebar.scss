@@ -1,4 +1,5 @@
 @use "./constants" as *;
+@use "./mixins" as *;
 
 
 .sidebar {
@@ -155,8 +156,6 @@
     flex-direction: column;
     row-gap: 0.8rem;
 
-    width: max-content;
-
     margin: 0 1rem;
     padding: 0.8rem 0;
     padding-left: calc(#{$icon-size} + 1rem);
@@ -167,7 +166,13 @@
   }
 
   &-child {
+    width: max-content;
+    max-width: 100%;
+
     position: relative;
+
+    // TODO: Fix ellipsis on Chrome
+    // @include text-ellipsis();
 
     font-size: 1.1rem;
 

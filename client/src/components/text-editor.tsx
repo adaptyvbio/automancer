@@ -1,14 +1,9 @@
 import * as monaco from 'monaco-editor';
 import * as React from 'react';
+import * as ReactDOM from 'react-dom';
 
-import type { Draft } from '../backends/common';
+import type { Draft } from '../application';
 
-
-declare global {
-  interface Window {
-    MonacoEnvironment?: monaco.Environment | undefined;
-  }
-}
 
 window.MonacoEnvironment = {
 	getWorkerUrl: function (_moduleId, label) {
@@ -29,7 +24,7 @@ window.MonacoEnvironment = {
 };
 
 
-interface TextEditorProps {
+export interface TextEditorProps {
   draft: Draft;
   onSave(source: string): void;
 }
@@ -38,6 +33,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
   editor!: monaco.editor.IStandaloneCodeEditor;
   model!: monaco.editor.IModel;
   ref = React.createRef<HTMLDivElement>();
+  refWidgetContainer = React.createRef<HTMLDivElement>();
 
   componentDidMount() {
     this.editor = monaco.editor.create(this.ref.current!, {
@@ -50,7 +46,9 @@ export class TextEditor extends React.Component<TextEditorProps> {
       renderWhitespace: 'trailing',
       scrollBeyondLastLine: false,
       selectionHighlight: false,
-      tabSize: 2
+      tabSize: 2,
+      overflowWidgetsDomNode: this.refWidgetContainer.current!,
+      fixedOverflowWidgets: true
       // readOnly: true
     });
 
@@ -68,46 +66,47 @@ export class TextEditor extends React.Component<TextEditorProps> {
   }
 
   updateErrors(options?: { reveal?: boolean; }) {
-    monaco.editor.setModelMarkers(this.model, 'main', this.props.draft.errors.map((error) => {
-      let [startIndex, endIndex] = error.range;
-      let start = this.model.getPositionAt(startIndex);
-      let end = this.model.getPositionAt(endIndex);
+    let compiled = this.props.draft.compiled;
 
-      if (options?.reveal && (this.props.draft.errors.length === 1)) {
-        this.editor.revealLines(start.lineNumber, end.lineNumber);
-      }
+    if (compiled) {
+      monaco.editor.setModelMarkers(this.model, 'main', compiled.errors.map((error) => {
+        let [startIndex, endIndex] = error.range;
+        let start = this.model.getPositionAt(startIndex);
+        let end = this.model.getPositionAt(endIndex);
 
-      return {
-        startColumn: start.column,
-        startLineNumber: start.lineNumber,
+        if (options?.reveal && (compiled!.errors.length === 1)) {
+          this.editor.revealLines(start.lineNumber, end.lineNumber);
+        }
 
-        endColumn: end.column,
-        endLineNumber: end.lineNumber,
+        return {
+          startColumn: start.column,
+          startLineNumber: start.lineNumber,
 
-        message: error.message,
-        severity: monaco.MarkerSeverity.Error
-      };
-    }));
+          endColumn: end.column,
+          endLineNumber: end.lineNumber,
+
+          message: error.message,
+          severity: monaco.MarkerSeverity.Error
+        };
+      }));
+    }
+  }
+
+  undo() {
+    this.editor.trigger(undefined, 'undo', undefined);
   }
 
   render() {
     return (
-      <div ref={this.ref} style={{ height: '100%', overflow: 'hidden' }} onKeyDown={(event) => {
-        if (event.metaKey && (event.key === 's')) {
-          event.preventDefault();
-          this.props.onSave(this.model.getValue());
-        }
-      }}/>
-  //     <style>
-  //        div.hover-row.status-bar {
-  //   display: none !important;
-  // }
-  //     </style>
+      <div className="teditor-inner">
+        <div ref={this.ref} onKeyDown={(event) => {
+          if (event.metaKey && (event.key === 's')) {
+            event.preventDefault();
+            this.props.onSave(this.model.getValue());
+          }
+        }}/>
+        {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
+      </div>
     );
-  }
-
-
-  undo() {
-    this.editor.trigger(undefined, 'undo', undefined);
   }
 }

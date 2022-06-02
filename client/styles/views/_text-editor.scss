@@ -1,0 +1,17 @@
+.teditor {
+  &-root {
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  &-inner {
+    > * {
+      height: 100%;
+    }
+  }
+}
+
+
+div.hover-row.status-bar {
+  display: none !important;
+}

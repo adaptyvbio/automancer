@@ -20,11 +20,6 @@ $segment-radius: 4px;
 
       border: 1px solid transparent;
       border-radius: 4px;
-
-      .icon {
-        border-radius: 50%;
-        transform: scale(1.4);
-      }
     }
 
     &-root:not(._open) &-expand {
@@ -213,10 +208,6 @@ $segment-radius: 4px;
       > :nth-child(-n+2) {
         color: $app-blue;
       }
-
-      .icon {
-        transform: scale(1.2);
-      }
     }
   }
 
@@ -248,6 +239,11 @@ $segment-radius: 4px;
   }
 
   .icon {
-    transform: scale(1.2);
+    font-family: "Material Symbols Sharp";
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 500,
+      'GRAD' 200,
+      'opsz' 48;
   }
 }

@@ -1,4 +1,4 @@
-@use "./constants" as *;
+@use "../constants" as *;
 @use "./protocol-overview" as proto;
 
 
@@ -9,7 +9,7 @@
 }
 
 
-.vedit {
+.veditor {
   &-root {
     margin: 1rem 2rem;
     max-width: 500px;
@@ -19,7 +19,7 @@
 
   &-stage {
     &-header {
-      @extend .protoview-stage-header;
+      @extend .poverview-stage-header;
 
       &._context {
         background-color: lighten($app-blue, 55%);
@@ -28,16 +28,12 @@
       }
     }
 
-    &-name { @extend .protoview-stage-name; }
-    &-expand { @extend .protoview-stage-expand; }
+    &-expand { @extend .poverview-stage-expand; }
+    &-name { @extend .poverview-stage-name; }
+    &-ellipsis { @extend .poverview-stage-ellipsis; }
 
-    &-root:not(._open) &-header .icon {
-      transform: scale(1.4) rotate(-90deg);
-    }
-
-    &-root._open &-expand {
-      display: none;
-    }
+    &-root:not(._open) &-expand { transform: rotate(-90deg); }
+    &-root._open &-ellipsis { display: none; }
 
     &-steps {
       display: flex;
@@ -82,12 +78,12 @@
     }
 
     // &-header {
-    //   @extend .protoview-step-header;
+    //   @extend .poverview-step-header;
     //   grid-template-columns: 3rem 1fr;
     // }
 
-    &-time { @extend .protoview-step-time; }
-    &-name { @extend .protoview-step-name; }
+    &-time { @extend .poverview-step-time; }
+    &-name { @extend .poverview-step-name; }
 
     // &-info {
     //   display: flex;
@@ -106,6 +102,10 @@
 
       &:hover {
         color: #333;
+      }
+
+      .icon {
+        font-size: 20px;
       }
     }
 

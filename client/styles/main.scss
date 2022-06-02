@@ -10,6 +10,8 @@
 @use "./components/protocol-config";
 @use "./components/protocol-overview";
 @use "./components/protocol-timeline";
+@use "./components/text-editor";
+@use "./components/visual-editor";
 @use "./form";
 @use "./mcontrol";
 @use "./reset";
@@ -17,7 +19,6 @@
 @use "./terminal-session";
 @use "./views/draft";
 @use "./views/protocols";
-@use "./views/text-editor";
 
 
 html {

@@ -4,6 +4,7 @@ import type { Draft, Host, Route } from '../application';
 import { Icon } from '../components/icon';
 import { DraftOverview } from '../components/draft-overview';
 import { TextEditor } from '../components/text-editor';
+import { VisualEditor } from '../components/visual-editor';
 import * as util from '../util';
 import { Pool } from '../util';
 
@@ -26,7 +27,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     super(props);
 
     this.state = {
-      mode: 'overview'
+      mode: 'visual'
     };
   }
 
@@ -37,7 +38,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           <DraftOverview
             draft={this.props.draft}
             host={this.props.host} />
-        )
+        );
+
         case 'text': return (
           <TextEditor
             draft={this.props.draft}
@@ -59,6 +61,11 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 });
               });
             }} />
+        );
+
+        case 'visual': return (
+          <VisualEditor
+            draft={this.props.draft} />
         );
       }
     })();
@@ -93,24 +100,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 <div className="barnav-label">{entry.label}</div>
               </button>
             ))}
-            {/* <button type="button" className="barnav-entry _selected">
-              <div className="barnav-icon">
-                <Icon name="hexagon" />
-              </div>
-              <div className="barnav-label">Overview</div>
-            </button>
-            <button type="button" className="barnav-entry">
-              <div className="barnav-icon">
-                <Icon name="code" />
-              </div>
-              <div className="barnav-label">Text editor</div>
-            </button>
-            <button type="button" className="barnav-entry">
-              <div className="barnav-icon">
-                <Icon name="imagesearch_roller" />
-              </div>
-              <div className="barnav-label">Visual editor</div>
-            </button> */}
           </nav>
         </header>
         {contents}

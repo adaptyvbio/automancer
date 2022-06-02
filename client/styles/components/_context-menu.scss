@@ -1,0 +1,97 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.cmenu {
+  &-root {
+    width: 200px;
+    padding: 0.4rem 0;
+
+    border-radius: 4px;
+    box-shadow: 2px 2px 6px #0003;
+
+    color: #fff;
+  }
+}
+
+.cmenu {
+  &-root {
+    background-color: #000d;
+    backdrop-filter: blur(3px);
+
+    outline: none;
+    z-index: 100;
+  }
+
+  &-header {
+    padding: 0.6rem 0.8rem;
+
+    color: #999;
+
+    &:first-child {
+      padding-top: 0.2rem;
+    }
+
+    &:not(:first-child) {
+      margin-top: 0.4rem;
+
+      border-top: 1px solid #fff2;
+    }
+  }
+
+  &-item {
+    display: grid;
+    align-items: center;
+    column-gap: 1rem;
+    grid-template-columns: $icon-size 1fr auto;
+
+    height: 2.2rem;
+    padding: 0 0.8rem;
+
+    cursor: default;
+
+    &._open {
+      background-color: #333;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+
+    &:hover {
+      background-color: $app-blue;
+      background-image: linear-gradient(transparent, #0003);
+    }
+  }
+
+  &-icon, &-chevron {
+    display: flex;
+    .icon { font-size: 20px; }
+  }
+
+  &-icon {
+    .icon { font-size: 18px; }
+  }
+
+  &-name {
+    grid-column: 2;
+
+    @include text-ellipsis();
+  }
+
+  &-shortcut {
+    grid-column: 3;
+    font-size: 0.9em;
+  }
+
+  &-item:not(:disabled) &-shortcut {
+    color: #fff6;
+  }
+
+  &-divider {
+    margin-bottom: 0.4rem;
+    padding-bottom: 0.4rem;
+
+    border-bottom: 1px solid #fff2;
+  }
+}

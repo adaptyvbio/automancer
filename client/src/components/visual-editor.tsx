@@ -3,13 +3,9 @@ import * as React from 'react';
 
 import type { Draft } from '../application';
 import { ProtocolSeq } from '../backends/common';
+import { ContextMenuArea } from './context-menu-area';
 import * as util from '../util';
 import { Icon } from './icon';
-
-
-function ContextMenuArea(props: React.PropsWithChildren<{}>) {
-  return props.children;
-}
 
 
 export interface Stage {
@@ -243,12 +239,12 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
   }
 
   render() {
-    console.log(
-      'INFO',
-      this.state.stages.toJS(),
-      this.state.steps.toJS(),
-      this.state.segments.toJS()
-    );
+    // console.log(
+    //   'INFO',
+    //   this.state.stages.toJS(),
+    //   this.state.steps.toJS(),
+    //   this.state.segments.toJS()
+    // );
 
     for (let [stageIndex, stage] of this.state.stages.entries()) {
       if (stageIndex === 0) {
@@ -315,28 +311,30 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
                   return (
                     <React.Fragment key={step.id}>
-                      <ContextMenuArea onContextMenu={async (event) => {
-                        let selectedStepIndices = (selection?.type === 'steps') && selection.indices.has(stepIndex)
-                          ? selection.indices
-                          : ImSet([stepIndex]);
+                      <ContextMenuArea
+                        createMenu={() => {
+                          let selectedStepIndices = (selection?.type === 'steps') && selection.indices.has(stepIndex)
+                            ? selection.indices
+                            : ImSet([stepIndex]);
 
-                        this.setState({
-                          selection: {
-                            type: 'steps',
-                            activeIndex: stepIndex,
-                            indices: selectedStepIndices
-                          }
-                        });
+                          this.setState({
+                            selection: {
+                              type: 'steps',
+                              activeIndex: stepIndex,
+                              indices: selectedStepIndices
+                            }
+                          });
 
-                        await this.props.app.showContextMenu(event, [
-                          { id: '_header', name: 'Protocol step', type: 'header' },
-                          { id: 'delete', name: 'Delete' }
-                        ], (menuPath) => {
+                          return [
+                            { id: '_header', name: 'Protocol step', type: 'header' },
+                            { id: 'delete', name: 'Delete' }
+                          ];
+                        }}
+                        onSelect={(menuPath) => {
                           if (menuPath.first() === 'delete') {
                             this.deleteStep(stepIndex);
                           }
-                        });
-                      }}>
+                        }}>
                         <div className={util.formatClass('veditor-step-item', {
                           '_open': this.state.openStepIds.has(step.id),
                           '_selected': (selection?.type === 'steps') && selection.indices.has(stepIndex)

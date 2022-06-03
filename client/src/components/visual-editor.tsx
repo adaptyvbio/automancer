@@ -1,4 +1,4 @@
-import { List, Set as ImSet } from 'immutable';
+import { List, Range, Set as ImSet } from 'immutable';
 import * as React from 'react';
 
 import type { Draft } from '../application';
@@ -25,6 +25,16 @@ export interface Segment {
   features: { icon: string; label: string; }[];
 }
 
+export type Selection = {
+  type: 'steps';
+  activeIndex: number;
+  indices: ImSet<number>;
+} | {
+  type: 'segments';
+  activeIndex: number;
+  indices: ImSet<number>;
+};
+
 
 export interface VisualEditorProps {
   draft: Draft;
@@ -41,27 +51,19 @@ export interface VisualEditorState {
     start: { x: number; y: number; };
   } | null;
 
-  openStageIndices: ImSet<number>;
+  openStageIds: ImSet<Stage['id']>;
   openStepIds: ImSet<Step['id']>;
 
-  selection: {
-    type: 'steps';
-    activeIndex: number;
-    indices: ImSet<number>;
-  } | {
-    type: 'segments';
-    activeIndex: number;
-    indices: ImSet<number>;
-  } | null;
+  selection: Selection | null;
 }
 
 
 let a = () => ({
   id: crypto.randomUUID(),
   features: [
-    { icon: 'memory', label: Math.floor(Math.random() * 100).toString() + ' Gb' },
+    { icon: 'hourglass_empty', label: '20 min' },
     // { icon: 'face', label: 'Alice' },
-    { icon: 'face', label: 'Bob' }
+    { icon: 'air', label: 'Biotin' }
   ]
 });
 
@@ -84,14 +86,14 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
         { id: x, name: 'Alpha', seq: [0, 3] },
         { id: crypto.randomUUID(), name: 'Beta', seq: [3, 4] as ProtocolSeq },
         ...new Array(16).fill(0).map((_, i) => (
-          { id: crypto.randomUUID(), name: 'Delta', seq: [4 + i, 5 + i] as ProtocolSeq }
+          { id: crypto.randomUUID(), name: 'Delta ' + i, seq: [4 + i, 5 + i] as ProtocolSeq }
         ))
       ]),
       segments: List(new Array(20).fill(0).map(a)),
 
       drag: null,
 
-      openStageIndices: ImSet([0]),
+      openStageIds: ImSet([]),
       openStepIds: ImSet([x]),
 
       activeSegmentIndex: null,
@@ -113,11 +115,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       let deletedSegmentCount = segmentSeq[1] - segmentSeq[0];
 
       return {
-        activeSegmentIndex: null,
         stages: util.renumber.deleteItem(state.stages, 'stepSeq', targetStageIndex),
         steps: util.renumber.deleteRange(state.steps, 'seq', stage.stepSeq[0], stage.stepSeq[1], deletedSegmentCount),
         segments: state.segments.splice(segmentSeq[0], deletedSegmentCount),
-        selectedSegmentIndices: state.selectedSegmentIndices.clear()
+        selection: null
       };
     });
   }
@@ -163,33 +164,37 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
   deleteSelected() {
     this.setState((state) => {
-      let segmentIndices = (state.selectedSegmentIndices.toJS() as number[]).sort((a, b) => a - b);
-      let segmentIndexIndex = 0;
-      let delta = 0;
+      let selection = state.selection;
 
-      let steps = state.steps.map((step, stepIndex) => {
-        let delta0 = -delta;
+      switch (selection?.type) {
+        case 'steps': {
+          let deletedSegmentIndices = state.steps.flatMap((step, stepIndex) => {
+            if (!selection!.indices.includes(stepIndex)) {
+              return [];
+            }
 
-        for (; (step.seq[0] <= segmentIndices[segmentIndexIndex])
-          && (step.seq[1] > segmentIndices[segmentIndexIndex])
-          && (segmentIndexIndex < segmentIndices.length); segmentIndexIndex += 1) {
-          delta += 1;
+            return Range(step.seq[0], step.seq[1]);
+          });
+
+          return {
+            stages: util.renumber.deleteChildItems(state.stages, 'stepSeq', selection.indices),
+            steps: util.renumber.deleteChildItems(state.steps, 'seq', deletedSegmentIndices)
+              .filter((_step, stepIndex) => !selection!.indices.includes(stepIndex)),
+            segments: state.segments.filter((_segment, segmentIndex) => !deletedSegmentIndices.includes(segmentIndex)),
+            selection: null
+          };
         }
 
-        let delta1 = -delta;
+        case 'segments': {
+          return {
+            steps: util.renumber.deleteChildItems(state.steps, 'seq', selection.indices),
+            segments: state.segments.filter((_segment, segmentIndex) => !selection!.indices.has(segmentIndex)),
+            selection: null
+          };
+        }
 
-        return {
-          ...step,
-          seq: [step.seq[0] + delta0, step.seq[1] + delta1] as ProtocolSeq
-        };
-      });
-
-      return {
-        activeSegmentIndex: null,
-        segments: state.segments.filter((segment, segmentIndex) => !state.selectedSegmentIndices.has(segmentIndex)),
-        selectedSegmentIndices: state.selectedSegmentIndices.clear(),
-        steps
-      };
+        default: return null;
+      }
     });
   }
 
@@ -238,6 +243,66 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     });
   }
 
+  mouseSelect(event: React.MouseEvent, targetIndex: number, targetType: Selection['type'], options?: { context?: boolean; }) {
+    this.setState((state) => {
+      let selection = state.selection;
+
+      // if (selection.type !== targetType) {
+      //   return {
+      //     selection: {
+      //       type: targetType,
+      //       activeIndex: targetIndex,
+      //       indices: ImSet([targetIndex])
+      //     }
+      //   };
+      // }
+
+      if (options?.context) {
+        return {
+          selection: {
+            type: targetType,
+            activeIndex: targetIndex,
+            indices: (selection?.type === targetType) && selection.indices.has(targetIndex)
+              ? selection.indices
+              : ImSet([targetIndex])
+          }
+        };
+      }
+
+      if (event.shiftKey && (selection?.type === targetType)) {
+        let added = Range(targetIndex, selection.activeIndex);
+
+        return {
+          selection: {
+            type: targetType,
+            activeIndex: targetIndex,
+            indices: selection.indices.isSuperset(added)
+              ? selection.indices.subtract(Range(selection.activeIndex, targetIndex))
+              : selection.indices.union(added)
+          } as Selection
+        };
+      } else if (event.metaKey && (selection?.type === targetType)) {
+        return {
+          selection: {
+            type: targetType,
+            activeIndex: selection.indices.has(targetIndex)
+              ? selection.activeIndex
+              : targetIndex,
+            indices: util.toggleSet(selection.indices, targetIndex)
+          } as Selection
+        };
+      } else {
+        return {
+          selection: {
+            type: targetType,
+            activeIndex: targetIndex,
+            indices: ImSet([targetIndex])
+          } as Selection
+        };
+      }
+    });
+  }
+
   render() {
     // console.log(
     //   'INFO',
@@ -276,28 +341,68 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           let stepCount = stage.stepSeq[1] - stage.stepSeq[0];
 
           return (
-            <div className={util.formatClass('veditor-stage-root', { '_open': this.state.openStageIndices.has(stageIndex) })} key={stage.id}>
-              <ContextMenuArea onContextMenu={async (event) => {
-                await this.props.app.showContextMenu(event, [
-                  { id: '_header', name: 'Protocol stage', type: 'header' },
-                  { id: 'delete', name: 'Delete' }
-                ], (menuPath) => {
-                  if (menuPath.first() === 'delete') {
-                    this.deleteStage(stageIndex);
+            <div className={util.formatClass('veditor-stage-root', { '_open': this.state.openStageIds.has(stage.id) })} key={stage.id}>
+              <ContextMenuArea
+                createMenu={() => {
+                  this.setState({ selection: null });
+
+                  return [
+                    { id: '_header', name: 'Protocol stage', type: 'header' },
+                    { id: 'add-above', name: 'Add stage above' },
+                    { id: 'add-below', name: 'Add stage below' },
+                    { id: '_divider', type: 'divider' },
+                    { id: 'delete', name: 'Delete', icon: 'delete' },
+                  ];
+                }}
+                onSelect={(menuPath) => {
+                  switch (menuPath.first()) {
+                    case 'add-above': {
+                      let newStage = {
+                        id: crypto.randomUUID(),
+                        name: 'Untitled stage',
+                        stepSeq: [stage.stepSeq[0], stage.stepSeq[0]] as ProtocolSeq
+                      };
+
+                      this.setState((state) => ({
+                        openStageIds: state.openStageIds.add(newStage.id),
+                        stages: state.stages.insert(stageIndex, newStage)
+                      }));
+
+                      break;
+                    }
+
+                    case 'add-below': {
+                      let newStage = {
+                        id: crypto.randomUUID(),
+                        name: 'Untitled stage',
+                        stepSeq: [stage.stepSeq[1], stage.stepSeq[1]] as ProtocolSeq
+                      };
+
+                      this.setState((state) => ({
+                        openStageIds: state.openStageIds.add(newStage.id),
+                        stages: state.stages.insert(stageIndex + 1, newStage)
+                      }));
+
+                      break;
+                    }
+
+                    case 'delete': {
+                      this.deleteStage(stageIndex);
+                      break;
+                    }
                   }
-                });
-              }}>
-                <a href="#" className="veditor-stage-header" onClick={(event) => {
+                }}>
+                <button type="button" className="veditor-stage-header" onClick={(event) => {
                   event.preventDefault();
 
                   this.setState((state) => ({
-                    openStageIndices: util.toggleSet(state.openStageIndices, stageIndex)
+                    openStageIds: util.toggleSet(state.openStageIds, stage.id)
                   }));
                 }}>
                   <div className="veditor-stage-expand"><Icon name="expand_more" /></div>
                   <h3 className="veditor-stage-name">{stage.name}</h3>
                   {(stepCount > 0) && <div className="veditor-stage-ellipsis">⋯</div>}
-                </a>
+                </button>
               </ContextMenuArea>
               <div className="veditor-stage-steps">
                 {/* <SegmentsDivider step
@@ -312,18 +417,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                   return (
                     <React.Fragment key={step.id}>
                       <ContextMenuArea
-                        createMenu={() => {
-                          let selectedStepIndices = (selection?.type === 'steps') && selection.indices.has(stepIndex)
-                            ? selection.indices
-                            : ImSet([stepIndex]);
-
-                          this.setState({
-                            selection: {
-                              type: 'steps',
-                              activeIndex: stepIndex,
-                              indices: selectedStepIndices
-                            }
-                          });
+                        createMenu={(event) => {
+                          this.mouseSelect(event, stepIndex, 'steps', { context: true });
 
                           return [
                             { id: '_header', name: 'Protocol step', type: 'header' },
@@ -332,19 +427,55 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         }}
                         onSelect={(menuPath) => {
                           if (menuPath.first() === 'delete') {
-                            this.deleteStep(stepIndex);
+                            this.deleteSelected();
                           }
                         }}>
-                        <div className={util.formatClass('veditor-step-item', {
-                          '_open': this.state.openStepIds.has(step.id),
-                          '_selected': (selection?.type === 'steps') && selection.indices.has(stepIndex)
-                        })}
+                        <div
+                          className={util.formatClass('veditor-step-item', {
+                            '_open': this.state.openStepIds.has(step.id),
+                            '_selected': (selection?.type === 'steps') && selection.indices.has(stepIndex)
+                          })}
+                          tabIndex={-1}
+                          onClick={(event) => {
+                            if (event.detail === 1) {
+                              event.preventDefault();
+                              this.mouseSelect(event, stepIndex, 'steps');
+                            }
+                          }}
                           onDoubleClick={(event) => {
                             event.preventDefault();
 
                             this.setState((state) => ({
                               openStepIds: util.toggleSet(state.openStepIds, step.id)
                             }));
+                          }}
+                          onBlur={(event) => {
+                            // console.log('BLUR', selection, event.target, '->', event.relatedTarget);
+
+                            if (event.currentTarget !== event.target) {
+                              if (!event.relatedTarget && (selection?.type === 'steps') && (selection.indices.includes(stepIndex))) {
+                                event.currentTarget.focus();
+                              }
+                            } else if (!event.currentTarget.contains(event.relatedTarget)
+                              && !event.relatedTarget?.classList.contains('veditor-step-item')
+                              && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                              this.setState((_state) => ({ selection: null }));
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            switch (event.key) {
+                              case 'Backspace':
+                                this.deleteSelected();
+                                break;
+                              case 'Escape':
+                                event.currentTarget.blur();
+                                break;
+                              default:
+                                return;
+                            }
+
+                            event.preventDefault();
+                            event.stopPropagation();
                           }}>
                           <div className="veditor-step-time">00:00</div>
                           <div className="veditor-step-name">{step.name}</div>
@@ -352,14 +483,16 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                           {/* <div className="veditor-step-segment"></div> */}
                           {/* </div> */}
 
-                          <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={() => {
+                          <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
+                            event.stopPropagation();
                             this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
                           }}>
                             <div>Open</div>
                             <Icon name="expand_more" />
                           </button>
 
-                          <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={() => {
+                          <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={(event) => {
+                            event.stopPropagation();
                             this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
                           }}>
                             <div>Close</div>
@@ -445,63 +578,30 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                       draggable
                                       tabIndex={-1}
                                       onBlur={(event) => {
-                                        if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('ctxmenu')) {
+                                        if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('cmenu-root')) {
                                           this.setState((_state) => ({ selection: null }));
                                         }
                                       }}
                                       onKeyDown={(event) => {
                                         switch (event.key) {
-                                          case 'Backspace': {
+                                          case 'Backspace':
                                             this.deleteSelected();
                                             break;
-                                          }
-
-                                          case 'Escape': {
-                                            this.setState((_state) => ({ selection: null }));
+                                          case 'Escape':
+                                            event.currentTarget.blur();
                                             break;
-                                          }
-
-                                          default: return;
+                                          default:
+                                            return;
                                         }
 
                                         event.preventDefault();
+                                        event.stopPropagation();
                                       }}
                                       onClick={(event) => {
-                                        this.setState((state) => {
-                                          let selection = state.selection;
+                                        event.preventDefault();
+                                        event.stopPropagation();
 
-                                          if (event.shiftKey && (selection?.type === 'segments')) {
-                                            let added = Range(segmentIndex, selection.activeIndex);
-
-                                            return {
-                                              selection: {
-                                                type: 'segments',
-                                                activeIndex: segmentIndex,
-                                                indices: selection.indices.isSuperset(added)
-                                                  ? selection.indices.subtract(Range(selection.activeIndex, segmentIndex))
-                                                  : selection.indices.union(added)
-                                              }
-                                            };
-                                          } else if (event.metaKey && (selection?.type === 'segments')) {
-                                            return {
-                                              selection: {
-                                                type: 'segments',
-                                                activeIndex: selection.indices.has(segmentIndex)
-                                                  ? selection.activeIndex
-                                                  : segmentIndex,
-                                                indices: util.toggleSet(selection.indices, segmentIndex)
-                                              }
-                                            };
-                                          } else {
-                                            return {
-                                              selection: {
-                                                type: 'segments',
-                                                activeIndex: segmentIndex,
-                                                indices: ImSet([segmentIndex])
-                                              }
-                                            };
-                                          }
-                                        });
+                                        this.mouseSelect(event, segmentIndex, 'segments');
                                       }}
                                       onDragStart={(event) => {
                                         event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));

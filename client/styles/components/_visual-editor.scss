@@ -20,12 +20,12 @@
   &-stage {
     &-header {
       @extend .poverview-stage-header;
+    }
 
-      &._context {
-        background-color: lighten($app-blue, 55%);
-        border-color: $app-blue;
-        box-shadow: -1px 1px 6px #0001;
-      }
+    &-root:not(._open) &-header._context {
+      background-color: lighten($app-blue, 55%);
+      border-color: $app-blue;
+      box-shadow: -1px 1px 6px #0001;
     }
 
     &-expand { @extend .poverview-stage-expand; }
@@ -199,6 +199,7 @@
 
       > :nth-child(2) {
         display: flex;
+        align-items: center;
         column-gap: 0.4rem;
       }
 
@@ -259,4 +260,9 @@
   &-step-item:not(._open) &-segment-list {
     display: none;
   }
+}
+
+
+*:focus {
+  // background-color: #f003 !important;
 }

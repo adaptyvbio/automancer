@@ -49,10 +49,10 @@ export type MenuModifiers = Record<string, boolean>;
 
 
 export const ContextMenu = React.forwardRef(function ContextMenu(props: {
-  createMenu(): MenuDef;
+  createMenu(event: React.MouseEvent): MenuDef;
   onClose(selected: boolean): void;
   onSelect(path: MenuEntryPath): void;
-  triggerRef: React.MutableRefObject<(event: MouseEvent) => void>;
+  triggerRef: React.MutableRefObject<(event: React.MouseEvent) => void>;
 }, ref) {
   let [menu, setMenu] = React.useState<MenuDef | null>(null);
   let open = (menu !== null);
@@ -152,7 +152,7 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: {
     });
 
     // setOpen(true);
-    setMenu(props.createMenu());
+    setMenu(props.createMenu(event));
   };
 
   // React.useEffect(() => {

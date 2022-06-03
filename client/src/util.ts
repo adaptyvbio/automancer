@@ -110,10 +110,34 @@ export namespace renumber {
       return {
         ...item,
         [seqKey]: [
-          itemSeq[0] + (itemSeq[0] > targetIndex ? -1 : 0),
-          itemSeq[1] + (itemSeq[1] > targetIndex ? -1 : 0)
+          itemSeq[0] + (targetIndex < itemSeq[0] ? -1 : 0),
+          itemSeq[1] + (targetIndex < itemSeq[1] ? -1 : 0)
         ]
       };
+    });
+  }
+
+  export function deleteChildItems<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, unsortedTargetIndices: Iterable<number>): List<T> {
+    let targetIndices = Array.from(unsortedTargetIndices).sort((a, b) => a - b);
+    let targetIndicesIndex = 0;
+
+    let delta = 0;
+
+    return list.map((item) => {
+      let itemSeq = item[seqKey];
+      let start = itemSeq[0] - delta;
+
+      for (; (targetIndices[targetIndicesIndex] < itemSeq[1]) && (targetIndicesIndex < targetIndices.length); targetIndicesIndex += 1) {
+        delta += 1;
+      }
+
+      return {
+        ...item,
+        [seqKey]: [
+          start,
+          itemSeq[1] - delta
+        ]
+      }
     });
   }
 

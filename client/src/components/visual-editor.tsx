@@ -80,12 +80,16 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
     this.state = {
       stages: List([
-        { id: y,
+        {
+          id: y,
           name: 'Stage A',
-          stepSeq: [0, 2] },
-        { id: z,
+          stepSeq: [0, 2]
+        },
+        {
+          id: z,
           name: 'Stage B',
-          stepSeq: [2, 18] }
+          stepSeq: [2, 18]
+        }
       ]),
       steps: List([
         { id: x, name: 'Alpha', seq: [0, 3] },
@@ -375,413 +379,413 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
     return (
       <div className="veditor-root">
-      <div className="veditor-stage-list">
-        {this.state.stages.map((stage, stageIndex) => {
-          let stepCount = stage.stepSeq[1] - stage.stepSeq[0];
+        <div className="veditor-stage-list">
+          {this.state.stages.map((stage, stageIndex) => {
+            let stepCount = stage.stepSeq[1] - stage.stepSeq[0];
 
-          return (
-            <div className={util.formatClass('veditor-stage-root', { '_open': this.state.openStageIds.has(stage.id) })} key={stage.id}>
-              <ContextMenuArea
-                createMenu={() => {
-                  this.setState({ selection: null });
+            return (
+              <div className={util.formatClass('veditor-stage-root', { '_open': this.state.openStageIds.has(stage.id) })} key={stage.id}>
+                <ContextMenuArea
+                  createMenu={() => {
+                    this.setState({ selection: null });
 
-                  return [
-                    { id: '_header', name: 'Protocol stage', type: 'header' },
-                    { id: 'add-above', name: 'Add stage above' },
-                    { id: 'add-below', name: 'Add stage below' },
-                    { id: '_divider', type: 'divider' },
-                    { id: 'delete', name: 'Delete', icon: 'delete' },
-                  ];
-                }}
-                onSelect={(menuPath) => {
-                  switch (menuPath.first()) {
-                    case 'add-above': {
-                      let newStage = {
-                        id: crypto.randomUUID(),
-                        name: 'Untitled stage',
-                        stepSeq: [stage.stepSeq[0], stage.stepSeq[0]] as ProtocolSeq
-                      };
+                    return [
+                      { id: '_header', name: 'Protocol stage', type: 'header' },
+                      { id: 'add-above', name: 'Add stage above' },
+                      { id: 'add-below', name: 'Add stage below' },
+                      { id: '_divider', type: 'divider' },
+                      { id: 'delete', name: 'Delete', icon: 'delete' },
+                    ];
+                  }}
+                  onSelect={(menuPath) => {
+                    switch (menuPath.first()) {
+                      case 'add-above': {
+                        let newStage = {
+                          id: crypto.randomUUID(),
+                          name: 'Untitled stage',
+                          stepSeq: [stage.stepSeq[0], stage.stepSeq[0]] as ProtocolSeq
+                        };
 
-                      this.setState((state) => ({
-                        openStageIds: state.openStageIds.add(newStage.id),
-                        stages: state.stages.insert(stageIndex, newStage)
-                      }));
+                        this.setState((state) => ({
+                          openStageIds: state.openStageIds.add(newStage.id),
+                          stages: state.stages.insert(stageIndex, newStage)
+                        }));
 
-                      break;
+                        break;
+                      }
+
+                      case 'add-below': {
+                        let newStage = {
+                          id: crypto.randomUUID(),
+                          name: 'Untitled stage',
+                          stepSeq: [stage.stepSeq[1], stage.stepSeq[1]] as ProtocolSeq
+                        };
+
+                        this.setState((state) => ({
+                          openStageIds: state.openStageIds.add(newStage.id),
+                          stages: state.stages.insert(stageIndex + 1, newStage)
+                        }));
+
+                        break;
+                      }
+
+                      case 'delete': {
+                        this.deleteStage(stageIndex);
+                        break;
+                      }
                     }
+                  }}>
+                  <button type="button" className="veditor-stage-header" onClick={(event) => {
+                    event.preventDefault();
 
-                    case 'add-below': {
-                      let newStage = {
-                        id: crypto.randomUUID(),
-                        name: 'Untitled stage',
-                        stepSeq: [stage.stepSeq[1], stage.stepSeq[1]] as ProtocolSeq
-                      };
-
-                      this.setState((state) => ({
-                        openStageIds: state.openStageIds.add(newStage.id),
-                        stages: state.stages.insert(stageIndex + 1, newStage)
-                      }));
-
-                      break;
-                    }
-
-                    case 'delete': {
-                      this.deleteStage(stageIndex);
-                      break;
-                    }
-                  }
-                }}>
-                <button type="button" className="veditor-stage-header" onClick={(event) => {
-                  event.preventDefault();
-
-                  this.setState((state) => ({
-                    openStageIds: util.toggleSet(state.openStageIds, stage.id)
-                  }));
-                }}>
-                  <div className="veditor-stage-expand"><Icon name="expand_more" /></div>
-                  <h3 className="veditor-stage-name">{stage.name}</h3>
-                  {(stepCount > 0) && <div className="veditor-stage-ellipsis">⋯</div>}
-                </button>
-              </ContextMenuArea>
-              <div className="veditor-stage-steps">
-                {/* <SegmentsDivider step
+                    this.setState((state) => ({
+                      openStageIds: util.toggleSet(state.openStageIds, stage.id)
+                    }));
+                  }}>
+                    <div className="veditor-stage-expand"><Icon name="expand_more" /></div>
+                    <h3 className="veditor-stage-name">{stage.name}</h3>
+                    {(stepCount > 0) && <div className="veditor-stage-ellipsis">⋯</div>}
+                  </button>
+                </ContextMenuArea>
+                <div className="veditor-stage-steps">
+                  {/* <SegmentsDivider step
                   onDrop={() => void this.moveSelectedStep(stage.stepSeq[0], stageIndex)}
                   onTrigger={() => void this.createStep(stage.stepSeq[0], stageIndex)} /> */}
 
-                {new Array(stepCount).fill(0).map((_, stepRelIndex) => {
-                  let stepIndex = stage.stepSeq[0] + stepRelIndex;
-                  let step = this.state.steps.get(stepIndex)!;
-                  let stepSelected = (selection?.type === 'steps') && selection.indices.has(stepIndex);
-                  let segmentCount = step.seq[1] - step.seq[0];
+                  {new Array(stepCount).fill(0).map((_, stepRelIndex) => {
+                    let stepIndex = stage.stepSeq[0] + stepRelIndex;
+                    let step = this.state.steps.get(stepIndex)!;
+                    let stepSelected = (selection?.type === 'steps') && selection.indices.has(stepIndex);
+                    let segmentCount = step.seq[1] - step.seq[0];
 
-                  return (
-                    <React.Fragment key={step.id}>
-                      <ContextMenuArea
-                        createMenu={(event) => {
-                          this.mouseSelect(event, stepIndex, 'steps', { context: true });
+                    return (
+                      <React.Fragment key={step.id}>
+                        <ContextMenuArea
+                          createMenu={(event) => {
+                            this.mouseSelect(event, stepIndex, 'steps', { context: true });
 
-                          return [
-                            { id: '_header', name: 'Protocol step', type: 'header' },
-                            { id: 'add-above', name: 'Add step above' },
-                            { id: 'add-below', name: 'Add step below' },
-                            { id: '_divider', type: 'divider' },
-                            { id: 'delete', name: 'Delete', icon: 'delete' }
-                          ];
-                        }}
-                        onSelect={(menuPath) => {
-                          switch (menuPath.first()) {
-                            case 'add-above': {
-                              let newStep = {
-                                id: crypto.randomUUID(),
-                                name: 'Untitled step',
-                                seq: [step.seq[0], step.seq[0]] as ProtocolSeq
-                              };
-
-                              this.setState((state) => ({
-                                openStepIds: state.openStepIds.add(newStep.id),
-                                stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
-                                steps: state.steps.insert(stepIndex, newStep),
-                                selection: {
-                                  type: 'steps',
-                                  activeIndex: stepIndex,
-                                  indices: ImSet([stepIndex])
-                                }
-                              }));
-
-                              break;
-                            }
-
-                            case 'add-below': {
-                              let newStep = {
-                                id: crypto.randomUUID(),
-                                name: 'Untitled step',
-                                seq: [step.seq[1], step.seq[1]] as ProtocolSeq
-                              };
-
-                              this.setState((state) => ({
-                                openStepIds: state.openStepIds.add(newStep.id),
-                                stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
-                                steps: state.steps.insert(stepIndex + 1, newStep)
-                              }));
-
-                              break;
-                            }
-
-                            case 'delete':
-                              this.deleteSelected();
-                              break;
-                          }
-                        }}>
-                        <div
-                          className={util.formatClass('veditor-step-item', {
-                            '_open': this.state.openStepIds.has(step.id),
-                            '_selected': stepSelected
-                          })}
-                          tabIndex={-1}
-                          onClick={(event) => {
-                            // if (event.detail === 1) {
-                            //   if (event.target === event.currentTarget) {
-                            //     event.preventDefault();
-                            //     this.mouseSelect(event, stepIndex, 'steps');
-                            //   }
-                            // }
+                            return [
+                              { id: '_header', name: 'Protocol step', type: 'header' },
+                              { id: 'add-above', name: 'Add step above' },
+                              { id: 'add-below', name: 'Add step below' },
+                              { id: '_divider', type: 'divider' },
+                              { id: 'delete', name: 'Delete', icon: 'delete' }
+                            ];
                           }}
-                          onDoubleClick={(event) => {
-                            event.preventDefault();
+                          onSelect={(menuPath) => {
+                            switch (menuPath.first()) {
+                              case 'add-above': {
+                                let newStep = {
+                                  id: crypto.randomUUID(),
+                                  name: 'Untitled step',
+                                  seq: [step.seq[0], step.seq[0]] as ProtocolSeq
+                                };
 
-                            this.setState((state) => ({
-                              openStepIds: util.toggleSet(state.openStepIds, step.id)
-                            }));
-                          }}
-                          onBlur={(event) => {
-                            console.log('Item blur', event.target, '->', event.relatedTarget);
-                            if (stepSelected && (event.currentTarget === event.target) && !event.relatedTarget) {
-                              this.setState({ selection: null });
-                            }
+                                this.setState((state) => ({
+                                  openStepIds: state.openStepIds.add(newStep.id),
+                                  stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
+                                  steps: state.steps.insert(stepIndex, newStep),
+                                  selection: {
+                                    type: 'steps',
+                                    activeIndex: stepIndex,
+                                    indices: ImSet([stepIndex])
+                                  }
+                                }));
 
-                            return;
-
-                            // console.log('BLUR', selection, event.target, '->', event.relatedTarget);
-
-                            if (event.currentTarget !== event.target) {
-                              if (!event.relatedTarget && (selection?.type === 'steps') && (selection.indices.includes(stepIndex))) {
-                                event.currentTarget.focus();
+                                break;
                               }
-                            } else if (!event.currentTarget.contains(event.relatedTarget)
-                              && !event.relatedTarget?.classList.contains('veditor-step-item')
-                              && !event.relatedTarget?.classList.contains('cmenu-root')) {
-                              this.setState((_state) => ({ selection: null }));
-                            }
-                          }}
-                          // onFocus={(event) => {
-                          //   if (!stepSelected && (event.currentTarget === event.target)) {
-                          //     event.currentTarget.blur();
-                          //   }
-                          // }}
-                          onKeyDown={(event) => {
-                            switch (event.key) {
-                              case 'Backspace':
+
+                              case 'add-below': {
+                                let newStep = {
+                                  id: crypto.randomUUID(),
+                                  name: 'Untitled step',
+                                  seq: [step.seq[1], step.seq[1]] as ProtocolSeq
+                                };
+
+                                this.setState((state) => ({
+                                  openStepIds: state.openStepIds.add(newStep.id),
+                                  stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
+                                  steps: state.steps.insert(stepIndex + 1, newStep)
+                                }));
+
+                                break;
+                              }
+
+                              case 'delete':
                                 this.deleteSelected();
                                 break;
-                              case 'Escape':
-                                event.currentTarget.blur();
-                                break;
-                              default:
-                                return;
-                            }
-
-                            event.preventDefault();
-                            event.stopPropagation();
-                          }}
-                          ref={(el) => {
-                            if (el) {
-                              this.refSteps[stepIndex] = el;
-                            } else {
-                              delete this.refSteps[stepIndex];
                             }
                           }}>
-                          <button type="button" className="veditor-step-handle"
+                          <div
+                            className={util.formatClass('veditor-step-item', {
+                              '_open': this.state.openStepIds.has(step.id),
+                              '_selected': stepSelected
+                            })}
+                            tabIndex={-1}
                             onClick={(event) => {
-                              event.preventDefault();
-                              this.mouseSelect(event, stepIndex, 'steps');
+                              // if (event.detail === 1) {
+                              //   if (event.target === event.currentTarget) {
+                              //     event.preventDefault();
+                              //     this.mouseSelect(event, stepIndex, 'steps');
+                              //   }
+                              // }
                             }}
-                            onFocus={(event) => {
-                              event.currentTarget.parentElement!.focus();
-                            }} />
-                          <div className="veditor-step-body">
-                            <div className="veditor-step-time">00:00</div>
-                            <div className="veditor-step-name">{step.name}</div>
+                            onDoubleClick={(event) => {
+                              event.preventDefault();
 
-                            <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
+                              this.setState((state) => ({
+                                openStepIds: util.toggleSet(state.openStepIds, step.id)
+                              }));
+                            }}
+                            onBlur={(event) => {
+                              console.log('Item blur', event.target, '->', event.relatedTarget);
+                              if (stepSelected && (event.currentTarget === event.target) && !event.relatedTarget) {
+                                this.setState({ selection: null });
+                              }
+
+                              return;
+
+                              // console.log('BLUR', selection, event.target, '->', event.relatedTarget);
+
+                              if (event.currentTarget !== event.target) {
+                                if (!event.relatedTarget && (selection?.type === 'steps') && (selection.indices.includes(stepIndex))) {
+                                  event.currentTarget.focus();
+                                }
+                              } else if (!event.currentTarget.contains(event.relatedTarget)
+                                && !event.relatedTarget?.classList.contains('veditor-step-item')
+                                && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                                this.setState((_state) => ({ selection: null }));
+                              }
+                            }}
+                            // onFocus={(event) => {
+                            //   if (!stepSelected && (event.currentTarget === event.target)) {
+                            //     event.currentTarget.blur();
+                            //   }
+                            // }}
+                            onKeyDown={(event) => {
+                              switch (event.key) {
+                                case 'Backspace':
+                                  this.deleteSelected();
+                                  break;
+                                case 'Escape':
+                                  event.currentTarget.blur();
+                                  break;
+                                default:
+                                  return;
+                              }
+
+                              event.preventDefault();
                               event.stopPropagation();
-                              this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
+                            }}
+                            ref={(el) => {
+                              if (el) {
+                                this.refSteps[stepIndex] = el;
+                              } else {
+                                delete this.refSteps[stepIndex];
+                              }
                             }}>
-                              <div>Open</div>
-                              <Icon name="expand_more" />
-                            </button>
+                            <button type="button" className="veditor-step-handle"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                this.mouseSelect(event, stepIndex, 'steps');
+                              }}
+                              onFocus={(event) => {
+                                event.currentTarget.parentElement!.focus();
+                              }} />
+                            <div className="veditor-step-body">
+                              <div className="veditor-step-time">00:00</div>
+                              <div className="veditor-step-name">{step.name}</div>
 
-                            <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={(event) => {
-                              event.stopPropagation();
-                              this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
-                            }}>
-                              <div>Close</div>
-                              <Icon name="expand_less" />
-                            </button>
+                              <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
+                                event.stopPropagation();
+                                this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
+                              }}>
+                                <div>Open</div>
+                                <Icon name="expand_more" />
+                              </button>
 
-                            {segmentCount !== 1
-                              ? <div className="veditor-step-summary">{segmentCount > 1 ? `${segmentCount} segments` : 'no segment'}</div>
-                              : <div className="veditor-step-preview"></div>}
+                              <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={(event) => {
+                                event.stopPropagation();
+                                this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
+                              }}>
+                                <div>Close</div>
+                                <Icon name="expand_less" />
+                              </button>
 
-                            <div className="veditor-segment-list">
-                              <SegmentsDivider
-                                onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
-                                onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
+                              {segmentCount !== 1
+                                ? <div className="veditor-step-summary">{segmentCount > 1 ? `${segmentCount} segments` : 'no segment'}</div>
+                                : <div className="veditor-step-preview"></div>}
 
-                              {new Array(segmentCount).fill(0).map((_, segmentRelIndex) => {
-                                let segmentIndex = step.seq[0] + segmentRelIndex;
-                                let segment = this.state.segments.get(segmentIndex)!;
+                              <div className="veditor-segment-list">
+                                <SegmentsDivider
+                                  onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
+                                  onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
 
-                                return (
-                                  <React.Fragment key={segment.id}>
-                                    <ContextMenuArea onContextMenu={async (event) => {
-                                      event.stopPropagation();
+                                {new Array(segmentCount).fill(0).map((_, segmentRelIndex) => {
+                                  let segmentIndex = step.seq[0] + segmentRelIndex;
+                                  let segment = this.state.segments.get(segmentIndex)!;
 
-                                      let selectedSegmentIndices = (selection?.type === 'segments') && selection.indices.has(segmentIndex)
-                                        ? selection.indices
-                                        : ImSet([segmentIndex]);
+                                  return (
+                                    <React.Fragment key={segment.id}>
+                                      <ContextMenuArea onContextMenu={async (event) => {
+                                        event.stopPropagation();
 
-                                      this.setState({
-                                        selection: {
-                                          type: 'segments',
-                                          activeIndex: segmentIndex,
-                                          indices: selectedSegmentIndices
-                                        }
-                                      });
+                                        let selectedSegmentIndices = (selection?.type === 'segments') && selection.indices.has(segmentIndex)
+                                          ? selection.indices
+                                          : ImSet([segmentIndex]);
 
-                                      await this.props.app.showContextMenu(event, [
-                                        { id: '_header', name: 'Protocol segment', type: 'header' },
-                                        // {
-                                        //   id: 'process', name: 'Process', children: [
-                                        //     { id: 'noop', name: 'No-op' },
-                                        //     { id: '_divider', type: 'divider' },
-                                        //     { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
-                                        //     { id: 'pump', name: 'Pump...' }
-                                        //   ]
-                                        // },
-                                        // { id: '_divider', type: 'divider' },
-                                        // {
-                                        //   id: 'control', name: 'Valve control', children: [
-                                        //     {
-                                        //       id: 'recent', name: 'Recent', children: [
-                                        //         { id: 'inlet1', name: 'Inlet 1' },
-                                        //         { id: 'inlet2', name: 'Inlet 2' },
-                                        //       ]
-                                        //     },
-                                        //     { id: 'clear', name: 'Clear' },
-                                        //     {
-                                        //       id: 'set', name: 'Set', children: [
-                                        //         { id: 'inlet1', name: 'Inlet 1' },
-                                        //         { id: 'inlet2', name: 'Inlet 2' },
-                                        //       ]
-                                        //     }
-                                        //   ]
-                                        // },
-                                        // { id: '_divider2', type: 'divider' },
-                                        { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete' }
-                                      ], (menuPath) => {
-                                        if (menuPath.first() === 'delete') {
-                                          this.deleteSelected();
-                                        }
-                                      }, (selected) => {
-                                        if (!selected) {
-                                          this.setState((_state) => ({ selection: null }));
-                                        }
-                                      });
-                                    }}>
-                                      <div
-                                        className={util.formatClass('veditor-segment-features', {
-                                          '_active': (this.state.selection?.type === 'segments') && this.state.selection.activeIndex === segmentIndex,
-                                          '_selected': (this.state.selection?.type === 'segments') && this.state.selection.indices.has(segmentIndex)
-                                        })}
-                                        key={segment.id}
-                                        draggable
-                                        tabIndex={-1}
-                                        onBlur={(event) => {
-                                          if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                                        this.setState({
+                                          selection: {
+                                            type: 'segments',
+                                            activeIndex: segmentIndex,
+                                            indices: selectedSegmentIndices
+                                          }
+                                        });
+
+                                        await this.props.app.showContextMenu(event, [
+                                          { id: '_header', name: 'Protocol segment', type: 'header' },
+                                          // {
+                                          //   id: 'process', name: 'Process', children: [
+                                          //     { id: 'noop', name: 'No-op' },
+                                          //     { id: '_divider', type: 'divider' },
+                                          //     { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
+                                          //     { id: 'pump', name: 'Pump...' }
+                                          //   ]
+                                          // },
+                                          // { id: '_divider', type: 'divider' },
+                                          // {
+                                          //   id: 'control', name: 'Valve control', children: [
+                                          //     {
+                                          //       id: 'recent', name: 'Recent', children: [
+                                          //         { id: 'inlet1', name: 'Inlet 1' },
+                                          //         { id: 'inlet2', name: 'Inlet 2' },
+                                          //       ]
+                                          //     },
+                                          //     { id: 'clear', name: 'Clear' },
+                                          //     {
+                                          //       id: 'set', name: 'Set', children: [
+                                          //         { id: 'inlet1', name: 'Inlet 1' },
+                                          //         { id: 'inlet2', name: 'Inlet 2' },
+                                          //       ]
+                                          //     }
+                                          //   ]
+                                          // },
+                                          // { id: '_divider2', type: 'divider' },
+                                          { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete' }
+                                        ], (menuPath) => {
+                                          if (menuPath.first() === 'delete') {
+                                            this.deleteSelected();
+                                          }
+                                        }, (selected) => {
+                                          if (!selected) {
                                             this.setState((_state) => ({ selection: null }));
                                           }
-                                        }}
-                                        onKeyDown={(event) => {
-                                          switch (event.key) {
-                                            case 'Backspace':
-                                              this.deleteSelected();
-                                              break;
-                                            case 'Escape':
-                                              event.currentTarget.blur();
-                                              break;
-                                            default:
-                                              return;
-                                          }
+                                        });
+                                      }}>
+                                        <div
+                                          className={util.formatClass('veditor-segment-features', {
+                                            '_active': (this.state.selection?.type === 'segments') && this.state.selection.activeIndex === segmentIndex,
+                                            '_selected': (this.state.selection?.type === 'segments') && this.state.selection.indices.has(segmentIndex)
+                                          })}
+                                          key={segment.id}
+                                          draggable
+                                          tabIndex={-1}
+                                          onBlur={(event) => {
+                                            if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                                              this.setState((_state) => ({ selection: null }));
+                                            }
+                                          }}
+                                          onKeyDown={(event) => {
+                                            switch (event.key) {
+                                              case 'Backspace':
+                                                this.deleteSelected();
+                                                break;
+                                              case 'Escape':
+                                                event.currentTarget.blur();
+                                                break;
+                                              default:
+                                                return;
+                                            }
 
-                                          event.preventDefault();
-                                          event.stopPropagation();
-                                        }}
-                                        onClick={(event) => {
-                                          event.preventDefault();
-                                          event.stopPropagation();
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                          }}
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
 
-                                          this.mouseSelect(event, segmentIndex, 'segments');
-                                        }}
-                                        onDragStart={(event) => {
-                                          event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
-                                          // event.dataTransfer.setDragImage(blankImage, 0, 0);
+                                            this.mouseSelect(event, segmentIndex, 'segments');
+                                          }}
+                                          onDragStart={(event) => {
+                                            event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
+                                            // event.dataTransfer.setDragImage(blankImage, 0, 0);
 
-                                          // this.setState({ draggingSegmentId: segment.id });
-                                          // event.dataTransfer.dropEffect = "copy";
-                                          let rect = event.currentTarget.getBoundingClientRect();
+                                            // this.setState({ draggingSegmentId: segment.id });
+                                            // event.dataTransfer.dropEffect = "copy";
+                                            let rect = event.currentTarget.getBoundingClientRect();
 
-                                          let offset = {
-                                            x: event.clientX - rect.x,
-                                            y: event.clientY - rect.y
-                                          };
+                                            let offset = {
+                                              x: event.clientX - rect.x,
+                                              y: event.clientY - rect.y
+                                            };
 
-                                          let start = { x: event.clientX, y: event.clientY };
+                                            let start = { x: event.clientX, y: event.clientY };
 
-                                          this.setState((state) => ({
-                                            drag: {
-                                              segmentId: segment.id,
-                                              offset,
-                                              start
-                                            },
+                                            this.setState((state) => ({
+                                              drag: {
+                                                segmentId: segment.id,
+                                                offset,
+                                                start
+                                              },
 
-                                            activeSegmentIndex: segmentIndex,
-                                            selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
-                                              ? state.selectedSegmentIndices
-                                              : state.selectedSegmentIndices.clear().add(segmentIndex)
-                                          }));
-                                        }}
-                                        onDragEnd={() => {
-                                          this.setState({ drag: null });
-                                        }}>
-                                        {segment.features.map((feature, featureIndex) => (
-                                          <React.Fragment key={featureIndex}>
-                                            <Icon name={feature.icon} />
-                                            <span>{feature.label}</span>
-                                          </React.Fragment>
-                                        ))}
-                                      </div>
-                                    </ContextMenuArea>
+                                              activeSegmentIndex: segmentIndex,
+                                              selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
+                                                ? state.selectedSegmentIndices
+                                                : state.selectedSegmentIndices.clear().add(segmentIndex)
+                                            }));
+                                          }}
+                                          onDragEnd={() => {
+                                            this.setState({ drag: null });
+                                          }}>
+                                          {segment.features.map((feature, featureIndex) => (
+                                            <React.Fragment key={featureIndex}>
+                                              <Icon name={feature.icon} />
+                                              <span>{feature.label}</span>
+                                            </React.Fragment>
+                                          ))}
+                                        </div>
+                                      </ContextMenuArea>
 
-                                    <SegmentsDivider
-                                      onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
-                                      onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
-                                  </React.Fragment>
-                                );
-                              })}
+                                      <SegmentsDivider
+                                        onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
+                                        onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </ContextMenuArea>
+                        </ContextMenuArea>
 
-                      {/* <SegmentsDivider step
+                        {/* <SegmentsDivider step
                         onDrop={() => void this.moveSelectedStep(stepIndex + 1, stageIndex)}
                         onTrigger={() => void this.createStep(stepIndex + 1, stageIndex)} /> */}
 
-                      {/* <div className="veditor-step-dropzone">
+                        {/* <div className="veditor-step-dropzone">
                         <Rf.Icon name="chevron-right" />
                         <div />
                         <Rf.Icon name="chevron-left" />
                       </div> */}
 
-                      <StepDivider active={this.state.drag !== null} />
-                    </React.Fragment>
-                  );
-                })}
+                        <StepDivider active={this.state.drag !== null} />
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
         {(this.state.selection?.type === 'steps') && <div className="veditor-inspector-root">
           <div className="veditor-inspector-header">
             <div className="veditor-inspector-subtitle">Selection</div>
@@ -933,9 +937,9 @@ namespace Inspector {
   }) {
     return (
       <label className="veditor-inspector-group">
-      <div className="veditor-inspector-label">{props.label}</div>
-      <input type="text" className="veditor-inspector-textfield" placeholder={props.placeholder} />
-    </label>
+        <div className="veditor-inspector-label">{props.label}</div>
+        <input type="text" className="veditor-inspector-textfield" placeholder={props.placeholder} />
+      </label>
     );
   }
 }

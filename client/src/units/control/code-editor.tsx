@@ -66,7 +66,7 @@ export class CodeEditor extends React.Component<CodeEditorProps> {
                   }} */}
                     {/* selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} /> */}
                   </select>
-                  <div className="btn illustrated-root superimposed-visible">
+                  <div className="btn superimposed-visible">
                     {argValve && (
                       <div className="btn-icon">
                         <Icon name="air" />

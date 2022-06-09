@@ -336,7 +336,8 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     let selection = this.state.selection;
 
     return (
-      <div className="protoview-root veditor-root">
+      <div className="veditor-root">
+      <div className="veditor-stage-list">
         {this.state.stages.map((stage, stageIndex) => {
           let stepCount = stage.stepSeq[1] - stage.stepSeq[0];
 
@@ -422,12 +423,49 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
                           return [
                             { id: '_header', name: 'Protocol step', type: 'header' },
-                            { id: 'delete', name: 'Delete' }
+                            { id: 'add-above', name: 'Add step above' },
+                            { id: 'add-below', name: 'Add step below' },
+                            { id: '_divider', type: 'divider' },
+                            { id: 'delete', name: 'Delete', icon: 'delete' }
                           ];
                         }}
                         onSelect={(menuPath) => {
-                          if (menuPath.first() === 'delete') {
-                            this.deleteSelected();
+                          switch (menuPath.first()) {
+                            case 'add-above': {
+                              let newStep = {
+                                id: crypto.randomUUID(),
+                                name: 'Untitled step',
+                                seq: [step.seq[0], step.seq[0]] as ProtocolSeq
+                              };
+
+                              this.setState((state) => ({
+                                openStepIds: state.openStepIds.add(newStep.id),
+                                stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
+                                steps: state.steps.insert(stepIndex, newStep)
+                              }));
+
+                              break;
+                            }
+
+                            case 'add-below': {
+                              let newStep = {
+                                id: crypto.randomUUID(),
+                                name: 'Untitled step',
+                                seq: [step.seq[1], step.seq[1]] as ProtocolSeq
+                              };
+
+                              this.setState((state) => ({
+                                openStepIds: state.openStepIds.add(newStep.id),
+                                stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
+                                steps: state.steps.insert(stepIndex + 1, newStep)
+                              }));
+
+                              break;
+                            }
+
+                            case 'delete':
+                              this.deleteSelected();
+                              break;
                           }
                         }}>
                         <div
@@ -438,8 +476,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                           tabIndex={-1}
                           onClick={(event) => {
                             if (event.detail === 1) {
+                            if (event.target === event.currentTarget) {
                               event.preventDefault();
                               this.mouseSelect(event, stepIndex, 'steps');
+                            }
                             }
                           }}
                           onDoubleClick={(event) => {
@@ -479,9 +519,6 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                           }}>
                           <div className="veditor-step-time">00:00</div>
                           <div className="veditor-step-name">{step.name}</div>
-                          {/* <div className="veditor-step-info"> */}
-                          {/* <div className="veditor-step-segment"></div> */}
-                          {/* </div> */}
 
                           <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
                             event.stopPropagation();
@@ -672,6 +709,153 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           );
         })}
       </div>
+        <div className="veditor-inspector">
+          <div className="veditor-inspector-header">
+            <div className="veditor-inspector-subtitle">Selection</div>
+            <input value="Alpha" className="veditor-inspector-title" />
+            <div className="veditor-inspector-navigation">
+              <button type="button" className="veditor-inspector-navigate" disabled>
+                <Icon name="chevron_left" />
+              </button>
+              <button type="button" className="veditor-inspector-navigate">
+                <Icon name="chevron_right" />
+              </button>
+            </div>
+          </div>
+          {/* <button type="button" className="btn">
+            <Icon name="delete" />
+            <div>Delete</div>
+          </button> */}
+          {/* <div className="veditor-inspector-oheader">
+            <h3>Process</h3>
+            <div className="superimposed-root">
+              <select className="superimposed-target">
+                <option>No-op</option>
+                <option>Timer</option>
+                <option>Pump forward</option>
+                <option>Pump backward</option>
+              </select>
+              <div className="btn superimposed-visible">
+                <div className="btn-icon">
+                  <Icon name="mail" />
+                </div>
+                <div>Email</div>
+              </div>
+            </div>
+          </div> */}
+
+          <div className="veditor-inspector-section">Valve control</div>
+          <div className="veditor-inspector-form">
+            <Inspector.TextField label="Name" placeholder="e.g. Bob" />
+          </div>
+
+          <div className="veditor-inspector-section">Valve control</div>
+
+          <div className="veditor-inspector-form">
+            <Inspector.CheckboxList label="Closed valves">
+              <Inspector.Checkbox label="Button" />
+              <Inspector.Checkbox label="Outlet" />
+              <Inspector.Checkbox label="Foo" />
+            </Inspector.CheckboxList>
+
+            <Inspector.Select label="Mode">
+              <option>No-op</option>
+              <option>Timer</option>
+              <option>Pump forward</option>
+              <option>Pump backward</option>
+            </Inspector.Select>
+            <Inspector.Select label="Mode">
+              <option>Forward</option>
+              <option>Backward</option>
+            </Inspector.Select>
+            <Inspector.TextField label="Name" placeholder="e.g. Bob" />
+            <Inspector.DurationField label="Duration" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+
+namespace Inspector {
+  export function Checkbox(props: {
+    label: string;
+  }) {
+    return (
+      <label className="veditor-inspector-checkbox">
+        <input type="checkbox" />
+        <div>{props.label}</div>
+      </label>
+    );
+  }
+
+  export function CheckboxList(props: React.PropsWithChildren<{
+    label: string;
+  }>) {
+    return (
+      <div className="veditor-inspector-group">
+        <div className="veditor-inspector-label">{props.label}</div>
+        <div className="veditor-inspector-checkboxlist">
+          {props.children}
+        </div>
+      </div>
+    );
+  }
+
+  export function DurationField(props: React.PropsWithChildren<{
+    label: string;
+  }>) {
+    return (
+      <div className="veditor-inspector-group">
+        <div className="veditor-inspector-label">{props.label}</div>
+        <div className="veditor-inspector-durationfield">
+          <label>
+            <input type="text" placeholder="0" />
+            <div>hrs</div>
+          </label>
+          <label>
+            <input type="text" placeholder="0" />
+            <div>min</div>
+          </label>
+          <label>
+            <input type="text" placeholder="0" />
+            <div>sec</div>
+          </label>
+          <label>
+            <input type="text" placeholder="0" />
+            <div>ms</div>
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  export function Select(props: React.PropsWithChildren<{
+    label: string;
+  }>) {
+    return (
+      <label className="veditor-inspector-group">
+        <div className="veditor-inspector-label">{props.label}</div>
+        <div className="veditor-inspector-select">
+          <select>
+            {props.children}
+          </select>
+          <Icon name="expand_more" />
+        </div>
+      </label>
+    );
+  }
+
+  export function TextField(props: {
+    label: string;
+    placeholder: string;
+  }) {
+    return (
+      <label className="veditor-inspector-group">
+      <div className="veditor-inspector-label">{props.label}</div>
+      <input type="text" className="veditor-inspector-textfield" placeholder={props.placeholder} />
+    </label>
     );
   }
 }

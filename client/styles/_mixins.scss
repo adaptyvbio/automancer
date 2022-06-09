@@ -1,3 +1,12 @@
+@mixin superimposed-children() {
+  display: grid;
+  grid: [track] 100% / [track] 100%;
+
+  > * {
+    grid-area: track;
+  }
+}
+
 @mixin text-ellipsis {
   overflow-x: hidden;
   text-overflow: ellipsis;

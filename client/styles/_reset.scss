@@ -11,6 +11,10 @@
     margin: initial;
   }
 
+  :focus {
+    outline: initial;
+  }
+
   a {
     display: block;
 
@@ -78,6 +82,7 @@
 
   input::placeholder {
     opacity: initial;
+    color: initial;
   }
 
   input[type="search"]::-webkit-search-decoration {

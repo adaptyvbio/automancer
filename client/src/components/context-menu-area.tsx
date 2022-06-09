@@ -24,10 +24,18 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
     });
   }, []);
 
+  let child = props.children as any;
+
   return (
     <>
-      {React.cloneElement(props.children as React.ReactElement, {
-        ref: (ref: HTMLElement) => ((childRef as any).current = ref)
+      {React.cloneElement(child, {
+        ref: (ref: HTMLElement) => {
+          (childRef as any).current = ref;
+
+          if (typeof child.ref === 'function') {
+            child.ref(ref);
+          }
+        }
       })}
       <ContextMenu
         createMenu={props.createMenu}

@@ -68,17 +68,22 @@ let a = () => ({
 });
 
 export class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState> {
+  controller = new AbortController();
+  refSteps: Record<number, HTMLDivElement> = {};
+
   constructor(props: VisualEditorProps) {
     super(props);
 
     let x = crypto.randomUUID();
+    let y = crypto.randomUUID();
+    let z = crypto.randomUUID();
 
     this.state = {
       stages: List([
-        { id: crypto.randomUUID(),
+        { id: y,
           name: 'Stage A',
           stepSeq: [0, 2] },
-        { id: crypto.randomUUID(),
+        { id: z,
           name: 'Stage B',
           stepSeq: [2, 18] }
       ]),
@@ -93,12 +98,33 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
       drag: null,
 
-      openStageIds: ImSet([]),
+      openStageIds: ImSet([y, z]),
       openStepIds: ImSet([x]),
 
       activeSegmentIndex: null,
       selectedSegmentIndices: ImSet()
     };
+  }
+
+  componentDidMount() {
+    let isStepEl = (el: HTMLElement): boolean => el.matches('.veditor-step-item');
+
+    document.body.addEventListener('focusout', (event) => {
+      console.log('Global blur', event.target, '->', event.relatedTarget);
+
+      if (!isStepEl(event.target as HTMLElement) && !event.relatedTarget && (this.state.selection?.type === 'steps')) {
+        this.refSteps[this.state.selection.activeIndex].focus({ preventScroll: true });
+        console.log('Adapt');
+      }
+    }, { capture: false, signal: this.controller.signal });
+
+    // setInterval(() => {
+    //   console.log(document.activeElement)
+    // }, 500)
+  }
+
+  componentWillUnmount() {
+    this.controller.abort();
   }
 
   deleteStage(targetStageIndex: number) {
@@ -282,15 +308,23 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           } as Selection
         };
       } else if (event.metaKey && (selection?.type === targetType)) {
-        return {
-          selection: {
-            type: targetType,
-            activeIndex: selection.indices.has(targetIndex)
-              ? selection.activeIndex
-              : targetIndex,
-            indices: util.toggleSet(selection.indices, targetIndex)
-          } as Selection
-        };
+        let indices = util.toggleSet(selection.indices, targetIndex);
+
+        if (indices.isEmpty()) {
+          return {
+            selection: null
+          };
+        } else {
+          return {
+            selection: {
+              type: targetType,
+              activeIndex: selection.indices.has(targetIndex)
+                ? selection.activeIndex
+                : targetIndex,
+              indices
+            } as Selection
+          };
+        }
       } else {
         return {
           selection: {
@@ -299,6 +333,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
             indices: ImSet([targetIndex])
           } as Selection
         };
+      }
+    }, () => {
+      if (this.state.selection === null) {
+        document.activeElement?.blur();
       }
     });
   }
@@ -413,6 +451,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                 {new Array(stepCount).fill(0).map((_, stepRelIndex) => {
                   let stepIndex = stage.stepSeq[0] + stepRelIndex;
                   let step = this.state.steps.get(stepIndex)!;
+                  let stepSelected = (selection?.type === 'steps') && selection.indices.has(stepIndex);
                   let segmentCount = step.seq[1] - step.seq[0];
 
                   return (
@@ -441,7 +480,12 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                               this.setState((state) => ({
                                 openStepIds: state.openStepIds.add(newStep.id),
                                 stages: util.renumber.createChildItem(state.stages, 'stepSeq', stageIndex),
-                                steps: state.steps.insert(stepIndex, newStep)
+                                steps: state.steps.insert(stepIndex, newStep),
+                                selection: {
+                                  type: 'steps',
+                                  activeIndex: stepIndex,
+                                  indices: ImSet([stepIndex])
+                                }
                               }));
 
                               break;
@@ -471,16 +515,16 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         <div
                           className={util.formatClass('veditor-step-item', {
                             '_open': this.state.openStepIds.has(step.id),
-                            '_selected': (selection?.type === 'steps') && selection.indices.has(stepIndex)
+                            '_selected': stepSelected
                           })}
                           tabIndex={-1}
                           onClick={(event) => {
-                            if (event.detail === 1) {
-                            if (event.target === event.currentTarget) {
-                              event.preventDefault();
-                              this.mouseSelect(event, stepIndex, 'steps');
-                            }
-                            }
+                            // if (event.detail === 1) {
+                            //   if (event.target === event.currentTarget) {
+                            //     event.preventDefault();
+                            //     this.mouseSelect(event, stepIndex, 'steps');
+                            //   }
+                            // }
                           }}
                           onDoubleClick={(event) => {
                             event.preventDefault();
@@ -490,6 +534,13 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                             }));
                           }}
                           onBlur={(event) => {
+                            console.log('Item blur', event.target, '->', event.relatedTarget);
+                            if (stepSelected && (event.currentTarget === event.target) && !event.relatedTarget) {
+                              this.setState({ selection: null });
+                            }
+
+                            return;
+
                             // console.log('BLUR', selection, event.target, '->', event.relatedTarget);
 
                             if (event.currentTarget !== event.target) {
@@ -502,6 +553,11 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                               this.setState((_state) => ({ selection: null }));
                             }
                           }}
+                          // onFocus={(event) => {
+                          //   if (!stepSelected && (event.currentTarget === event.target)) {
+                          //     event.currentTarget.blur();
+                          //   }
+                          // }}
                           onKeyDown={(event) => {
                             switch (event.key) {
                               case 'Backspace':
@@ -516,179 +572,196 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
 
                             event.preventDefault();
                             event.stopPropagation();
+                          }}
+                          ref={(el) => {
+                            if (el) {
+                              this.refSteps[stepIndex] = el;
+                            } else {
+                              delete this.refSteps[stepIndex];
+                            }
                           }}>
-                          <div className="veditor-step-time">00:00</div>
-                          <div className="veditor-step-name">{step.name}</div>
+                          <button type="button" className="veditor-step-handle"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              this.mouseSelect(event, stepIndex, 'steps');
+                            }}
+                            onFocus={(event) => {
+                              event.currentTarget.parentElement!.focus();
+                            }} />
+                          <div className="veditor-step-body">
+                            <div className="veditor-step-time">00:00</div>
+                            <div className="veditor-step-name">{step.name}</div>
 
-                          <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
-                            event.stopPropagation();
-                            this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
-                          }}>
-                            <div>Open</div>
-                            <Icon name="expand_more" />
-                          </button>
+                            <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
+                              event.stopPropagation();
+                              this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
+                            }}>
+                              <div>Open</div>
+                              <Icon name="expand_more" />
+                            </button>
 
-                          <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={(event) => {
-                            event.stopPropagation();
-                            this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
-                          }}>
-                            <div>Close</div>
-                            <Icon name="expand_less" />
-                          </button>
+                            <button type="button" className="veditor-step-expand veditor-step-expand--close" onClick={(event) => {
+                              event.stopPropagation();
+                              this.setState((state) => ({ openStepIds: state.openStepIds.delete(step.id) }));
+                            }}>
+                              <div>Close</div>
+                              <Icon name="expand_less" />
+                            </button>
 
-                          {segmentCount !== 1
-                            ? <div className="veditor-step-summary">{segmentCount > 1 ? `${segmentCount} segments` : 'no segment'}</div>
-                            : <div className="veditor-step-preview"></div>}
+                            {segmentCount !== 1
+                              ? <div className="veditor-step-summary">{segmentCount > 1 ? `${segmentCount} segments` : 'no segment'}</div>
+                              : <div className="veditor-step-preview"></div>}
 
-                          <div className="veditor-segment-list">
-                            <SegmentsDivider
-                              onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
-                              onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
+                            <div className="veditor-segment-list">
+                              <SegmentsDivider
+                                onDrop={() => void this.moveSelected(step.seq[0], stepIndex)}
+                                onTrigger={() => void this.createSegment(step.seq[0], stepIndex)} />
 
-                            {new Array(segmentCount).fill(0).map((_, segmentRelIndex) => {
-                              let segmentIndex = step.seq[0] + segmentRelIndex;
-                              let segment = this.state.segments.get(segmentIndex)!;
+                              {new Array(segmentCount).fill(0).map((_, segmentRelIndex) => {
+                                let segmentIndex = step.seq[0] + segmentRelIndex;
+                                let segment = this.state.segments.get(segmentIndex)!;
 
-                              return (
-                                <React.Fragment key={segment.id}>
-                                  <ContextMenuArea onContextMenu={async (event) => {
-                                    event.stopPropagation();
+                                return (
+                                  <React.Fragment key={segment.id}>
+                                    <ContextMenuArea onContextMenu={async (event) => {
+                                      event.stopPropagation();
 
-                                    let selectedSegmentIndices = (selection?.type === 'segments') && selection.indices.has(segmentIndex)
-                                      ? selection.indices
-                                      : ImSet([segmentIndex]);
+                                      let selectedSegmentIndices = (selection?.type === 'segments') && selection.indices.has(segmentIndex)
+                                        ? selection.indices
+                                        : ImSet([segmentIndex]);
 
-                                    this.setState({
-                                      selection: {
-                                        type: 'segments',
-                                        activeIndex: segmentIndex,
-                                        indices: selectedSegmentIndices
-                                      }
-                                    });
+                                      this.setState({
+                                        selection: {
+                                          type: 'segments',
+                                          activeIndex: segmentIndex,
+                                          indices: selectedSegmentIndices
+                                        }
+                                      });
 
-                                    await this.props.app.showContextMenu(event, [
-                                      { id: '_header', name: 'Protocol segment', type: 'header' },
-                                      // {
-                                      //   id: 'process', name: 'Process', children: [
-                                      //     { id: 'noop', name: 'No-op' },
-                                      //     { id: '_divider', type: 'divider' },
-                                      //     { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
-                                      //     { id: 'pump', name: 'Pump...' }
-                                      //   ]
-                                      // },
-                                      // { id: '_divider', type: 'divider' },
-                                      // {
-                                      //   id: 'control', name: 'Valve control', children: [
-                                      //     {
-                                      //       id: 'recent', name: 'Recent', children: [
-                                      //         { id: 'inlet1', name: 'Inlet 1' },
-                                      //         { id: 'inlet2', name: 'Inlet 2' },
-                                      //       ]
-                                      //     },
-                                      //     { id: 'clear', name: 'Clear' },
-                                      //     {
-                                      //       id: 'set', name: 'Set', children: [
-                                      //         { id: 'inlet1', name: 'Inlet 1' },
-                                      //         { id: 'inlet2', name: 'Inlet 2' },
-                                      //       ]
-                                      //     }
-                                      //   ]
-                                      // },
-                                      // { id: '_divider2', type: 'divider' },
-                                      { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete' }
-                                    ], (menuPath) => {
-                                      if (menuPath.first() === 'delete') {
-                                        this.deleteSelected();
-                                      }
-                                    }, (selected) => {
-                                      if (!selected) {
-                                        this.setState((_state) => ({ selection: null }));
-                                      }
-                                    });
-                                  }}>
-                                    <div
-                                      className={util.formatClass('veditor-segment-features', {
-                                        '_active': (this.state.selection?.type === 'segments') && this.state.selection.activeIndex === segmentIndex,
-                                        '_selected': (this.state.selection?.type === 'segments') && this.state.selection.indices.has(segmentIndex)
-                                      })}
-                                      key={segment.id}
-                                      draggable
-                                      tabIndex={-1}
-                                      onBlur={(event) => {
-                                        if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                                      await this.props.app.showContextMenu(event, [
+                                        { id: '_header', name: 'Protocol segment', type: 'header' },
+                                        // {
+                                        //   id: 'process', name: 'Process', children: [
+                                        //     { id: 'noop', name: 'No-op' },
+                                        //     { id: '_divider', type: 'divider' },
+                                        //     { id: 'wait', name: 'Wait...', icon: 'hourglass-empty' },
+                                        //     { id: 'pump', name: 'Pump...' }
+                                        //   ]
+                                        // },
+                                        // { id: '_divider', type: 'divider' },
+                                        // {
+                                        //   id: 'control', name: 'Valve control', children: [
+                                        //     {
+                                        //       id: 'recent', name: 'Recent', children: [
+                                        //         { id: 'inlet1', name: 'Inlet 1' },
+                                        //         { id: 'inlet2', name: 'Inlet 2' },
+                                        //       ]
+                                        //     },
+                                        //     { id: 'clear', name: 'Clear' },
+                                        //     {
+                                        //       id: 'set', name: 'Set', children: [
+                                        //         { id: 'inlet1', name: 'Inlet 1' },
+                                        //         { id: 'inlet2', name: 'Inlet 2' },
+                                        //       ]
+                                        //     }
+                                        //   ]
+                                        // },
+                                        // { id: '_divider2', type: 'divider' },
+                                        { id: 'delete', name: selectedSegmentIndices.size > 1 ? `Delete ${selectedSegmentIndices.size} segments` : 'Delete' }
+                                      ], (menuPath) => {
+                                        if (menuPath.first() === 'delete') {
+                                          this.deleteSelected();
+                                        }
+                                      }, (selected) => {
+                                        if (!selected) {
                                           this.setState((_state) => ({ selection: null }));
                                         }
-                                      }}
-                                      onKeyDown={(event) => {
-                                        switch (event.key) {
-                                          case 'Backspace':
-                                            this.deleteSelected();
-                                            break;
-                                          case 'Escape':
-                                            event.currentTarget.blur();
-                                            break;
-                                          default:
-                                            return;
-                                        }
+                                      });
+                                    }}>
+                                      <div
+                                        className={util.formatClass('veditor-segment-features', {
+                                          '_active': (this.state.selection?.type === 'segments') && this.state.selection.activeIndex === segmentIndex,
+                                          '_selected': (this.state.selection?.type === 'segments') && this.state.selection.indices.has(segmentIndex)
+                                        })}
+                                        key={segment.id}
+                                        draggable
+                                        tabIndex={-1}
+                                        onBlur={(event) => {
+                                          if (!event.relatedTarget?.classList.contains('veditor-segment-features') && !event.relatedTarget?.classList.contains('cmenu-root')) {
+                                            this.setState((_state) => ({ selection: null }));
+                                          }
+                                        }}
+                                        onKeyDown={(event) => {
+                                          switch (event.key) {
+                                            case 'Backspace':
+                                              this.deleteSelected();
+                                              break;
+                                            case 'Escape':
+                                              event.currentTarget.blur();
+                                              break;
+                                            default:
+                                              return;
+                                          }
 
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                      }}
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                        }}
+                                        onClick={(event) => {
+                                          event.preventDefault();
+                                          event.stopPropagation();
 
-                                        this.mouseSelect(event, segmentIndex, 'segments');
-                                      }}
-                                      onDragStart={(event) => {
-                                        event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
-                                        // event.dataTransfer.setDragImage(blankImage, 0, 0);
+                                          this.mouseSelect(event, segmentIndex, 'segments');
+                                        }}
+                                        onDragStart={(event) => {
+                                          event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: segment.id }));
+                                          // event.dataTransfer.setDragImage(blankImage, 0, 0);
 
-                                        // this.setState({ draggingSegmentId: segment.id });
-                                        // event.dataTransfer.dropEffect = "copy";
-                                        let rect = event.currentTarget.getBoundingClientRect();
+                                          // this.setState({ draggingSegmentId: segment.id });
+                                          // event.dataTransfer.dropEffect = "copy";
+                                          let rect = event.currentTarget.getBoundingClientRect();
 
-                                        let offset = {
-                                          x: event.clientX - rect.x,
-                                          y: event.clientY - rect.y
-                                        };
+                                          let offset = {
+                                            x: event.clientX - rect.x,
+                                            y: event.clientY - rect.y
+                                          };
 
-                                        let start = { x: event.clientX, y: event.clientY };
+                                          let start = { x: event.clientX, y: event.clientY };
 
-                                        this.setState((state) => ({
-                                          drag: {
-                                            segmentId: segment.id,
-                                            offset,
-                                            start
-                                          },
+                                          this.setState((state) => ({
+                                            drag: {
+                                              segmentId: segment.id,
+                                              offset,
+                                              start
+                                            },
 
-                                          activeSegmentIndex: segmentIndex,
-                                          selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
-                                            ? state.selectedSegmentIndices
-                                            : state.selectedSegmentIndices.clear().add(segmentIndex)
-                                        }));
-                                      }}
-                                      onDragEnd={() => {
-                                        this.setState({ drag: null });
-                                      }}>
-                                      {segment.features.map((feature, featureIndex) => (
-                                        <React.Fragment key={featureIndex}>
-                                          <Icon name={feature.icon} />
-                                          <span>{feature.label}</span>
-                                        </React.Fragment>
-                                      ))}
-                                    </div>
-                                  </ContextMenuArea>
+                                            activeSegmentIndex: segmentIndex,
+                                            selectedSegmentIndices: state.selectedSegmentIndices.has(segmentIndex)
+                                              ? state.selectedSegmentIndices
+                                              : state.selectedSegmentIndices.clear().add(segmentIndex)
+                                          }));
+                                        }}
+                                        onDragEnd={() => {
+                                          this.setState({ drag: null });
+                                        }}>
+                                        {segment.features.map((feature, featureIndex) => (
+                                          <React.Fragment key={featureIndex}>
+                                            <Icon name={feature.icon} />
+                                            <span>{feature.label}</span>
+                                          </React.Fragment>
+                                        ))}
+                                      </div>
+                                    </ContextMenuArea>
 
-                                  <SegmentsDivider
-                                    onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
-                                    onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
-                                </React.Fragment>
-                              );
-                          })}
+                                    <SegmentsDivider
+                                      onDrop={() => void this.moveSelected(segmentIndex + 1, stepIndex)}
+                                      onTrigger={() => void this.createSegment(segmentIndex + 1, stepIndex)} />
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </ContextMenuArea>
+                      </ContextMenuArea>
 
                       {/* <SegmentsDivider step
                         onDrop={() => void this.moveSelectedStep(stepIndex + 1, stageIndex)}
@@ -709,10 +782,10 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           );
         })}
       </div>
-        <div className="veditor-inspector">
+        {(this.state.selection?.type === 'steps') && <div className="veditor-inspector-root">
           <div className="veditor-inspector-header">
             <div className="veditor-inspector-subtitle">Selection</div>
-            <input value="Alpha" className="veditor-inspector-title" />
+            <input defaultValue="Alpha" className="veditor-inspector-title" />
             <div className="veditor-inspector-navigation">
               <button type="button" className="veditor-inspector-navigate" disabled>
                 <Icon name="chevron_left" />
@@ -744,9 +817,16 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
             </div>
           </div> */}
 
-          <div className="veditor-inspector-section">Valve control</div>
+          <div className="veditor-inspector-section">Process</div>
           <div className="veditor-inspector-form">
-            <Inspector.TextField label="Name" placeholder="e.g. Bob" />
+            {/* <Inspector.TextField label="Name" placeholder="e.g. Bob" /> */}
+            <Inspector.Select label="Mode">
+              <option>No-op</option>
+              <option>Timer</option>
+              <option>Pump forward</option>
+              <option>Pump backward</option>
+            </Inspector.Select>
+            <Inspector.DurationField label="Duration" />
           </div>
 
           <div className="veditor-inspector-section">Valve control</div>
@@ -771,7 +851,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
             <Inspector.TextField label="Name" placeholder="e.g. Bob" />
             <Inspector.DurationField label="Duration" />
           </div>
-        </div>
+        </div>}
       </div>
     );
   }

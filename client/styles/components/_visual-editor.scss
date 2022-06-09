@@ -13,9 +13,11 @@
 .veditor {
   &-root {
     display: grid;
-    column-gap: 4rem;
+    align-items: start;
+    column-gap: 6rem;
     grid-template-columns: 1fr 1fr;
     margin: 1rem 2rem;
+    margin-bottom: 0;
 
     // :focus { background-color: #f003 !important; }
   }
@@ -54,32 +56,78 @@
   }
 
   &-step {
+    // &-item {
+    //   display: grid;
+    //   column-gap: 6px;
+    //   grid-template-columns: 1rem 1fr;
+    // }
+
+    // &-handle {
+    //   background-color: #f6f6f6;
+    //   border: 1px solid #0002;
+    //   border-radius: 4px 0 0 4px;
+
+    //   transition: opacity 150ms;
+    // }
+
+    // &-item:not(:hover) &-handle {
+    //   opacity: 0;
+    // }
+
+    // &-item:hover &-body {
+    //   border-radius: 0 proto.$step-radius proto.$step-radius 0;
+    // }
+
     &-item {
+      display: grid;
+      grid-template-columns: 1rem 1fr;
+    }
+
+    &-handle {
+      background-color: proto.$step-background;
+      border: 1px solid #d5d5d5;
+      border-right: none;
+      border-radius: proto.$step-radius 0 0 proto.$step-radius;
+
+      cursor: default;
+    }
+
+    &-item:hover &-handle {
+      background-color: #d5d5d5;
+    }
+
+    &-item._selected &-handle {
+      background-color: $app-blue;
+      border-color: transparent;
+    }
+
+
+    &-body {
       display: grid;
       align-items: baseline;
       gap: 0 1rem;
       grid-template-columns: 3rem 1fr auto;
 
-      padding: 1rem 1.8rem;
+      padding: 1rem 1.8rem 1rem 1rem;
 
       background-color: proto.$step-background;
-      border: 1px solid transparent;
-      border-color: #0002;
-      border-radius: proto.$step-radius;
+      border: 1px solid #0002;
+      border-left: none;
+      border-radius: 0 proto.$step-radius proto.$step-radius 0;
 
       user-select: none;
 
-      &._context, &._open, &:hover {
-        box-shadow: 1px 1px 3px #0001;
-      }
-
-      // &._context {
-      //   @extend %selection-highlight;
+      // &._context, &._open, &:hover {
+      //   box-shadow: 1px 1px 3px #0001;
       // }
 
       &._selected {
         @extend %selection-highlight;
       }
+    }
+
+    &-item._selected &-body {
+      border-color: $app-blue;
     }
 
     // &-header {
@@ -268,6 +316,17 @@
 
 
   &-inspector {
+    &-root {
+      position: sticky;
+      top: 0;
+
+      padding: 0 3px;
+
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      height: calc(100vh - 2 * 2.2rem);
+    }
+
     &-header {
       display: grid;
       align-items: center;
@@ -375,7 +434,7 @@
       width: auto;
       appearance: auto;
 
-      &:focus {
+      &:focus-visible {
         outline: 2px solid $highlight-blue;
         outline-offset: 1px;
       }
@@ -423,7 +482,7 @@
     @include superimposed-children();
     align-items: center;
 
-    max-width: 200px;
+    // max-width: 300px;
     color: $main-color;
 
     select {

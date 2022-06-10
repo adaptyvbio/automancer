@@ -344,6 +344,14 @@
       font-size: 1.4rem;
       font-weight: 600;
 
+      &:not(._mixed)::placeholder {
+        color: #aaa;
+      }
+
+      &._mixed {
+        font-style: italic;
+      }
+
       // @extend .veditor-stage-name;
 
       // padding: 0.8rem 1.2rem;

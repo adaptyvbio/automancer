@@ -1,6 +1,25 @@
 import { List, Range, type Set as ImSet } from 'immutable';
 
 
+export function findCommon<T>(arr: Iterable<T>): T | null {
+  let value!: T;
+  let valueSet = false;
+
+  for (let item of arr) {
+    if (valueSet) {
+      if (item !== value) {
+        return null;
+      }
+    } else {
+      value = item;
+      valueSet = true;
+    }
+  }
+
+  return value;
+}
+
+
 export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => unknown): [number, T] | undefined {
   for (let index = arr.length - 1; index >= 0; index -= 1) {
     if (fn(arr[index], index, arr)) {

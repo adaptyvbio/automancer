@@ -45,16 +45,11 @@ export interface VisualEditorState {
   steps: List<Step>;
   segments: List<Segment>;
 
-  drag: {
-    segmentId: Segment['id'];
-    offset: { x: number; y: number; };
-    start: { x: number; y: number; };
-  } | null;
+  drag: boolean;
+  selection: Selection | null;
 
   openStageIds: ImSet<Stage['id']>;
   openStepIds: ImSet<Step['id']>;
-
-  selection: Selection | null;
 }
 
 
@@ -100,13 +95,11 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       ]),
       segments: List(new Array(20).fill(0).map(a)),
 
-      drag: null,
+      drag: true,
+      selection: null,
 
-      openStageIds: ImSet([y, z]),
-      openStepIds: ImSet([x]),
-
-      activeSegmentIndex: null,
-      selectedSegmentIndices: ImSet()
+      openStageIds: ImSet([z]),
+      openStepIds: ImSet([x])
     };
   }
 
@@ -114,17 +107,24 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     let isStepEl = (el: HTMLElement): boolean => el.matches('.veditor-step-item');
 
     document.body.addEventListener('focusout', (event) => {
-      console.log('Global blur', event.target, '->', event.relatedTarget);
+      // console.log('Global blur', event.target, '->', event.relatedTarget);
 
       if (!isStepEl(event.target as HTMLElement) && !event.relatedTarget && (this.state.selection?.type === 'steps')) {
         this.refSteps[this.state.selection.activeIndex].focus({ preventScroll: true });
-        console.log('Adapt');
       }
     }, { capture: false, signal: this.controller.signal });
+  }
 
-    // setInterval(() => {
-    //   console.log(document.activeElement)
-    // }, 500)
+  componentDidUpdate(_prevProps: VisualEditorProps, prevState: VisualEditorState) {
+    if (this.state.selection !== prevState.selection) {
+      if (!this.state.selection && document.activeElement?.matches('.veditor-step-item')) {
+        (document.activeElement as HTMLElement).blur();
+      }
+
+      if ((this.state.selection?.type === 'steps') && document.activeElement !== this.refSteps[this.state.selection.activeIndex]) {
+        this.refSteps[this.state.selection.activeIndex].focus({ preventScroll: true });
+      }
+    }
   }
 
   componentWillUnmount() {
@@ -322,9 +322,11 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
           return {
             selection: {
               type: targetType,
-              activeIndex: selection.indices.has(targetIndex)
-                ? selection.activeIndex
-                : targetIndex,
+              activeIndex: indices.has(targetIndex)
+                ? targetIndex
+                : indices.has(selection.activeIndex)
+                  ? selection.activeIndex
+                  : indices.first(),
               indices
             } as Selection
           };
@@ -337,10 +339,6 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
             indices: ImSet([targetIndex])
           } as Selection
         };
-      }
-    }, () => {
-      if (this.state.selection === null) {
-        document.activeElement?.blur();
       }
     });
   }
@@ -522,41 +520,24 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                               '_selected': stepSelected
                             })}
                             tabIndex={-1}
-                            onClick={(event) => {
-                              // if (event.detail === 1) {
-                              //   if (event.target === event.currentTarget) {
-                              //     event.preventDefault();
-                              //     this.mouseSelect(event, stepIndex, 'steps');
-                              //   }
-                              // }
+                            onMouseDown={(event) => {
+                              // event.preventDefault();
+                              // (document.activeElement as HTMLElement)?.blur();
                             }}
-                            onDoubleClick={(event) => {
-                              event.preventDefault();
+                            // onDoubleClick={(event) => {
+                            //   event.preventDefault();
 
-                              this.setState((state) => ({
-                                openStepIds: util.toggleSet(state.openStepIds, step.id)
-                              }));
-                            }}
+                            //   this.setState((state) => ({
+                            //     openStepIds: util.toggleSet(state.openStepIds, step.id)
+                            //   }));
+                            // }}
                             onBlur={(event) => {
-                              console.log('Item blur', event.target, '->', event.relatedTarget);
+                              // console.log('Item blur', event.target, '->', event.relatedTarget);
                               if (stepSelected && (event.currentTarget === event.target) && !event.relatedTarget) {
                                 this.setState({ selection: null });
                               }
-
-                              return;
-
-                              // console.log('BLUR', selection, event.target, '->', event.relatedTarget);
-
-                              if (event.currentTarget !== event.target) {
-                                if (!event.relatedTarget && (selection?.type === 'steps') && (selection.indices.includes(stepIndex))) {
-                                  event.currentTarget.focus();
-                                }
-                              } else if (!event.currentTarget.contains(event.relatedTarget)
-                                && !event.relatedTarget?.classList.contains('veditor-step-item')
-                                && !event.relatedTarget?.classList.contains('cmenu-root')) {
-                                this.setState((_state) => ({ selection: null }));
-                              }
                             }}
+                            // Necessary for if the tab comes into the background
                             // onFocus={(event) => {
                             //   if (!stepSelected && (event.currentTarget === event.target)) {
                             //     event.currentTarget.blur();
@@ -584,22 +565,30 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                                 delete this.refSteps[stepIndex];
                               }
                             }}>
-                            <button type="button" className="veditor-step-handle"
+                            <button type="button"
+                              className="veditor-step-handle"
                               onClick={(event) => {
                                 event.preventDefault();
                                 this.mouseSelect(event, stepIndex, 'steps');
                               }}
                               onFocus={(event) => {
+                                // Necessary when the context menu gives the context back to the handle.
                                 event.currentTarget.parentElement!.focus();
+                              }}
+                              onMouseDown={(event) => {
+                                // Prevent the event from reaching the parent which would otherwise
+                                // blur the current active element and unselect it if it was selected.
+                                event.stopPropagation();
                               }} />
                             <div className="veditor-step-body">
                               <div className="veditor-step-time">00:00</div>
                               <div className="veditor-step-name">{step.name}</div>
 
-                              <button type="button" className="veditor-step-expand veditor-step-expand--open" onClick={(event) => {
-                                event.stopPropagation();
-                                this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
-                              }}>
+                              <button type="button" className="veditor-step-expand veditor-step-expand--open"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  this.setState((state) => ({ openStepIds: state.openStepIds.add(step.id) }));
+                                }}>
                                 <div>Open</div>
                                 <Icon name="expand_more" />
                               </button>
@@ -786,76 +775,83 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
             );
           })}
         </div>
-        {(this.state.selection?.type === 'steps') && <div className="veditor-inspector-root">
-          <div className="veditor-inspector-header">
-            <div className="veditor-inspector-subtitle">Selection</div>
-            <input defaultValue="Alpha" className="veditor-inspector-title" />
-            <div className="veditor-inspector-navigation">
-              <button type="button" className="veditor-inspector-navigate" disabled>
-                <Icon name="chevron_left" />
-              </button>
-              <button type="button" className="veditor-inspector-navigate">
-                <Icon name="chevron_right" />
-              </button>
-            </div>
-          </div>
-          {/* <button type="button" className="btn">
-            <Icon name="delete" />
-            <div>Delete</div>
-          </button> */}
-          {/* <div className="veditor-inspector-oheader">
-            <h3>Process</h3>
-            <div className="superimposed-root">
-              <select className="superimposed-target">
-                <option>No-op</option>
-                <option>Timer</option>
-                <option>Pump forward</option>
-                <option>Pump backward</option>
-              </select>
-              <div className="btn superimposed-visible">
-                <div className="btn-icon">
-                  <Icon name="mail" />
+        {(this.state.selection?.type === 'steps') && (() => {
+          let steps = this.state.selection.indices.toArray().map((stepIndex) => this.state.steps.get(stepIndex)!);
+          let commonStepName = util.findCommon(steps.map((step) => step.name));
+
+          let setName = (name: string) => {
+            this.setState((state) => ({
+              steps: state.steps.map((step, stepIndex) =>
+                this.state.selection!.indices.has(stepIndex)
+                  ? { ...step, name }
+                  : step
+              )
+            }));
+          };
+
+          return (
+            <div className="veditor-inspector-root">
+              <div className="veditor-inspector-header">
+                <div className="veditor-inspector-subtitle">{(steps.length <= 1) ? 'Step' : `${steps.length} steps`}</div>
+                <input
+                  className={util.formatClass('veditor-inspector-title', { '_mixed': (commonStepName === null) })}
+                  value={commonStepName ?? ''}
+                  placeholder={(commonStepName === null) ? 'Mixed' : 'Step title'}
+                  onFocus={() => {
+                    if (commonStepName === null) {
+                      setName('');
+                    }
+                  }}
+                  onInput={(event) => {
+                    setName(event.currentTarget.value);
+                  }} />
+                <div className="veditor-inspector-navigation">
+                  <button type="button" className="veditor-inspector-navigate" disabled>
+                    <Icon name="chevron_left" />
+                  </button>
+                  <button type="button" className="veditor-inspector-navigate">
+                    <Icon name="chevron_right" />
+                  </button>
                 </div>
-                <div>Email</div>
+              </div>
+
+              <div className="veditor-inspector-section">Process</div>
+              <div className="veditor-inspector-form">
+                <Inspector.TextField label="Name" placeholder="e.g. Bob" />
+                <Inspector.Select label="Mode">
+                  <option>No-op</option>
+                  <option>Timer</option>
+                  <option>Pump forward</option>
+                  <option>Pump backward</option>
+                </Inspector.Select>
+                <Inspector.DurationField label="Duration" />
+              </div>
+
+              <div className="veditor-inspector-section">Valve control</div>
+
+              <div className="veditor-inspector-form">
+                <Inspector.CheckboxList label="Closed valves">
+                  <Inspector.Checkbox label="Button" />
+                  <Inspector.Checkbox label="Outlet" />
+                  <Inspector.Checkbox label="Foo" />
+                </Inspector.CheckboxList>
+
+                <Inspector.Select label="Mode">
+                  <option>No-op</option>
+                  <option>Timer</option>
+                  <option>Pump forward</option>
+                  <option>Pump backward</option>
+                </Inspector.Select>
+                <Inspector.Select label="Mode">
+                  <option>Forward</option>
+                  <option>Backward</option>
+                </Inspector.Select>
+                <Inspector.TextField label="Name" placeholder="e.g. Bob" />
+                <Inspector.DurationField label="Duration" />
               </div>
             </div>
-          </div> */}
-
-          <div className="veditor-inspector-section">Process</div>
-          <div className="veditor-inspector-form">
-            {/* <Inspector.TextField label="Name" placeholder="e.g. Bob" /> */}
-            <Inspector.Select label="Mode">
-              <option>No-op</option>
-              <option>Timer</option>
-              <option>Pump forward</option>
-              <option>Pump backward</option>
-            </Inspector.Select>
-            <Inspector.DurationField label="Duration" />
-          </div>
-
-          <div className="veditor-inspector-section">Valve control</div>
-
-          <div className="veditor-inspector-form">
-            <Inspector.CheckboxList label="Closed valves">
-              <Inspector.Checkbox label="Button" />
-              <Inspector.Checkbox label="Outlet" />
-              <Inspector.Checkbox label="Foo" />
-            </Inspector.CheckboxList>
-
-            <Inspector.Select label="Mode">
-              <option>No-op</option>
-              <option>Timer</option>
-              <option>Pump forward</option>
-              <option>Pump backward</option>
-            </Inspector.Select>
-            <Inspector.Select label="Mode">
-              <option>Forward</option>
-              <option>Backward</option>
-            </Inspector.Select>
-            <Inspector.TextField label="Name" placeholder="e.g. Bob" />
-            <Inspector.DurationField label="Duration" />
-          </div>
-        </div>}
+          );
+        })()}
       </div>
     );
   }

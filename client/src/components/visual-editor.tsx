@@ -64,7 +64,7 @@ let a = () => ({
 
 export class VisualEditor extends React.Component<VisualEditorProps, VisualEditorState> {
   controller = new AbortController();
-  refSteps: Record<number, HTMLDivElement> = {};
+  refSteps: Record<number, HTMLElement> = {};
 
   constructor(props: VisualEditorProps) {
     super(props);
@@ -95,7 +95,7 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
       ]),
       segments: List(new Array(20).fill(0).map(a)),
 
-      drag: true,
+      drag: false,
       selection: null,
 
       openStageIds: ImSet([z]),
@@ -109,9 +109,9 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
     document.body.addEventListener('focusout', (event) => {
       // console.log('Global blur', event.target, '->', event.relatedTarget);
 
-      if (!isStepEl(event.target as HTMLElement) && !event.relatedTarget && (this.state.selection?.type === 'steps')) {
-        this.refSteps[this.state.selection.activeIndex].focus({ preventScroll: true });
-      }
+      // if (!isStepEl(event.target as HTMLElement) && !event.relatedTarget && (this.state.selection?.type === 'steps')) {
+      //   this.refSteps[this.state.selection.activeIndex].focus({ preventScroll: true });
+      // }
     }, { capture: false, signal: this.controller.signal });
   }
 
@@ -270,6 +270,46 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
         selectedSegmentIndices: state.selectedSegmentIndices.clear().union(Range(insertionIndex, insertionIndex + movedSegments.size)),
         steps
       };
+    });
+  }
+
+  moveSelectedBetweenSteps(targetStageIndex: number, targetStepIndex: number) {
+    this.setState((state) => {
+      console.log('>>>>', targetStageIndex, targetStepIndex);
+
+      let selection = state.selection;
+
+      if (selection?.type === 'steps') {
+        let movedSegmentIndices = selection.indices.flatMap((stepIndex) => {
+          let step = state.steps.get(stepIndex)!;
+          return Range(step.seq[0], step.seq[1]);
+        });
+
+        let stillSegments = state.segments.filter((_segment, segmentIndex) => !movedSegmentIndices.has(segmentIndex));
+        let movedSegments = state.segments.filter((_segment, segmentIndex) => movedSegmentIndices.has(segmentIndex));
+
+        let [stages, stepInsertionIndex] = util.renumber.moveChildItems(state.stages, 'stepSeq', selection.indices, targetStageIndex, targetStepIndex);
+        let [steps, segmentInsertionIndex] = util.renumber.moveChildItems(state.steps, 'seq', movedSegmentIndices, stepInsertionIndex, state.steps.get(stepInsertionIndex)!.seq[0]); // <- !
+        // console.log(state.stages.toJS(), stages.toJS(), insertionIndex);
+
+        let stillSteps = steps.filter((_step, stepIndex) => !selection!.indices.has(stepIndex));
+        let movedSteps = steps.filter((_step, stepIndex) => selection!.indices.has(stepIndex));
+
+        // console.log(steps.toJS());
+
+        return {
+          stages,
+          steps: stillSteps.splice(stepInsertionIndex, 0, ...movedSteps),
+          segments: stillSegments.splice(segmentInsertionIndex, 0, ...movedSegments),
+          selection: {
+            type: 'steps',
+            activeIndex: stepInsertionIndex,
+            indices: ImSet(Range(stepInsertionIndex, stepInsertionIndex + movedSteps.size))
+          }
+        };
+      } else {
+        return null;
+      }
     });
   }
 
@@ -519,10 +559,15 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                               '_open': this.state.openStepIds.has(step.id),
                               '_selected': stepSelected
                             })}
-                            tabIndex={-1}
-                            onMouseDown={(event) => {
-                              // event.preventDefault();
-                              // (document.activeElement as HTMLElement)?.blur();
+                            draggable
+                            onDragEnd={() => {
+                              this.setState({ drag: false });
+                            }}
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData('text/plain', JSON.stringify({ sourceId: step.id }));
+
+                              this.mouseSelect(event, stepIndex, 'steps', { context: true });
+                              this.setState({ drag: true });
                             }}
                             // onDoubleClick={(event) => {
                             //   event.preventDefault();
@@ -531,54 +576,46 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                             //     openStepIds: util.toggleSet(state.openStepIds, step.id)
                             //   }));
                             // }}
-                            onBlur={(event) => {
-                              // console.log('Item blur', event.target, '->', event.relatedTarget);
-                              if (stepSelected && (event.currentTarget === event.target) && !event.relatedTarget) {
-                                this.setState({ selection: null });
-                              }
-                            }}
-                            // Necessary for if the tab comes into the background
-                            // onFocus={(event) => {
-                            //   if (!stepSelected && (event.currentTarget === event.target)) {
-                            //     event.currentTarget.blur();
-                            //   }
-                            // }}
-                            onKeyDown={(event) => {
-                              switch (event.key) {
-                                case 'Backspace':
-                                  this.deleteSelected();
-                                  break;
-                                case 'Escape':
-                                  event.currentTarget.blur();
-                                  break;
-                                default:
-                                  return;
-                              }
-
-                              event.preventDefault();
-                              event.stopPropagation();
-                            }}
-                            ref={(el) => {
-                              if (el) {
-                                this.refSteps[stepIndex] = el;
-                              } else {
-                                delete this.refSteps[stepIndex];
-                              }
-                            }}>
+                            >
                             <button type="button"
                               className="veditor-step-handle"
+                              onBlur={(event) => {
+                                // console.log('Item blur', event.target, '->', event.relatedTarget);
+                                if (stepSelected && !event.relatedTarget) {
+                                  this.setState({ selection: null });
+                                }
+                              }}
+                              // Necessary for if the tab comes into the background
+                              // onFocus={(event) => {
+                              //   if (!stepSelected && (event.currentTarget === event.target)) {
+                              //     event.currentTarget.blur();
+                              //   }
+                              // }}
                               onClick={(event) => {
                                 event.preventDefault();
                                 this.mouseSelect(event, stepIndex, 'steps');
                               }}
-                              onFocus={(event) => {
-                                // Necessary when the context menu gives the context back to the handle.
-                                event.currentTarget.parentElement!.focus();
-                              }}
-                              onMouseDown={(event) => {
-                                // Prevent the event from reaching the parent which would otherwise
-                                // blur the current active element and unselect it if it was selected.
+                              onKeyDown={(event) => {
+                                switch (event.key) {
+                                  case 'Backspace':
+                                    this.deleteSelected();
+                                    break;
+                                  case 'Escape':
+                                    event.currentTarget.blur();
+                                    break;
+                                  default:
+                                    return;
+                                }
+
+                                event.preventDefault();
                                 event.stopPropagation();
+                              }}
+                              ref={(el) => {
+                                if (el) {
+                                  this.refSteps[stepIndex] = el;
+                                } else {
+                                  delete this.refSteps[stepIndex];
+                                }
                               }} />
                             <div className="veditor-step-body">
                               <div className="veditor-step-time">00:00</div>
@@ -766,7 +803,11 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                         <Rf.Icon name="chevron-left" />
                       </div> */}
 
-                        <StepDivider active={this.state.drag !== null} />
+                        <StepDivider
+                          active={this.state.drag}
+                          onDrop={() => {
+                            this.moveSelectedBetweenSteps(stageIndex, stepIndex + 1);
+                          }} />
                       </React.Fragment>
                     );
                   })}
@@ -941,7 +982,10 @@ namespace Inspector {
 }
 
 
-function StepDivider(props: { active: boolean; }) {
+function StepDivider(props: {
+  active: boolean;
+  onDrop(): void;
+}) {
   let [over, setOver] = React.useState(false);
 
   return (
@@ -966,7 +1010,7 @@ function StepDivider(props: { active: boolean; }) {
       onDrop={(event) => {
         event.preventDefault();
         setOver(false);
-        // props.onDrop();
+        props.onDrop();
       }}>
       <Icon name="chevron_right" />
       <div />

@@ -3,6 +3,6 @@ class Chip:
     self.id = id
     self.master = master
     self.matrices = matrices
+    self.metadata = { 'name': name }
     self.model = model
-    self.name = name
     self.runners = runners

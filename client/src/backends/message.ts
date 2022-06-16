@@ -51,6 +51,14 @@ export abstract class MessageBackend extends BackendCommon {
     });
   }
 
+  async setChipMetadata(chipId: string, value: Partial<{ description: string | null; name: string; }>): Promise<void> {
+    await this._request({
+      type: 'setChipMetadata',
+      chipId,
+      value
+    });
+  }
+
   async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
     await this._request({
       type: 'setMatrix',

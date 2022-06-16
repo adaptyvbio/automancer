@@ -4,7 +4,7 @@
 .btn {
   display: flex;
   align-items: center;
-  column-gap: 0.4rem;
+  column-gap: $icon-gap;
 
   width: auto;
   height: 2.4rem;
@@ -22,5 +22,11 @@
   .btn-icon {
     display: flex;
     width: $icon-size;
+
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 48;
   }
 }

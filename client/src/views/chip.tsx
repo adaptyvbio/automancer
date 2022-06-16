@@ -46,12 +46,17 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
     return (
       <main>
-        <h1>{this.chip.name}</h1>
+        <div className="header header--1">
+          <h1>{this.chip.name}</h1>
+          <button type="button" className="btn" onClick={() => {
+            this.props.setRoute(['chip', this.props.chipId, 'settings']);
+          }}>Open settings</button>
+        </div>
 
         <div className="vchip-root">
           {sheet.diagram && (
             <>
-              <div className="header2">
+              <div className="header header--2">
                 <h2>Diagram</h2>
               </div>
               <div className="vchip-diagram">
@@ -63,7 +68,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
             </>
           )}
 
-          <div className="header2">
+          <div className="header header--2">
             <h2>Manual control</h2>
           </div>
 

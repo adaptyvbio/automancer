@@ -17,7 +17,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
   componentDidUpdate() {
     if (this.chipIdAwaitingRedirect && (this.chipIdAwaitingRedirect in this.props.host.state.chips)) {
-      this.props.setRoute(['chip', this.chipIdAwaitingRedirect]);
+      this.props.setRoute(['chip', this.chipIdAwaitingRedirect, 'settings']);
     }
   }
 
@@ -27,9 +27,11 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
     return (
       <main>
-        <h1>Chips</h1>
+        <div className="header header--1">
+          <h1>Chips</h1>
+        </div>
 
-        <div className="header2">
+        <div className="header header--2">
           <h2>Current chips</h2>
         </div>
 
@@ -63,7 +65,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
           )}
 
 
-        <header className="header2">
+        <header className="header header--2">
           <h2>Add a chip</h2>
           <button type="button" className="btn">
             <div>Manage models</div>

@@ -2,7 +2,9 @@ import type { ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } f
 import type { Features } from '..';
 
 
-export { CodeEditor } from './code-editor';
+import { CodeEditor } from './code-editor';
+import { MatrixEditor } from './matrix-editor';
+
 
 export const namespace = 'control';
 
@@ -40,4 +42,19 @@ export function createFeatures(segment: ProtocolSegment, protocol: Protocol, mas
 
 export interface Code {
   arguments: (number | null)[];
+}
+
+export interface Matrix {
+  valves: {
+    aliases: string[];
+    hostValveIndex: number;
+  }[];
+}
+
+
+export default {
+  // CodeEditor,
+  MatrixEditor,
+  createCode,
+  createFeatures
 }

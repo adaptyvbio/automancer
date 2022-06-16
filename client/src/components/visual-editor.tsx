@@ -563,7 +563,9 @@ export class VisualEditor extends React.Component<VisualEditorProps, VisualEdito
                       }
 
                       case 'delete': {
-                        this.deleteSelected();
+                        this.pushHistory([
+                          { type: 'delete', target: stage }
+                        ]);
                         break;
                       }
                     }

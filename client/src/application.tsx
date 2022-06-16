@@ -256,7 +256,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let route;
 
     try {
-      route = JSON.parse(window.localStorage['route']);
+      route = JSON.parse(window.sessionStorage['route']);
     } catch {
       return;
     }
@@ -298,7 +298,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
   setRoute(route: Route) {
     this.setState({ currentRoute: route });
-    window.localStorage['route'] = JSON.stringify(route);
+    window.sessionStorage['route'] = JSON.stringify(route);
 
     if ((route[0] === 'protocol') && (route.length === 2)) {
       this.setOpenDraftIds((openDraftIds) => openDraftIds.add(route[1] as DraftId));
@@ -338,7 +338,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setRoute={setRoute} />
           );
         }
-      } else {
+      } else if (route.length === 2) {
         switch (route[0]) {
           case 'chip': return (
             <ViewChip
@@ -354,6 +354,19 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setDraft={setDraft}
               setRoute={setRoute} />
           );
+        }
+      } else if (route.length === 3) {
+        switch (route[0]) {
+          case 'chip': {
+            switch (route[2]) {
+              case 'settings': return (
+                <ViewChipSettings
+                  chipId={route[1] as ChipId}
+                  host={this.host}
+                  setRoute={setRoute} />
+              );
+            }
+          }
         }
       }
     })();

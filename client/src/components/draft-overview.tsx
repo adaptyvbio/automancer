@@ -7,7 +7,7 @@ import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
-import Units, { UnitsCode } from '../units';
+// import Units, { UnitsCode } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
 

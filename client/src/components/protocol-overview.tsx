@@ -6,7 +6,7 @@ import { type Analysis, analyzeProtocol } from '../analysis';
 import type { Master, MasterEntry, Protocol } from '../backends/common';
 // import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
-import Units, { UnitsCode } from '../units';
+// import Units, { UnitsCode } from '../units';
 
 
 export function ProtocolOverview(props: {

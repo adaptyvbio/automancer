@@ -1,10 +1,16 @@
 import * as React from 'react';
 
+import ControlUnit from './control';
 import * as Control from './control';
-import * as Input from './input';
-import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
-import type { Draft } from '../application';
 
+import InputUnit from './input';
+import * as Input from './input';
+
+import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
+import type { Draft, Host } from '../application';
+
+
+//> Feature
 
 export interface Feature {
   icon: string;
@@ -14,7 +20,30 @@ export interface Feature {
 export type Features = Feature[];
 
 
-interface Unit {
+//> MatrixEditor
+
+export interface MatrixEditorComponent<Matrix> {
+  new(props: MatrixEditorProps<Matrix>): MatrixEditorInstance<Matrix>;
+}
+
+export type MatrixEditorInstance<Matrix> = React.Component<MatrixEditorProps<Matrix>, unknown>;
+
+export interface MatrixEditorProps<Matrix> {
+  chip: Chip;
+  host: Host;
+  model: ChipModel;
+  matrix: Matrix;
+  setMatrix(matrix: Matrix): void;
+}
+
+export interface Matrices {
+  [Control.namespace]: Control.Matrix;
+}
+
+
+//> Unit
+
+export interface Unit<Matrix> {
   CodeEditor?: { new(): React.Component<{
     chip: Chip;
     draft: Draft;
@@ -22,26 +51,20 @@ interface Unit {
     code: any;
     setCode(code: any): void;
   }, unknown> };
+
+  MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
+
   createCode?(protocol: Protocol, model: ChipModel): object;
   createFeatures?(segment: ProtocolSegment, protocol: Protocol, master?: Master): Features;
 }
 
 
-interface Units {
-  [Control.namespace]: typeof Control,
-  [Input.namespace]: typeof Input
-}
+//> Units
 
-export interface UnitsCode {
-  // [namespace in keyof Units]: ReturnType<Units[namespace]['createCode']>;
-  control: ReturnType<Units[typeof Control.namespace]['createCode']>;
-}
-
-export interface UnitsCodeEditor  {
-  control: Units[typeof Control.namespace]['CodeEditor'];
-};
-
-export default [
-  [Control.namespace, Control],
-  [Input.namespace, Input]
-] as [string, Unit][];
+export const Units = [
+  [Control.namespace, ControlUnit],
+  [Input.namespace, InputUnit]
+] as [
+  [typeof Control.namespace, Unit<Control.Matrix>],
+  [typeof Input.namespace, Unit<never>],
+]

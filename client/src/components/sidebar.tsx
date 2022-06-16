@@ -138,7 +138,7 @@ export class Sidebar extends React.Component<SidebarProps> {
                       <div className="sidebar-children">
                         {entry.children?.map((child) => (
                           <button type="button"
-                            className={util.formatClass('sidebar-child', { '_selected': child.route && currentRoute?.equals(List(child.route)) })}
+                            className={util.formatClass('sidebar-child', { '_selected': child.route && currentRoute?.isSuperset(List(child.route)) })}
                             key={child.id}
                             onClick={(child.route ?? undefined) && (() => {
                               this.props.setRoute(child.route!);

@@ -18,3 +18,8 @@ export function createFeatures(segment: ProtocolSegment, protocol: Protocol, mas
 export interface Code {
   arguments: (number | null)[];
 }
+
+
+export default {
+  createFeatures
+}

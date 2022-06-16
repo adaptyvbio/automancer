@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../application';
-import type { UnitsCode } from '../units';
+import type { Matrices, UnitsCode } from '../units';
 
 
 export abstract class BackendCommon {
@@ -32,6 +32,7 @@ export abstract class BackendCommon {
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
+  abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
   abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
@@ -56,8 +57,10 @@ export interface Device {
 export interface Chip {
   id: ChipId;
   master: Master | null;
-  matrices: {
-    control: ControlNamespace.Matrix;
+  matrices: Matrices;
+  metadata: {
+    description: string | null;
+    name: string;
   };
   modelId: ChipModelId;
   name: string;

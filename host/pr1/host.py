@@ -224,7 +224,8 @@ class Host:
             namespace: matrix.export() for namespace, matrix in chip.matrices.items()
           },
           "modelId": chip.model.id,
-          "name": chip.name,
+          "name": chip.metadata['name'],
+          "metadata": chip.metadata,
           "runners": {
             namespace: runner.export() for namespace, runner in chip.runners.items()
           }
@@ -279,6 +280,10 @@ class Host:
     if request["type"] == "resume":
       chip = self.chips[request["chipId"]]
       chip.master.resume()
+
+    if request["type"] == "setChipMetadata":
+      chip = self.chips[request["chipId"]]
+      chip.metadata.update(request["value"])
 
     if request["type"] == "setMatrix":
       chip = self.chips[request["chipId"]]

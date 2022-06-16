@@ -48,7 +48,6 @@ class Model:
         raise data['preview'].error(f"Missing file at {preview_path}")
 
       preview_type, _encoding = mimetypes.guess_type(preview_path)
-      print(preview_type, preview_path)
 
       if (preview_type is None) or (not preview_type.startswith("image/")):
         raise data['preview'].error(f"Invalid file type{' ' + (preview_type) if preview_type else str()}, expected image/*")

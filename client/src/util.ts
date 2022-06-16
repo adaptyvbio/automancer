@@ -169,6 +169,42 @@ export namespace renumber {
       ]
     }));
   }
+
+  export function moveChildItems<K extends string, T extends Record<K, Seq>>(list: List<T>, seqKey: K, unsortedTargetIndices: Iterable<number>, itemInsertionIndex: number, childInsertionIndex: number): [List<T>, number] {
+    let targetIndices = Array.from(unsortedTargetIndices).sort((a, b) => a - b);
+    let targetIndicesIndex = 0;
+
+    let delta = 0;
+    let insertionIndex!: number;
+
+    let newList = list.map((item, itemIndex) => {
+      let itemSeq = item[seqKey];
+      let start = itemSeq[0] - delta;
+
+      for (; (targetIndices[targetIndicesIndex] < Math.min(itemSeq[1], childInsertionIndex)) && (targetIndicesIndex < targetIndices.length); targetIndicesIndex += 1) {
+        delta += 1;
+      }
+
+      if (itemIndex === itemInsertionIndex) {
+        insertionIndex = childInsertionIndex - delta;
+        delta -= targetIndices.length;
+      }
+
+      for (; (targetIndices[targetIndicesIndex] < itemSeq[1]) && (targetIndicesIndex < targetIndices.length); targetIndicesIndex += 1) {
+        delta += 1;
+      }
+
+      return {
+        ...item,
+        [seqKey]: [
+          start,
+          itemSeq[1] - delta
+        ]
+      };
+    });
+
+    return [newList, insertionIndex];
+  }
 }
 
 

@@ -81,6 +81,10 @@
     &-item {
       display: grid;
       grid-template-columns: 1rem 1fr;
+
+      &._active {
+        z-index: 2;
+      }
     }
 
     &-handle {
@@ -181,13 +185,12 @@
       column-gap: 1rem;
       grid-template-columns: auto 1fr auto;
 
-      // margin: -0.4rem -1rem;
+      // background-color: #f003;
+
       margin: -0.4rem 0;
       z-index: 1;
 
       color: $app-blue;
-
-      // background-color: #f003;
 
       &:not(._over) {
         opacity: 0;
@@ -204,7 +207,9 @@
       $dur: 150ms;
       $delay: 150ms;
 
-      transition: opacity $dur $delay, padding $dur $delay;
+      &:not(._done) {
+        transition: opacity $dur $delay, padding $dur $delay;
+      }
 
       > :nth-child(1) { --dir: -1; }
       > :nth-child(3) { --dir: 1; --y-offset: -1px; }
@@ -213,6 +218,8 @@
       &._over > :nth-child(2n+1) { --delta: 1rem; }
 
       > :nth-child(2n+1) {
+        pointer-events: none;
+
         transform: translate(calc(var(--delta) * var(--dir)), var(--y-offset, 0)) scale(1.4);
         transition: transform $dur $delay;
       }

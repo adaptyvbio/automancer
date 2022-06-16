@@ -95,3 +95,8 @@
     border-bottom: 1px solid #fff2;
   }
 }
+
+
+#floating-ui-root > * {
+  z-index: 100;
+}

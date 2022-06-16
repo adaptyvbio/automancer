@@ -90,6 +90,8 @@ class Host:
         e.display()
         sys.exit(1)
 
+    logger.debug(f"Done loading {len(self.models)} models")
+
   async def initialize(self):
     logger.info("Initializing host")
     logger.debug("Initializing executors")
@@ -170,7 +172,14 @@ class Host:
   def create_chip(self, model_id, name):
     model = self.models[model_id]
     matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if hasattr(unit, 'Matrix') }
-    chip = Chip(id=str(uuid.uuid4()), master=None, matrices=matrices, model=model, name=name, runners=dict())
+    chip = Chip(
+      id=str(uuid.uuid4()),
+      master=None,
+      matrices=matrices,
+      model=model,
+      name=name,
+      runners=dict()
+    )
 
     for namespace, executor in self.executors.items():
       chip.runners[namespace] = executor.create_runner(chip)
@@ -222,13 +231,7 @@ class Host:
         } for chip in self.chips.values()
       },
       "models": {
-        model.id: {
-          "id": model.id,
-          "name": model.name,
-          "sheets": {
-            namespace: sheet.export() for namespace, sheet in model.sheets.items()
-          }
-        } for model in self.models.values()
+        model.id: model.export() for model in self.models.values()
       },
       "devices": {
         device.id: device.export() for namespace, executor in self.executors.items() for device in executor.get_devices()

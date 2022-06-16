@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import type { Host, Route } from '../application';
+import { ChipModelId } from '../backends/common';
 import { Pool } from '../util';
 
 
@@ -14,6 +15,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
+    let models = Object.values(this.props.host.state.models);
 
     return (
       <main>
@@ -51,7 +53,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                   this.props.onRouteChange(['chip', chip.id]);
                 }}>
                   <div className="card-image">
-                    <img src="chip-preview.png" />
+                    {model.previewUrl && <img src={model.previewUrl} />}
                   </div>
                   <div className="card-body">
                     <div className="card-title">{chip.name} ({model.name})</div>
@@ -76,7 +78,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
         </header>
 
         <div className="card-list">
-          {Object.values(this.props.host.state.models).map((model) => (
+          {models.map((model) => (
             <button type="button" className="card-item" key={model.id} onClick={() => {
               this.pool.add(async () => {
                 let result = await this.props.host.backend.createChip({ modelId: model.id });
@@ -84,7 +86,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
               });
             }}>
               <div className="card-image">
-                <img src="chip-preview.png" />
+                {model.previewUrl && <img src={model.previewUrl} />}
               </div>
               <div className="card-body">
                 <div className="card-title">{model.name}</div>

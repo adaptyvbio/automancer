@@ -69,6 +69,7 @@ export interface Chip {
 export interface ChipModel {
   id: ChipModelId;
   name: string;
+  previewUrl: string | null;
   sheets: {
     control: ControlNamespace.Sheet;
   };

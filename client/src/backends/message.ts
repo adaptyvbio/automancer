@@ -23,10 +23,10 @@ export abstract class MessageBackend extends BackendCommon {
   }
 
   async createChip(options: { modelId: string; }) {
-    await this._request({
+    return await this._request({
       type: 'createChip',
       modelId: options.modelId
-    });
+    }) as { chipId: ChipId; };
   }
 
   async deleteChip(chipId: ChipId) {

@@ -4,6 +4,7 @@
 .card {
   &-list {
     display: flex;
+    align-items: start;
     flex-wrap: wrap;
     gap: 0.8rem;
 
@@ -32,14 +33,48 @@
       margin: 0 auto;
       object-fit: contain;
     }
+
+    &-placeholder {
+      display: flex;
+      align-items: center;
+      column-gap: $icon-gap;
+
+      margin: auto;
+
+      color: #999;
+      font-weight: 500;
+    }
   }
 
   &-body {
+    display: flex;
+    flex-direction: column;
+
     padding: 1.4rem 1rem 1rem 1rem;
   }
 
   &-title {
     font-size: 1.2rem;
+    font-weight: 500;
+  }
+
+  &-subtitle {
+    color: #666;
+  }
+
+  &-status {
+    display: flex;
+    align-items: center;
+    column-gap: $icon-gap;
+    justify-content: center;
+
+    margin-top: 0.8rem;
+    padding: 0.4rem 0.8rem;
+
+    background-color: #fafafa;
+    border-radius: 4px;
+
+    color: #666;
     font-weight: 500;
   }
 

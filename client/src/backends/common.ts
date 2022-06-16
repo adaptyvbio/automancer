@@ -28,7 +28,7 @@ export abstract class BackendCommon {
 
   abstract command(chipId: ChipId, command: RunnerCommand): Promise<void>;
   abstract compileDraft(draftId: string, source: string): Promise<AppDraft['compiled']>;
-  abstract createChip(options: { modelId: ChipModelId; }): Promise<void>;
+  abstract createChip(options: { modelId: ChipModelId; }): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;

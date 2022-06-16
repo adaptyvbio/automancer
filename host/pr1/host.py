@@ -259,7 +259,12 @@ class Host:
       chip.runners[namespace].command(command)
 
     if request["type"] == "createChip":
-      self.create_chip(model_id=request["modelId"], name="Untitled chip")
+      chip = self.create_chip(model_id=request["modelId"], name="Untitled chip")
+      self.update_callback()
+
+      return {
+        "chipId": chip.id
+      }
 
     if request["type"] == "deleteChip":
       # TODO: checks

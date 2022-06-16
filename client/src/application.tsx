@@ -321,7 +321,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           case 'chip': return (
             <ViewChips
               host={this.host}
-              onRouteChange={setRoute} />
+              setRoute={setRoute} />
           );
 
           case 'protocol': return (

@@ -1,17 +1,25 @@
 import * as React from 'react';
 
 import type { Host, Route } from '../application';
-import { ChipModelId } from '../backends/common';
+import { ChipId } from '../backends/common';
+import { Icon } from '../components/icon';
 import { Pool } from '../util';
 
 
 export interface ViewChipsProps {
   host: Host;
-  onRouteChange(route: Route): void;
+  setRoute(route: Route): void;
 }
 
 export class ViewChips extends React.Component<ViewChipsProps> {
   pool = new Pool();
+  chipIdAwaitingRedirect: ChipId | null = null;
+
+  componentDidUpdate() {
+    if (this.chipIdAwaitingRedirect && (this.chipIdAwaitingRedirect in this.props.host.state.chips)) {
+      this.props.setRoute(['chip', this.chipIdAwaitingRedirect]);
+    }
+  }
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
@@ -28,39 +36,24 @@ export class ViewChips extends React.Component<ViewChipsProps> {
         {(chips.length > 0)
           ? (
             <div className="card-list">
-            {/* <button type="button" className="card-item">
-              <div className="card-image">
-                <img src="chip-preview.png" />
-              </div>
-              <div className="card-body">
-                <div className="card-title">A.56</div>
-                <p>Added on May 31st</p>
-              </div>
-            </button>
-            <button type="button" className="card-item">
-              <div className="card-image">
-                <img src="chip-preview.png" />
-              </div>
-              <div className="card-body">
-                <div className="card-title">Mitomi 1024</div>
-              </div>
-            </button> */}
-            {chips.map((chip) => {
-              let model = this.props.host.state.models[chip.modelId];
+              {chips.map((chip) => {
+                let model = this.props.host.state.models[chip.modelId];
 
-              return (
-                <button type="button" className="card-item" key={chip.id} onClick={() => {
-                  this.props.onRouteChange(['chip', chip.id]);
-                }}>
-                  <div className="card-image">
-                    {model.previewUrl && <img src={model.previewUrl} />}
-                  </div>
-                  <div className="card-body">
-                    <div className="card-title">{chip.name} ({model.name})</div>
-                  </div>
-                </button>
-              );
-            })}
+                return (
+                  <Card
+                    previewUrl={model.previewUrl}
+                    title={chip.name}
+                    subtitle={model.name}
+                    status={{
+                      icon: 'dark_mode',
+                      label: 'Idle'
+                    }}
+                    key={chip.id}
+                    onClick={() => {
+                      this.props.setRoute(['chip', chip.id]);
+                    }} />
+                );
+              })}
             </div>
           )
           : (
@@ -79,40 +72,57 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
         <div className="card-list">
           {models.map((model) => (
-            <button type="button" className="card-item" key={model.id} onClick={() => {
-              this.pool.add(async () => {
-                let result = await this.props.host.backend.createChip({ modelId: model.id });
-                // TODO: redirect to the ['chip', result.chipId] route
-              });
-            }}>
-              <div className="card-image">
-                {model.previewUrl && <img src={model.previewUrl} />}
-              </div>
-              <div className="card-body">
-                <div className="card-title">{model.name}</div>
-              </div>
-            </button>
+            <Card
+              previewUrl={model.previewUrl}
+              title={model.name}
+              key={model.id} onClick={() => {
+                this.pool.add(async () => {
+                  let result = await this.props.host.backend.createChip({ modelId: model.id });
+                  this.chipIdAwaitingRedirect = result.chipId;
+                });
+              }} />
           ))}
-          {/* <button type="button" className="card-item">
-            <div className="card-image">
-              <img src="chip-preview.png" />
-            </div>
-            <div className="card-body">
-              <div className="card-title">Mitomi 1024</div>
-            </div>
-          </button>
-          <button type="button" className="card-item">
-            <div className="card-image">
-              <img src="chip-preview.png" />
-            </div>
-            <div className="card-body">
-              <div className="card-title">Mitomi 1024</div>
-            </div>
-          </button> */}
         </div>
 
         {/* + Completed chips */}
       </main>
     );
   }
+}
+
+
+function Card(props: {
+  onClick(event: React.SyntheticEvent<HTMLButtonElement, MouseEvent>): void;
+  previewUrl: string | null;
+  title: string;
+  subtitle?: string;
+  status?: {
+    icon: string;
+    label: string;
+  };
+}) {
+  return (
+    <button type="button" className="card-item" onClick={props.onClick}>
+      <div className="card-image">
+        {props.previewUrl
+          ? <img src={props.previewUrl} />
+          : (
+            <div className="card-image-placeholder">
+              <Icon name="image_not_supported" />
+              <div>No preview</div>
+            </div>
+          )}
+      </div>
+      <div className="card-body">
+        <div className="card-title">{props.title}</div>
+        {props.subtitle && <div className="card-subtitle">{props.subtitle}</div>}
+        {props.status && (
+          <div className="card-status">
+            <Icon name={props.status.icon} />
+            <div>{props.status.label}</div>
+          </div>
+        )}
+      </div>
+    </button>
+  );
 }

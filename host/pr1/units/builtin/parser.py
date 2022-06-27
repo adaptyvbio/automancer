@@ -7,9 +7,9 @@ from ...util import schema as sc
 
 
 schema = sc.Dict({
-  'shorthands': sc.Dict({
+  'shorthands': sc.Optional(sc.Dict({
     str: dict
-  })
+  }))
 }, allow_extra=True)
 
 class ShorthandsParser(BaseParser):

@@ -208,8 +208,15 @@ export namespace renumber {
 }
 
 
-export function debounce(delay: number, callback: () => void): (() => void) {
+export function debounce(delay: number, callback: () => void, options?: { signal?: AbortSignal; }): (() => void) {
   let timeout: number | null = null;
+
+  options?.signal?.addEventListener('abort', () => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+  });
 
   return () => {
     if (timeout !== null) {

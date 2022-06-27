@@ -18,12 +18,12 @@ Segment = namedtuple("Segment", ["data", "process_namespace"])
 protocol_schema = sc.Dict({
   'name': sc.Optional(str),
   'models': sc.Optional(sc.List(str)),
-  'stages': sc.List(sc.Dict({
+  'stages': sc.Optional(sc.List(sc.Dict({
     'name': sc.Optional(str),
     'steps': sc.List(sc.Dict({
       'name': sc.Optional(str)
     }, allow_extra=True))
-  }, allow_extra=True))
+  }, allow_extra=True)))
 }, allow_extra=True)
 
 

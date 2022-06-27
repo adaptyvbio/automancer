@@ -159,6 +159,8 @@ class Host:
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
+    except Exception as e: # TODO: filter between unexpected errors and compilation errors
+      errors.append(DraftError(message=str(e), range=None))
 
     draft = Draft(
       id=draft_id,

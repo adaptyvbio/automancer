@@ -3,6 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
 import type { Draft } from '../application';
+import * as util from '../util';
 
 
 window.MonacoEnvironment = {
@@ -30,10 +31,15 @@ export interface TextEditorProps {
 }
 
 export class TextEditor extends React.Component<TextEditorProps> {
+  controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   model!: monaco.editor.IModel;
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
+  triggerCompilation = util.debounce(400, () => {
+    // TODO: compile without saving
+    this.props.onSave(this.model.getValue());
+  }, { signal: this.controller.signal });
 
   componentDidMount() {
     this.editor = monaco.editor.create(this.ref.current!, {
@@ -56,6 +62,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
     this.model.onDidChangeContent(() => {
       monaco.editor.setModelMarkers(this.model, 'main', []);
+      this.triggerCompilation();
     });
 
     this.updateErrors();
@@ -65,12 +72,17 @@ export class TextEditor extends React.Component<TextEditorProps> {
     this.updateErrors({ reveal: true });
   }
 
+  componentWillUnmount() {
+    this.controller.abort();
+  }
+
   updateErrors(options?: { reveal?: boolean; }) {
     let compiled = this.props.draft.compiled;
 
     if (compiled) {
       monaco.editor.setModelMarkers(this.model, 'main', compiled.errors.map((error) => {
-        let [startIndex, endIndex] = error.range;
+        // TODO: show error somewhere else
+        let [startIndex, endIndex] = error.range ?? [0, this.model.getValueLength()];
         let start = this.model.getPositionAt(startIndex);
         let end = this.model.getPositionAt(endIndex);
 

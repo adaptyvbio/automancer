@@ -40,7 +40,9 @@ class Parser(BaseParser):
   def enter_protocol(self, data_protocol):
     data_protocol = protocol_schema.transform(data_protocol)
 
-    for valve_name, valve_info in data_protocol.get('parameters', dict()).items():
+    for valve_name, valve_info_raw in data_protocol.get('parameters', dict()).items():
+      valve_info = valve_info_raw or dict()
+
       self._valve_parameters.append(
         ValveParameter(
           default_valve_indices={
@@ -153,7 +155,7 @@ class Parser(BaseParser):
 
     for valve_index, valve_param in enumerate(self._valve_parameters):
       if (not wildcard) and (valve_param.name == query_name)\
-        or (wildcard is not None) and valve_param.name.startswith(query_name) and (len(valve_param.name) > len(query_name)):
+        or wildcard and valve_param.name.startswith(query_name) and (len(valve_param.name) > len(query_name)):
         valves.add(valve_index)
 
     if len(valves) < 1:

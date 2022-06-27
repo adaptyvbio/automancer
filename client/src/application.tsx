@@ -80,7 +80,7 @@ export interface Draft {
   compiled: {
     errors: {
       message: string;
-      range: [number, number];
+      range: [number, number] | null;
     }[];
     protocol: Protocol | null;
   } | null;

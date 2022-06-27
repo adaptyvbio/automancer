@@ -6,3 +6,8 @@ class Chip:
     self.metadata = { 'name': name }
     self.model = model
     self.runners = runners
+
+  # Update runners following a matrix update
+  def update_runners(self):
+    for runner in self.runners.values():
+      runner.update()

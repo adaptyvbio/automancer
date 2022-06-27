@@ -37,7 +37,7 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
                 return (
                   <React.Fragment key={valveIndex}>
                     <Inspector.Select
-                      label={valve.names[0]}
+                      label={valve.name}
                       value={rawCurrentValue}
                       onInput={(event) => {
                         let rawValue = event.currentTarget.value;

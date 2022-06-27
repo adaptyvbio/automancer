@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../application';
-import type { Matrices, UnitsCode } from '../units';
+import type { Matrices } from '../units';
 
 
 export abstract class BackendCommon {
@@ -37,7 +37,7 @@ export abstract class BackendCommon {
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
     chipId: ChipId;
-    data: UnitsCode;
+    data: any;
     source: string;
   }): Promise<void>;
 }
@@ -195,7 +195,11 @@ export namespace ControlNamespace {
     valves: {
       diagramRef: [number, number] | null;
       group: number;
-      names: string[];
+      id: string;
+      idLabel: string;
+      inverse: true;
+      name: string;
+      repr: 'barrier' | 'flow' | 'isolate' | 'move' | 'push';
     }[];
   }
 

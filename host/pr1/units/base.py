@@ -82,6 +82,9 @@ class BaseRunner:
   def pause(self, options):
     pass
 
+  def update(self):
+    pass
+
 
 class BaseProcessRunner(BaseRunner):
   async def run_process(self, segment, seg_index, state):

@@ -4,7 +4,7 @@ from ...util.parser import Identifier, check_identifier
 from ...util import schema as sc
 
 
-Valve = namedtuple("Valve", ['alias', 'default_display', 'default_repr', 'diagram_ref', 'group', 'id', 'inverse', 'name'])
+Valve = namedtuple("Valve", ['alias', 'default_display', 'diagram_ref', 'group', 'id', 'id_label', 'inverse', 'name', 'repr'])
 ValveGroup = namedtuple("ValveGroup", ['id', 'inverse', 'name', 'valve_ids'])
 
 
@@ -38,7 +38,7 @@ def parse_valve_id(value):
 
 
 display_values = ['delta', 'hidden', 'visible']
-repr_values = ['flow', 'push', 'unpush', 'waves']
+repr_values = ['barrier', 'flow', 'isolate', 'move', 'push']
 
 display_partial_schema = {
   'display': sc.Optional(sc.Or(*[sc.Exact(value) for value in display_values])),
@@ -122,12 +122,13 @@ class Sheet:
       self.valves.append(Valve(
         alias=alias,
         default_display=data_valve.get("display", "visible"),
-        default_repr=data_valve.get("repr", "flow"),
         diagram_ref=diagram_ref,
         group=group,
-        id=valve_id,
+        id=full_id,
+        id_label=full_id,
         inverse=(data_valve.get("inverse", False) != group.inverse),
-        name=data_valve.get("name")
+        name=data_valve.get("name"),
+        repr=data_valve.get("repr", "flow")
       ))
 
       self.valve_names[full_id] = valve_index
@@ -158,7 +159,11 @@ class Sheet:
       "valves": [{
         "diagramRef": valve.diagram_ref,
         "group": list(self.groups.values()).index(valve.group),
-        "names": [valve.name or valve.id],
+        "id": valve.id,
+        "idLabel": valve.id_label,
+        "inverse": valve.inverse,
+        "name": (valve.name or valve.id),
+        "repr": valve.repr
       } for valve in self.valves]
     }
 

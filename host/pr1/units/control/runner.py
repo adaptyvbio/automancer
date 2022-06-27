@@ -42,6 +42,10 @@ class Runner(BaseRunner):
       } for valve_index, valve in enumerate(self._matrix.valves)]
     }
 
+  # Called following a matrix update
+  def update(self):
+   self._write()
+
 
   def _write(self):
     executor_signal = self._matrix.permutation.permute(self._chip_signal ^ self._default_chip_signal)

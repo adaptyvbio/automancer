@@ -291,6 +291,8 @@ class Host:
       for namespace, matrix_data in request["update"].items():
         chip.matrices[namespace].update(matrix_data)
 
+      chip.update_runners()
+
     if request["type"] == "skipSegment":
       chip = self.chips[request["chipId"]]
       chip.master.skip_segment(

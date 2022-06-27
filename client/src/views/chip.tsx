@@ -85,10 +85,18 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
                         let modelValveMask = 1n << BigInt(valveIndex);
                         let status = runner.valves[valveIndex];
 
+                        let icon = {
+                          'barrier': 'vertical_align_center',
+                          'flow': 'air',
+                          'isolate': 'view_column',
+                          'move': 'moving',
+                          'push': 'download'
+                        }[valve.repr];
+
                         return (
                           <div
                             className={util.formatClass('mcontrol-entry', { '_on': active })}
-                            key={valveIndex}
+                            key={valve.id}
                             onMouseEnter={() => {
                               this.setState({ targetValveIndex: valveIndex });
                             }}
@@ -96,10 +104,10 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
                               this.setState({ targetValveIndex: null });
                             }}>
                             <div className="mcontrol-icon">
-                              <span className="material-symbols-rounded">air</span>
+                              <span className="material-symbols-rounded">{icon}</span>
                             </div>
-                            <div className="mcontrol-label">{valve.names[0]}</div>
-                            <div className="mcontrol-sublabel">inlet/1</div>
+                            <div className="mcontrol-label">{valve.name}</div>
+                            <div className="mcontrol-sublabel">{valve.idLabel}</div>
                             <div className="mcontrol-statuses">
                               {(status.error !== null) && (
                                 <div className="mcontrol-status mcontrol-status--warning">
@@ -120,7 +128,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
                                 });
                               }}>
                                 <div className="mcontrol-switch-icon">
-                                  <span className="material-symbols-rounded">air</span>
+                                  <span className="material-symbols-rounded">{icon}</span>
                                 </div>
                                 <div className="mcontrol-switch-label">{active ? 'On' : 'Off'}</div>
                               </button>

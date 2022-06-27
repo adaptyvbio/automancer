@@ -103,7 +103,7 @@ class Parser(BaseParser):
 
       return {
         'display': param.display or (valve and valve.default_display) or 'visible',
-        'repr': param.repr or (valve and valve.default_repr or param.repr) or 'flow'
+        'repr': param.repr or (valve and valve.repr or param.repr) or 'flow'
       }
 
     arguments = [process_arg(param_index, arg) for param_index, arg in enumerate(code['arguments'])]

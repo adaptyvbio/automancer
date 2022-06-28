@@ -23,5 +23,7 @@ export function formatRelativeTime(input: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
-// export function formatAbsoluteTime(input: number): string {
-// }
+export function formatAbsoluteTime(input: number): string {
+  let time = new Date(input);
+  return `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+}

@@ -10,6 +10,10 @@ $segment-radius: 4px;
 
 
 .poverview {
+  &-root {
+    max-width: 500px;
+  }
+
   &-stage {
     &-header {
       display: flex;

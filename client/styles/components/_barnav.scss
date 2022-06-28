@@ -33,6 +33,10 @@
     &:not(._selected, :hover) {
       color: #666;
     }
+
+    &:disabled {
+      color: #bbb;
+    }
   }
 
   &-icon {

@@ -1,21 +1,14 @@
 import { List } from 'immutable';
 import * as React from 'react';
 
+import type { Code } from '.';
+import type { CodeEditorInstance, CodeEditorProps } from '..';
 import type { Draft } from '../../application';
 import type { Chip, ChipId, ChipModel, ControlNamespace, HostId, Protocol } from '../../backends/common';
 import { Icon } from '../../components/icon';
 
 
-interface CodeEditorProps {
-  chip: Chip;
-  draft: Draft;
-  model: ChipModel;
-
-  code: ControlNamespace.Code;
-  setCode(code: ControlNamespace.Code): void;
-}
-
-export class CodeEditor extends React.Component<CodeEditorProps> {
+export class CodeEditor extends React.Component<CodeEditorProps<Code>> implements CodeEditorInstance<Code> {
   render() {
     let protocol = this.props.draft.compiled!.protocol!;
     let sheet = this.props.model.sheets.control;
@@ -50,7 +43,7 @@ export class CodeEditor extends React.Component<CodeEditorProps> {
                         {Array.from(sheet.valves.entries())
                           .filter(([_valveIndex, valve]) => groupIndex === valve.group)
                           .map(([valveIndex, valve]) => (
-                            <option value={valveIndex} key={valveIndex}>{valve.names[0]}</option>
+                            <option value={valveIndex} key={valveIndex}>{valve.name}</option>
                           ))}
                       </React.Fragment>
                     ))}
@@ -72,7 +65,7 @@ export class CodeEditor extends React.Component<CodeEditorProps> {
                         <Icon name="air" />
                       </div>
                     )}
-                    <div>{argValve ? argValve.names[0] : 'Select valve'}</div>
+                    <div>{argValve ? argValve.name : 'Select valve'}</div>
                   </div>
                 </div>
               </label>

@@ -2,7 +2,7 @@ import { Set as ImSet } from 'immutable';
 import * as React from 'react';
 
 import { Icon } from './icon';
-import { formatDuration, formatRelativeTime } from '../format';
+import { formatAbsoluteTime, formatDuration, formatRelativeTime } from '../format';
 import { type Analysis, analyzeProtocol } from '../analysis';
 import type { Master, MasterEntry, Protocol } from '../backends/common';
 // import { ContextMenuArea } from '../components/context-menu-area';
@@ -18,6 +18,10 @@ export function ProtocolOverview(props: {
   let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>(props.protocol.stages.map((_, index) => index)));
   let analysis = props.analysis ?? analyzeProtocol(props.protocol);
   let currentSegmentIndex = analysis.current?.segmentIndex!; // !
+
+  let formatTime = props.master
+    ? formatAbsoluteTime
+    : formatRelativeTime;
 
   return (
     <div className="poverview-root">
@@ -57,7 +61,7 @@ export function ProtocolOverview(props: {
                   <div className="poverview-step-item" key={stepIndex}>
                     <div className="poverview-step-header">
                       <div className="poverview-step-marker" />
-                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatRelativeTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
+                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
                       <div className="poverview-step-name">{step.name}</div>
                     </div>
                     {!isStepHidden
@@ -118,8 +122,8 @@ export function ProtocolOverview(props: {
                   <div className="poverview-step-marker" />
                   <div className="poverview-step-time">
                     {nextStageSegmentAnalysis
-                      ? (nextStageSegmentAnalysis.timeRange ? formatRelativeTime(nextStageSegmentAnalysis.timeRange[0]) : '–')
-                      : formatRelativeTime(analysis.done.time)}
+                      ? (nextStageSegmentAnalysis.timeRange ? formatTime(nextStageSegmentAnalysis.timeRange[0]) : '–')
+                      : formatTime(analysis.done.time)}
                   </div>
                   <div className="poverview-step-name">{nextStage ? `Continuing to ${nextStage.name}` : 'Done'}</div>
                 </div>

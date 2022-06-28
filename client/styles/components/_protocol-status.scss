@@ -1,0 +1,15 @@
+@use "../common/buttons";
+
+
+.pstatus {
+  &-actions {
+    display: flex;
+    column-gap: 0.4rem;
+
+    margin: 1rem 0;
+  }
+
+  &-button {
+    @extend .btn;
+  }
+}

@@ -30,11 +30,11 @@ export function createFeatures(segment: ProtocolSegment, protocol: Protocol, mas
     }
 
     return [{
-      icon: ({
+      icon: 'air' /* ({
         'flow': 'air',
         'push': 'download',
         'unpush': 'upload'
-      } as any)[argData?.repr ?? param.repr ?? 'flow'],
+      } as any)[argData?.repr ?? param.repr ?? 'flow'] */,
       label: param.label
     }];
   });
@@ -53,7 +53,7 @@ export interface Matrix {
 
 
 export default {
-  // CodeEditor,
+  CodeEditor,
   MatrixEditor,
   createCode,
   createFeatures

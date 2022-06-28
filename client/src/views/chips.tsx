@@ -46,13 +46,12 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                     previewUrl={model.previewUrl}
                     title={chip.name}
                     subtitle={model.name}
-                    status={{
-                      icon: 'dark_mode',
-                      label: 'Idle'
-                    }}
+                    status={chip.master
+                      ? { icon: 'receipt_long', label: (chip.master.protocol.name ?? 'Running') }
+                      : { icon: 'dark_mode', label: 'Idle' }}
                     key={chip.id}
                     onClick={() => {
-                      this.props.setRoute(['chip', chip.id]);
+                      this.props.setRoute(['chip', chip.id, 'settings']);
                     }} />
                 );
               })}

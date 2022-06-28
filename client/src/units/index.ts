@@ -20,6 +20,27 @@ export interface Feature {
 export type Features = Feature[];
 
 
+//> CodeEditor
+
+export interface CodeEditorComponent<Code> {
+  new(props: CodeEditorProps<Code>): CodeEditorInstance<Code>;
+}
+
+export type CodeEditorInstance<Code> = React.Component<CodeEditorProps<Code>, unknown>;
+
+export interface CodeEditorProps<Code> {
+  chip: Chip;
+  draft: Draft;
+  model: ChipModel;
+  code: Code;
+  setCode(code: Code): void;
+}
+
+export interface Codes {
+  [Control.namespace]: Control.Code;
+}
+
+
 //> MatrixEditor
 
 export interface MatrixEditorComponent<Matrix> {
@@ -43,15 +64,8 @@ export interface Matrices {
 
 //> Unit
 
-export interface Unit<Matrix> {
-  CodeEditor?: { new(): React.Component<{
-    chip: Chip;
-    draft: Draft;
-    model: ChipModel;
-    code: any;
-    setCode(code: any): void;
-  }, unknown> };
-
+export interface Unit<Code, Matrix> {
+  CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
   createCode?(protocol: Protocol, model: ChipModel): object;
@@ -65,6 +79,6 @@ export const Units = [
   [Control.namespace, ControlUnit],
   [Input.namespace, InputUnit]
 ] as [
-  [typeof Control.namespace, Unit<Control.Matrix>],
-  [typeof Input.namespace, Unit<never>],
+  [typeof Control.namespace, Unit<Control.Code, Control.Matrix>],
+  [typeof Input.namespace, Unit<never, never>],
 ]

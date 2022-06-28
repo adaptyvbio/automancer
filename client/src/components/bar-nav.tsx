@@ -9,6 +9,7 @@ export function BarNav<Id extends number | string>(props: {
     id: Id;
     label: string;
     icon: string;
+    disabled?: unknown;
   }[];
   selectEntry(entryId: Id): void;
   selectedEntryId: Id | null;
@@ -18,6 +19,7 @@ export function BarNav<Id extends number | string>(props: {
       {props.entries.map((entry) => (
         <button type="button"
           className={util.formatClass('barnav-entry', { '_selected': entry.id === props.selectedEntryId })}
+          disabled={!!entry.disabled}
           key={entry.id}
           onClick={() => {
             props.selectEntry(entry.id);

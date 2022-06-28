@@ -7,14 +7,14 @@ import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
-// import Units, { UnitsCode } from '../units';
+import { Codes, Units } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
 
 
 export interface PlanData {
   chipId: ChipId;
-  // data: UnitsCode;
+  data: Codes;
 }
 
 
@@ -67,13 +67,13 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
 
               <ProtocolTimeline protocol={protocol} />
 
-              <div className="headerh header--2">
+              <div className="header header--2">
                 <h2>Sequence</h2>
               </div>
 
               <ProtocolOverview protocol={protocol} />
 
-              {/* <div className="header2">
+              <div className="header header--2">
                 <h2>Start protocol</h2>
                 <div className="superimposed-root">
                   <select className="superimposed-target" onInput={(event) => {
@@ -84,7 +84,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                           Units
                             .filter(([_namespace, Unit]) => Unit.createCode)
                             .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!, model!)])
-                        ) as unknown as UnitsCode
+                        ) as unknown as Codes
                       }
                     });
                   }}>
@@ -108,20 +108,18 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
               {this.state.planData && (
                 <>
                   <div className="pconfig-root">
-                    {Units.map(([rawNamespace, unit]) => {
-                      if (!unit.CodeEditor || !(rawNamespace in this.state.planData!.data)) {
+                    {Units.map(([namespace, unit]) => {
+                      if (!unit.CodeEditor || !(namespace in this.state.planData!.data)) {
                         return null;
                       }
-
-                      let namespace = rawNamespace as (keyof UnitsCode);
 
                       return (
                         <unit.CodeEditor
                           chip={chip!}
                           draft={this.props.draft}
                           model={model!}
-                          code={this.state.planData!.data[namespace]}
-                          setCode={(code: UnitsCode[typeof namespace]) => {
+                          code={this.state.planData!.data[namespace as keyof Codes]}
+                          setCode={(code: Codes[keyof Codes]) => {
                             this.setState({
                               planData: setIn(this.state.planData, ['data', namespace], code)
                             });
@@ -145,7 +143,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                     </button>
                   </div>
                 </>
-              )} */}
+              )}
             </>
           )
           : (

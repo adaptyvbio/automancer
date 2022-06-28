@@ -21,21 +21,22 @@ export class Diagram extends React.Component<DiagramProps> {
     this.update(prevProps.signal, prevProps.targetValveIndex);
   }
 
-  update(prevSignal: bigint = 0n, prevTargetValveIndex: number | null = null) {
+  update(prevSignal: bigint | null = null, prevTargetValveIndex: number | null = null) {
     let createTargetMask = (valveIndex: number | null) =>
       valveIndex !== null
         ? (1n << BigInt(valveIndex))
         : 0n;
 
-    let diff = (this.props.signal ^ prevSignal)
-      | (createTargetMask(this.props.targetValveIndex) ^ createTargetMask(prevTargetValveIndex));
+    let diff = prevSignal !== null
+      ? (this.props.signal ^ prevSignal) | (createTargetMask(this.props.targetValveIndex) ^ createTargetMask(prevTargetValveIndex))
+      : (1n << BigInt(this.props.sheet.valves.length)) - 1n;
 
     for (let [valveIndex, valve] of this.props.sheet.valves.entries()) {
-      let mask = BigInt(1 << valveIndex);
+      let mask = 1n << BigInt(valveIndex);
       let changed = (diff & mask) > 0;
 
       if (changed && valve.diagramRef) {
-        let value = (this.props.signal & mask) > 0;
+        let value = ((this.props.signal & mask) > 0) !== valve.inverse;
         let element = this.ref.current!.querySelector(`[data-layer-index="${valve.diagramRef[0]}"][data-group-index="${valve.diagramRef[1]}"]`)!;
 
         element.classList.toggle('_active', value);

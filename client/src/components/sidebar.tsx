@@ -33,11 +33,11 @@ export class Sidebar extends React.Component<SidebarProps> {
         label: string;
         icon: string;
         route: Route | null;
-        routeRef?: Route;
         children?: {
           id: string;
           label: string;
           route: Route | null;
+          routeRef?: Route;
         }[] | null;
       }[];
     }[] = host
@@ -116,14 +116,12 @@ export class Sidebar extends React.Component<SidebarProps> {
           {groups.map((group) => (
             <div className="sidebar-group" key={group.id}>
               {group.entries.map((entry) => {
-                let routeRef = entry.routeRef ?? entry.route;
-
                 let item = (
                   <button
                     type="button"
                     className={util.formatClass('sidebar-item', {
                       '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
-                      '_subselected': routeRef && currentRoute && isSuperset(currentRoute, routeRef)
+                      '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
                     })}
                     key={entry.id}
                     onClick={(entry.route ?? undefined) && (() => {
@@ -141,16 +139,20 @@ export class Sidebar extends React.Component<SidebarProps> {
                     <div className="sidebar-grouping" key={entry.id}>
                       {item}
                       <div className="sidebar-children">
-                        {entry.children?.map((child) => (
-                          <button type="button"
-                            className={util.formatClass('sidebar-child', { '_selected': routeRef && currentRoute && isSuperset(currentRoute, routeRef) })}
-                            key={child.id}
-                            onClick={(child.route ?? undefined) && (() => {
-                              this.props.setRoute(child.route!);
-                            })}>
-                              {child.label}
-                          </button>
-                        ))}
+                        {entry.children?.map((child) => {
+                          let routeRef = child.routeRef ?? child.route;
+
+                          return (
+                            <button type="button"
+                              className={util.formatClass('sidebar-child', { '_selected': routeRef && currentRoute && isSuperset(currentRoute, routeRef) })}
+                              key={child.id}
+                              onClick={(child.route ?? undefined) && (() => {
+                                this.props.setRoute(child.route!);
+                              })}>
+                                {child.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )

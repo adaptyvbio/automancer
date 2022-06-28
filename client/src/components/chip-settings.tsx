@@ -10,21 +10,20 @@ import { Icon } from '../components/icon';
 import { Matrices, Units } from '../units';
 
 
-export interface ViewChipSettingsProps {
+export interface ChipSettingsProps {
   chipId: ChipId;
   host: Host;
-  setRoute(route: Route): void;
 }
 
-export interface ViewChipSettingsState {
+export interface ChipSettingsState {
   description: string;
   name: string;
 }
 
-export class ViewChipSettings extends React.Component<ViewChipSettingsProps, ViewChipSettingsState> {
+export class ChipSettings extends React.Component<ChipSettingsProps, ChipSettingsState> {
   pool = new Pool();
 
-  constructor(props: ViewChipSettingsProps) {
+  constructor(props: ChipSettingsProps) {
     super(props);
 
     this.state = {
@@ -41,7 +40,7 @@ export class ViewChipSettings extends React.Component<ViewChipSettingsProps, Vie
     return this.props.host.state.models[this.chip.modelId];
   }
 
-  componentDidUpdate(prevProps: ViewChipSettingsProps) {
+  componentDidUpdate(prevProps: ChipSettingsProps) {
     if ((prevProps !== this.props)) {
       if (this.state.description !== (this.chip.metadata.description ?? '')) {
         this.setState({ description: this.chip.metadata.description ?? '' });
@@ -55,14 +54,7 @@ export class ViewChipSettings extends React.Component<ViewChipSettingsProps, Vie
 
   render() {
     return (
-      <main>
-        <div className="header header--1">
-          <h1>Chip settings</h1>
-          <button type="button" className="btn" onClick={() => {
-            this.props.setRoute(['chip', this.props.chipId]);
-          }}>Close settings</button>
-        </div>
-
+      <div className="barnav-contents">
         <div className="form-container">
           <div className="header header--2">
             <h2>General</h2>
@@ -121,7 +113,7 @@ export class ViewChipSettings extends React.Component<ViewChipSettingsProps, Vie
               key={namespace} />
           })}
         </div>
-      </main>
+      </div>
     );
   }
 }

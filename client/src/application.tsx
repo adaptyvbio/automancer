@@ -6,7 +6,7 @@ import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/c
 import WebsocketBackend from './backends/websocket';
 import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
-import { ViewChip } from './views/chip';
+import { ViewChip, ViewChipMode } from './views/chip';
 import { ViewChipSettings } from './views/chip-settings';
 import { ViewChips } from './views/chips';
 import { ViewDraft } from './views/draft';
@@ -340,13 +340,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         }
       } else if (route.length === 2) {
         switch (route[0]) {
-          case 'chip': return (
-            <ViewChip
-              chipId={route[1] as ChipId}
-              host={this.host}
-              setRoute={setRoute} />
-          );
-
           case 'protocol': return (
             <ViewDraft
               draft={this.state.drafts[route[1]]}
@@ -357,16 +350,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         }
       } else if (route.length === 3) {
         switch (route[0]) {
-          case 'chip': {
-            switch (route[2]) {
-              case 'settings': return (
-                <ViewChipSettings
-                  chipId={route[1] as ChipId}
-                  host={this.host}
-                  setRoute={setRoute} />
-              );
-            }
-          }
+          case 'chip': return (
+            <ViewChip
+              chipId={route[1] as ChipId}
+              host={this.host}
+              mode={route[2] as ViewChipMode}
+              setRoute={setRoute} />
+          );
         }
       }
     })();

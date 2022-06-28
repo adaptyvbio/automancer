@@ -23,7 +23,8 @@ export class Sidebar extends React.Component<SidebarProps> {
     let host: Host | undefined = this.props.hosts[this.props.selectedHostId!];
     let hosts = Object.values(this.props.hosts);
 
-    let currentRoute = this.props.currentRoute && List(this.props.currentRoute);
+    let currentRoute = this.props.currentRoute;
+    let currentRouteList = currentRoute && List(currentRoute);
 
     let groups: {
       id: string;
@@ -32,6 +33,7 @@ export class Sidebar extends React.Component<SidebarProps> {
         label: string;
         icon: string;
         route: Route | null;
+        routeRef?: Route;
         children?: {
           id: string;
           label: string;
@@ -53,7 +55,8 @@ export class Sidebar extends React.Component<SidebarProps> {
             children: Object.values(host.state.chips).map((chip) => ({
               id: chip.id,
               label: chip.name,
-              route: ['chip', chip.id]
+              route: ['chip', chip.id, 'settings'],
+              routeRef: ['chip', chip.id]
             })) },
           { id: 'protocol',
             label: 'Protocols',
@@ -113,12 +116,14 @@ export class Sidebar extends React.Component<SidebarProps> {
           {groups.map((group) => (
             <div className="sidebar-group" key={group.id}>
               {group.entries.map((entry) => {
+                let routeRef = entry.routeRef ?? entry.route;
+
                 let item = (
                   <button
                     type="button"
                     className={util.formatClass('sidebar-item', {
-                      '_selected': entry.route && currentRoute?.equals(List(entry.route)),
-                      '_subselected': entry.route && currentRoute?.isSuperset(List(entry.route))
+                      '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
+                      '_subselected': routeRef && currentRoute && isSuperset(currentRoute, routeRef)
                     })}
                     key={entry.id}
                     onClick={(entry.route ?? undefined) && (() => {
@@ -138,7 +143,7 @@ export class Sidebar extends React.Component<SidebarProps> {
                       <div className="sidebar-children">
                         {entry.children?.map((child) => (
                           <button type="button"
-                            className={util.formatClass('sidebar-child', { '_selected': child.route && currentRoute?.isSuperset(List(child.route)) })}
+                            className={util.formatClass('sidebar-child', { '_selected': routeRef && currentRoute && isSuperset(currentRoute, routeRef) })}
                             key={child.id}
                             onClick={(child.route ?? undefined) && (() => {
                               this.props.setRoute(child.route!);
@@ -153,50 +158,24 @@ export class Sidebar extends React.Component<SidebarProps> {
               })}
             </div>
           ))}
-          {/* <div className="sidebar-group">
-            <button type="button" className="sidebar-item _selected">
-              <div className="sidebar-item-icon">
-                <span className="material-symbols-rounded">dashboard</span>
-              </div>
-              <div className="sidebar-item-label">Dashboard</div>
-            </button>
-
-            <div className="sidebar-grouping">
-              <button type="button" className="sidebar-item">
-                <div className="sidebar-item-icon">
-                  <span className="material-symbols-rounded">memory</span>
-                </div>
-                <div className="sidebar-item-label">Chips</div>
-              </button>
-              <div className="sidebar-children">
-                <button type="button" className="sidebar-child">Chip Alpha</button>
-                <button type="button" className="sidebar-child">Chip Bravo</button>
-              </div>
-            </div>
-
-            <button type="button" className="sidebar-item">
-              <div className="sidebar-item-icon">
-                <span className="material-symbols-rounded">description</span>
-              </div>
-              <div className="sidebar-item-label">Chip models</div>
-            </button>
-            <button type="button" className="sidebar-item">
-              <div className="sidebar-item-icon">
-                <span className="material-symbols-rounded">terminal</span>
-              </div>
-              <div className="sidebar-item-label">Terminal</div>
-            </button>
-          </div>
-          <div className="sidebar-group">
-            <button type="button" className="sidebar-item">
-              <div className="sidebar-item-icon">
-                <span className="material-symbols-rounded">settings</span>
-              </div>
-              <div className="sidebar-item-label">Settings</div>
-            </button>
-          </div> */}
         </nav>
       </aside>
     );
   }
+}
+
+
+// Is 'a' a superset of 'b'
+function isSuperset<T>(a: T[], b: T[]): boolean {
+  if (a.length < b.length) {
+    return false;
+  }
+
+  for (let index = 0; index < b.length; index += 1) {
+    if (a[index] !== b[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }

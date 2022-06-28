@@ -27,9 +27,11 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
     return (
       <main>
-        <h1>Protocols</h1>
+        <header className="header header--1">
+          <h1>Protocols</h1>
+        </header>
 
-        <div className="header2">
+        <header className="header header--2">
           <h2>Recent protocols</h2>
           <button type="button" className="btn" onClick={() => {
             let draft: Draft = {
@@ -46,7 +48,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
           }}>
             <div>New protocol</div>
           </button>
-        </div>
+        </header>
 
         <div className="lproto-root">
           <button type="button" className="lproto-entry">
@@ -58,9 +60,9 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
           </button>
         </div>
 
-        <div className="header2">
+        <header className="header header--2">
           <h2>All protocols</h2>
-        </div>
+        </header>
 
 
         {(drafts.length > 0)

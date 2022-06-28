@@ -2,11 +2,12 @@ import { Set as ImSet } from 'immutable';
 import * as React from 'react';
 
 import { Icon } from './icon';
+import { formatDuration, formatRelativeTime } from '../format';
 import { type Analysis, analyzeProtocol } from '../analysis';
 import type { Master, MasterEntry, Protocol } from '../backends/common';
 // import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
-// import Units, { UnitsCode } from '../units';
+import { Units } from '../units';
 
 
 export function ProtocolOverview(props: {
@@ -14,7 +15,7 @@ export function ProtocolOverview(props: {
   master?: Master;
   protocol: Protocol;
 }) {
-  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>([]));
+  let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>(props.protocol.stages.map((_, index) => index)));
   let analysis = props.analysis ?? analyzeProtocol(props.protocol);
   let currentSegmentIndex = analysis.current?.segmentIndex!; // !
 
@@ -56,7 +57,7 @@ export function ProtocolOverview(props: {
                   <div className="poverview-step-item" key={stepIndex}>
                     <div className="poverview-step-header">
                       <div className="poverview-step-marker" />
-                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
+                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatRelativeTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
                       <div className="poverview-step-name">{step.name}</div>
                     </div>
                     {!isStepHidden
@@ -117,8 +118,8 @@ export function ProtocolOverview(props: {
                   <div className="poverview-step-marker" />
                   <div className="poverview-step-time">
                     {nextStageSegmentAnalysis
-                      ? (nextStageSegmentAnalysis.timeRange ? formatTime(nextStageSegmentAnalysis.timeRange[0]) : '–')
-                      : formatTime(analysis.done.time)}
+                      ? (nextStageSegmentAnalysis.timeRange ? formatRelativeTime(nextStageSegmentAnalysis.timeRange[0]) : '–')
+                      : formatRelativeTime(analysis.done.time)}
                   </div>
                   <div className="poverview-step-name">{nextStage ? `Continuing to ${nextStage.name}` : 'Done'}</div>
                 </div>
@@ -129,37 +130,4 @@ export function ProtocolOverview(props: {
       })}
     </div>
   );
-}
-
-
-function formatDuration(input: number): string {
-  if (input < 1000) {
-    return `${input} ms`;
-  } else if (input < 60e3) {
-    return `${input / 1000} sec`;
-  } if (input < 3600e3) {
-    let min = Math.floor(input / 60e3);
-    let sec = Math.round(Math.floor(input % 60e3) / 1000);
-    return `${min} min` + (sec > 0 ? ` ${sec} sec` : '');
-  }
-
-  return input.toString() + ' sec';
-}
-
-function formatDuration2(input: number): string {
-  let hours = Math.floor(input / 3600);
-  let minutes = Math.floor((input % 3600) / 60);
-
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-}
-
-
-const dtf = new Intl.DateTimeFormat('en', {
-  dateStyle: undefined,
-  hour12: false,
-  timeStyle: 'short'
-});
-
-function formatTime(input: number): string {
-  return dtf.format(input);
 }

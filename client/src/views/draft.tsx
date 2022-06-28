@@ -27,7 +27,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     super(props);
 
     this.state = {
-      mode: 'visual'
+      mode: 'overview'
     };
   }
 

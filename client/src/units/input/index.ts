@@ -9,7 +9,7 @@ export function createFeatures(segment: ProtocolSegment, protocol: Protocol, mas
 
   return data
     ? [{
-      icon: 'keyboard-command-key',
+      icon: 'keyboard_command_key',
       label: data.message
     }]
     : [];

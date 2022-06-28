@@ -1,12 +1,24 @@
 import * as React from 'react';
+import { type Analysis, analyzeProtocol } from '../analysis';
+
+import { Protocol } from '../backends/common';
+import { formatDuration, formatRelativeTime } from '../format';
 
 
-export class ProtocolTimeline extends React.Component<{}, { width: number | null; }> {
+export interface ProtocolTimelineProps {
+  analysis?: Analysis;
+  protocol: Protocol;
+}
+
+export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { width: number | null; }> {
+  analysis: Analysis;
   observer: ResizeObserver;
   refContainer = React.createRef<HTMLDivElement>();
 
-  constructor(props: {}) {
+  constructor(props: ProtocolTimelineProps) {
     super(props);
+
+    this.analysis = props.analysis ?? analyzeProtocol(props.protocol);
 
     this.state = {
       width: null
@@ -38,24 +50,23 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
 
     // Input
 
-    let props = {
-      segments: [
-        { position: 0.0 },
-        { position: 0.1 },
-        { position: 0.2 },
-        { position: 0.4 },
-        { position: 0.65 },
-        { position: 0.7 },
-        { position: 0.75 },
-        { position: 0.8 },
-        { position: 0.85 },
-        { position: 0.9 },
-      ],
-      stages: [
-        { name: 'Stage 1', seq: [0, 3] },
-        { name: 'Stage 2', seq: [3, 7] },
-        { name: 'Stage 3', seq: [7, 10] }
-      ]
+    let data = {
+      segments: this.props.protocol.stages
+        .flatMap((stage) => stage.steps)
+        .map((step) => {
+          let firstSegmentAnalysis = this.analysis.segments[step.seq[0]];
+
+          return {
+            position: firstSegmentAnalysis.timeRange![0] / this.analysis.done.time,
+            time: firstSegmentAnalysis.timeRange![0]
+          };
+        }),
+      stages: this.props.protocol.stages.map((stage, stageIndex) => {
+        return {
+          name: stage.name,
+          seq: stage.seq
+        };
+      })
     };
 
 
@@ -72,21 +83,21 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
     return (
       <div ref={this.refContainer}>
         <svg viewBox={`0 0 ${width} ${height}`} className="timeline-root">
-          {props.stages.map((stage, stageIndex) => {
-            let firstSegment = props.segments[stage.seq[0]];
-            let nextSegment = props.segments[stage.seq[1]];
+          {data.stages.map((stage, stageIndex) => {
+            let firstSegment = data.segments[stage.seq[0]];
+            let nextSegment = data.segments[stage.seq[1]];
 
             return (
               <g className="timeline-stage" key={stageIndex}>
                 <rect x={marginHor + firstSegment.position * availWidth} y={0} width={((nextSegment?.position ?? 1) - firstSegment.position) * availWidth} height={height} fill="transparent" />
                 <text x={marginHor + (firstSegment.position + (nextSegment?.position ?? 1)) * 0.5 * availWidth} y={10} className="timeline-stagename">{stage.name}</text>
 
-                {props.segments.map((segment, segmentIndex) => {
+                {data.segments.map((segment, segmentIndex) => {
                   if (!(segmentIndex >= stage.seq[0] && segmentIndex < stage.seq[1])) {
                     return null;
                   }
 
-                  let nextSegment = props.segments[segmentIndex + 1];
+                  let nextSegment = data.segments[segmentIndex + 1];
 
                   let firstStageSegment = segmentIndex === stage.seq[0];
                   let lastStageSegment = segmentIndex === (stage.seq[1] - 1);
@@ -97,7 +108,7 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
                   return (
                     <React.Fragment key={segmentIndex}>
                       <g className="timeline-segment">
-                        {firstStageSegment && <text x={start} y={50} className="timeline-segmentlabel">13:15</text>}
+                        {firstStageSegment && <text x={start} y={50} className="timeline-segmentlabel">{formatRelativeTime(firstSegment.time)}</text>}
                         <circle cx={start} cy={y} r={firstStageSegment ? stageRadius : segmentRadius} className={'timeline-marker ' + (firstStageSegment ? 'timeline-stagemarker' : '')} />
                       </g>
                       {firstStageSegment
@@ -112,7 +123,7 @@ export class ProtocolTimeline extends React.Component<{}, { width: number | null
 
           <g className="timeline-segment">
             <circle cx={marginHor + availWidth} cy={y} r={stageRadius} className="timeline-marker timeline-stagemarker" />
-            <text x={marginHor + availWidth} y="50" className="timeline-segmentlabel">14:00</text>
+            <text x={marginHor + availWidth} y="50" className="timeline-segmentlabel">{formatRelativeTime(this.analysis.done.time)}</text>
           </g>
         </svg>
       </div>

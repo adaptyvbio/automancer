@@ -14,7 +14,7 @@ import { Pool } from '../util';
 
 export interface PlanData {
   chipId: ChipId;
-  data: UnitsCode;
+  // data: UnitsCode;
 }
 
 
@@ -61,19 +61,19 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
         {protocol
           ? (
             <>
-              <div className="header2">
+              <div className="header header--2">
                 <h2>Timeline</h2>
               </div>
 
-              <ProtocolTimeline />
+              <ProtocolTimeline protocol={protocol} />
 
-              <div className="header2">
+              <div className="headerh header--2">
                 <h2>Sequence</h2>
               </div>
 
               <ProtocolOverview protocol={protocol} />
 
-              <div className="header2">
+              {/* <div className="header2">
                 <h2>Start protocol</h2>
                 <div className="superimposed-root">
                   <select className="superimposed-target" onInput={(event) => {
@@ -145,7 +145,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                     </button>
                   </div>
                 </>
-              )}
+              )} */}
             </>
           )
           : (

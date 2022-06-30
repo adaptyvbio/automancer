@@ -12,7 +12,7 @@ import { Pool } from '../util';
 export interface ViewDraftProps {
   draft: Draft;
   host: Host;
-  setDraft(draft: Draft): void;
+  setDraft(draft: Draft): Promise<void>;
   setRoute(route: Route): void;
 }
 
@@ -44,17 +44,17 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           <TextEditor
             draft={this.props.draft}
             onSave={(source) => {
-              this.props.setDraft({
-                ...this.props.draft,
-                compiled: null,
-                lastModified: Date.now(),
-                source
-              });
-
               this.pool.add(async () => {
+                await this.props.setDraft({
+                  ...this.props.draft,
+                  compiled: null,
+                  lastModified: Date.now(),
+                  source
+                });
+
                 let compiled = await this.props.host.backend.compileDraft(this.props.draft.id, source);
 
-                this.props.setDraft({
+                await this.props.setDraft({
                   ...this.props.draft,
                   compiled,
                   name: compiled?.protocol?.name ?? this.props.draft.name

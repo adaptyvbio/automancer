@@ -29,3 +29,4 @@ export interface Draft {
 }
 
 export type DraftsRecord = Record<DraftId, Draft>;
+export type DraftsUpdateRecord = Record<DraftId, Draft | undefined>;

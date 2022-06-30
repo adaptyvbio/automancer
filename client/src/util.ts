@@ -50,6 +50,15 @@ export function formatClass(...input: (string | Record<string, unknown>)[]): str
 }
 
 
+export function mergeRecords<K extends string | number | symbol, V>(base: Record<K, V>, update: Record<K, V | undefined>): Record<K, V> {
+  let newValue = { ...base, ...update };
+
+  return Object.fromEntries(
+    Object.entries(newValue).filter(([_key, value]) => value !== undefined)
+  ) as Record<K, V>;
+}
+
+
 export function toggleSet<T>(set: ImSet<T>, item: T): ImSet<T> {
   if (set.has(item)) {
     return set.delete(item);

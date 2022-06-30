@@ -1,4 +1,4 @@
-import type { Draft as AppDraft } from '../application';
+import type { Draft as AppDraft } from '../draft';
 import type { Matrices } from '../units';
 
 

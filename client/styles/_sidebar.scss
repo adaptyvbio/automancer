@@ -145,6 +145,10 @@
       background: linear-gradient(135deg, #fff, #aaa);
     }
 
+    &._selected &-icon > * {
+      background: linear-gradient(135deg, #fff, #ddd);
+    }
+
     &-label {
       font-size: 1.1rem;
       font-weight: 500;

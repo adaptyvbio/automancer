@@ -11,7 +11,7 @@ export function formatDuration(input: number): string {
     let hour = Math.floor(input / 3600e3);
     let min = Math.floor((input % 3600e3) / 60e3);
     let sec = Math.round(Math.floor(input % 60e3) / 1000);
-    return `${hour} hr` + (min > 0 ? ` ${min} min` : '') + (sec > 0 ? ` ${sec} sec` : '');
+    return `${hour} hr${hour > 1 ? 's' : ''}` + (min > 0 ? ` ${min} min` : '') + (sec > 0 ? ` ${sec} sec` : '');
   }
 }
 

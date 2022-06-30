@@ -15,6 +15,7 @@ import { ViewDraft } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { Pool } from './util';
+import * as util from './util';
 
 
 
@@ -94,10 +95,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   appBackend = new AppBackend({
     onDraftsUpdate: (update) => {
       this.setState((state) => ({
-        drafts: {
-          ...state.drafts,
-          ...update
-        }
+        drafts: util.mergeRecords(state.drafts, update)
       }));
     }
   });
@@ -232,6 +230,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.controller.abort();
   }
 
+  async deleteDraft(draftId: DraftId) {
+    this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
+    await this.appBackend.deleteDraft(draftId);
+  }
+
   async setDraft(draft: Draft) {
     await this.appBackend.setDraft(draft);
   }
@@ -250,6 +253,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   render() {
+    let deleteDraft = this.deleteDraft.bind(this);
     let setDraft = this.setDraft.bind(this);
     let setRoute = this.setRoute.bind(this);
 
@@ -272,6 +276,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewProtocols
               drafts={this.state.drafts}
               host={this.host}
+              deleteDraft={deleteDraft}
               setDraft={setDraft}
               setRoute={setRoute} />
           )

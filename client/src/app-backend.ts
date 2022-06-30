@@ -1,6 +1,6 @@
 import * as idb from 'idb-keyval';
 
-import { Draft, DraftId, DraftsRecord } from './draft';
+import { Draft, DraftId, DraftsUpdateRecord } from './draft';
 
 
 export interface MainRecord {
@@ -9,7 +9,7 @@ export interface MainRecord {
 }
 
 export interface AppBackendOptions {
-  onDraftsUpdate(update: DraftsRecord): void;
+  onDraftsUpdate(update: DraftsUpdateRecord): void;
 }
 
 export class AppBackend {
@@ -42,6 +42,19 @@ export class AppBackend {
 
       await idb.set('main', record, this.#store);
     }
+  }
+
+  async deleteDraft(draftId: DraftId) {
+    this.#draftIds.delete(draftId);
+
+    await idb.update<MainRecord>('main', (mainRecord) => ({
+      ...mainRecord!,
+      draftIds: [...this.#draftIds]
+    }), this.#store);
+
+    await idb.del(draftId, this.#store);
+
+    this.#options.onDraftsUpdate({ [draftId]: undefined });
   }
 
   async setDraft(draft: Draft) {

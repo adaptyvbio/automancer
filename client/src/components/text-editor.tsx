@@ -2,7 +2,7 @@ import * as monaco from 'monaco-editor';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
-import type { Draft } from '../application';
+import { Draft, getDraftEntrySource } from '../draft';
 import * as util from '../util';
 
 
@@ -34,6 +34,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   model!: monaco.editor.IModel;
+  pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
   triggerCompilation = util.debounce(400, () => {
@@ -42,30 +43,34 @@ export class TextEditor extends React.Component<TextEditorProps> {
   }, { signal: this.controller.signal });
 
   componentDidMount() {
-    this.editor = monaco.editor.create(this.ref.current!, {
-      value: this.props.draft.source,
-      automaticLayout: true,
-      contextmenu: false,
-      language: 'yaml',
-      minimap: { enabled: false },
-      occurrencesHighlight: false,
-      renderWhitespace: 'trailing',
-      scrollBeyondLastLine: false,
-      selectionHighlight: false,
-      tabSize: 2,
-      overflowWidgetsDomNode: this.refWidgetContainer.current!,
-      fixedOverflowWidgets: true
-      // readOnly: true
+    this.pool.add(async () => {
+      let source = await getDraftEntrySource(this.props.draft.entry);
+
+      this.editor = monaco.editor.create(this.ref.current!, {
+        value: source,
+        automaticLayout: true,
+        contextmenu: false,
+        language: 'yaml',
+        minimap: { enabled: false },
+        occurrencesHighlight: false,
+        renderWhitespace: 'trailing',
+        scrollBeyondLastLine: false,
+        selectionHighlight: false,
+        tabSize: 2,
+        overflowWidgetsDomNode: this.refWidgetContainer.current!,
+        fixedOverflowWidgets: true
+        // readOnly: true
+      });
+
+      this.model = this.editor.getModel()!;
+
+      this.model.onDidChangeContent(() => {
+        monaco.editor.setModelMarkers(this.model, 'main', []);
+        this.triggerCompilation();
+      });
+
+      this.updateErrors();
     });
-
-    this.model = this.editor.getModel()!;
-
-    this.model.onDidChangeContent(() => {
-      monaco.editor.setModelMarkers(this.model, 'main', []);
-      this.triggerCompilation();
-    });
-
-    this.updateErrors();
   }
 
   componentDidUpdate() {

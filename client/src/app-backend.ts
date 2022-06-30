@@ -1,15 +1,32 @@
 import * as idb from 'idb-keyval';
 
-import { Draft, DraftId, DraftsUpdateRecord } from './draft';
+import { Draft, DraftId } from './draft';
 
 
-export interface MainRecord {
+export interface MainEntry {
   draftIds: DraftId[];
   version: number;
 }
 
+export interface DraftEntry {
+  id: DraftId;
+  name: string | null;
+  lastModified: number;
+
+  location: {
+    type: 'app';
+    source: string;
+  } | {
+    type: 'filesystem';
+    handle: FileSystemFileHandle;
+  };
+}
+
+export type DraftsUpdateRecord = Record<DraftId, DraftEntry | undefined>;
+
+
 export interface AppBackendOptions {
-  onDraftsUpdate(update: DraftsUpdateRecord): void;
+  onDraftsUpdate(update: DraftsUpdateRecord, options: any): void;
 }
 
 export class AppBackend {
@@ -24,55 +41,59 @@ export class AppBackend {
   }
 
   async initialize() {
-    let mainRecord = await idb.get<MainRecord>('main', this.#store);
+    let mainEntry = await idb.get<MainEntry>('main', this.#store);
 
-    if (mainRecord && (mainRecord.version === AppBackend.version)) {
-      let drafts = await idb.getMany(mainRecord.draftIds, this.#store);
+    if (mainEntry && (mainEntry.version === AppBackend.version)) {
+      let drafts = await idb.getMany(mainEntry.draftIds, this.#store);
       let draftsById = Object.fromEntries(
         drafts.map((draft) => [draft.id, draft])
       );
 
-      this.#draftIds = new Set(mainRecord.draftIds);
-      this.#options.onDraftsUpdate(draftsById);
+      this.#draftIds = new Set(mainEntry.draftIds);
+      this.#options.onDraftsUpdate(draftsById, {});
     } else {
-      let record: MainRecord = {
+      let entry: MainEntry = {
         draftIds: [],
         version: AppBackend.version
       };
 
-      await idb.set('main', record, this.#store);
+      await idb.set('main', entry, this.#store);
     }
   }
 
   async deleteDraft(draftId: DraftId) {
     this.#draftIds.delete(draftId);
 
-    await idb.update<MainRecord>('main', (mainRecord) => ({
-      ...mainRecord!,
+    await idb.update<MainEntry>('main', (mainEntry) => ({
+      ...mainEntry!,
       draftIds: [...this.#draftIds]
     }), this.#store);
 
     await idb.del(draftId, this.#store);
 
-    this.#options.onDraftsUpdate({ [draftId]: undefined });
+    this.#options.onDraftsUpdate({ [draftId]: undefined }, {});
   }
 
-  async setDraft(draft: Draft) {
-    if (draft.location.type === 'memory') {
-      let isNewDraft = !this.#draftIds.has(draft.id);
+  async setDraft(draftEntryUpdate: Pick<DraftEntry, 'id'> & Partial<DraftEntry>, options: any = {}) {
+    let isNewDraft = !this.#draftIds.has(draftEntryUpdate.id);
 
-      await idb.set(draft.id, draft, this.#store);
+    let draftEntry = await idb.get(draftEntryUpdate.id, this.#store);
+    let newDraftEntry = {
+      ...draftEntry,
+      ...draftEntryUpdate
+    };
 
-      if (isNewDraft) {
-        this.#draftIds.add(draft.id);
+    await idb.set(draftEntryUpdate.id, newDraftEntry, this.#store);
 
-        await idb.update<MainRecord>('main', (mainRecord) => ({
-          ...mainRecord!,
-          draftIds: [...this.#draftIds]
-        }), this.#store);
-      }
+    if (isNewDraft) {
+      this.#draftIds.add(draftEntryUpdate.id);
 
-      this.#options.onDraftsUpdate({ [draft.id]: draft });
+      await idb.update<MainEntry>('main', (mainEntry) => ({
+        ...mainEntry!,
+        draftIds: [...this.#draftIds]
+      }), this.#store);
     }
+
+    this.#options.onDraftsUpdate({ [draftEntryUpdate.id]: newDraftEntry }, options);
   }
 }

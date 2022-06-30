@@ -1,10 +1,11 @@
 import * as React from 'react';
 
-import type { Draft, Host, Route } from '../application';
+import type { Host, Route } from '../application';
 import { Icon } from '../components/icon';
 import { DraftOverview } from '../components/draft-overview';
 import { TextEditor } from '../components/text-editor';
 import { VisualEditor } from '../components/visual-editor';
+import { Draft, DraftPrimitive } from '../draft';
 import * as util from '../util';
 import { Pool } from '../util';
 
@@ -12,7 +13,7 @@ import { Pool } from '../util';
 export interface ViewDraftProps {
   draft: Draft;
   host: Host;
-  setDraft(draft: Draft): Promise<void>;
+  setDraft(draft: DraftPrimitive): Promise<void>;
   setRoute(route: Route): void;
 }
 
@@ -46,18 +47,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             onSave={(source) => {
               this.pool.add(async () => {
                 await this.props.setDraft({
-                  ...this.props.draft,
-                  compiled: null,
-                  lastModified: Date.now(),
+                  id: this.props.draft.id,
                   source
-                });
-
-                let compiled = await this.props.host.backend.compileDraft(this.props.draft.id, source);
-
-                await this.props.setDraft({
-                  ...this.props.draft,
-                  compiled,
-                  name: compiled?.protocol?.name ?? this.props.draft.name
                 });
               });
             }} />
@@ -85,7 +76,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return (
       <main className="vdraft-root">
         <header className="vdraft-header">
-          <h1>{this.props.draft.name}</h1>
+          <h1>{this.props.draft.entry?.name ?? '[Untitled]'}</h1>
           <nav className="barnav-root">
             {navEntries.map((entry) => (
               <button type="button"

@@ -1,8 +1,9 @@
 import { Set as ImSet, List } from 'immutable';
 import * as React from 'react';
 
-import { Draft, DraftId, Host, Route } from '../application';
+import { Host, Route } from '../application';
 import { HostId } from '../backends/common';
+import { Draft, DraftId } from '../draft';
 import * as util from '../util';
 
 
@@ -66,7 +67,7 @@ export class Sidebar extends React.Component<SidebarProps> {
               .map((draftId) => this.props.drafts[draftId])
               .map((draft) => ({
                 id: draft.id,
-                label: draft.name,
+                label: draft.entry.name ?? '[Untitled]',
                 route: ['protocol', draft.id]
               })) },
           { id: 'terminal',

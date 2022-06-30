@@ -2,12 +2,12 @@ import * as idb from 'idb-keyval';
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
-import { AppBackend } from './app-backend';
+import { AppBackend, DraftEntry } from './app-backend';
 import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/common';
 import WebsocketBackend from './backends/websocket';
 import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
-import { Draft, DraftId, DraftsRecord } from './draft';
+import { Draft, DraftId, DraftPrimitive, DraftsRecord, getDraftEntrySource } from './draft';
 import { ViewChip, ViewChipMode } from './views/chip';
 import { ViewChipSettings } from './views/chip-settings';
 import { ViewChips } from './views/chips';
@@ -16,6 +16,7 @@ import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { Pool } from './util';
 import * as util from './util';
+import { analyzeProtocol } from './analysis';
 
 
 
@@ -93,10 +94,32 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   pool = new Pool();
 
   appBackend = new AppBackend({
-    onDraftsUpdate: (update) => {
-      this.setState((state) => ({
-        drafts: util.mergeRecords(state.drafts, update)
-      }));
+    onDraftsUpdate: (update, options) => {
+      this.setState((state) => {
+        let drafts = { ...state.drafts };
+
+        for (let [draftId, draftEntry] of Object.entries(update)) {
+          if (!draftEntry) {
+            delete drafts[draftId];
+            continue;
+          }
+
+          drafts[draftId] = {
+            compiled: null,
+            id: draftId,
+            ...(drafts[draftId] as Draft | undefined),
+            entry: draftEntry
+          };
+
+          if (this.host && !options.skipCompilation) {
+            this.pool.add(async () => {
+              await this.compileDraft(draftEntry!);
+            });
+          }
+        }
+
+        return { drafts };
+      });
     }
   });
 
@@ -211,6 +234,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
 
     this.pool.add(async () => {
+      // await new Promise((r) => setTimeout(r, 200));
       await this.appBackend.initialize();
     });
 
@@ -226,8 +250,40 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.setRoute(route);
   }
 
+  componentDidUpdate(_prevProps: ApplicationProps, prevState: ApplicationState) {
+    if (prevState.selectedHostId !== this.state.selectedHostId) {
+      this.pool.add(async () => {
+        for (let draft of Object.values(this.state.drafts)) {
+          await this.compileDraft(draft.entry);
+        }
+      });
+    }
+  }
+
   componentWillUnmount() {
     this.controller.abort();
+  }
+
+
+  async compileDraft(draftEntry: DraftEntry) {
+    let source = await getDraftEntrySource(draftEntry);
+    let compiled = await this.host!.backend.compileDraft(draftEntry.id, source);
+    // let analysis = compiled.protocol && analyzeProtocol(compiled.protocol);
+
+    await this.appBackend.setDraft({
+      id: draftEntry.id,
+      name: compiled.protocol?.name ?? draftEntry.name
+    }, { skipCompilation: true });
+
+    this.setState((state) => ({
+      drafts: {
+        ...state.drafts,
+        [draftEntry.id]: {
+          ...state.drafts[draftEntry.id],
+          compiled
+        }
+      }
+    }));
   }
 
   async deleteDraft(draftId: DraftId) {
@@ -235,13 +291,37 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     await this.appBackend.deleteDraft(draftId);
   }
 
-  async setDraft(draft: Draft) {
-    await this.appBackend.setDraft(draft);
+  async setDraft(draftPrimitive: DraftPrimitive) {
+    let draft = this.state.drafts[draftPrimitive.id];
+
+    if (draft) {
+      if (draft.entry.location.type === 'app') {
+        await this.appBackend.setDraft({
+          ...draft.entry,
+          lastModified: Date.now(),
+          location: {
+            ...draft.entry.location,
+            source: draftPrimitive.source
+          }
+        });
+      }
+    } else {
+      await this.appBackend.setDraft({
+        id: draftPrimitive.id,
+        name: null,
+        lastModified: Date.now(),
+        location: {
+          type: 'app',
+          source: draftPrimitive.source
+        }
+      });
+    }
   }
 
   setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
     this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
   }
+
 
   setRoute(route: Route) {
     this.setState({ currentRoute: route });
@@ -289,13 +369,22 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         }
       } else if (route.length === 2) {
         switch (route[0]) {
-          case 'protocol': return (
-            <ViewDraft
-              draft={this.state.drafts[route[1]]}
-              host={this.host}
-              setDraft={setDraft}
-              setRoute={setRoute} />
-          );
+          case 'protocol': {
+            let draft = this.state.drafts[route[1]];
+
+            if (!draft) {
+              this.setRoute([route[0]]);
+              return null;
+            }
+
+            return (
+              <ViewDraft
+                draft={draft}
+                host={this.host}
+                setDraft={setDraft}
+                setRoute={setRoute} />
+            );
+          }
         }
       } else if (route.length === 3) {
         switch (route[0]) {

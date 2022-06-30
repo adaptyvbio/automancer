@@ -1,3 +1,4 @@
+import { DraftEntry } from './app-backend';
 import { Protocol } from './backends/common';
 
 
@@ -5,10 +6,7 @@ export type DraftId = string;
 
 export interface Draft {
   id: DraftId;
-  name: string;
-  lastModified: number;
-  source: string;
-
+  entry: DraftEntry;
   compiled: {
     errors: {
       message: string;
@@ -16,17 +14,20 @@ export interface Draft {
     }[];
     protocol: Protocol | null;
   } | null;
+}
 
-  location: {
-    type: 'host';
-  } | {
-    type: 'filesystem';
-    handle: FileSystemFileHandle;
-    path: string;
-  } | {
-    type: 'memory';
-  };
+export interface DraftPrimitive {
+  id: DraftId;
+  source: string;
 }
 
 export type DraftsRecord = Record<DraftId, Draft>;
-export type DraftsUpdateRecord = Record<DraftId, Draft | undefined>;
+
+export async function getDraftEntrySource(entry: DraftEntry): Promise<string> {
+  switch (entry.location.type) {
+    case 'app':
+      return entry.location.source;
+    default:
+      return '# Missing';
+  }
+}

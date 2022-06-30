@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import type { Host, Route } from '../application';
-import type { Draft, DraftId } from '../draft';
+import type { Draft, DraftId, DraftPrimitive } from '../draft';
 import { ContextMenuArea, ContextMenuAreaProps } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
 import * as util from '../util';
@@ -22,7 +22,7 @@ export interface ViewProtocolsProps {
   host: Host;
 
   deleteDraft(draftId: DraftId): Promise<void>;
-  setDraft(draft: Draft): Promise<void>;
+  setDraft(draft: DraftPrimitive): Promise<void>;
   setRoute(route: Route): void;
 }
 
@@ -41,13 +41,9 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
         <header className="header header--2">
           <h2>All protocols</h2>
           <button type="button" className="btn" onClick={() => {
-            let draft: Draft = {
+            let draft = {
               id: crypto.randomUUID(),
-              name: 'Untitled protocol',
-              lastModified: Date.now(),
               source: `name: Untitled protocol\n`,
-              compiled: null,
-              location: { type: 'memory' }
             };
 
             this.pool.add(async () => {
@@ -65,9 +61,9 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
             return (
               <DraftEntry
-                name={draft.name}
+                name={draft.entry.name ?? '[Untitled]'}
                 properties={[
-                  { id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' },
+                  { id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.entry.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' },
                   ...(draft.compiled
                     ? [analysis
                       ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }

@@ -113,7 +113,7 @@
     border-radius: 6px;
 
     &._selected, &:hover {
-      background-color: #fff3;
+      background-color: rgba(#fff, 10%);
     }
 
     &:not(._selected) {

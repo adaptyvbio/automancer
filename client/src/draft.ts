@@ -23,10 +23,33 @@ export interface DraftPrimitive {
 
 export type DraftsRecord = Record<DraftId, Draft>;
 
-export async function getDraftEntrySource(entry: DraftEntry): Promise<string> {
+export async function getDraftEntrySource(entry: DraftEntry): Promise<string | null> {
   switch (entry.location.type) {
     case 'app':
       return entry.location.source;
+    case 'filesystem': {
+      let file;
+
+      try {
+        await entry.location.handle.requestPermission();
+      } catch (err) {
+        if ((err as { name: string; }).name !== 'SecurityError') {
+          throw err;
+        }
+      }
+
+      try {
+        file = await entry.location.handle.getFile();
+      } catch (err) {
+        if ((err as { name: string; }).name === 'NotAllowedError') {
+          return null;
+        }
+
+        throw err;
+      }
+
+      return await file.text();
+    }
     default:
       return '# Missing';
   }

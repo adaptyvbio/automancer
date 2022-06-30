@@ -46,6 +46,10 @@ export class TextEditor extends React.Component<TextEditorProps> {
     this.pool.add(async () => {
       let source = await getDraftEntrySource(this.props.draft.entry);
 
+      if (source === null) {
+        return;
+      }
+
       this.editor = monaco.editor.create(this.ref.current!, {
         value: source,
         automaticLayout: true,

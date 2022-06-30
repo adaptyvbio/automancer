@@ -2,12 +2,14 @@
 
 
 .lproto {
-  &-root {
+  &-container {
+    max-width: 600px;
+  }
+
+  &-list {
     display: flex;
     flex-direction: column;
     row-gap: 0.8rem;
-
-    max-width: 600px; // tmp
   }
 
   &-entry {

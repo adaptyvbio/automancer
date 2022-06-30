@@ -267,23 +267,42 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
   async compileDraft(draftEntry: DraftEntry) {
     let source = await getDraftEntrySource(draftEntry);
-    let compiled = await this.host!.backend.compileDraft(draftEntry.id, source);
-    // let analysis = compiled.protocol && analyzeProtocol(compiled.protocol);
+
+    if (source !== null) {
+      let compiled = await this.host!.backend.compileDraft(draftEntry.id, source);
+
+      await this.appBackend.setDraft({
+        id: draftEntry.id,
+        name: compiled.protocol?.name ?? draftEntry.name
+      }, { skipCompilation: true });
+
+      this.setState((state) => ({
+        drafts: {
+          ...state.drafts,
+          [draftEntry.id]: {
+            ...state.drafts[draftEntry.id],
+            compiled
+          }
+        }
+      }));
+    }
+  }
+
+  async createDraft(location: DraftEntry['location']): Promise<DraftId> {
+    let lastModified = (location.type === 'filesystem')
+      ? (await location.handle.getFile()).lastModified
+      : Date.now();
+
+    let id = crypto.randomUUID();
 
     await this.appBackend.setDraft({
-      id: draftEntry.id,
-      name: compiled.protocol?.name ?? draftEntry.name
-    }, { skipCompilation: true });
+      id,
+      name: null,
+      lastModified,
+      location
+    });
 
-    this.setState((state) => ({
-      drafts: {
-        ...state.drafts,
-        [draftEntry.id]: {
-          ...state.drafts[draftEntry.id],
-          compiled
-        }
-      }
-    }));
+    return id;
   }
 
   async deleteDraft(draftId: DraftId) {
@@ -294,8 +313,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   async setDraft(draftPrimitive: DraftPrimitive) {
     let draft = this.state.drafts[draftPrimitive.id];
 
-    if (draft) {
-      if (draft.entry.location.type === 'app') {
+    switch (draft.entry.location.type) {
+      case 'app': {
         await this.appBackend.setDraft({
           ...draft.entry,
           lastModified: Date.now(),
@@ -305,16 +324,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           }
         });
       }
-    } else {
-      await this.appBackend.setDraft({
-        id: draftPrimitive.id,
-        name: null,
-        lastModified: Date.now(),
-        location: {
-          type: 'app',
-          source: draftPrimitive.source
-        }
-      });
     }
   }
 
@@ -333,6 +342,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   render() {
+    let createDraft = this.createDraft.bind(this);
     let deleteDraft = this.deleteDraft.bind(this);
     let setDraft = this.setDraft.bind(this);
     let setRoute = this.setRoute.bind(this);
@@ -356,6 +366,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewProtocols
               drafts={this.state.drafts}
               host={this.host}
+              createDraft={createDraft}
               deleteDraft={deleteDraft}
               setDraft={setDraft}
               setRoute={setRoute} />
@@ -375,6 +386,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             if (!draft) {
               this.setRoute([route[0]]);
               return null;
+            }
+
+            // TODO: Improve
+            if (!draft.compiled) {
+              this.pool.add(async () => {
+                await this.compileDraft(draft.entry);
+              });
             }
 
             return (

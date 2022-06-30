@@ -68,6 +68,19 @@ export function toggleSet<T>(set: ImSet<T>, item: T): ImSet<T> {
 }
 
 
+export async function wrapAbortable<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (err) {
+    if ((err as { name: string; }).name === 'AbortError') {
+      return null;
+    }
+
+    throw err;
+  }
+}
+
+
 export namespace renumber {
   type Operator = (seq: Seq, index: number) => Seq;
   type Seq = [number, number];

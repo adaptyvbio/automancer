@@ -1,7 +1,7 @@
 /// <reference path="global-interfaces.d.ts" />
 
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 import { Application, Settings } from './application';
 
@@ -13,8 +13,6 @@ export default function createClient(element: Element, options: {
   settings: Settings;
   saveSettings?(settings: Settings): void;
 }) {
-  ReactDOM.render(
-    <Application initialSettings={options.settings} />,
-    element
-  );
+  let root = createRoot(element);
+  root.render(<Application initialSettings={options.settings} />);
 }

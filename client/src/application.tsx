@@ -2,10 +2,12 @@ import * as idb from 'idb-keyval';
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
+import { AppBackend } from './app-backend';
 import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/common';
 import WebsocketBackend from './backends/websocket';
 import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
+import { Draft, DraftId, DraftsRecord } from './draft';
 import { ViewChip, ViewChipMode } from './views/chip';
 import { ViewChipSettings } from './views/chip-settings';
 import { ViewChips } from './views/chips';
@@ -69,42 +71,6 @@ export interface Settings {
 
 export type Route = (number | string)[];
 
-export type DraftId = string;
-
-export interface Draft {
-  id: DraftId;
-  name: string;
-  lastModified: number;
-  source: string;
-
-  compiled: {
-    errors: {
-      message: string;
-      range: [number, number] | null;
-    }[];
-    protocol: Protocol | null;
-  } | null;
-
-  location: {
-    type: 'host';
-  } | {
-    type: 'filesystem';
-    handle: FileSystemFileHandle;
-    path: string;
-  } | {
-    type: 'memory';
-  };
-}
-
-
-export interface DraftsRecord {
-  draftIds: DraftId[];
-}
-
-
-
-// ---
-
 
 export interface ApplicationProps {
   initialSettings: Settings;
@@ -114,7 +80,7 @@ export interface ApplicationState {
   hosts: Record<HostId, Host>;
   settings: Settings;
 
-  drafts: Record<DraftId, Draft>;
+  drafts: DraftsRecord;
   openDraftIds: ImSet<DraftId>;
 
   currentRoute: Route | null;
@@ -124,6 +90,17 @@ export interface ApplicationState {
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
   controller = new AbortController();
   pool = new Pool();
+
+  appBackend = new AppBackend({
+    onDraftsUpdate: (update) => {
+      this.setState((state) => ({
+        drafts: {
+          ...state.drafts,
+          ...update
+        }
+      }));
+    }
+  });
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -236,20 +213,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
 
     this.pool.add(async () => {
-      let record = await idb.get<DraftsRecord>('drafts');
-
-      if (record) {
-        let drafts = await idb.getMany(record.draftIds);
-
-        this.setState({
-          drafts: {
-            ...this.state.drafts,
-            ...Object.fromEntries(
-              drafts.map((draft) => [draft.id, draft])
-            )
-          }
-        });
-      }
+      await this.appBackend.initialize();
     });
 
 
@@ -268,28 +232,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.controller.abort();
   }
 
-  setDraft(draft: Draft) {
-    this.setState({
-      drafts: setIn(this.state.drafts, [draft.id], draft),
-      openDraftIds: this.state.openDraftIds.add(draft.id)
-    });
-
-    if (draft.location.type === 'memory') {
-      let isNewDraft = !(draft.id in this.state.drafts);
-
-      // TODO: make this an atomic operation
-      this.pool.add(async () => {
-        await idb.set(draft.id, { ...draft, analysis: null });
-
-        if (isNewDraft) {
-          await idb.update<DraftsRecord>('drafts', (record) => {
-            return {
-              draftIds: Array.from(new Set([...(record?.draftIds ?? []), draft.id]))
-            };
-          });
-        }
-      });
-    }
+  async setDraft(draft: Draft) {
+    await this.appBackend.setDraft(draft);
   }
 
   setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {

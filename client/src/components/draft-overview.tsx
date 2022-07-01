@@ -7,6 +7,7 @@ import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
+import { getDraftEntrySource } from '../draft';
 import { Codes, Units } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
@@ -131,11 +132,15 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                   <div className="pconfig-submit">
                     <button type="button" className="btn" onClick={() => {
                       this.pool.add(async () => {
-                        this.props.host.backend.startPlan({
-                          chipId: this.state.planData!.chipId,
-                          data: this.state.planData!.data,
-                          source: this.props.draft.source
-                        });
+                        let source = await getDraftEntrySource(this.props.draft.entry);
+
+                        if (source !== null) {
+                          this.props.host.backend.startPlan({
+                            chipId: this.state.planData!.chipId,
+                            data: this.state.planData!.data,
+                            source
+                          });
+                        }
                       });
                     }}>
                       <Icon name="play_circle" />

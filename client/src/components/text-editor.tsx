@@ -2,6 +2,7 @@ import * as monaco from 'monaco-editor';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
+import { Icon } from './icon';
 import { Draft, getDraftEntrySource } from '../draft';
 import * as util from '../util';
 
@@ -53,7 +54,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
       this.editor = monaco.editor.create(this.ref.current!, {
         value: source,
         automaticLayout: true,
-        contextmenu: false,
+        // contextmenu: false,
         language: 'yaml',
         minimap: { enabled: false },
         occurrencesHighlight: false,
@@ -110,6 +111,9 @@ export class TextEditor extends React.Component<TextEditorProps> {
           severity: monaco.MarkerSeverity.Error
         };
       }));
+
+      // console.log(monaco.editor.getModelMarkers(this.model));
+      // console.log(this.editor.getSupportedActions());
     }
   }
 
@@ -119,14 +123,35 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
   render() {
     return (
-      <div className="teditor-inner">
-        <div ref={this.ref} onKeyDown={(event) => {
-          if (event.metaKey && (event.key === 's')) {
-            event.preventDefault();
-            this.props.onSave(this.model.getValue());
-          }
-        }}/>
-        {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
+      <div className="teditor-outer">
+        <div className="teditor-inner">
+          <div ref={this.ref} onKeyDown={(event) => {
+            if (event.metaKey && (event.key === 's')) {
+              event.preventDefault();
+              this.props.onSave(this.model.getValue());
+            }
+          }}/>
+          {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
+        </div>
+        {((this.props.draft.compiled?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
+          <div className="teditor-views-nav-root">
+            <nav className="teditor-views-nav-list">
+              <button className="teditor-views-nav-entry _selected">Problems</button>
+            </nav>
+          </div>
+          <div className="teditor-views-problem-list">
+            {this.props.draft.compiled?.errors.map((error, index) => (
+              <button type="button" className="teditor-views-problem-entry" key={index} onClick={() => {
+                if (this.props.draft.compiled?.errors.length === 1) {
+                  this.editor.trigger('anystring', 'editor.action.marker.next', {});
+                }
+              }}>
+                <Icon name="error" />
+                <div className="teditor-views-problem-label">{error.message}</div>
+              </button>
+            ))}
+          </div>
+        </div>}
       </div>
     );
   }

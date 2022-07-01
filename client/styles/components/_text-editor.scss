@@ -1,9 +1,79 @@
-.teditor {
-  &-inner {
-    margin: 1rem 0;
+@use "../constants" as *;
 
+
+.teditor {
+  &-outer {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+
+    // Avoid the views-root shadow from being visible outside.
+    overflow: hidden;
+  }
+
+  &-inner {
     > * {
       height: 100%;
+    }
+  }
+
+  &-views {
+    &-root {
+      box-shadow: 0 -2px 6px #0001;
+      z-index: 1;
+    }
+
+    &-nav {
+      &-root {
+        border-bottom: 1px solid #eee;
+      }
+
+      &-list {
+        display: flex;
+        column-gap: 1rem;
+
+        margin-bottom: -1px;
+        padding: 0 2rem;
+      }
+
+      &-entry {
+        width: auto;
+        padding: 0.6rem 0.4rem;
+        border-bottom: 2px solid transparent;
+
+        font-size: 0.9rem;
+        text-transform: uppercase;
+
+        &._selected {
+          border-bottom-color: $app-blue;
+        }
+
+        &:not(._selected, :hover) {
+          color: #999;
+        }
+      }
+    }
+
+    &-problem {
+      &-list {
+        margin-top: 0.4rem;
+      }
+
+      &-entry {
+        display: grid;
+        align-items: center;
+        column-gap: 0.6rem;
+        grid-template-columns: auto 1fr;
+
+        padding: 0 0.4rem;
+
+        &:hover {
+          background-color: #f0f0f0;
+        }
+
+        .icon {
+          transform: scale(0.8);
+        }
+      }
     }
   }
 }
@@ -11,4 +81,60 @@
 
 div.hover-row.status-bar {
   display: none !important;
+}
+
+
+// ---
+
+
+.monaco-editor {
+  font-family: $main-font;
+}
+
+.codicon:not(.monaco-custom-checkbox) {
+  box-sizing: content-box;
+}
+
+.monaco-custom-checkbox {
+  padding: 1.5px !important;
+}
+
+.monaco-list.list_id_2 .monaco-list-row.focused {
+  background-color: $app-blue;
+}
+
+
+$icons: (
+  "error": "error",
+  "find-collapsed": "chevron_right",
+  "find-expanded": "expand_more",
+  "find-previous-match": "arrow_upward",
+  "find-next-match": "arrow_downward",
+  "find-selection": "subject",
+  "widget-close": "close"
+);
+
+%codicon {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "liga";
+}
+
+@each $codicon, $icon in $icons {
+  .codicon-#{$codicon}::before {
+    @extend %codicon;
+    content: $icon !important;
+  }
 }

@@ -105,9 +105,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           }
 
           drafts[draftId] = {
-            compiled: null,
             id: draftId,
             ...(drafts[draftId] as Draft | undefined),
+            compiled: null,
             entry: draftEntry
           };
 

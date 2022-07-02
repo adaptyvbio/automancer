@@ -169,6 +169,13 @@ class LocatedString(str, LocatedValue):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]
     return [self[((a + 1) if a is not None else a):b] for a, b in zip([None, *indices], [*indices, None])]
 
+  def strip(self):
+    return self.lstrip().rstrip()
+
+  def lstrip(self):
+    stripped = self.value.lstrip()
+    return self[(len(self) - len(stripped)):]
+
   def rstrip(self):
     stripped = self.value.rstrip()
     return self[0:len(stripped)]

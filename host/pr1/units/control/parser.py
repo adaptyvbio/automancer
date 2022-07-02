@@ -20,13 +20,16 @@ protocol_schema = sc.Dict({
   'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
     **display_partial_schema,
     'default': sc.Optional(str),
-    'name': sc.Optional(str)
+    'name': sc.Optional(str),
+    'imply': sc.Optional(str)
   }))),
   'valves': sc.Optional(str)
 }, allow_extra=True)
 
 
 class Parser(BaseParser):
+  protocol_keys = {'valve_parameters'}
+
   def __init__(self, parent):
     self._block_stack = list()
     self._valve_stack = list()
@@ -40,14 +43,52 @@ class Parser(BaseParser):
   def enter_protocol(self, data_protocol):
     data_protocol = protocol_schema.transform(data_protocol)
 
-    for valve_name, valve_info_raw in data_protocol.get('parameters', dict()).items():
+    for valve_name, valve_info_raw in data_protocol.get('valve_parameters', dict()).items():
       valve_info = valve_info_raw or dict()
+
+      if 'default' in valve_info:
+        valve_default_refs = valve_info['default'].split(",")
+
+        if not self._parent.models:
+          raise valve_info['default'].error("No models referenced")
+
+        default_valve_indices = dict()
+
+        for ref in valve_default_refs:
+          ref = ref.strip()
+
+          try:
+            colon_index = ref.index(":")
+          except ValueError:
+            ref_model_ids = list(self._parent.models.keys())
+            ref_valve_name = ref
+          else:
+            ref_model_ids = [ref[0:colon_index]]
+            ref_valve_name = ref[(colon_index + 1):]
+
+          ref_match = False
+
+          for ref_model_id in ref_model_ids:
+            ref_model = self._parent.models.get(ref_model_id)
+
+            if not ref_model:
+              raise ref_model_id.error(f"Invalid chip model id '{ref_model_id}'")
+
+            ref_valve_index = ref_model.sheets[namespace].valve_names.get(ref_valve_name)
+
+            if (ref_valve_index is not None) and not (ref_model_id in default_valve_indices):
+              default_valve_indices[ref_model_id] = ref_valve_index
+              ref_match = True
+
+          if not ref_match:
+            raise ref_valve_name.error(f"Invalid valve name '{ref_valve_name}'")
+
+      if 'imply' in valve_info:
+        pass
 
       self._valve_parameters.append(
         ValveParameter(
-          default_valve_indices={
-            model_id: model.sheets[namespace].valve_names.get(valve_info['default']) for model_id, model in self._parent.models.items()
-          } if ('default' in valve_info) and (self._parent.models) else None,
+          default_valve_indices=default_valve_indices,
           display=(valve_info['display'].value if valve_info and ('display' in valve_info) else None),
           label=(valve_info['name'].value if valve_info and ('name' in valve_info) else valve_name.value),
           name=valve_name.value,

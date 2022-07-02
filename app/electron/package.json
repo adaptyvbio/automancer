@@ -1,0 +1,22 @@
+{
+  "name": "pr1-app",
+  "version": "0.0.0",
+  "main": "main.js",
+  "scripts": {
+    "build": "npm run build-js && npm run build-other && npm run build-host && npm run make",
+    "build-host": "rm -rf tmp && mkdir tmp && cp -r ../stdio-server/dist/main tmp/host",
+    "build-js": "esbuild renderer.js --bundle --outfile=lib/renderer.js --format=iife --loader:.ttf=file --loader:.woff2=file --external:vm --external:path --external:fs/promises",
+    "build-other": "zsh -c 'esbuild node_modules/pr1-client/dist/*/**/*.js --outbase=node_modules/pr1-client/dist --outdir=lib'",
+    "make": "electron-forge make",
+    "package": "electron-forge package",
+    "start": "electron .",
+    "start-forge": "electron-forge start"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^6.0.0-beta.64",
+    "@electron-forge/maker-zip": "^6.0.0-beta.64",
+    "electron": "^19.0.7",
+    "esbuild": "^0.14.48",
+    "pr1-client": "file:../../client"
+  }
+}

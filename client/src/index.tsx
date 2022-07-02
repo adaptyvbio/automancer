@@ -9,6 +9,8 @@ import '../lib/styles.css';
 import 'material-symbols';
 
 
+export { MessageBackend } from './backends/message';
+
 export default function createClient(element: Element, options: {
   settings: Settings;
   saveSettings?(settings: Settings): void;

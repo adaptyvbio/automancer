@@ -54,7 +54,7 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
 
   render() {
     return (
-      <div className="barnav-contents">
+      <div className="blayout-contents">
         <div className="form-container">
           <div className="header header--2">
             <h2>General</h2>

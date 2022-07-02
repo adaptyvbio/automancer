@@ -1,9 +1,0 @@
-@use "../constants" as *;
-
-
-.vdraft {
-  &-root {
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-}

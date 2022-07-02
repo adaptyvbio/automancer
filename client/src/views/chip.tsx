@@ -65,22 +65,21 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     })();
 
     return (
-      <main>
-        <div className="header header--1">
+      <main className="blayout-container">
+        <div className="blayout-header">
           <h1>{this.chip.name}</h1>
+          <BarNav
+            entries={[
+              { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
+              { id: 'control', label: 'Valve control', icon: 'tune' },
+              { id: 'settings', label: 'Settings', icon: 'settings' },
+              { id: 'history', label: 'History', icon: 'history', disabled: true }
+            ]}
+            selectEntry={(mode) => {
+              this.props.setRoute(['chip', this.props.chipId, mode]);
+            }}
+            selectedEntryId={this.props.mode} />
         </div>
-
-        <BarNav
-          entries={[
-            { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
-            { id: 'control', label: 'Valve control', icon: 'tune' },
-            { id: 'settings', label: 'Settings', icon: 'settings' },
-            { id: 'history', label: 'History', icon: 'history', disabled: true }
-          ]}
-          selectEntry={(mode) => {
-            this.props.setRoute(['chip', this.props.chipId, mode]);
-          }}
-          selectedEntryId={this.props.mode} />
 
         {component}
       </main>

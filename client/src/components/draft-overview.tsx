@@ -58,7 +58,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
     let model = chip && this.props.host.state.models[chip.modelId];
 
     return (
-      <div>
+      <div className="blayout-contents">
         {protocol
           ? (
             <>

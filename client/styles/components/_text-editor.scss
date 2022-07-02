@@ -6,6 +6,8 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
 
+    padding: 1.4rem 0;
+
     // Avoid the views-root shadow from being visible outside.
     overflow: hidden;
   }

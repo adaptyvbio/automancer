@@ -19,7 +19,6 @@
 @use "./reset";
 @use "./sidebar";
 @use "./terminal-session";
-@use "./views/draft";
 @use "./views/protocols";
 
 
@@ -47,7 +46,7 @@ body {
 }
 
 main {
-  padding: 1.4rem 3rem;
+  padding: 0.4rem 3rem;
   overflow-y: auto;
 
   h1 {

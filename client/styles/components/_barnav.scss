@@ -1,4 +1,5 @@
 @use "../constants" as *;
+@use "../common/header";
 
 
 .barnav {
@@ -6,10 +7,7 @@
     display: flex;
     column-gap: 0.6rem;
 
-    margin: 1rem 0;
-    padding: 0.4rem 2rem;
-
-    border-bottom: 2px solid #eee;
+    padding: 0 2rem;
   }
 
   &-entry {
@@ -20,6 +18,7 @@
     width: auto;
     padding: 0.4rem 1rem;
 
+    border: 1px solid transparent;
     border-radius: 4px;
 
     &:hover {
@@ -28,6 +27,7 @@
 
     &._selected {
       background-color: #eee;
+      border-color: #ddd;
     }
 
     &:not(._selected, :hover) {
@@ -54,9 +54,25 @@
   &-label {
     font-weight: 500;
   }
+}
 
+
+.blayout {
+  &-container {
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  &-header {
+    @extend .header, .header--1;
+
+    margin-bottom: 0;
+    padding-bottom: 1rem;
+
+    border-bottom: 3px solid #eee;
+  }
 
   &-contents {
-    margin: 1.4rem 2rem;
+    margin: 1rem 2rem;
   }
 }

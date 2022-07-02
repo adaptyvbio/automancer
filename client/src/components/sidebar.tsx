@@ -68,7 +68,8 @@ export class Sidebar extends React.Component<SidebarProps> {
               .map((draft) => ({
                 id: draft.id,
                 label: draft.entry.name ?? '[Untitled]',
-                route: ['protocol', draft.id]
+                route: ['protocol', draft.id, 'overview'],
+                routeRef: ['protocol', draft.id]
               })) },
           { id: 'terminal',
             label: 'Terminal',

@@ -9,9 +9,8 @@ import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
 import { Draft, DraftId, DraftPrimitive, DraftsRecord, getDraftEntrySource } from './draft';
 import { ViewChip, ViewChipMode } from './views/chip';
-import { ViewChipSettings } from './views/chip-settings';
 import { ViewChips } from './views/chips';
-import { ViewDraft } from './views/draft';
+import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { Pool } from './util';
@@ -336,7 +335,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.setState({ currentRoute: route });
     window.sessionStorage['route'] = JSON.stringify(route);
 
-    if ((route[0] === 'protocol') && (route.length === 2)) {
+    if ((route[0] === 'protocol') && (route.length === 3)) {
       this.setOpenDraftIds((openDraftIds) => openDraftIds.add(route[1] as DraftId));
     }
   }
@@ -378,8 +377,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setRoute={setRoute} />
           );
         }
-      } else if (route.length === 2) {
+      } else if (route.length === 3) {
         switch (route[0]) {
+          case 'chip': return (
+            <ViewChip
+              chipId={route[1] as ChipId}
+              host={this.host}
+              mode={route[2] as ViewChipMode}
+              setRoute={setRoute} />
+          );
+
           case 'protocol': {
             let draft = this.state.drafts[route[1]];
 
@@ -399,20 +406,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               <ViewDraft
                 draft={draft}
                 host={this.host}
+                mode={route[2] as ViewDraftMode}
                 setDraft={setDraft}
                 setRoute={setRoute} />
             );
-          }
-        }
-      } else if (route.length === 3) {
-        switch (route[0]) {
-          case 'chip': return (
-            <ViewChip
-              chipId={route[1] as ChipId}
-              host={this.host}
-              mode={route[2] as ViewChipMode}
-              setRoute={setRoute} />
-          );
+          };
         }
       }
     })();

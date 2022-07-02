@@ -101,7 +101,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     { id: 'delete', name: 'Delete', icon: 'delete' }
                   ]}
                   onClick={() => {
-                    this.props.setRoute(['protocol', draft.id]);
+                    this.props.setRoute(['protocol', draft.id, 'overview']);
                   }}
                   onSelect={(path) => {
                     switch (path.first()) {

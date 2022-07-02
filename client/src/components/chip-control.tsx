@@ -44,7 +44,7 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
     // console.log(matrix, sheet, runner);
 
     return (
-      <div className="barnav-contents">
+      <div className="blayout-contents">
         {sheet.diagram && (
           <>
             <div className="header header--2">

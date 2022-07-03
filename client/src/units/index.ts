@@ -1,13 +1,14 @@
 import * as React from 'react';
 
+import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
+import type { Host } from '../application';
+import type { Draft } from '../draft';
+
 import ControlUnit from './control';
 import * as Control from './control';
 
 import InputUnit from './input';
 import * as Input from './input';
-
-import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
-import type { Draft, Host } from '../application';
 
 
 //> Feature
@@ -62,6 +63,17 @@ export interface Matrices {
 }
 
 
+//> ProtocolData & SegmentData
+
+export interface ProtocolData {
+  [Control.namespace]: Control.ProtocolData;
+}
+
+export interface SegmentData {
+  [Control.namespace]: Control.SegmentData;
+}
+
+
 //> Unit
 
 export interface Unit<Code, Matrix> {
@@ -69,7 +81,7 @@ export interface Unit<Code, Matrix> {
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
   createCode?(protocol: Protocol, model: ChipModel): object;
-  createFeatures?(segment: ProtocolSegment, protocol: Protocol, master?: Master): Features;
+  createFeatures?(segmentIndex: number, segment: ProtocolSegment, protocol: Protocol, master?: Master): Features;
 }
 
 

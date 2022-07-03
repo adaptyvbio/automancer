@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../draft';
-import type { Matrices } from '../units';
+import type { Matrices, ProtocolData, SegmentData } from '../units';
 
 
 export abstract class BackendCommon {
@@ -108,9 +108,7 @@ export interface Protocol {
   modelIds: ChipModelId[] | null;
   segments: ProtocolSegment[];
   stages: ProtocolStage[];
-  data: {
-    control?: ControlNamespace.ProtocolData;
-  };
+  data: ProtocolData;
 }
 
 export interface ProtocolStage {
@@ -126,8 +124,7 @@ export interface ProtocolStep {
 
 export interface ProtocolSegment {
   processNamespace: Namespace;
-  data: {
-    control?: ControlNamespace.SegmentData;
+  data: SegmentData & {
     input?: InputNamespace.SegmentData;
     timer?: TimerNamespace.SegmentData;
   };

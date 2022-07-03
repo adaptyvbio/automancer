@@ -95,7 +95,7 @@ export function ProtocolOverview(props: {
 
                             features = [
                               ...features,
-                              ...Units.flatMap(([namespace, Unit]) => Unit.createFeatures?.(segment, props.protocol, props.master) ?? [])
+                              ...Units.flatMap(([_namespace, Unit]) => Unit.createFeatures?.(segmentIndex, segment, props.protocol, props.master) ?? [])
                             ];
 
                             return (

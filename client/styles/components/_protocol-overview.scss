@@ -67,6 +67,7 @@ $segment-radius: 4px;
       margin-bottom: 1.4rem;
       padding: 1.4rem 1.8rem;
 
+      --background: #{$step-background};
       background-color: $step-background;
       border-radius: $step-radius;
     }
@@ -173,6 +174,8 @@ $segment-radius: 4px;
       row-gap: 0.6rem;
 
       padding: 0.8rem 1.2rem;
+
+      background-color: var(--background);
       border: 1px solid transparent;
 
       font-size: 1.1rem;
@@ -196,15 +199,15 @@ $segment-radius: 4px;
       }
 
       &:hover {
-        background-color: #f3f3f3;
+        --background: #f3f3f3;
       }
 
       &._active {
-        background-color: #eee;
+        --background: #eee;
       }
 
       &._context, &._selected {
-        background-color: lighten($app-blue, 55%);
+        --background: lighten($app-blue, 55%);
         border-color: $app-blue;
         box-shadow: -1px 1px 6px #0001;
       }

@@ -4,7 +4,7 @@ import type { Features } from '..';
 
 export const namespace = 'input';
 
-export function createFeatures(segment: ProtocolSegment, protocol: Protocol, master?: Master): Features {
+export function createFeatures(_segmentIndex: number, segment: ProtocolSegment, protocol: Protocol, master?: Master): Features {
   let data = segment.data[namespace];
 
   return data

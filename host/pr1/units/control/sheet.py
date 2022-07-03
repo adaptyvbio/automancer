@@ -37,8 +37,8 @@ def parse_valve_id(value):
   return (group_id, valve_id)
 
 
-display_values = ['delta', 'hidden', 'visible']
-repr_values = ['barrier', 'flow', 'isolate', 'move', 'push']
+display_values = ['active', 'delta', 'inactive', 'never']
+repr_values = ['barrier', 'flow', 'isolate', 'move', 'push', 'subset']
 
 display_partial_schema = {
   'display': sc.Optional(sc.Or(*[sc.Exact(value) for value in display_values])),
@@ -171,23 +171,3 @@ class Sheet:
         "repr": valve.repr
       } for valve in self.valves]
     }
-
-  def resolve_valve(self, groups):
-    name, range_end, wildcard = groups
-
-    valves = set()
-
-    for target_name, target_index in self._valves_names.items():
-      if (
-        (wildcard is None) and (target_name == name)
-      ) or (
-        (range_end is not None) and (target_name >= name) and (target_name <= range_end)
-      ) or (
-        (wildcard is not None) and target_name.startswith(name) and (len(target_name) > len(name))
-      ):
-        valves.add(target_index)
-
-    if not valves:
-      raise Exception(f"Missing valve '{name}'")
-
-    return valves

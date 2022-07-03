@@ -14,31 +14,10 @@ from ...util import schema as sc
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
 
 Entity = namedtuple("Entity", ['display', 'label', 'repr'])
-ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'entity_index', 'name'])
-# ValveSelection = namedtuple("ValveSelection", ['entity_indices', 'param_indices'])
+ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'param_indices_encoded'])
 
-class ValveSelection:
-  def __init__(self, *, entity_indices = set(), param_indices = set()):
-    self.entity_indices = entity_indices
-    self.param_indices = param_indices
-
-  def __bool__(self):
-    return bool(self.entity_indices)
-
-  def __or__(self, other):
-    return ValveSelection(
-      entity_indices = self.entity_indices | other.entity_indices,
-      param_indices = self.param_indices | other.param_indices
-    )
-
-  def __xor__(self, other):
-    return ValveSelection(
-      entity_indices = self.entity_indices ^ other.entity_indices,
-      param_indices = self.param_indices ^ other.param_indices
-    )
-
-  def __repr__(self):
-    return f"{type(self).__name__}(entity_indices={self.entity_indices}, param_indices={self.param_indices})"
+def encode_indices(items):
+  return sum([1 << item for item in set(items)])
 
 
 # Schemas
@@ -47,15 +26,15 @@ def parse_list(raw_list):
   return [item.strip() for item in raw_list.split(",")]
 
 protocol_schema = sc.Dict({
-  'valve_aliases': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Or(str, {
+  'valve_aliases': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Or({
     **entity_schema,
-    'name': sc.Optional(str),
-    'value': str
-  }))),
+    'alias': str,
+    'label': sc.Optional(str)
+  }, str))),
   'valve_parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
     **entity_schema,
     'default': sc.Optional(sc.Transform(parse_list, str)),
-    'name': sc.Optional(str),
+    'label': sc.Optional(str),
     'imply': sc.Optional(str)
   }))),
   'valves': sc.Optional(str)
@@ -63,13 +42,13 @@ protocol_schema = sc.Dict({
 
 
 class Parser(BaseParser):
-  protocol_keys = {'valve_aliases', 'valve_parameters'}
+  protocol_keys = {'valve_aliases', 'valve_parameters', 'valves'}
 
   def __init__(self, parent):
     self._block_stack = list()
     self._valve_stack = list()
     self._parent = parent
-    self._entities = list()
+    self._entities = dict()
     self._valve_aliases = list()
     self._valve_names = dict()
     self._valve_parameters = list()
@@ -80,6 +59,25 @@ class Parser(BaseParser):
 
   def enter_protocol(self, data_protocol):
     data_protocol = protocol_schema.transform(data_protocol)
+
+
+    # -- Parse parameters ---------------------------------
+
+    def register_entity(name, obj, param_indices):
+      param_indices_encoded = encode_indices(param_indices)
+
+      if not param_indices_encoded in self._entities:
+        self._entities[param_indices_encoded] = Entity(
+          display=(obj['display'].value if obj and ('display' in obj) else 'active'),
+          label=(obj['label'].value if obj and ('label' in obj) else name.value),
+          repr=(obj['repr'].value if obj and ('repr' in obj) else None)
+        )
+
+      if name in self._valve_names:
+        raise name.error(f"Duplicate name '{name}'")
+
+      self._valve_names[name] = param_indices
+      return param_indices_encoded
 
     for valve_name, valve_info_raw in data_protocol.get('valve_parameters', dict()).items():
       valve_info = valve_info_raw or dict()
@@ -117,50 +115,41 @@ class Parser(BaseParser):
             raise ref_valve_name.error(f"Invalid valve name '{ref_valve_name}'")
 
       if 'imply' in valve_info:
-        implication_selection = self._parse_query([valve_info['imply']])
+        implication = self._parse_query([valve_info['imply']])
       else:
-        implication_selection = ValveSelection(entity_indices=set(), param_indices=set())
+        implication = set()
 
-      entity_index = len(self._entities)
-
-      self._entities.append(
-        Entity(
-          display=(valve_info['display'].value if valve_info and ('display' in valve_info) else None),
-          label=(valve_info['name'].value if valve_info and ('name' in valve_info) else valve_name.value),
-          repr=(valve_info['repr'].value if valve_info and ('repr' in valve_info) else None)
-        )
-      )
-
-      if valve_name in self._valve_names:
-        raise valve_name.error(f"Duplicate valve name '{valve_name}'")
-
-      self._valve_names[valve_name] = ValveSelection(
-        entity_indices=({entity_index} | implication_selection.entity_indices),
-        param_indices=({len(self._valve_parameters)} | implication_selection.param_indices)
-      )
+      param_indices = {len(self._valve_parameters)} | implication
+      param_indices_encoded = register_entity(valve_name, valve_info, param_indices)
 
       self._valve_parameters.append(
         ValveParameter(
           default_valve_indices=default_valve_indices,
-          entity_index=entity_index,
-          name=valve_name.value
+          param_indices_encoded=param_indices_encoded,
         )
       )
+
+
+    # -- Parse aliases ------------------------------------
+
+    for name, alias in data_protocol.get('valve_aliases', dict()).items():
+      if isinstance(alias, str):
+        alias = { 'alias': alias }
+
+      param_indices = self._parse_query([alias['alias']])
+      register_entity(name, alias, param_indices)
+
+
+    # -- Process root valves ------------------------------
 
     if 'valves' in data_protocol:
       self._process_valves(data_protocol['valves'])
     else:
       self._process_valves()
 
+
   def leave_protocol(self, data_protocol):
     self._block_stack.pop()
-
-    # from pprint import pprint
-    # pprint(self._valve_names)
-    # pprint(self._entities)
-    # pprint(self._valve_parameters)
-    # print()
-    # print()
 
     # if self._depth > 0:
     #   raise data_protocol['stages'].error("Final depth is non-null")
@@ -180,20 +169,22 @@ class Parser(BaseParser):
   def handle_segment(self, data_segment):
     return {
       namespace: {
-        'valves': self._block_stack[-1] ^ (self._valve_stack[-1] if self._valve_stack else ValveSelection())
+        'valves': self._block_stack[-1] ^ (self._valve_stack[-1] if self._valve_stack else set())
       }
     }
 
   def export_protocol(self):
     return {
-      "entities": [{
-        "display": entity.display,
-        "label": entity.label,
-        "repr": entity.repr
-      } for entity in self._entities],
+      "entities": {
+        param_indices_encoded: {
+          "display": entity.display,
+          "label": entity.label,
+          "repr": entity.repr
+        } for param_indices_encoded, entity in self._entities.items()
+      },
       "parameters": [{
         "defaultValveIndices": param.default_valve_indices,
-        "entityIndex": param.entity_index
+        "paramIndicesEncoded": str(param.param_indices_encoded)
       } for param in self._valve_parameters],
     }
 
@@ -217,7 +208,7 @@ class Parser(BaseParser):
 
   def export_segment(data):
     return {
-      "entityIndices": list(data['valves'].entity_indices)
+      "paramIndices": list(data['valves'])
     }
 
   def export_supdata(data):
@@ -233,7 +224,7 @@ class Parser(BaseParser):
       pop_count, pushes, peak = self._parse_expr(expr, context)
 
       for _ in range(pop_count):
-        if len(self._valve_stack) <= 1:
+        if len(self._valve_stack) < 1:
           raise expr.error(f"Invalid pop instruction, stack is already empty")
 
         self._valve_stack.pop()
@@ -242,14 +233,14 @@ class Parser(BaseParser):
       peak = None
 
     for push in pushes:
-      self._valve_stack.append(push ^ (self._valve_stack[-1] if self._valve_stack else ValveSelection()))
+      self._valve_stack.append(push ^ (self._valve_stack[-1] if self._valve_stack else set()))
 
-    self._block_stack.append((peak if peak else ValveSelection()) ^ (self._block_stack[-1] if self._block_stack else ValveSelection()))
+    self._block_stack.append((peak if peak else set()) ^ (self._block_stack[-1] if self._block_stack else set()))
 
 
   def _resolve_atom_query(self, token):
     query_name = token['value']
-    query_selection = self._valve_names[query_name]
+    query_selection = self._valve_names.get(query_name)
 
     if query_selection is None:
       raise query_name.error(f"Invalid query atom")
@@ -283,15 +274,15 @@ class Parser(BaseParser):
       if state == 1:
         if token['kind'] == 'push':
           state = 2
-          selection = ValveSelection()
+          selection = set()
           continue
         elif token['kind'] == 'peak':
           state = 3
-          selection = ValveSelection()
+          selection = set()
           continue
         elif (token['kind'] == 'query_atom') or (token['kind'] == 'fragment'):
           state = 3
-          selection = ValveSelection()
+          selection = set()
         else:
           raise create_error()
 
@@ -307,7 +298,7 @@ class Parser(BaseParser):
           comma = True
         elif ((token['kind'] == 'push') or (token['kind'] == 'peak')) and (not comma) and (state == 2):
           pushes.append(selection)
-          selection = ValveSelection()
+          selection = set()
           state = 2 if token['kind'] == 'push' else 3
         else:
           raise create_error()
@@ -325,7 +316,7 @@ class Parser(BaseParser):
   def _parse_query(self, fragments):
     tokens = self._tokenize_expr(fragments)
     comma = True
-    query_selection = ValveSelection()
+    query_selection = set()
 
     def create_error(message = None):
       return token['data'].error(message or f"Unexpected token '{token['kind']}'")

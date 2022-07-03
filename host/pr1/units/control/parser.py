@@ -2,24 +2,59 @@ from collections import namedtuple
 import re
 import regex
 
+from pr1 import protocol
+
 from . import namespace
-from .sheet import display_partial_schema
+from .sheet import entity_schema
 from ..base import BaseParser
-from ...util.parser import Identifier, UnclassifiedExpr, interpolate
+from ...util.parser import Identifier, UnclassifiedExpr, interpolate, regexp_identifier_start
 from ...util import schema as sc
 
 
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
 
-ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'display', 'label', 'name', 'repr'])
+Entity = namedtuple("Entity", ['display', 'label', 'repr'])
+ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'entity_index', 'name'])
+# ValveSelection = namedtuple("ValveSelection", ['entity_indices', 'param_indices'])
+
+class ValveSelection:
+  def __init__(self, *, entity_indices = set(), param_indices = set()):
+    self.entity_indices = entity_indices
+    self.param_indices = param_indices
+
+  def __bool__(self):
+    return bool(self.entity_indices)
+
+  def __or__(self, other):
+    return ValveSelection(
+      entity_indices = self.entity_indices | other.entity_indices,
+      param_indices = self.param_indices | other.param_indices
+    )
+
+  def __xor__(self, other):
+    return ValveSelection(
+      entity_indices = self.entity_indices ^ other.entity_indices,
+      param_indices = self.param_indices ^ other.param_indices
+    )
+
+  def __repr__(self):
+    return f"{type(self).__name__}(entity_indices={self.entity_indices}, param_indices={self.param_indices})"
 
 
 # Schemas
 
+def parse_list(raw_list):
+  return [item.strip() for item in raw_list.split(",")]
+
 protocol_schema = sc.Dict({
-  'parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
-    **display_partial_schema,
-    'default': sc.Optional(str),
+  'valve_aliases': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Or(str, {
+    **entity_schema,
+    'name': sc.Optional(str),
+    'value': str
+  }))),
+  'valve_parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
+    **entity_schema,
+    'default': sc.Optional(sc.Transform(parse_list, str)),
     'name': sc.Optional(str),
     'imply': sc.Optional(str)
   }))),
@@ -28,12 +63,15 @@ protocol_schema = sc.Dict({
 
 
 class Parser(BaseParser):
-  protocol_keys = {'valve_parameters'}
+  protocol_keys = {'valve_aliases', 'valve_parameters'}
 
   def __init__(self, parent):
     self._block_stack = list()
     self._valve_stack = list()
     self._parent = parent
+    self._entities = list()
+    self._valve_aliases = list()
+    self._valve_names = dict()
     self._valve_parameters = list()
 
   @property
@@ -45,18 +83,13 @@ class Parser(BaseParser):
 
     for valve_name, valve_info_raw in data_protocol.get('valve_parameters', dict()).items():
       valve_info = valve_info_raw or dict()
+      default_valve_indices = dict()
 
       if 'default' in valve_info:
-        valve_default_refs = valve_info['default'].split(",")
-
         if not self._parent.models:
           raise valve_info['default'].error("No models referenced")
 
-        default_valve_indices = dict()
-
-        for ref in valve_default_refs:
-          ref = ref.strip()
-
+        for ref in valve_info['default']:
           try:
             colon_index = ref.index(":")
           except ValueError:
@@ -84,15 +117,33 @@ class Parser(BaseParser):
             raise ref_valve_name.error(f"Invalid valve name '{ref_valve_name}'")
 
       if 'imply' in valve_info:
-        pass
+        implication_selection = self._parse_query([valve_info['imply']])
+      else:
+        implication_selection = ValveSelection(entity_indices=set(), param_indices=set())
+
+      entity_index = len(self._entities)
+
+      self._entities.append(
+        Entity(
+          display=(valve_info['display'].value if valve_info and ('display' in valve_info) else None),
+          label=(valve_info['name'].value if valve_info and ('name' in valve_info) else valve_name.value),
+          repr=(valve_info['repr'].value if valve_info and ('repr' in valve_info) else None)
+        )
+      )
+
+      if valve_name in self._valve_names:
+        raise valve_name.error(f"Duplicate valve name '{valve_name}'")
+
+      self._valve_names[valve_name] = ValveSelection(
+        entity_indices=({entity_index} | implication_selection.entity_indices),
+        param_indices=({len(self._valve_parameters)} | implication_selection.param_indices)
+      )
 
       self._valve_parameters.append(
         ValveParameter(
           default_valve_indices=default_valve_indices,
-          display=(valve_info['display'].value if valve_info and ('display' in valve_info) else None),
-          label=(valve_info['name'].value if valve_info and ('name' in valve_info) else valve_name.value),
-          name=valve_name.value,
-          repr=(valve_info['repr'].value if valve_info and ('repr' in valve_info) else None)
+          entity_index=entity_index,
+          name=valve_name.value
         )
       )
 
@@ -103,6 +154,13 @@ class Parser(BaseParser):
 
   def leave_protocol(self, data_protocol):
     self._block_stack.pop()
+
+    # from pprint import pprint
+    # pprint(self._valve_names)
+    # pprint(self._entities)
+    # pprint(self._valve_parameters)
+    # print()
+    # print()
 
     # if self._depth > 0:
     #   raise data_protocol['stages'].error("Final depth is non-null")
@@ -116,24 +174,26 @@ class Parser(BaseParser):
     else:
       self._process_valves()
 
-  def leave_block(self, data_block):
+  def leave_block(self, _data_block):
     self._block_stack.pop()
 
   def handle_segment(self, data_segment):
     return {
       namespace: {
-        'valves': self._block_stack[-1] ^ (self._valve_stack[-1] if self._valve_stack else set())
-        # 'valves': self._block_stack[-1] ^ (self._valve_stack[-1:] or [set()])[0]
+        'valves': self._block_stack[-1] ^ (self._valve_stack[-1] if self._valve_stack else ValveSelection())
       }
     }
 
   def export_protocol(self):
     return {
+      "entities": [{
+        "display": entity.display,
+        "label": entity.label,
+        "repr": entity.repr
+      } for entity in self._entities],
       "parameters": [{
         "defaultValveIndices": param.default_valve_indices,
-        "display": param.display,
-        "label": param.label,
-        "repr": param.repr
+        "entityIndex": param.entity_index
       } for param in self._valve_parameters],
     }
 
@@ -157,7 +217,7 @@ class Parser(BaseParser):
 
   def export_segment(data):
     return {
-      "valves": list(data['valves'])
+      "entityIndices": list(data['valves'].entity_indices)
     }
 
   def export_supdata(data):
@@ -182,39 +242,19 @@ class Parser(BaseParser):
       peak = None
 
     for push in pushes:
-      self._valve_stack.append(push ^ (self._valve_stack[-1] if self._valve_stack else set()))
+      self._valve_stack.append(push ^ (self._valve_stack[-1] if self._valve_stack else ValveSelection()))
 
-    self._block_stack.append((peak if peak else set()) ^ (self._block_stack[-1] if self._block_stack else set()))
+    self._block_stack.append((peak if peak else ValveSelection()) ^ (self._block_stack[-1] if self._block_stack else ValveSelection()))
 
 
-  def _resolve_atom_query(self, token): # <--------- TODO: Remove that
+  def _resolve_atom_query(self, token):
     query_name = token['value']
-    range_end = token['range_end']
-    wildcard = token['wildcard']
+    query_selection = self._valve_names[query_name]
 
-    valves = set()
-
-    for valve_index, valve_param in enumerate(self._valve_parameters):
-      if (not wildcard) and (valve_param.name == query_name)\
-        or wildcard and valve_param.name.startswith(query_name) and (len(valve_param.name) > len(query_name)):
-        valves.add(valve_index)
-
-    if len(valves) < 1:
+    if query_selection is None:
       raise query_name.error(f"Invalid query atom")
 
-    # etc.
-
-    return valves
-
-    # for target_name, target_index in sheet.valves_names.items():
-    #   if (
-    #     (wildcard is None) and (target_name == name)
-    #   ) or (
-    #     (range_end is not None) and (target_name >= name) and (target_name <= range_end)
-    #   ) or (
-    #     (wildcard is not None) and target_name.startswith(name) and (len(target_name) > len(name))
-    #   ):
-    #     valves.add(target_index)
+    return query_selection
 
 
   def _parse_expr(self, expr, context):
@@ -243,15 +283,15 @@ class Parser(BaseParser):
       if state == 1:
         if token['kind'] == 'push':
           state = 2
-          selection = set()
+          selection = ValveSelection()
           continue
         elif token['kind'] == 'peak':
           state = 3
-          selection = set()
+          selection = ValveSelection()
           continue
         elif (token['kind'] == 'query_atom') or (token['kind'] == 'fragment'):
           state = 3
-          selection = set()
+          selection = ValveSelection()
         else:
           raise create_error()
 
@@ -267,7 +307,7 @@ class Parser(BaseParser):
           comma = True
         elif ((token['kind'] == 'push') or (token['kind'] == 'peak')) and (not comma) and (state == 2):
           pushes.append(selection)
-          selection = set()
+          selection = ValveSelection()
           state = 2 if token['kind'] == 'push' else 3
         else:
           raise create_error()
@@ -285,7 +325,7 @@ class Parser(BaseParser):
   def _parse_query(self, fragments):
     tokens = self._tokenize_expr(fragments)
     comma = True
-    result = set()
+    query_selection = ValveSelection()
 
     def create_error(message = None):
       return token['data'].error(message or f"Unexpected token '{token['kind']}'")
@@ -295,21 +335,21 @@ class Parser(BaseParser):
         comma = True
       elif comma and (token['kind'] == 'query_atom'):
         comma = False
-        result |= self._resolve_atom_query(token)
+        query_selection |= self._resolve_atom_query(token)
       elif comma and (token['kind'] == 'fragment'):
         comma = False
-        result |= token['query']
+        query_selection |= token['query']
       else:
         raise create_error()
 
     if comma:
       raise create_error()
 
-    return result
+    return query_selection
 
 
   # fragments: EvaluatedCompositeValue
-  def _tokenize_expr(self, fragments) -> list:
+  def _tokenize_expr(self, fragments):
     tokens = list()
 
     for fragment_index, fragment in enumerate(fragments):
@@ -318,27 +358,19 @@ class Parser(BaseParser):
 
         while index < len(fragment.value):
           ch = fragment[index]
-          query_atom_match = regexp_query_atom.match(fragment.value[index:])
-          # ref_match = parse_ref(fragment.value[index:])
+          query_atom_match = regexp_identifier_start.match(fragment.value[index:])
 
           if query_atom_match:
-            groups = query_atom_match.groups()
             span = query_atom_match.span()
-            value_span = query_atom_match.spans(1)[0]
+            value = fragment[(index + span[0]):(index + span[1])]
 
             tokens.append({
               'kind': 'query_atom',
-              'data': fragment[(index + span[0]):(index + span[1])],
-              'range_end': groups[1],
-              'value': fragment[(index + value_span[0]):(index + value_span[1])],
-              'wildcard': groups[2] is not None
+              'data': value,
+              'value': value
             })
 
             index += span[1] - 1
-          # elif ref_match:
-          #   ref_name, length = ref_match
-          #   tokens.append({ 'kind': 'ref', 'name': ref_name, 'data': (index, index + length) })
-          #   index += length - 1
           elif ch == ">":
             tokens.append({ 'kind': 'push', 'data': ch })
           elif ch == "<":

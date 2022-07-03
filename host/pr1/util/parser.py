@@ -11,19 +11,14 @@ from .schema import SchemaType
 
 regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*$", re.ASCII)
 regexp_identifier_alt = re.compile(r"^[a-zA-Z0-9]+$", re.ASCII)
+regexp_identifier_start = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*", re.ASCII)
 
 def check_identifier(identifier, *, allow_leading_digit = False):
   regexp = regexp_identifier_alt if allow_leading_digit else regexp_identifier
+  raw_value = LocatedValue.extract(identifier)
 
-  if not regexp.match(identifier.value):
-    raise identifier.error(f"Invalid identifier literal '{identifier.value}'")
-
-
-regexp_ref = re.compile(r"^\$([a-zA-Z0-9]+)", re.ASCII)
-
-def parse_ref(expr):
-  match = regexp_ref.match(expr)
-  return (match.groups()[0], match.span()[1]) if match else None
+  if not regexp.match(raw_value):
+    raise identifier.error(f"Invalid identifier literal '{raw_value}'")
 
 
 class Identifier(SchemaType):

@@ -45,6 +45,11 @@ display_partial_schema = {
   'repr': sc.Optional(sc.Or(*[sc.Exact(value) for value in repr_values]))
 }
 
+entity_schema = {
+  'display': sc.Optional(sc.Or(*[sc.Exact(value) for value in display_values])),
+  'repr': sc.Optional(sc.Or(*[sc.Exact(value) for value in repr_values]))
+}
+
 
 class Sheet:
   def __init__(self, data, *, dir):
@@ -59,7 +64,7 @@ class Sheet:
         'inverse': sc.Optional(sc.ParseType(bool))
       })),
       'valves': sc.Optional(sc.List({
-        **display_partial_schema,
+        **entity_schema,
         'alias': sc.Optional(Identifier()),
         'diagram': sc.Optional(sc.Transform(parse_diagram_ref, str)),
         'id': sc.Transform(parse_valve_id, str),

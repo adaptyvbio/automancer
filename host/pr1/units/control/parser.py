@@ -2,8 +2,6 @@ from collections import namedtuple
 import re
 import regex
 
-from pr1 import protocol
-
 from . import namespace
 from .sheet import entity_schema
 from ..base import BaseParser

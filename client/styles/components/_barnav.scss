@@ -75,4 +75,25 @@
   &-contents {
     margin: 1rem 2rem;
   }
+
+  &-blank {
+    &-outer {
+      display: flex;
+      height: 100%;
+    }
+
+    &-inner {
+      display: flex;
+      align-items: center;
+      flex-direction: column;
+      row-gap: 0.4rem;
+
+      margin: auto;
+
+      p {
+        font-size: 1.2rem;
+        font-weight: 500;
+      }
+    }
+  }
 }

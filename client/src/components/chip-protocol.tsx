@@ -22,6 +22,12 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
 
   render() {
     let master = this.chip.master!;
+
+    // TODO: Improve
+    if (!master) {
+      return <div />;
+    }
+
     let protocol = master.protocol;
     let analysis = analyzeProtocol(protocol, master.entries);
     let lastEntry = master.entries.at(-1);

@@ -31,6 +31,7 @@ export interface PlanData {
 export interface DraftOverviewProps {
   draft: Draft;
   host: Host;
+  setRoute(route: Route): void;
 }
 
 export interface DraftOverviewState {
@@ -52,19 +53,6 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
           segmentIndex: 0
         }
       }
-
-      // planData: null && {
-      //   "chipId": Object.keys(this.props.host.state.chips)[0], // "d5547726-c709-4c08-8861-9d4fb5604f4f",
-      //   "data": {
-      //     "control": {
-      //       "arguments": [
-      //         null,
-      //         null,
-      //         null
-      //       ]
-      //     }
-      //   }
-      // }
     };
   }
 
@@ -171,11 +159,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                         let source = await getDraftEntrySource(this.props.draft.entry);
 
                         if (source !== null) {
-                          this.props.host.backend.startPlan({
-                            chipId: this.state.planData!.chipId,
-                            data: this.state.planData!.data,
+                          await this.props.host.backend.startPlan({
+                            chipId: plan.context!.chipId,
+                            data: plan.context!.data,
+                            location: plan.location,
                             source
                           });
+
+                          this.props.setRoute(['chip', plan.context!.chipId, 'protocol']);
                         }
                       });
                     }}>
@@ -188,8 +179,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
             </>
           )
           : (
-            <div className="blank">
-              <p>Invalid protocol</p>
+            <div className="blayout-blank-outer">
+              <div className="blayout-blank-inner">
+                <p>Invalid source code</p>
+                <button type="button" className="btn" onClick={() => {
+                  // TODO: With the navigation API, add { info: { revealError: true } }
+                  this.props.setRoute(['protocol', this.props.draft.id, 'text']);
+                }}>Open code editor</button>
+              </div>
             </div>
           )}
       </div>

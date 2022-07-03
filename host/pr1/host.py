@@ -101,6 +101,9 @@ class Host:
 
     logger.debug("Done initializing executors")
 
+    # debug
+    chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+
   async def start(self):
     try:
       await asyncio.Future()
@@ -162,6 +165,10 @@ class Host:
     except Exception as e: # TODO: filter between unexpected errors and compilation errors
       errors.append(DraftError(message=str(e), range=None))
 
+      import traceback
+      tb = traceback.format_exc()
+      print(tb)
+
     draft = Draft(
       id=draft_id,
       errors=errors,
@@ -189,11 +196,11 @@ class Host:
     self.chips[chip.id] = chip
     return chip
 
-  def start_plan(self, chip, codes, protocol):
+  def start_plan(self, chip, codes, location, protocol):
     if chip.master:
       raise Exception("Already running")
 
-    chip.master = Master(chip=chip, codes=codes, protocol=protocol, update_callback=self.update_callback)
+    chip.master = Master(chip=chip, codes=codes, location=location, protocol=protocol, update_callback=self.update_callback)
     chip.master.start()
 
 
@@ -311,7 +318,11 @@ class Host:
         models=self.models
       )
 
-      self.start_plan(chip=chip, codes=request["codes"], protocol=protocol)
+      location = {
+        'segment_index': request["location"]["segmentIndex"]
+      }
+
+      self.start_plan(chip=chip, codes=request["data"], location=location, protocol=protocol)
 
     self.update_callback()
 

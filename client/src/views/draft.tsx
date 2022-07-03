@@ -38,7 +38,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         case 'overview': return (
           <DraftOverview
             draft={this.props.draft}
-            host={this.props.host} />
+            host={this.props.host}
+            setRoute={this.props.setRoute} />
         );
 
         case 'text': return (
@@ -71,7 +72,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 label: 'Overview',
                 icon: 'hexagon' },
               { id: 'text',
-                label: 'Text editor',
+                label: 'Code editor',
                 icon: 'code' },
               { id: 'visual',
                 label: 'Visual editor',

@@ -3,15 +3,15 @@ import time
 
 
 class Master:
-  def __init__(self, chip, codes, protocol, *, update_callback):
+  def __init__(self, chip, codes, location, protocol, *, update_callback):
     self.chip = chip
     self.codes = codes
     self.protocol = protocol
-    self.supdata = protocol.create_supdata(chip, codes)
+    # self.supdata = protocol.create_supdata(chip, codes)
 
     self._pause_options = None
     self._process_state = None
-    self._seg_index = 0
+    self._seg_index = location['segment_index']
     self._task = None
 
     self._log_data = list()
@@ -150,6 +150,6 @@ class Master:
           "time": round(entry['time'] * 1000)
         } for entry in self._log_data
       ],
-      "supdata": self.protocol.export_supdata(self.supdata),
+      # "supdata": self.protocol.export_supdata(self.supdata),
       "protocol": self.protocol.export()
     }

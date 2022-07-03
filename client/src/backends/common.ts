@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../draft';
-import type { Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
+import type { Codes, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
 
 
 export abstract class BackendCommon {
@@ -37,7 +37,8 @@ export abstract class BackendCommon {
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
     chipId: ChipId;
-    data: any;
+    data: Codes;
+    location: ProtocolLocation;
     source: string;
   }): Promise<void>;
 }

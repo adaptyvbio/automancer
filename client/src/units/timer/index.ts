@@ -1,18 +1,15 @@
 import type { CreateFeaturesOptions, Features } from '..';
+import { formatDuration } from '../../format';
 
 
-export const namespace = 'input';
+export const namespace = 'timer';
 
 export interface OperatorLocationData {
-
-}
-
-export interface Code {
-  arguments: (number | null)[];
+  progress: number;
 }
 
 export interface SegmentData {
-  message: string;
+  duration: number;
 }
 
 
@@ -21,8 +18,11 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
 
   return segmentData
     ? [{
-      icon: 'keyboard_command_key',
-      label: segmentData.message
+      icon: 'hourglass_empty',
+      label: formatDuration(segmentData.duration)
+        + ((options.location?.segmentIndex === options.segmentIndex)
+          ? (` (${(options.location.data?.progress ?? 0) * 100}%)`)
+          : '')
     }]
     : [];
 }

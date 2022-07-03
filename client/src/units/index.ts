@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { Chip, ChipModel, Master, Protocol, ProtocolSegment } from '../backends/common';
+import type { Chip, ChipModel, Master, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
 import type { Host } from '../application';
 import type { Draft } from '../draft';
 
@@ -9,6 +9,9 @@ import * as Control from './control';
 
 import InputUnit from './input';
 import * as Input from './input';
+
+import TimerUnit from './timer';
+import * as Timer from './timer';
 
 
 //> Feature
@@ -19,6 +22,13 @@ export interface Feature {
 }
 
 export type Features = Feature[];
+
+export interface CreateFeaturesOptions {
+  location?: ProtocolLocation;
+  protocol: Protocol;
+  segment: ProtocolSegment;
+  segmentIndex: number;
+}
 
 
 //> CodeEditor
@@ -71,6 +81,16 @@ export interface ProtocolData {
 
 export interface SegmentData {
   [Control.namespace]: Control.SegmentData;
+  [Input.namespace]?: Input.SegmentData;
+  [Timer.namespace]?: Timer.SegmentData;
+}
+
+
+//> OperatorLocationData
+
+export interface OperatorLocationData {
+  [Input.namespace]: Timer.OperatorLocationData;
+  [Timer.namespace]: Timer.OperatorLocationData;
 }
 
 
@@ -81,7 +101,7 @@ export interface Unit<Code, Matrix> {
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
   createCode?(protocol: Protocol, model: ChipModel): object;
-  createFeatures?(segmentIndex: number, segment: ProtocolSegment, protocol: Protocol, master?: Master): Features;
+  createFeatures?(options: CreateFeaturesOptions): Features;
 }
 
 
@@ -89,8 +109,10 @@ export interface Unit<Code, Matrix> {
 
 export const Units = [
   [Control.namespace, ControlUnit],
-  [Input.namespace, InputUnit]
+  [Input.namespace, InputUnit],
+  [Timer.namespace, TimerUnit]
 ] as [
   [typeof Control.namespace, Unit<Control.Code, Control.Matrix>],
   [typeof Input.namespace, Unit<never, never>],
-]
+  [typeof Timer.namespace, Unit<never, never>]
+];

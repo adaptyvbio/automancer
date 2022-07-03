@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../draft';
-import type { Matrices, ProtocolData, SegmentData } from '../units';
+import type { Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
 
 
 export abstract class BackendCommon {
@@ -124,13 +124,16 @@ export interface ProtocolStep {
 
 export interface ProtocolSegment {
   processNamespace: Namespace;
-  data: SegmentData & {
-    input?: InputNamespace.SegmentData;
-    timer?: TimerNamespace.SegmentData;
-  };
+  data: SegmentData;
 }
 
 export type ProtocolSeq = [number, number];
+
+
+export interface ProtocolLocation {
+  data: OperatorLocationData[keyof OperatorLocationData] | null;
+  segmentIndex: number;
+}
 
 
 export interface HostState {

@@ -1,8 +1,9 @@
 import { setIn } from 'immutable';
 import * as React from 'react';
 
-import type { Draft, Host, Route } from '../application';
-import { ChipId } from '../backends/common';
+import type { Host, Route } from '../application';
+import type { Draft } from '../draft';
+import { ChipId, ProtocolLocation } from '../backends/common';
 import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
@@ -12,6 +13,14 @@ import { Codes, Units } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
 
+
+export interface Plan {
+  context: {
+    chipId: ChipId;
+    data: Codes;
+  } | null;
+  location: ProtocolLocation;
+}
 
 export interface PlanData {
   chipId: ChipId;
@@ -25,7 +34,8 @@ export interface DraftOverviewProps {
 }
 
 export interface DraftOverviewState {
-  planData: PlanData | null;
+  plan: Plan;
+  // planData: PlanData | null;
 }
 
 export class DraftOverview extends React.Component<DraftOverviewProps, DraftOverviewState> {
@@ -35,18 +45,26 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
     super(props);
 
     this.state = {
-      planData: null && {
-        "chipId": Object.keys(this.props.host.state.chips)[0], // "d5547726-c709-4c08-8861-9d4fb5604f4f",
-        "data": {
-          "control": {
-            "arguments": [
-              null,
-              null,
-              null
-            ]
-          }
+      plan: {
+        context: null,
+        location: {
+          data: null,
+          segmentIndex: 0
         }
       }
+
+      // planData: null && {
+      //   "chipId": Object.keys(this.props.host.state.chips)[0], // "d5547726-c709-4c08-8861-9d4fb5604f4f",
+      //   "data": {
+      //     "control": {
+      //       "arguments": [
+      //         null,
+      //         null,
+      //         null
+      //       ]
+      //     }
+      //   }
+      // }
     };
   }
 
@@ -54,7 +72,8 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
     let chips = Object.values(this.props.host.state.chips);
     let protocol = this.props.draft.compiled?.protocol;
 
-    let chip = this.state.planData && this.props.host.state.chips[this.state.planData.chipId];
+    let plan = this.state.plan;
+    let chip = plan.context && this.props.host.state.chips[plan.context.chipId];
     let model = chip && this.props.host.state.models[chip.modelId];
 
     return (
@@ -72,22 +91,39 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                 <h2>Sequence</h2>
               </div>
 
-              <ProtocolOverview protocol={protocol} />
+              <ProtocolOverview
+                location={plan.location}
+                protocol={protocol}
+                setLocation={(location) => {
+                  this.setState((state) => ({
+                    plan: {
+                      ...state.plan,
+                      location
+                    }
+                  }));
+                }} />
 
               <div className="header header--2">
                 <h2>Start protocol</h2>
                 <div className="superimposed-root">
                   <select className="superimposed-target" onInput={(event) => {
-                    this.setState({
-                      planData: {
-                        chipId: event.currentTarget.value,
-                        data: Object.fromEntries(
-                          Units
-                            .filter(([_namespace, Unit]) => Unit.createCode)
-                            .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!, model!)])
-                        ) as unknown as Codes
+                    let chipId = event.currentTarget.value;
+                    let chip = this.props.host.state.chips[chipId];
+                    let model = this.props.host.state.models[chip.modelId];
+
+                    this.setState((state) => ({
+                      plan: {
+                        ...state.plan,
+                        context: {
+                          chipId,
+                          data: Object.fromEntries(
+                            Units
+                              .filter(([_namespace, Unit]) => Unit.createCode)
+                              .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!, model)])
+                          ) as unknown as Codes
+                        }
                       }
-                    });
+                    }));
                   }}>
                     {!chip && <option value="">–</option>}
                     {chips.map((chip) => (
@@ -106,11 +142,11 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                 </div>
               </div>
 
-              {this.state.planData && (
+              {plan.context && (
                 <>
                   <div className="pconfig-root">
                     {Units.map(([namespace, unit]) => {
-                      if (!unit.CodeEditor || !(namespace in this.state.planData!.data)) {
+                      if (!unit.CodeEditor || !(namespace in plan.context!.data)) {
                         return null;
                       }
 
@@ -119,11 +155,11 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                           chip={chip!}
                           draft={this.props.draft}
                           model={model!}
-                          code={this.state.planData!.data[namespace as keyof Codes]}
+                          code={plan.context!.data[namespace as keyof Codes]}
                           setCode={(code: Codes[keyof Codes]) => {
-                            this.setState({
-                              planData: setIn(this.state.planData, ['data', namespace], code)
-                            });
+                            this.setState((state) => ({
+                              plan: setIn(state.plan, ['context', 'data', namespace], code)
+                            }));
                           }}
                           key={namespace} />
                       );

@@ -1,11 +1,11 @@
 import { CodeEditor } from './code-editor';
 import { MatrixEditor } from './matrix-editor';
-import type { Features } from '..';
+import type { CreateFeaturesOptions, Features } from '..';
 import type { ChipId, ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } from '../../backends/common';
 import * as util from '../../util';
 
 
-const EntityReprIcon = {
+export const ReprIcon = {
   'barrier': {
     forwards: 'vertical_align_center',
     backwards: '-vertical_align_center'
@@ -50,10 +50,10 @@ export interface ProtocolData {
   entities: Record<string, {
     display: ('delta' | 'active' | 'inactive' | 'never') | null;
     label: string;
-    repr: (keyof typeof EntityReprIcon) | null;
+    repr: (keyof typeof ReprIcon) | null;
   }>;
   parameters: {
-    defaultValveIndices: Record<ChipId, number> | null;
+    defaultValveIndices: Record<ChipId, number>;
     paramIndicesEncoded: string;
   }[];
 }
@@ -64,18 +64,20 @@ export interface SegmentData {
 
 
 export function createCode(protocol: Protocol, model: ChipModel): ControlNamespace.Code {
+  let protocolData = protocol.data[namespace];
+
   return {
-    arguments: protocol.data.control!.parameters.map((param) => {
-      return param.defaultValveIndices?.[model.id] ?? null;
+    arguments: protocolData.parameters.map((param) => {
+      return param.defaultValveIndices[model.id] ?? null;
     })
   };
 }
 
 
-export function createFeatures(segmentIndex: number, segment: ProtocolSegment, protocol: Protocol, master?: Master): Features {
-  let previousSegmentData = protocol.segments[segmentIndex - 1]?.data[namespace];
-  let segmentData = segment.data[namespace];
-  let protocolData = protocol.data[namespace];
+export function createFeatures(options: CreateFeaturesOptions): Features {
+  let previousSegmentData = options.protocol.segments[options.segmentIndex - 1]?.data[namespace];
+  let segmentData = options.segment.data[namespace];
+  let protocolData = options.protocol.data[namespace];
 
   let paramIndicesEncoded = util.encodeIndices(segmentData.paramIndices);
   let previousParamIndicesEncoded = util.encodeIndices(previousSegmentData?.paramIndices ?? []);
@@ -94,7 +96,7 @@ export function createFeatures(segmentIndex: number, segment: ProtocolSegment, p
       return [];
     }
 
-    let icon = EntityReprIcon[entity.repr ?? 'flow'];
+    let icon = ReprIcon[entity.repr ?? 'flow'];
 
     return [{
       icon: (entity.display === 'inactive') || ((entity.display === 'delta') && !active)

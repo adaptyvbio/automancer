@@ -1,9 +1,9 @@
 import { List } from 'immutable';
 import * as React from 'react';
 
-import type { Code } from '.';
+import { Code, namespace, ReprIcon } from '.';
 import type { CodeEditorInstance, CodeEditorProps } from '..';
-import type { Draft } from '../../application';
+import type { Draft } from '../../draft';
 import type { Chip, ChipId, ChipModel, ControlNamespace, HostId, Protocol } from '../../backends/common';
 import { Icon } from '../../components/icon';
 
@@ -11,6 +11,7 @@ import { Icon } from '../../components/icon';
 export class CodeEditor extends React.Component<CodeEditorProps<Code>> implements CodeEditorInstance<Code> {
   render() {
     let protocol = this.props.draft.compiled!.protocol!;
+    let protocolData = protocol.data[namespace];
     let sheet = this.props.model.sheets.control;
 
     let args = this.props.code.arguments;
@@ -19,13 +20,14 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
       <>
         <h4 className="pconfig-section">Control settings</h4>
         <div className="pconfig-form">
-          {protocol.data.control?.parameters.map((param, paramIndex) => {
+          {protocolData.parameters.map((param, paramIndex) => {
             let argValveIndex = args[paramIndex];
             let argValve = sheet.valves[argValveIndex!];
+            let entity = protocolData.entities[param.paramIndicesEncoded];
 
             return (
               <label className="pconfig-entry" key={paramIndex}>
-                <div className="pconfig-entry-label">{param.label}</div>
+                <div className="pconfig-entry-label">{entity.label}</div>
                 <div className="pconfig-entry-input superimposed-root">
                   <select className="superimposed-target" value={argValveIndex?.toString() ?? ''} onInput={(event) => {
                     let value = event.currentTarget.value.length > 0
@@ -62,7 +64,7 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
                   <div className="btn superimposed-visible">
                     {argValve && (
                       <div className="btn-icon">
-                        <Icon name="air" />
+                        <Icon name={ReprIcon[argValve.repr].forwards} />
                       </div>
                     )}
                     <div>{argValve ? argValve.name : 'Select valve'}</div>

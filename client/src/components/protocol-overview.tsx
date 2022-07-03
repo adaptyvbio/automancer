@@ -1,10 +1,12 @@
 import { Set as ImSet } from 'immutable';
 import * as React from 'react';
+import seqOrd from 'seq-ord';
 
+import type { Plan } from './draft-overview';
 import { Icon } from './icon';
 import { formatAbsoluteTime, formatDuration, formatRelativeTime } from '../format';
 import { type Analysis, analyzeProtocol } from '../analysis';
-import type { Master, MasterEntry, Protocol } from '../backends/common';
+import type { Master, MasterEntry, Protocol, ProtocolLocation } from '../backends/common';
 // import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
 import { Units } from '../units';
@@ -12,12 +14,16 @@ import { Units } from '../units';
 
 export function ProtocolOverview(props: {
   analysis?: Analysis;
+  location?: Plan['location'];
   master?: Master;
   protocol: Protocol;
+  setLocation?(location: ProtocolLocation): void;
 }) {
   let [openStageIndices, setOpenStageIndices] = React.useState(ImSet<number>(props.protocol.stages.map((_, index) => index)));
   let analysis = props.analysis ?? analyzeProtocol(props.protocol);
-  let currentSegmentIndex = analysis.current?.segmentIndex!; // !
+  let currentSegmentIndex = (analysis.current
+    ? analysis.current.segmentIndex
+    : props.location?.segmentIndex) ?? null;
 
   let formatTime = props.master
     ? formatAbsoluteTime
@@ -30,8 +36,8 @@ export function ProtocolOverview(props: {
         let nextStageSegmentAnalysis = nextStage && analysis.segments[nextStage.seq[0]];
 
         let hidden = true;
-        let isCurrentStage = analysis.current && (currentSegmentIndex >= stage.seq[0]) && (currentSegmentIndex < stage.seq[1]);
-        let currentStepIndex = isCurrentStage ? stage.steps.findIndex((step) => (step.seq[0] <= currentSegmentIndex) && (step.seq[1] > currentSegmentIndex))! : null;
+        let isCurrentStage = (currentSegmentIndex !== null) && (currentSegmentIndex >= stage.seq[0]) && (currentSegmentIndex < stage.seq[1]);
+        let currentStepIndex = isCurrentStage ? stage.steps.findIndex((step) => (step.seq[0] <= currentSegmentIndex!) && (step.seq[1] > currentSegmentIndex!))! : null;
 
         return (
           <div className={util.formatClass('poverview-stage-root', {
@@ -51,7 +57,8 @@ export function ProtocolOverview(props: {
             <div className="poverview-stage-steps">
               {stage.steps.map((step, stepIndex) => {
                 let firstSegmentAnalysis = analysis.segments[step.seq[0]];
-                let isStepHidden = isCurrentStage && hidden && (step.seq[1] <= currentSegmentIndex);
+                let isStepHidden = false;
+                // let isStepHidden = isCurrentStage && hidden && (step.seq[1] <= currentSegmentIndex!);
 
                 if (isStepHidden && (stepIndex > 0)) {
                   return null;
@@ -70,43 +77,38 @@ export function ProtocolOverview(props: {
                           {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                             let segmentIndex = step.seq[0] + segmentRelIndex;
                             let segment = props.protocol.segments[segmentIndex];
-                            let features = [];
+                            let operatorNamespace = segment.processNamespace;
 
-                            switch (segment.processNamespace) {
-                              case 'input': {
-                                // features.push(['keyboard-command-key', segment.data.input!.message]);
-                                break;
-                              }
-
-                              case 'timer': {
-                                features.push({
-                                  icon: 'hourglass_empty',
-                                  label: formatDuration(segment.data.timer!.duration)
-                                });
-
-                                break;
-                              }
-
-                              default: {
-                                // features.push(['⦿', 'Unknown process']);
-                                break;
-                              }
-                            }
-
-                            features = [
-                              ...features,
-                              ...Units.flatMap(([_namespace, Unit]) => Unit.createFeatures?.(segmentIndex, segment, props.protocol, props.master) ?? [])
-                            ];
+                            let features = Units
+                              .sort(seqOrd(function* ([aNamespace, _aUnit], [bNamespace, _bUnit], rules) {
+                                yield rules.binary(bNamespace === operatorNamespace, aNamespace === operatorNamespace);
+                              }))
+                              .flatMap(([namespace, Unit]) => {
+                                return Unit.createFeatures?.({
+                                  location: props.location,
+                                  protocol: props.protocol,
+                                  segment,
+                                  segmentIndex
+                                }) ?? [];
+                              });
 
                             return (
-                              <div className={util.formatClass('poverview-segment-features', { '_active': segmentIndex === analysis.current?.segmentIndex })} key={segmentRelIndex}>
+                              <button type="button"
+                                className={util.formatClass('poverview-segment-features', { '_active': segmentIndex === currentSegmentIndex })}
+                                key={segmentRelIndex}
+                                onClick={() => {
+                                  props.setLocation?.({
+                                    data: null,
+                                    segmentIndex
+                                  });
+                                }}>
                                 {features.map((feature, featureIndex) => (
                                   <React.Fragment key={featureIndex}>
                                     <div className="poverview-feature-icon"><Icon name={feature.icon} /></div>
                                     <div className="poverview-feature-label">{feature.label}</div>
                                   </React.Fragment>
                                 ))}
-                              </div>
+                              </button>
                             );
                           })}
                         </div>

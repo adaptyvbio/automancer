@@ -90,7 +90,7 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
             return (
               <g className="timeline-stage" key={stageIndex}>
                 <rect x={marginHor + firstSegment.position * availWidth} y={0} width={((nextSegment?.position ?? 1) - firstSegment.position) * availWidth} height={height} fill="transparent" />
-                <text x={marginHor + (firstSegment.position + (nextSegment?.position ?? 1)) * 0.5 * availWidth} y={10} className="timeline-stagename">{stage.name}</text>
+                <text x={marginHor + (firstSegment.position + (nextSegment?.position ?? 1)) * 0.5 * availWidth} y={10} fill="currentColor" className="timeline-stagename">{stage.name}</text>
 
                 {data.segments.map((segment, segmentIndex) => {
                   if (!(segmentIndex >= stage.seq[0] && segmentIndex < stage.seq[1])) {
@@ -108,12 +108,14 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
                   return (
                     <React.Fragment key={segmentIndex}>
                       <g className="timeline-segment">
-                        {firstStageSegment && <text x={start} y={50} className="timeline-segmentlabel">{formatRelativeTime(firstSegment.time)}</text>}
-                        <circle cx={start} cy={y} r={firstStageSegment ? stageRadius : segmentRadius} className={'timeline-marker ' + (firstStageSegment ? 'timeline-stagemarker' : '')} />
+                        {segment === firstSegment
+                          ? <text x={start} y={50} className="timeline-stagelabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>
+                          : <text x={start} y={50} className="timeline-segmentlabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>}
+                        <circle cx={start} cy={y} r={firstStageSegment ? stageRadius : segmentRadius} className={'timeline-marker ' + (firstStageSegment ? 'timeline-stagemarker' : '')} fill="currentColor" />
                       </g>
                       {firstStageSegment
-                        ? <path d={`M${start + stageRadius} ${y}L${end} ${y}`} stroke="#000" strokeWidth={lineWidth} className="timeline-line" />
-                        : <path d={`M${end} ${y}L${start + segmentRadius} ${y}`} stroke="#000" strokeWidth={lineWidth} className="timeline-line" />}
+                        ? <path d={`M${start + stageRadius} ${y}L${end} ${y}`} stroke="currentColor" strokeWidth={lineWidth} className="timeline-line" />
+                        : <path d={`M${end} ${y}L${start + segmentRadius} ${y}`} stroke="currentColor" strokeWidth={lineWidth} className="timeline-line" />}
                     </React.Fragment>
                   );
                 })}
@@ -122,8 +124,8 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
           })}
 
           <g className="timeline-segment">
-            <circle cx={marginHor + availWidth} cy={y} r={stageRadius} className="timeline-marker timeline-stagemarker" />
-            <text x={marginHor + availWidth} y="50" className="timeline-segmentlabel">{formatRelativeTime(this.analysis.done.time)}</text>
+            <circle cx={marginHor + availWidth} cy={y} r={stageRadius} fill="currentColor" className="timeline-marker timeline-stagemarker" />
+            <text x={marginHor + availWidth} y="50" fill="currentColor" className="timeline-segmentlabel">{formatRelativeTime(this.analysis.done.time)}</text>
           </g>
         </svg>
       </div>

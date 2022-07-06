@@ -12,7 +12,7 @@
     stroke-dasharray: 0 4 100000;
     stroke-dashoffset: 4;
 
-    transition: opacity 150ms, stroke-dashoffset 150ms;
+    transition: color 150ms, stroke-dashoffset 150ms;
   }
 
   &-line:last-of-type {
@@ -20,8 +20,9 @@
   }
 
   &-line, &-stagename, &-segment * {
-    opacity: var(--opacity);
-    transition: opacity 150ms;
+    $a: calc(255 * (1 - var(--opacity)));
+    color: rgb(#{$a}, #{$a}, #{$a});
+    transition: color 150ms;
   }
 
   &-root:hover &-stage, &-root:hover > &-segment {
@@ -45,7 +46,11 @@
     font-weight: 500;
   }
 
-  &-segmentlabel {
+  &-stagelabel, &-segmentlabel {
     font-weight: 500;
+  }
+
+  &-segmentlabel {
+    font-size: 0.9rem;
   }
 }

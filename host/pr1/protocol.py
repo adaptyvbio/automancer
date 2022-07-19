@@ -15,23 +15,15 @@ Step = namedtuple("Step", ["description", "name", "seq"])
 Segment = namedtuple("Segment", ["data", "process_namespace"])
 
 
-protocol_schema = sc.Dict({
-  'name': sc.Optional(str),
-  'models': sc.Optional(sc.List(str)),
-  'stages': sc.Optional(sc.List(sc.Dict({
-    'name': sc.Optional(str),
-    'steps': sc.List(sc.Dict({
-      'name': sc.Optional(str)
-    }, allow_extra=True))
-  }, allow_extra=True)))
-}, allow_extra=True)
-
-
 class Parsers(BaseParser):
   def __init__(self, protocol, Parsers):
     self.parsers = {
       namespace: Parser(protocol) for namespace, Parser in sorted(Parsers.items(), key=lambda item: -item[1].priority)
     }
+
+  @property
+  def protocol_keys(self):
+    return {key for parser in self.parsers.values() for key in parser.protocol_keys}
 
   def enter_protocol(self, data_protocol):
     for parser in self.parsers.values():
@@ -92,11 +84,23 @@ class Parsers(BaseParser):
 
 class Protocol:
   def __init__(self, text, parsers, models):
-    data = reader.parse(text)
-    data = protocol_schema.transform(data)
-
     self.parser_classes = parsers
     self.parser = Parsers(self, parsers)
+
+    protocol_schema = sc.Dict({
+      'name': sc.Optional(str),
+      'models': sc.Optional(sc.List(str)),
+      'stages': sc.Optional(sc.List(sc.Dict({
+        'name': sc.Optional(str),
+        'steps': sc.List(sc.Dict({
+          'name': sc.Optional(str)
+        }, allow_extra=True))
+      }, allow_extra=True))),
+      **({ key: sc.Optional(sc.Any()) for key in self.parser.protocol_keys }),
+    })
+
+    data = reader.parse(text)
+    data = protocol_schema.transform(data)
 
     self.models = None
     self.segments = list()

@@ -71,7 +71,6 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
 
 
     let width = this.state.width;
-    let height = 60;
     let y = 30;
     let lineWidth = 1.6;
     let marginHor = 20;
@@ -79,6 +78,19 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
 
     let stageRadius = 5;
     let segmentRadius = 3;
+
+    let [rows, segmentRowIndices] = assemble(data.segments.map((segment, segmentIndex) => ({
+      x: segment.position - 20 / availWidth,
+      width: 40 / availWidth,
+      priority: data.stages.some((stage) => stage.seq[0] === segmentIndex) ? 1 : 0
+    })), { rowCount: 2 });
+
+    let firstEmptyRowIndex = rows.findIndex((row) => row.length < 1);
+    let rowCount = (firstEmptyRowIndex >= 0)
+      ? firstEmptyRowIndex
+      : rows.length;
+
+    let height = 58 + (20 * (rowCount - 1));
 
     return (
       <div ref={this.refContainer}>
@@ -97,6 +109,7 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
                     return null;
                   }
 
+                  let rowIndex = segmentRowIndices[segmentIndex];
                   let nextSegment = data.segments[segmentIndex + 1];
 
                   let firstStageSegment = segmentIndex === stage.seq[0];
@@ -108,9 +121,11 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
                   return (
                     <React.Fragment key={segmentIndex}>
                       <g className="timeline-segment">
-                        {segment === firstSegment
-                          ? <text x={start} y={50} className="timeline-stagelabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>
-                          : <text x={start} y={50} className="timeline-segmentlabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>}
+                        {(rowIndex !== null) && (
+                          (segment === firstSegment)
+                            ? <text x={start} y={50 + 20 * rowIndex} className="timeline-stagelabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>
+                            : <text x={start} y={50 + 20 * rowIndex} className="timeline-segmentlabel" fill="currentColor">{formatRelativeTime(segment.time)}</text>
+                        )}
                         <circle cx={start} cy={y} r={firstStageSegment ? stageRadius : segmentRadius} className={'timeline-marker ' + (firstStageSegment ? 'timeline-stagemarker' : '')} fill="currentColor" />
                       </g>
                       {firstStageSegment
@@ -132,3 +147,50 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
     );
   }
 }
+
+
+interface AssemblySegment {
+  priority?: number;
+  x: number;
+  width: number;
+}
+
+function assemble(segments: AssemblySegment[], options?: { rowCount: number }): [AssemblySegment[][], (number | null)[]] {
+  let rowCount = (options?.rowCount ?? Infinity);
+  let rows: AssemblySegment[][] = isFinite(rowCount)
+    ? new Array(rowCount).fill(0).map(() => [])
+    : [];
+
+  let segmentRowIndices: (number | null)[] = new Array(segments.length);
+
+  for (let [segmentIndex, segment] of Array.from(segments.entries()).sort(([_a, a], [_b, b]) => (b.priority ?? 0) - (a.priority ?? 0))) {
+    let rowIndex = rows.findIndex((rowSegments) => !rowSegments.some((otherSegment) =>
+      (segment.x > otherSegment.x) && (segment.x + segment.width < otherSegment.x + otherSegment.width)
+    // || (segment.x < otherSegment.x) && (segment.x + segment.width > otherSegment.x + otherSegment.width)
+    || (segment.x < otherSegment.x) && (segment.x + segment.width > otherSegment.x)
+    || (segment.x < otherSegment.x + otherSegment.width) && (segment.x + segment.width > otherSegment.x + otherSegment.width)
+    ));
+
+    let row = rows[rowIndex];
+
+    if (!row && !isFinite(rowCount)) {
+      row = [];
+      rowIndex = rows.length;
+      rows.push(row);
+    }
+
+    row?.push(segment);
+    segmentRowIndices[segmentIndex] = (rowIndex >= 0 ? rowIndex : null);
+  }
+
+  return [rows, segmentRowIndices];
+}
+
+// 0--1--2--3--4--5--6--7
+//        =====
+//                 =
+//
+// console.log(assemble([
+//   { x: 2, width: 4 },
+//   { x: 5, width: 0.5 }
+// ], 1));

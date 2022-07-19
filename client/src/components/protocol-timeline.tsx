@@ -61,7 +61,7 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
             time: firstSegmentAnalysis.timeRange![0]
           };
         }),
-      stages: this.props.protocol.stages.map((stage, stageIndex) => {
+      stages: this.props.protocol.stages.map((stage) => {
         return {
           name: stage.name,
           seq: stage.seq
@@ -92,17 +92,35 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
 
     let height = 58 + (20 * (rowCount - 1));
 
+    let stageLabelTextOptions = { size: '1rem', weight: '500' };
+    let labelAssembly = assembleLabels(data.stages.map((stage) => {
+      let firstSegment = data.segments[stage.seq[0]];
+      let lastSegment = data.segments[stage.seq[1]];
+
+      return {
+        width: ((lastSegment?.position ?? 1) - firstSegment.position) * availWidth,
+        labelWidth: getTextWidth(stage.name, stageLabelTextOptions)
+      };
+    }), { margin: marginHor });
+
     return (
       <div ref={this.refContainer}>
         <svg viewBox={`0 0 ${width} ${height}`} className="timeline-root">
           {data.stages.map((stage, stageIndex) => {
             let firstSegment = data.segments[stage.seq[0]];
             let nextSegment = data.segments[stage.seq[1]];
+            let stageLabelAssembly = labelAssembly[stageIndex];
+            let stageText = fitText(stage.name, stageLabelAssembly.width, stageLabelTextOptions);
 
             return (
               <g className="timeline-stage" key={stageIndex}>
                 <rect x={marginHor + firstSegment.position * availWidth} y={0} width={((nextSegment?.position ?? 1) - firstSegment.position) * availWidth} height={height} fill="transparent" />
-                <text x={marginHor + (firstSegment.position + (nextSegment?.position ?? 1)) * 0.5 * availWidth} y={10} fill="currentColor" className="timeline-stagename">{stage.name}</text>
+                {stageText && (
+                  <text x={marginHor + stageLabelAssembly.x} y={10} fill="currentColor" className="timeline-stagename">
+                    {stageText}
+                    <title>{stage.name}</title>
+                  </text>
+                )}
 
                 {data.segments.map((segment, segmentIndex) => {
                   if (!(segmentIndex >= stage.seq[0] && segmentIndex < stage.seq[1])) {
@@ -140,7 +158,7 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
 
           <g className="timeline-segment">
             <circle cx={marginHor + availWidth} cy={y} r={stageRadius} fill="currentColor" className="timeline-marker timeline-stagemarker" />
-            <text x={marginHor + availWidth} y="50" fill="currentColor" className="timeline-segmentlabel">{formatRelativeTime(this.analysis.done.time)}</text>
+            <text x={marginHor + availWidth} y="50" fill="currentColor" className="timeline-stagelabel">{formatRelativeTime(this.analysis.done.time)}</text>
           </g>
         </svg>
       </div>
@@ -194,3 +212,103 @@ function assemble(segments: AssemblySegment[], options?: { rowCount: number }): 
 //   { x: 2, width: 4 },
 //   { x: 5, width: 0.5 }
 // ], 1));
+
+
+
+interface LabelAssemblySegment {
+  labelWidth: number;
+  width: number;
+}
+
+function assembleLabels(segments: LabelAssemblySegment[], options?: {
+  gap?: number;
+  margin?: number;
+  maxRelativeLabelWidth?: number;
+}) {
+  let gap = (options?.gap ?? 50);
+  let margin = (options?.margin ?? 0);
+  let maxRelativeLabelWidth = (options?.maxRelativeLabelWidth ?? Infinity);
+
+  let cumWidth = cumulativeSum(segments.map((segment) => segment.width));
+
+  let overlaps = segments.map((segment) => {
+    return (Math.min(segment.labelWidth - segment.width, (maxRelativeLabelWidth - 1) * segment.width) + gap * 0.5) * 0.5;
+  });
+
+  return overlaps.map((overlap, segmentIndex) => {
+    let leftX = cumWidth[segmentIndex - 1] ?? 0;
+    let rightX = cumWidth[segmentIndex];
+    let x = (leftX + rightX) * 0.5;
+    let segment = segments[segmentIndex];
+
+    if (overlap < 0) {
+      return { x, width: segment.labelWidth };
+    }
+
+    let prevOverlap = overlaps[segmentIndex - 1] ?? -(margin + gap * 0.5);
+    let nextOverlap = overlaps[segmentIndex + 1] ?? -(margin + gap * 0.5);
+
+    if ((prevOverlap > 0) || (nextOverlap > 0)) {
+      return { x, width: segment.width - gap * 0.25 };
+    }
+
+    let leftOverlap = Math.max(overlap + prevOverlap, 0);
+    let rightOverlap = Math.max(overlap + nextOverlap, 0);
+
+    // console.log(prevOverlap, overlap, nextOverlap);
+    // console.log(leftOverlap, rightOverlap);
+    // console.log('---');
+
+    return {
+      // The second argument ensures the segment respects the maxRelativeLabelWidth option.
+      width: Math.min(segment.labelWidth - 2 * Math.max(leftOverlap, rightOverlap), segment.width + overlap * 2),
+      x: (leftX + rightX) * 0.5
+    };
+  });
+}
+
+
+function fitText(text: string, targetWidth: number, options: { size: string; weight: string; }): string | null {
+  let nominalWidth = getTextWidth(text, options);
+
+  if (nominalWidth <= targetWidth) {
+    return text;
+  }
+
+  for (let endIndex = (text.length - 1); endIndex > 0; endIndex -= 1) {
+    if (text[endIndex - 1] === ' ') {
+      continue;
+    }
+
+    let slicedText = text.substring(0, endIndex) + '…';
+    let width = getTextWidth(slicedText, options);
+
+    if (width <= targetWidth) {
+      return slicedText;
+    }
+  }
+
+  return null;
+}
+
+function cumulativeSum(arr: number[]): number[] {
+  let sum = 0;
+  return arr.map((item) => sum += item);
+}
+
+
+let getTextWidthCanvas: HTMLCanvasElement | null = null;
+
+function getTextWidth(text: string, options: { size: string; weight: string; }) {
+  let fontFamily = window.getComputedStyle(document.body).fontFamily;
+
+  if (!getTextWidthCanvas) {
+    getTextWidthCanvas = document.createElement('canvas');
+  }
+
+  let ctx = getTextWidthCanvas.getContext('2d')!;
+  ctx.font = `${options.weight} ${options.size} ${fontFamily}`;
+  let metrics = ctx?.measureText(text);
+
+  return metrics.width;
+}

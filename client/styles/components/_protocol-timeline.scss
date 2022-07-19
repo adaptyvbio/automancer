@@ -1,3 +1,6 @@
+@use "../constants" as *;
+
+
 .timeline {
   &-root {
     margin: 1rem 0;
@@ -12,7 +15,7 @@
     stroke-dasharray: 0 4 100000;
     stroke-dashoffset: 4;
 
-    transition: color 150ms, stroke-dashoffset 150ms;
+    transition: color $dur-short, stroke-dashoffset $dur-short;
   }
 
   &-line:last-of-type {
@@ -22,7 +25,7 @@
   &-line, &-stagename, &-segment * {
     $a: calc(255 * (1 - var(--opacity)));
     color: rgb(#{$a}, #{$a}, #{$a});
-    transition: color 150ms;
+    transition: color $dur-short;
   }
 
   &-root:hover &-stage, &-root:hover > &-segment {
@@ -41,16 +44,24 @@
     stroke-dashoffset: 0;
   }
 
+  &-stage:not(:hover) &-segmentlabel {
+    opacity: 0;
+    transform: translateY(+5%);
+  }
+
   &-stagename {
     cursor: default;
     font-weight: 500;
   }
 
   &-stagelabel, &-segmentlabel {
+    pointer-events: none;
     font-weight: 500;
   }
 
   &-segmentlabel {
+    fill: #666;
     font-size: 0.9rem;
+    transition: opacity $dur-short, transform $dur-short;
   }
 }

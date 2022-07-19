@@ -1,4 +1,6 @@
 from collections import namedtuple
+import base64
+import pickle
 
 
 # used?
@@ -138,3 +140,21 @@ class BaseExecutor:
   """
   def export(self):
     return dict()
+
+  """
+  Returns true if the provided version is supported.
+
+  Parameters : any
+    Version to be tested.
+  """
+  def supports(_version):
+    return True
+
+
+class BaseSheet:
+  def serialize(self):
+    # print(pickle.dumps(self, 0))
+    return base64.b85encode(pickle.dumps(self)).decode("utf-8")
+
+  def unserialize(data):
+    return pickle.loads(base64.b85decode(data.encode("utf-8")))

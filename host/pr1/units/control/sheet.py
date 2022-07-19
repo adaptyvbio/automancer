@@ -1,5 +1,8 @@
 from collections import namedtuple
+import base64
+import pickle
 
+from ..base import BaseSheet
 from ...util.parser import Identifier, check_identifier
 from ...util import schema as sc
 
@@ -51,7 +54,9 @@ entity_schema = {
 }
 
 
-class Sheet:
+class Sheet(BaseSheet):
+  keys = {'diagram', 'groups', 'valves'}
+
   def __init__(self, data, *, dir):
 
     # -- Validate schema ----------------------------------
@@ -153,7 +158,6 @@ class Sheet:
         self.diagram = diagram_path.open().read()
       except FileNotFoundError:
         raise data["diagram"].error(f"Missing file at {diagram_path}")
-
 
   def export(self):
     return {

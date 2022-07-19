@@ -27,6 +27,8 @@ class Host:
     self.update_callback = update_callback
 
     self.chips = dict()
+    self.chips_dir = self.data_dir / "chips"
+    self.chips_dir.mkdir(exist_ok=True)
 
     # os.chmod(self.data_dir, 0o775)
 
@@ -103,6 +105,12 @@ class Host:
 
     # debug
     chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    print(f"Created '{chip.id}'")
+
+    for path in self.chips_dir.glob("**/*"):
+      if path.is_file() and not path.name.startswith("."):
+        chip = Chip.unserialize(path, models=self.models, units=self.units)
+        self.chips[chip.id] = chip
 
   async def start(self):
     try:
@@ -180,15 +188,14 @@ class Host:
 
   def create_chip(self, model_id, name):
     model = self.models[model_id]
-    matrices = { namespace: unit.Matrix.load(model.sheets[namespace]) for namespace, unit in self.units.items() if hasattr(unit, 'Matrix') }
-    chip = Chip(
-      id=str(uuid.uuid4()),
-      master=None,
-      matrices=matrices,
+
+    chip = Chip.create(
+      chips_dir=self.chips_dir,
       model=model,
-      name=name,
-      runners=dict()
+      name=name
     )
+
+    chip.runners = dict()
 
     for namespace, executor in self.executors.items():
       chip.runners[namespace] = executor.create_runner(chip)
@@ -235,7 +242,7 @@ class Host:
           "modelId": chip.model.id,
           "name": chip.metadata['name'],
           "metadata": chip.metadata,
-          "runners": {
+          "runners": chip.runners and {
             namespace: runner.export() for namespace, runner in chip.runners.items()
           }
         } for chip in self.chips.values()

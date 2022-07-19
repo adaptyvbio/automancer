@@ -82,3 +82,6 @@ class Executor(BaseExecutor):
       device_signal = (signal >> start) & ((1 << length) - 1)
       driver_signal = sum([1 << channel for index, channel in enumerate(device.valves) if (device_signal & (1 << index)) > 0])
       device.driver.write(driver_signal)
+
+  def supports(version):
+    return version == "0"

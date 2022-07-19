@@ -27,6 +27,11 @@ class Matrix:
       } for valve in self.valves]
     }
 
+  def serialize(self):
+    return {
+      'valves': [valve._asdict() for valve in self.valves]
+    }
+
   def update(self, data):
     self.valves = [Valve(
       aliases=data["valves"][index]["aliases"],
@@ -43,3 +48,6 @@ class Matrix:
         host_valve_index=None
       ) for _ in range(len(sheet.valves))]
     )
+
+  def unserialize(data, *, sheet):
+    return Matrix(sheet, valves=[Valve(**valve) for valve in data['valves']])

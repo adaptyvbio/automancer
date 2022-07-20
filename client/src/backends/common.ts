@@ -33,6 +33,7 @@ export abstract class BackendCommon {
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
   abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
+  abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
@@ -132,8 +133,8 @@ export type ProtocolSeq = [number, number];
 
 
 export interface ProtocolLocation {
-  data: OperatorLocationData[keyof OperatorLocationData] | null;
   segmentIndex: number;
+  state: OperatorLocationData[keyof OperatorLocationData] | null;
 }
 
 

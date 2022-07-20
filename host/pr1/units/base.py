@@ -64,9 +64,6 @@ class BaseRunner:
   async def initialize(self):
     pass
 
-  def get_state(self):
-    return dict()
-
   def export(self):
     return dict()
 
@@ -90,6 +87,15 @@ class BaseRunner:
 
 
 class BaseProcessRunner(BaseRunner):
+  def get_state(self):
+    return dict()
+
+  def export_state(self, state):
+    return None
+
+  def import_state(self, data_state):
+    return None
+
   async def run_process(self, segment, seg_index, state):
     pass
 

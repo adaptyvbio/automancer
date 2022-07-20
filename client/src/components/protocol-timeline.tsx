@@ -79,10 +79,10 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
     let stageRadius = 5;
     let segmentRadius = 3;
 
-    let [rows, segmentRowIndices] = assemble(data.segments.map((segment, segmentIndex) => ({
+    let [rows, segmentRowIndices] = assemble([...data.segments, { position: 1, time: this.analysis.done.time }].map((segment, segmentIndex) => ({
       x: segment.position - 20 / availWidth,
       width: 40 / availWidth,
-      priority: data.stages.some((stage) => stage.seq[0] === segmentIndex) ? 1 : 0
+      priority: data.stages.some((stage) => stage.seq[0] === segmentIndex) || (segmentIndex === data.segments.length) ? 1 : 0
     })), { rowCount: 2 });
 
     let firstEmptyRowIndex = rows.findIndex((row) => row.length < 1);

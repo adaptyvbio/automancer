@@ -59,6 +59,14 @@ export abstract class MessageBackend extends BackendCommon {
     });
   }
 
+  async setLocation(chipId: string, location: ProtocolLocation) {
+    await this._request({
+      type: 'setLocation',
+      chipId,
+      location
+    });
+  }
+
   async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
     await this._request({
       type: 'setMatrix',

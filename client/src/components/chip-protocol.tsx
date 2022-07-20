@@ -1,11 +1,12 @@
 import * as React from 'react';
-import { analyzeProtocol } from '../analysis';
 
-import { ProtocolOverview } from './protocol-overview';
+import { analyzeProtocol } from '../analysis';
 import { Host } from '../application';
 import { ChipId } from '../backends/common';
 import { formatAbsoluteTime } from '../format';
 import { Pool } from '../util';
+import { ProgressBar } from './progress-bar';
+import { ProtocolOverview } from './protocol-overview';
 
 
 export interface ChipProtocolProps {
@@ -41,8 +42,11 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
     let firstSegmentAnalysis = analysis.segments[currentStep.seq[0]];
     let lastSegmentAnalysis = analysis.segments[currentStep.seq[1] - 1];
 
+    // console.log(analysis);
+    console.log(master);
+
     return (
-      <div className="barnav-contents">
+      <div className="blayout-contents">
         <div className="pstatus-root">
           <div className="pstatus-subtitle">Current step ({currentSegmentIndex - currentStep.seq[0] + 1}/{currentStep.seq[1] - currentStep.seq[0]})</div>
           <div className="pstatus-header">
@@ -51,6 +55,20 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
               {firstSegmentAnalysis.timeRange && formatAbsoluteTime(firstSegmentAnalysis.timeRange[0])} &ndash; {formatAbsoluteTime(lastSegmentAnalysis.timeRange![1])}
             </div>
           </div>
+
+          <ProgressBar
+            paused={lastEntry.paused}
+            value={0.5}
+            setValue={(progress) => {
+              console.log(progress);
+              // TODO: generalize
+              this.pool.add(async () => {
+                await this.props.host.backend.setLocation(this.chip.id, {
+                  segmentIndex: lastEntry.segmentIndex,
+                  state: { progress }
+                });
+              });
+            }} />
 
           <div className="pstatus-actions">
             {lastEntry.paused
@@ -81,7 +99,12 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
         <ProtocolOverview
           analysis={analysis}
           master={master}
-          protocol={master.protocol} />
+          protocol={master.protocol}
+          setLocation={(location) => {
+            this.pool.add(async () => {
+              await this.props.host.backend.setLocation(this.chip.id, location);
+            });
+          }} />
       </div>
     )
   }

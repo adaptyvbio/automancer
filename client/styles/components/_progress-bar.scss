@@ -1,0 +1,54 @@
+@use "../constants" as *;
+
+
+.pbar {
+  &-root {
+    display: grid;
+    align-items: end;
+    column-gap: 1rem;
+    grid-template-columns: 1fr 3rem;
+  }
+
+  &-outer {
+    display: grid;
+
+    // background-color: #eee;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+
+    height: 12px;
+    padding: 0 4px;
+
+    cursor: pointer;
+  }
+
+  &-inner, &-progress, &-select {
+    width: 100%;
+    height: 4px;
+
+    margin: auto 0;
+    border-radius: 4px;
+
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  &-progress {
+    background-color: $app-blue;
+    // background-color: color.adjust($app-blue, $alpha: -0.5);
+  }
+
+  &-root._paused &-progress {
+    background-color: #666;
+  }
+
+  &-select {
+    background-color: #0003;
+  }
+
+  &-text {
+    color: #999;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}

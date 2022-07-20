@@ -27,6 +27,13 @@ class Runner(BaseProcessRunner):
       'progress': start_progress + new_progress
     }
 
+  def export_state(self, state):
+    return { "progress": state['progress'] }
+
+  def import_state(self, data_state):
+    return { 'progress': data_state["progress"] if data_state is not None else 0 }
+
+
   async def run_process(self, segment, seg_index, state):
     self._nominal_duration = segment[namespace]['duration']
     duration = self._nominal_duration * ((1.0 - state['progress']) if state else 1.0)

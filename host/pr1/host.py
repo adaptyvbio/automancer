@@ -104,13 +104,13 @@ class Host:
     logger.debug("Done initializing executors")
 
     # debug
-    chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
-    print(f"Created '{chip.id}'")
+    # chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    # print(f"Created '{chip.id}'")
 
-    for path in self.chips_dir.glob("**/*"):
-      if path.is_file() and not path.name.startswith("."):
-        chip = Chip.unserialize(path, models=self.models, units=self.units)
-        self.chips[chip.id] = chip
+    # for path in self.chips_dir.glob("**/*"):
+    #   if path.is_file() and not path.name.startswith("."):
+    #     chip = Chip.unserialize(path, models=self.models, units=self.units)
+    #     self.chips[chip.id] = chip
 
   async def start(self):
     try:
@@ -301,6 +301,10 @@ class Host:
       chip = self.chips[request["chipId"]]
       chip.metadata.update(request["value"])
 
+    if request["type"] == "setLocation":
+      chip = self.chips[request["chipId"]]
+      chip.master.set_location(chip.master.import_location(request["location"]))
+
     if request["type"] == "setMatrix":
       chip = self.chips[request["chipId"]]
 
@@ -326,6 +330,7 @@ class Host:
       )
 
       location = {
+        'state': None, # request["location"]["state"]
         'segment_index': request["location"]["segmentIndex"]
       }
 

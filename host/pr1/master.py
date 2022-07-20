@@ -10,7 +10,7 @@ class Master:
     # self.supdata = protocol.create_supdata(chip, codes)
 
     self._pause_options = None
-    self._process_state = None
+    self._process_state = location['state']
     self._seg_index = location['segment_index']
     self._task = None
 
@@ -126,6 +126,7 @@ class Master:
 
     self._enter_segment()
 
+  # TODO: deprecate in favor of set_location()
   def skip_segment(self, segment_index, process_state = None):
     if self._task:
       self._task.cancel()
@@ -139,17 +140,33 @@ class Master:
 
     # self._enter_segment()
 
+  def set_location(self, location):
+    if self._task:
+      self._task.cancel()
+
+    self._leave_segment(location['segment_index'], location['state'])
+
+  def import_location(self, location):
+    segment = self.protocol.segments[location["segmentIndex"]]
+    runner = self.chip.runners[segment.process_namespace]
+
+    state = runner.import_state(location["state"])
+
+    return {
+      'segment_index': location["segmentIndex"],
+      'state': state
+    }
+
   def export(self):
     return {
       "entries": [
         {
           "error": entry['error'],
           "paused": entry['pause_options'] is not None,
-          "processState": entry['process_state'],
+          "processState": self._process_runner.export_state(entry['process_state']),
           "segmentIndex": entry['segment_index'],
           "time": round(entry['time'] * 1000)
         } for entry in self._log_data
       ],
-      # "supdata": self.protocol.export_supdata(self.supdata),
       "protocol": self.protocol.export()
     }

@@ -1,7 +1,10 @@
 import * as React from 'react';
 
+import * as util from '../util';
+
 
 interface ProgressBarProps {
+  paused?: unknown;
   setValue(newValue: number): void;
   value: number;
 }
@@ -21,8 +24,8 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
 
   render() {
     return (
-      <div className="progress-root">
-        <div className="progress-outer"
+      <div className={util.formatClass('pbar-root', { '_paused': this.props.paused })}>
+        <div className="pbar-outer"
           onMouseMove={(event) => {
             let inner = event.currentTarget.firstChild as HTMLDivElement;
             let innerRect = inner.getBoundingClientRect();
@@ -38,13 +41,13 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
           onClick={() => {
             this.props.setValue(this.state.selectValue!);
           }}>
-          <div className="progress-inner" />
-          <div className="progress-progress" style={{ width: `${this.props.value * 100}%` }} />
+          <div className="pbar-inner" />
+          <div className="pbar-progress" style={{ width: `${this.props.value * 100}%` }} />
           {this.state.selectValue !== null && (
-            <div className="progress-select" style={{ width: `${this.state.selectValue * 100}%` }} />
+            <div className="pbar-select" style={{ width: `${this.state.selectValue * 100}%` }} />
           )}
         </div>
-        <div className="progress-text">{((this.state.selectValue ?? this.props.value) * 100).toFixed(0)}%</div>
+        <div className="pbar-text">{((this.state.selectValue ?? this.props.value) * 100).toFixed(0)}%</div>
       </div>
     )
   }

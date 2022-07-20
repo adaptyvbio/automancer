@@ -34,16 +34,21 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
     let lastEntry = master.entries.at(-1);
 
     let currentSegmentIndex = analysis.current!.segmentIndex;
-    let _currentSegment = protocol.segments[currentSegmentIndex];
+    let currentSegment = protocol.segments[currentSegmentIndex];
 
     let currentStage = protocol.stages.find((stage) => (stage.seq[0] <= currentSegmentIndex) && (stage.seq[1] > currentSegmentIndex))!;
     let currentStep = currentStage.steps.find((step) => (step.seq[0] <= currentSegmentIndex) && (step.seq[1] > currentSegmentIndex))!;
 
     let firstSegmentAnalysis = analysis.segments[currentStep.seq[0]];
     let lastSegmentAnalysis = analysis.segments[currentStep.seq[1] - 1];
+    let currentSegmentAnalysis = analysis.segments[lastEntry.segmentIndex];
 
-    // console.log(analysis);
-    console.log(master);
+    let currentSegmentEndTime = currentSegmentAnalysis.timeRange![1];
+    let currentProgress = lastEntry.processState.progress + (
+      !lastEntry.paused
+        ? (Date.now() - lastEntry.time) / currentSegment.data.timer!.duration
+        : 0
+    );
 
     return (
       <div className="blayout-contents">
@@ -58,9 +63,8 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
 
           <ProgressBar
             paused={lastEntry.paused}
-            value={0.5}
+            value={currentProgress}
             setValue={(progress) => {
-              console.log(progress);
               // TODO: generalize
               this.pool.add(async () => {
                 await this.props.host.backend.setLocation(this.chip.id, {
@@ -68,7 +72,8 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
                   state: { progress }
                 });
               });
-            }} />
+            }}
+            targetEndTime={currentSegmentEndTime} />
 
           <div className="pstatus-actions">
             {lastEntry.paused

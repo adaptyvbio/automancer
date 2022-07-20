@@ -28,7 +28,7 @@ class Session:
     master, slave = pty.openpty()
     self._master = master
 
-    self._proc = subprocess.Popen(["fish"], stdout=slave, stderr=slave, stdin=slave, universal_newlines=True, preexec_fn=os.setsid, shell=True, close_fds=True)
+    self._proc = subprocess.Popen(["fish"], stdout=slave, stderr=slave, stdin=slave, universal_newlines=True, preexec_fn=os.setsid, shell=True, close_fds=True, cwd=os.environ["HOME"])
 
     os.close(slave)
 

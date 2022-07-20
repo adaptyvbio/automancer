@@ -35,7 +35,6 @@ export function ProtocolOverview(props: {
         let nextStage = props.protocol.stages[stageIndex + 1];
         let nextStageSegmentAnalysis = nextStage && analysis.segments[nextStage.seq[0]];
 
-        let hidden = true;
         let isCurrentStage = (currentSegmentIndex !== null) && (currentSegmentIndex >= stage.seq[0]) && (currentSegmentIndex < stage.seq[1]);
         let currentStepIndex = isCurrentStage ? stage.steps.findIndex((step) => (step.seq[0] <= currentSegmentIndex!) && (step.seq[1] > currentSegmentIndex!))! : null;
 
@@ -83,7 +82,7 @@ export function ProtocolOverview(props: {
                               .sort(seqOrd(function* ([aNamespace, _aUnit], [bNamespace, _bUnit], rules) {
                                 yield rules.binary(bNamespace === operatorNamespace, aNamespace === operatorNamespace);
                               }))
-                              .flatMap(([namespace, Unit]) => {
+                              .flatMap(([_namespace, Unit]) => {
                                 return Unit.createFeatures?.({
                                   location: props.location,
                                   protocol: props.protocol,
@@ -98,8 +97,8 @@ export function ProtocolOverview(props: {
                                 key={segmentRelIndex}
                                 onClick={() => {
                                   props.setLocation?.({
-                                    data: null,
-                                    segmentIndex
+                                    segmentIndex,
+                                    state: null
                                   });
                                 }}>
                                 {features.map((feature, featureIndex) => (

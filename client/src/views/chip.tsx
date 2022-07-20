@@ -43,6 +43,19 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     return this.props.host.state.models[this.chip.modelId];
   }
 
+  componentDidUpdate() {
+    if ((this.props.mode === 'protocol') && !this.chip.master) {
+      this.props.setRoute(['chip', this.chip.id, 'settings']);
+    }
+  }
+
+  shouldComponentUpdate(nextProps: ViewChipProps, nextState: ViewChipState) {
+    return (nextState !== this.state)
+      || (nextProps.host.state !== this.props.host.state)
+      || (nextProps.chipId !== this.props.chipId)
+      || (nextProps.mode !== this.props.mode);
+  }
+
   render() {
     let component = (() => {
       switch (this.props.mode) {

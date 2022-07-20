@@ -45,10 +45,10 @@ export class Sidebar extends React.Component<SidebarProps> {
       ? [
         { id: 'main',
         entries: [
-          { id: 'dashboard',
-            label: 'Dashboard',
-            icon: 'dashboard',
-            route: ['dashboard'] },
+          // { id: 'dashboard',
+          //   label: 'Dashboard',
+          //   icon: 'dashboard',
+          //   route: ['dashboard'] },
           { id: 'chip',
             label: 'Chips',
             icon: 'memory',

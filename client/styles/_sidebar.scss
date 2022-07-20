@@ -17,14 +17,16 @@
   &-header {
     display: grid;
     column-gap: 1.2rem;
-    grid-template-columns: auto 1fr;
+    // grid-template-columns: auto 1fr;
+    grid-template-columns: 1fr;
 
     margin-bottom: 2rem;
   }
 
   &-host {
     &-logo {
-      display: flex;
+      // display: flex;
+      display: none;
 
       width: 3.4rem;
       height: 3.4rem;

@@ -132,7 +132,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       drafts: {},
       openDraftIds: ImSet(),
 
-      currentRoute: ['dashboard'],
+      currentRoute: ['chip'],
       selectedHostId: null
     };
 
@@ -250,6 +250,14 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   componentDidUpdate(_prevProps: ApplicationProps, prevState: ApplicationState) {
+    // if (this.state) {
+    //   console.group()
+    //   Object.entries(this.state).forEach(([key, val]) =>
+    //     prevState[key] !== val && console.log(`State '${key}' changed`)
+    //   );
+    //   console.groupEnd()
+    // }
+
     if (prevState.selectedHostId !== this.state.selectedHostId) {
       this.pool.add(async () => {
         for (let draft of Object.values(this.state.drafts)) {
@@ -397,9 +405,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
             // TODO: Improve
             if (!draft.compiled) {
-              this.pool.add(async () => {
-                await this.compileDraft(draft.entry);
-              });
+              // this.pool.add(async () => {
+              //   await this.compileDraft(draft.entry);
+              // });
             }
 
             return (

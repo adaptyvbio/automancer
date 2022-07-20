@@ -3,7 +3,7 @@ import time
 
 
 class Master:
-  def __init__(self, chip, codes, location, protocol, *, update_callback):
+  def __init__(self, chip, codes, location, protocol, *, done_callback, update_callback):
     self.chip = chip
     self.codes = codes
     self.protocol = protocol
@@ -15,6 +15,7 @@ class Master:
     self._task = None
 
     self._log_data = list()
+    self._done_callback = done_callback
     self._update_callback = update_callback
 
 
@@ -97,7 +98,7 @@ class Master:
     if self._seg_index < len(self.protocol.segments):
       self._enter_segment()
     else:
-      pass # Done
+      self._done_callback()
 
   def start(self):
     for namespace, runner in self.chip.runners.items():

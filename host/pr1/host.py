@@ -207,7 +207,19 @@ class Host:
     if chip.master:
       raise Exception("Already running")
 
-    chip.master = Master(chip=chip, codes=codes, location=location, protocol=protocol, update_callback=self.update_callback)
+    def done_callback():
+      chip.master = None
+      self.update_callback()
+
+    chip.master = Master(
+      chip=chip,
+      codes=codes,
+      location=location,
+      protocol=protocol,
+      done_callback=done_callback,
+      update_callback=self.update_callback
+    )
+
     chip.master.start()
 
 

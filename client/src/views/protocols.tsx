@@ -43,7 +43,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
         <div className="lproto-container">
           <header className="header header--2">
             <h2>All protocols</h2>
-            <div>
+            <div className="actions">
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {
                   let draftId = await this.props.createDraft({
@@ -51,7 +51,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     source: `name: Untitled protocol\n\nstages:\n  - name: First stage\n    steps:\n      - duration: 20 min`,
                   });
 
-                  this.props.setRoute(['protocol', draftId]);
+                  this.props.setRoute(['protocol', draftId, 'overview']);
                 });
               }}>
                 New protocol
@@ -71,7 +71,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     });
                   }
                 });
-              }}>Use file</button>
+              }}>Load file</button>
             </div>
           </header>
 

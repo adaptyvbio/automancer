@@ -1,7 +1,36 @@
 @use "../common/buttons";
+@use "./protocol-overview" as proto;
 
 
 .pstatus {
+  &-root {
+    max-width: 500px;
+    margin-top: 0.8rem;
+  }
+
+  &-subtitle {
+    margin-bottom: 0.2rem;
+    color: #666;
+  }
+
+  &-header {
+    display: grid;
+    align-items: baseline;
+    column-gap: 1rem;
+    grid-template-columns: 1fr auto;
+  }
+
+  &-time {
+    color: #666;
+  }
+
+  &-features {
+    @extend %features;
+    --background: #fff;
+
+    margin: 1rem 0;
+  }
+
   &-actions {
     display: flex;
     column-gap: 0.4rem;

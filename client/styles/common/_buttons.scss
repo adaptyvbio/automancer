@@ -7,16 +7,22 @@
   column-gap: $icon-gap;
 
   width: auto;
-  height: 2.4rem;
+  height: 2.6rem;
 
-  padding: 0 1rem;
-  border-radius: 4px;
+  padding: 0 1.4rem;
+  border-radius: 5px;
 
-  color: $app-blue;
+  background-color: #222;
+  background-image: linear-gradient(transparent, #fff1);
+
+  color: #fff;
   font-weight: 500;
 
+  transition: background-color $dur-short, box-shadow $dur-short;
+
   &:hover {
-    background-color: lighten($app-blue, 55%);
+    background-color: #111;
+    box-shadow: 2px 2px 6px #0003;
   }
 
   .btn-icon {
@@ -29,4 +35,10 @@
       'GRAD' 0,
       'opsz' 48;
   }
+}
+
+
+.actions {
+  display: flex;
+  column-gap: 0.4rem;
 }

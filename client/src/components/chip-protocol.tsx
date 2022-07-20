@@ -1,10 +1,13 @@
 import * as React from 'react';
+import seqOrd from 'seq-ord';
 
 import { analyzeProtocol } from '../analysis';
 import { Host } from '../application';
 import { ChipId } from '../backends/common';
 import { formatAbsoluteTime } from '../format';
+import { Units } from '../units';
 import { Pool } from '../util';
+import { Icon } from './icon';
 import { ProgressBar } from './progress-bar';
 import { ProtocolOverview } from './protocol-overview';
 
@@ -50,6 +53,22 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
         : 0
     );
 
+    let features = Units
+      .sort(seqOrd(function* ([aNamespace, _aUnit], [bNamespace, _bUnit], rules) {
+        yield rules.binary(
+          bNamespace === currentSegment.processNamespace,
+          aNamespace === currentSegment.processNamespace
+        );
+      }))
+      .flatMap(([_namespace, Unit]) => {
+        return Unit.createFeatures?.({
+          protocol,
+          segment: currentSegment,
+          segmentIndex: currentSegmentIndex
+        }) ?? [];
+      });
+
+
     return (
       <div className="blayout-contents">
         <div className="pstatus-root">
@@ -59,6 +78,15 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
             <div className="pstatus-time">
               {firstSegmentAnalysis.timeRange && formatAbsoluteTime(firstSegmentAnalysis.timeRange[0])} &ndash; {formatAbsoluteTime(lastSegmentAnalysis.timeRange![1])}
             </div>
+          </div>
+
+          <div className="pstatus-features">
+            {features.map((feature, featureIndex) => (
+              <React.Fragment key={featureIndex}>
+                <Icon name={feature.icon} />
+                <div className="pstatus-feature-label" title={feature.label}>{feature.label}</div>
+              </React.Fragment>
+            ))}
           </div>
 
           <ProgressBar

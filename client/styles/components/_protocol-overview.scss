@@ -1,4 +1,5 @@
 @use "../constants" as *;
+@use "../mixins" as *;
 
 
 $step-gap: 1.2rem;
@@ -243,6 +244,14 @@ $segment-radius: 4px;
 
   > :nth-child(-n+2) {
     color: $app-blue;
+  }
+
+  > :nth-child(2n) {
+    @include text-ellipsis();
+  }
+
+  > :nth-child(2):nth-last-child(4n+1) {
+    grid-column: 2 / 5;
   }
 
   .icon {

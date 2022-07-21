@@ -94,19 +94,18 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
               return null;
             }
 
-            // return <unit.MatrixEditor
-            //   chip={this.chip}
-            //   host={this.props.host}
-            //   model={this.model}
-            //   matrix={this.chip.matrices[namespace as keyof Matrices]}
-            //   setMatrix={(matrix) => {
-            //     this.pool.add(async () => {
-            //       await this.props.host.backend.setMatrix(this.chip.id, {
-            //         [namespace]: matrix
-            //       });
-            //     });
-            //   }}
-            //   key={namespace} />
+            return <unit.MatrixEditor
+              chip={this.chip}
+              host={this.props.host}
+              matrix={this.chip.matrices[namespace as keyof Matrices]}
+              setMatrix={(matrix) => {
+                this.pool.add(async () => {
+                  await this.props.host.backend.setMatrix(this.chip.id, {
+                    [namespace]: matrix
+                  });
+                });
+              }}
+              key={namespace} />
           })}
         </div>
       </div>

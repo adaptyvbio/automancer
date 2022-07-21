@@ -1,5 +1,6 @@
 import { Host } from '../../application';
 import { Chip } from '../../backends/common';
+import { MatrixEditor } from './matrix-editor';
 
 
 function providePreview(options: { chip: Chip; host: Host; }) {
@@ -44,9 +45,10 @@ export interface ExecutorState {
 }
 
 export interface Matrix {
-  modelId: ModelId;
+  modelId: ModelId | null;
 }
 
 export default {
+  MatrixEditor,
   providePreview
 }

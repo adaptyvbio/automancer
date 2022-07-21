@@ -3,40 +3,44 @@ import * as React from 'react';
 
 import { Matrix, namespace } from '.';
 import { MatrixEditorInstance, MatrixEditorProps } from '..';
-import * as Inspector from '../../components/inspector';
+import * as Form from '../../components/standard-form';
+import { namespace as mfNamespace } from '../../units/microfluidics';
 
 
 export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> implements MatrixEditorInstance<Matrix> {
-  get sheet() {
-    return this.props.model.sheets[namespace];
-  }
-
   render() {
-    let valves = this.props.host.state.executors[namespace].valves;
+    // let valves = this.props.host.state.executors[namespace].valves;
+    let mfMatrix = this.props.chip.matrices[mfNamespace];
+    let model = (mfMatrix.modelId !== null)
+      ?  this.props.host.state.executors[mfNamespace].models[mfMatrix.modelId]
+      : null;
 
     return (
       <>
         <div className="header header--2">
-          <h2>Control</h2>
+          <h2>Valve control</h2>
         </div>
 
-        {this.sheet.groups.map((group, groupIndex) => (
+        {0 && model.groups.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
-            <div className="veditor-inspector-section">{group.name}</div>
+            <div className="veditor-inspector-section">{group.label}</div>
             <div className="veditor-inspector-form">
-              {this.sheet.valves.map((valve, valveIndex) => {
+              {/* {model!.channels.map((valve, valveIndex) => {
                 if (valve.group !== groupIndex) {
                   return null;
-                }
+                } */}
 
-                let currentValue = this.props.matrix.valves[valveIndex].hostValveIndex;
-                let rawCurrentValue = currentValue !== null
-                  ? currentValue.toString()
-                  : '';
+              {group.channelIndices.map((channelIndex) => {
+                let channel = model!.channels[channelIndex];
+
+                // let currentValue = this.props.matrix.valves[valveIndex].hostValveIndex;
+                // let rawCurrentValue = currentValue !== null
+                //   ? currentValue.toString()
+                //   : '';
 
                 return (
                   <React.Fragment key={valveIndex}>
-                    <Inspector.Select
+                    <Form.Select
                       label={valve.name}
                       value={rawCurrentValue}
                       onInput={(event) => {
@@ -53,7 +57,7 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
                       {Object.entries(valves).map(([label, hostValveIndex]) => (
                         <option key={hostValveIndex} value={hostValveIndex}>{label}</option>
                       ))}
-                    </Inspector.Select>
+                    </Form.Select>
                   </React.Fragment>
                 );
               })}

@@ -66,7 +66,6 @@ export type MatrixEditorInstance<Matrix> = React.Component<MatrixEditorProps<Mat
 export interface MatrixEditorProps<Matrix> {
   chip: Chip;
   host: Host;
-  model: ChipModel;
   matrix: Matrix;
   setMatrix(matrix: Matrix): void;
 }

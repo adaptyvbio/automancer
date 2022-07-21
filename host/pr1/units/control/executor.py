@@ -31,7 +31,7 @@ schema = sc.Schema({
 
 
 class Executor(BaseExecutor):
-  def __init__(self, conf):
+  def __init__(self, conf, *, host):
     self._devices = list()
     self._valves = dict()
 

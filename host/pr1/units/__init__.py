@@ -1,8 +1,8 @@
-from . import builtin, input, microfluidics, timer
+from . import builtin, control, input, microfluidics, timer
 
 
 units = {
-  unit.namespace: unit for unit in [builtin, input, microfluidics, timer]
+  unit.namespace: unit for unit in [builtin, control, input, microfluidics, timer]
 }
 
 __all__ = ["units"]

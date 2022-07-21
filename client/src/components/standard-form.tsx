@@ -56,7 +56,21 @@ export function DurationField(props: React.PropsWithChildren<{
   );
 }
 
-export function Select<T extends string | null>(props: {
+export function Form(props: React.PropsWithChildren<{}>) {
+  return (
+    <div className="sform-form">
+      {props.children}
+    </div>
+  );
+}
+
+export function Header(props: React.PropsWithChildren<{}>) {
+  return (
+    <div className="sform-header">{props.children}</div>
+  );
+}
+
+export function Select<T extends number | string | null>(props: {
   label: string;
   onInput(value: T): void;
   options: {
@@ -70,12 +84,12 @@ export function Select<T extends string | null>(props: {
     <label className="sform-group">
       <div className="sform-label">{props.label}</div>
       <div className="sform-select">
-        <select value={props.value || ''} onInput={(event) => {
-          let value = event.currentTarget.value;
-          props.onInput(((value !== '') ? value : null) as T);
+        <select value={props.options.findIndex((option) => option.id === props.value)} onInput={(event) => {
+          let optionIndex = parseInt(event.currentTarget.value);
+          props.onInput(props.options[optionIndex].id);
         }}>
-          {props.options.map((option) =>
-            <option value={option.id || ''} key={option.id}>{option.label}</option>
+          {props.options.map((option, optionIndex) =>
+            <option value={optionIndex} key={option.id}>{option.label}</option>
           )}
         </select>
         <Icon name="expand_more" />

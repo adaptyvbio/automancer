@@ -12,6 +12,21 @@ $hor-padding: 0.6rem;
 $height: 2rem;
 
 .sform {
+  &-form {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.6rem;
+
+    margin: 1rem 0;
+  }
+
+  &-header {
+    margin-top: 1.4rem;
+
+    font-size: 1.2rem;
+    font-weight: 500;
+  }
+
   &-label {
     margin-left: 0.6rem;
     margin-bottom: 0.2rem;

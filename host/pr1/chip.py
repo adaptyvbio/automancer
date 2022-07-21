@@ -17,8 +17,10 @@ class Chip:
 
   # Update runners following a matrix update
   def update_runners(self):
-    for runner in self.runners.values():
-      runner.update()
+    # for runner in self.runners.values():
+    #   runner.update()
+
+    pass
 
   def export(self):
     return {
@@ -34,7 +36,7 @@ class Chip:
       }
     }
 
-  def create(chips_dir, name, *, units):
+  def create(chips_dir, name, *, host):
     chip_id = str(uuid.uuid4())
     chip_dir = chips_dir / chip_id
     chip_dir.mkdir(exist_ok=True)
@@ -44,28 +46,33 @@ class Chip:
       'name': name
     }
 
-    matrices = { namespace: unit.Matrix() for namespace, unit in units.items() if hasattr(unit, 'Matrix') }
-    spec={ namespace: unit.version for namespace, unit in units.items() if hasattr(unit, 'version') }
+    spec={ namespace: unit.version for namespace, unit in host.units.items() if hasattr(unit, 'version') }
+    matrices = { namespace: unit.Matrix() for namespace, unit in host.units.items() if hasattr(unit, 'Matrix') }
 
-    header = {
-      'id': chip_id,
-      'matrices': {
-        namespace: matrix.serialize() for namespace, matrix in matrices.items()
-      },
-      'metadata': metadata,
-      'spec': spec
-    }
-
-    header_path = chip_dir / "header.json"
-    header_path.open("w").write(json.dumps(header) + "\n")
-
-    return Chip(
+    chip = Chip(
       id=chip_id,
       dir=chip_dir,
       matrices=matrices,
       metadata=metadata,
       spec=spec
     )
+
+    for matrix in chip.matrices.values():
+      matrix.commit(chip=chip, host=host)
+
+    header = {
+      'id': chip.id,
+      'matrices': {
+        namespace: matrix.serialize() for namespace, matrix in chip.matrices.items()
+      },
+      'metadata': chip.metadata,
+      'spec': chip.spec
+    }
+
+    header_path = chip_dir / "header.json"
+    header_path.open("w").write(json.dumps(header) + "\n")
+
+    return chip
 
   def unserialize(chip_dir, *, units):
     header_path = chip_dir / "header.json"

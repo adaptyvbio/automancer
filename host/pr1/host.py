@@ -86,14 +86,15 @@ class Host:
 
     logger.debug("Done initializing executors")
 
-    # debug
-    # chip = self.create_chip(name="Default chip")
-    # print(f"Created '{chip.id}'")
-
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
         chip = Chip.unserialize(path, units=self.units)
         self.chips[chip.id] = chip
+
+    if len(self.chips) < 1:
+      # debug
+      chip = self.create_chip(name="Default chip")
+      print(f"Created '{chip.id}'")
 
   async def start(self):
     try:
@@ -173,7 +174,7 @@ class Host:
     chip = Chip.create(
       chips_dir=self.chips_dir,
       name=name,
-      units=self.units
+      host=self
     )
 
     # chip.runners = dict()
@@ -288,6 +289,9 @@ class Host:
 
       for namespace, matrix_data in request["update"].items():
         chip.matrices[namespace].update(matrix_data)
+
+      for matrix in chip.matrices.values():
+        matrix.commit(chip=chip, host=self)
 
       chip.update_runners()
 

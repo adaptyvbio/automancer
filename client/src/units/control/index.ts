@@ -45,9 +45,8 @@ export interface ExecutorState {
 
 export interface Matrix {
   valves: {
-    aliases: string[];
     hostValveIndex: number;
-  }[];
+  }[] | null;
 }
 
 export interface ProtocolData {

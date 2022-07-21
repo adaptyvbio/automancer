@@ -1,6 +1,4 @@
 from collections import namedtuple
-import base64
-import pickle
 
 from ..util.encoder import decode, encode
 
@@ -159,16 +157,13 @@ class BaseExecutor:
     return True
 
 
-class BaseSheet:
-  def serialize(self):
-    # print(pickle.dumps(self, 0))
-    return base64.b85encode(pickle.dumps(self)).decode("utf-8")
-
-  def unserialize(data):
-    return pickle.loads(base64.b85decode(data.encode("utf-8")))
-
-
 class BaseMatrix:
+  def commit(self, *, chip, host):
+    pass
+
+  def update(self, data):
+    pass
+
   def export(self):
     return dict()
 

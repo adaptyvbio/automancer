@@ -2,6 +2,7 @@ from enum import IntEnum
 
 from . import namespace
 from ..base import BaseRunner
+from ..microfluidics import namespace as mf_namespace
 
 
 class ValveError(IntEnum):
@@ -10,20 +11,26 @@ class ValveError(IntEnum):
 
 
 class Runner(BaseRunner):
-  def __init__(self, executor, chip):
+  def __init__(self, chip, *, host):
     self._chip = chip
-    self._executor = executor
-
-    self._matrix = chip.matrices[namespace]
-    self._sheet = chip.model.sheets[namespace]
+    self._host = host
 
     self._code = None
+    self._executor = self._host.executors[namespace]
+    self._matrix = chip.matrices[namespace]
 
     # sequence
     self._drive = None
 
     self._chip_signal = 0
-    self._default_chip_signal = sum([1 << valve_index for valve_index, valve in enumerate(self._sheet.valves) if valve.inverse])
+    self._default_chip_signal = None
+
+    self.update()
+
+  @property
+  def _model(self):
+    model_id = self._chip.matrices[mf_namespace].model_id
+    return self._host.executors[mf_namespace].models[model_id] if model_id else None
 
 
   # Client communication
@@ -40,11 +47,15 @@ class Runner(BaseRunner):
       "valves": [{
         "error": ValveError.Unbound if (self._matrix.valves[valve_index].host_valve_index is None) else None
       } for valve_index, valve in enumerate(self._matrix.valves)]
-    }
+    } if self._model else None
 
   # Called following a matrix update
   def update(self):
-   self._write()
+    if self._model:
+      self._default_chip_signal = sum([1 << channel_index for channel_index, channel in enumerate(self._model.channels) if channel.inverse])
+      self._write()
+    else:
+      self._default_chip_signal = None
 
 
   def _write(self):

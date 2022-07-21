@@ -1,8 +1,10 @@
 import * as React from 'react';
 
-import type { Host, Route } from '../application';
-import { Chip, ChipId, ChipModel, ControlNamespace } from '../backends/common';
 import { Diagram } from './diagram';
+import type { Host, Route } from '../application';
+import { Chip, ChipId, ControlNamespace } from '../backends/common';
+import { namespace as vcNamespace } from '../units/control';
+import { namespace as mfNamespace } from '../units/microfluidics';
 import { Pool } from '../util';
 import * as util from '../util';
 
@@ -13,7 +15,7 @@ export interface ChipControlProps {
 }
 
 export interface ChipControlState {
-  targetValveIndex: number | null;
+  targetChannelIndex: number | null;
 }
 
 export class ChipControl extends React.Component<ChipControlProps, ChipControlState> {
@@ -23,7 +25,7 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
     super(props);
 
     this.state = {
-      targetValveIndex: null
+      targetChannelIndex: null
     };
   }
 
@@ -31,30 +33,35 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
     return this.props.host.state.chips[this.props.chipId];
   }
 
-  get model(): ChipModel {
-    return this.props.host.state.models[this.chip.modelId];
-  }
-
   render() {
-    let matrix = this.chip.matrices.control;
-    let sheet = this.model.sheets.control;
-    let runner = this.chip.runners.control;
-    let signal = BigInt(runner.signal);
+    let mfMatrix = this.chip.matrices[mfNamespace];
+    let model = (mfMatrix.modelId !== null)
+      ? this.props.host.state.executors[mfNamespace].models[mfMatrix.modelId]
+      : null;
 
+    // console.log(model);
     // console.log(matrix, sheet, runner);
+
+    if (!model) {
+      return <></>;
+    }
+
+    let runner = this.chip.runners[vcNamespace]
+    let signal = BigInt(runner.signal);
+    let vcMatrix = this.chip.matrices[vcNamespace];
 
     return (
       <div className="blayout-contents">
-        {sheet.diagram && (
+        {model.diagram && (
           <>
             <div className="header header--2">
               <h2>Diagram</h2>
             </div>
             <div>
               <Diagram
-                sheet={sheet}
+                model={model}
                 signal={signal}
-                targetValveIndex={this.state.targetValveIndex} />
+                targetChannelIndex={this.state.targetChannelIndex} />
             </div>
           </>
         )}
@@ -64,17 +71,16 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
         </div>
 
         <div className="mcontrol-root">
-          {sheet.groups.map((group, groupIndex) => (
+          {model.groups.map((group, groupIndex) => (
             <React.Fragment key={groupIndex}>
               <div className="mcontrol-group">
-                <h3 className="mcontrol-group-title">{group.name}</h3>
+                <h3 className="mcontrol-group-title">{group.label}</h3>
                 <div className="mcontrol-group-entries">
-                  {Array.from(sheet.valves.entries())
-                    .filter(([_valveIndex, valve]) => valve.group === groupIndex)
-                    .map(([valveIndex, valve]) => {
-                      let active = ((1n << BigInt(valveIndex)) & signal) > 0;
-                      let modelValveMask = 1n << BigInt(valveIndex);
-                      let status = runner.valves[valveIndex];
+                  {group.channelIndices.map((channelIndex) => {
+                    let channel = model!.channels[channelIndex];
+                    let active = ((1n << BigInt(channelIndex)) & signal) > 0;
+                    let modelValveMask = 1n << BigInt(channelIndex);
+                    let status = runner.valves[channelIndex];
 
                       let icon = {
                         'barrier': 'vertical_align_center',
@@ -82,23 +88,23 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
                         'isolate': 'view_column',
                         'move': 'moving',
                         'push': 'download'
-                      }[valve.repr];
+                      }[channel.repr];
 
                       return (
                         <div
                           className={util.formatClass('mcontrol-entry', { '_on': active })}
-                          key={valve.id}
+                          key={channel.id}
                           onMouseEnter={() => {
-                            this.setState({ targetValveIndex: valveIndex });
+                            this.setState({ targetChannelIndex: channelIndex });
                           }}
                           onMouseLeave={() => {
-                            this.setState({ targetValveIndex: null });
+                            this.setState({ targetChannelIndex: null });
                           }}>
                           <div className="mcontrol-icon">
                             <span className="material-symbols-rounded">{icon}</span>
                           </div>
-                          <div className="mcontrol-label">{valve.name}</div>
-                          <div className="mcontrol-sublabel">{valve.idLabel}</div>
+                          <div className="mcontrol-label">{channel.label ?? `Channel ${channelIndex}`}</div>
+                          <div className="mcontrol-sublabel">{channel.id}</div>
                           <div className="mcontrol-statuses">
                             {(status.error !== null) && (
                               <div className="mcontrol-status mcontrol-status--warning">

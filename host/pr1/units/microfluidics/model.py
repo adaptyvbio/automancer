@@ -52,6 +52,7 @@ class Model:
       "channels": [{
         "id": channel.id,
         "diagramRef": channel.diagram_ref,
+        "inverse": channel.inverse,
         "label": channel.label,
         "repr": channel.repr
       } for channel in self.channels],

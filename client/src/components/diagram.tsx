@@ -1,13 +1,14 @@
 import * as React from 'react';
 
 import { ControlNamespace } from '../backends/common';
+import { Model } from '../units/microfluidics';
 import * as util from '../util';
 
 
 export interface DiagramProps {
-  sheet: ControlNamespace.Sheet;
+  model: Model;
   signal: bigint;
-  targetValveIndex: number | null;
+  targetChannelIndex: number | null;
 }
 
 export class Diagram extends React.Component<DiagramProps> {
@@ -18,29 +19,29 @@ export class Diagram extends React.Component<DiagramProps> {
   }
 
   componentDidUpdate(prevProps: Readonly<DiagramProps>, prevState: Readonly<{}>) {
-    this.update(prevProps.signal, prevProps.targetValveIndex);
+    this.update(prevProps.signal, prevProps.targetChannelIndex);
   }
 
   update(prevSignal: bigint | null = null, prevTargetValveIndex: number | null = null) {
-    let createTargetMask = (valveIndex: number | null) =>
-      valveIndex !== null
-        ? (1n << BigInt(valveIndex))
+    let createTargetMask = (channelIndex: number | null) =>
+      channelIndex !== null
+        ? (1n << BigInt(channelIndex))
         : 0n;
 
     let diff = prevSignal !== null
-      ? (this.props.signal ^ prevSignal) | (createTargetMask(this.props.targetValveIndex) ^ createTargetMask(prevTargetValveIndex))
-      : (1n << BigInt(this.props.sheet.valves.length)) - 1n;
+      ? (this.props.signal ^ prevSignal) | (createTargetMask(this.props.targetChannelIndex) ^ createTargetMask(prevTargetValveIndex))
+      : (1n << BigInt(this.props.model.channels.length)) - 1n;
 
-    for (let [valveIndex, valve] of this.props.sheet.valves.entries()) {
-      let mask = 1n << BigInt(valveIndex);
+    for (let [channelIndex, channel] of this.props.model.channels.entries()) {
+      let mask = 1n << BigInt(channelIndex);
       let changed = (diff & mask) > 0;
 
-      if (changed && valve.diagramRef) {
-        let value = ((this.props.signal & mask) > 0) !== valve.inverse;
-        let element = this.ref.current!.querySelector(`[data-layer-index="${valve.diagramRef[0]}"][data-group-index="${valve.diagramRef[1]}"]`)!;
+      if (changed && channel.diagramRef) {
+        let value = ((this.props.signal & mask) > 0) !== channel.inverse;
+        let element = this.ref.current!.querySelector(`[data-layer-index="${channel.diagramRef[0]}"][data-group-index="${channel.diagramRef[1]}"]`)!;
 
         element.classList.toggle('_active', value);
-        element.classList.toggle('_target', valveIndex === this.props.targetValveIndex);
+        element.classList.toggle('_target', channelIndex === this.props.targetChannelIndex);
       }
     }
   }
@@ -81,9 +82,8 @@ export class Diagram extends React.Component<DiagramProps> {
 
     return (
       <div
-        className={util.formatClass('diagram', { '_target': (this.props.targetValveIndex !== null) })}
-        dangerouslySetInnerHTML={{ __html: this.props.sheet.diagram! }}
-        // dangerouslySetInnerHTML={{ __html: this.props.sheet.diagram!.slice(0, -6) + filter + '</svg>' }}
+        className={util.formatClass('diagram', { '_target': (this.props.targetChannelIndex !== null) })}
+        dangerouslySetInnerHTML={{ __html: this.props.model.diagram! }}
         ref={this.ref} />
     );
   }

@@ -17,10 +17,8 @@ class Chip:
 
   # Update runners following a matrix update
   def update_runners(self):
-    # for runner in self.runners.values():
-    #   runner.update()
-
-    pass
+    for runner in self.runners.values():
+      runner.update()
 
   def export(self):
     return {

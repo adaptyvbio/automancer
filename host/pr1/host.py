@@ -89,6 +89,12 @@ class Host:
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
         chip = Chip.unserialize(path, units=self.units)
+        chip.runners = dict()
+
+        for namespace, unit in self.units.items():
+          if hasattr(unit, 'Runner'):
+            chip.runners[namespace] = unit.Runner(chip=chip, host=self)
+
         self.chips[chip.id] = chip
 
     if len(self.chips) < 1:
@@ -177,10 +183,11 @@ class Host:
       host=self
     )
 
-    # chip.runners = dict()
+    chip.runners = dict()
 
-    # for namespace, executor in self.executors.items():
-    #   chip.runners[namespace] = executor.create_runner(chip)
+    for namespace, unit in self.units.items():
+      if hasattr(unit, 'Runner'):
+        chip.runners[namespace] = unit.Runner(chip=chip, host=self)
 
     self.chips[chip.id] = chip
     return chip

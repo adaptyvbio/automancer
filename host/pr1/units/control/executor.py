@@ -69,9 +69,6 @@ class Executor(BaseExecutor):
       "valves": self._valves
     }
 
-  def create_runner(self, chip):
-    return Runner(self, chip)
-
   def set(self, change, mask):
     self._signal = (change & mask) | (self._signal & ~mask)
     self._write()

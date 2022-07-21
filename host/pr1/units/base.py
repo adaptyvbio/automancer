@@ -61,6 +61,9 @@ class BaseParser:
 
 
 class BaseRunner:
+  def __init__(self, chip, *, host):
+    pass
+
   async def initialize(self):
     pass
 

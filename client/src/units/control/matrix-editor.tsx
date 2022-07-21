@@ -14,7 +14,7 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
 
     let mfMatrix = this.props.chip.matrices[mfNamespace];
     let model = (mfMatrix.modelId !== null)
-      ?  this.props.host.state.executors[mfNamespace].models[mfMatrix.modelId]
+      ? this.props.host.state.executors[mfNamespace].models[mfMatrix.modelId]
       : null;
 
     return valves

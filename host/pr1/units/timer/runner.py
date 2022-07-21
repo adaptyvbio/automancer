@@ -6,9 +6,9 @@ from ..base import BaseProcessRunner
 
 
 class Runner(BaseProcessRunner):
-  def __init__(self, executor, chip):
+  def __init__(self, chip, *, host):
     self._chip = chip
-    self._executor = executor
+    self._executor = host.executors[namespace]
 
     self._nominal_duration = None
     self._start_state = None

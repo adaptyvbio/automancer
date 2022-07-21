@@ -29,6 +29,7 @@ export interface Model {
   channels: {
     id: string;
     diagramRef: [number, number] | null;
+    inverse: boolean;
     label: string | null;
     repr: 'barrier' | 'flow' | 'isolate' | 'move' | 'push';
   }[];

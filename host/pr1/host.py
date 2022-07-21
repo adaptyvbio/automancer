@@ -10,7 +10,7 @@ import uuid
 from . import reader, units
 from .chip import Chip
 from .master import Master
-from .model import Model
+from .units.microfluidics.model import Model
 from .protocol import Protocol
 from .util import schema as sc
 
@@ -74,25 +74,8 @@ class Host:
     conf_units = conf['units'] or dict()
 
     self.executors = {
-      namespace: unit.Executor(conf_units.get(namespace, dict())) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
+      namespace: unit.Executor(conf_units.get(namespace, dict()), host=self) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
     }
-
-
-    # -- Load models --------------------------------------
-
-    logger.debug(f"Loading models")
-
-    self.models = dict()
-
-    for path in (self.data_dir / "models").glob("**/*.yml"):
-      try:
-        chip_model = Model.load(path, self.units)
-        self.models[chip_model.id] = chip_model
-      except reader.LocatedError as e:
-        e.display()
-        sys.exit(1)
-
-    logger.debug(f"Done loading {len(self.models)} models")
 
   async def initialize(self):
     logger.info("Initializing host")
@@ -104,13 +87,13 @@ class Host:
     logger.debug("Done initializing executors")
 
     # debug
-    # chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    # chip = self.create_chip(name="Default chip")
     # print(f"Created '{chip.id}'")
 
-    # for path in self.chips_dir.glob("**/*"):
-    #   if path.is_file() and not path.name.startswith("."):
-    #     chip = Chip.unserialize(path, models=self.models, units=self.units)
-    #     self.chips[chip.id] = chip
+    for path in self.chips_dir.iterdir():
+      if not path.name.startswith("."):
+        chip = Chip.unserialize(path, units=self.units)
+        self.chips[chip.id] = chip
 
   async def start(self):
     try:
@@ -131,7 +114,7 @@ class Host:
   def _debug(self):
     # -- Debug --------------------------------------------
 
-    chip = self.create_chip(model_id=list(self.models.keys())[0], name="Default chip")
+    chip = self.create_chip(name="Default chip")
     # _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
     draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent.parent / "test.yml").open().read())
 
@@ -186,19 +169,17 @@ class Host:
 
     return draft
 
-  def create_chip(self, model_id, name):
-    model = self.models[model_id]
-
+  def create_chip(self, name):
     chip = Chip.create(
       chips_dir=self.chips_dir,
-      model=model,
-      name=name
+      name=name,
+      units=self.units
     )
 
-    chip.runners = dict()
+    # chip.runners = dict()
 
-    for namespace, executor in self.executors.items():
-      chip.runners[namespace] = executor.create_runner(chip)
+    # for namespace, executor in self.executors.items():
+    #   chip.runners[namespace] = executor.create_runner(chip)
 
     self.chips[chip.id] = chip
     return chip
@@ -245,25 +226,10 @@ class Host:
         "startTime": self.start_time
       },
       "chips": {
-        chip.id: {
-          "id": chip.id,
-          "master": chip.master and chip.master.export(),
-          "matrices": {
-            namespace: matrix.export() for namespace, matrix in chip.matrices.items()
-          },
-          "modelId": chip.model.id,
-          "name": chip.metadata['name'],
-          "metadata": chip.metadata,
-          "runners": chip.runners and {
-            namespace: runner.export() for namespace, runner in chip.runners.items()
-          }
-        } for chip in self.chips.values()
-      },
-      "models": {
-        model.id: model.export() for model in self.models.values()
+        chip.id: chip.export() for chip in self.chips.values()
       },
       "devices": {
-        device.id: device.export() for namespace, executor in self.executors.items() for device in executor.get_devices()
+        device.id: device.export() for executor in self.executors.values() for device in executor.get_devices()
       },
       "executors": {
         namespace: executor.export() for namespace, executor in self.executors.items()
@@ -288,7 +254,7 @@ class Host:
       chip.runners[namespace].command(command)
 
     if request["type"] == "createChip":
-      chip = self.create_chip(model_id=request["modelId"], name="Untitled chip")
+      chip = self.create_chip(name="Untitled chip")
       self.update_callback()
 
       return {

@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import type { Host, Route } from '../application';
 // import { Chip, HostState } from '../backends/common';
-import { Chip, ChipId, ChipModel, ControlNamespace, HostId } from '../backends/common';
+import { Chip, ChipId, ControlNamespace, HostId } from '../backends/common';
 import { Pool } from '../util';
 import * as util from '../util';
 import { Icon } from '../components/icon';
@@ -34,10 +34,6 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
 
   get chip(): Chip {
     return this.props.host.state.chips[this.props.chipId];
-  }
-
-  get model(): ChipModel {
-    return this.props.host.state.models[this.chip.modelId];
   }
 
   componentDidUpdate(prevProps: ChipSettingsProps) {
@@ -98,19 +94,19 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
               return null;
             }
 
-            return <unit.MatrixEditor
-              chip={this.chip}
-              host={this.props.host}
-              model={this.model}
-              matrix={this.chip.matrices[namespace as keyof Matrices]}
-              setMatrix={(matrix) => {
-                this.pool.add(async () => {
-                  await this.props.host.backend.setMatrix(this.chip.id, {
-                    [namespace]: matrix
-                  });
-                });
-              }}
-              key={namespace} />
+            // return <unit.MatrixEditor
+            //   chip={this.chip}
+            //   host={this.props.host}
+            //   model={this.model}
+            //   matrix={this.chip.matrices[namespace as keyof Matrices]}
+            //   setMatrix={(matrix) => {
+            //     this.pool.add(async () => {
+            //       await this.props.host.backend.setMatrix(this.chip.id, {
+            //         [namespace]: matrix
+            //       });
+            //     });
+            //   }}
+            //   key={namespace} />
           })}
         </div>
       </div>

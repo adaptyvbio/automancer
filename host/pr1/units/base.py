@@ -2,6 +2,8 @@ from collections import namedtuple
 import base64
 import pickle
 
+from ..util.encoder import decode, encode
+
 
 # used?
 Device = namedtuple("Device", ["description", "build", "id", "name"])
@@ -112,7 +114,7 @@ class BaseExecutor:
   conf : dict
     Section of the setup configuration regarding that unit. An empty dict if not specified in the configuration.
   """
-  def __init__(self, conf):
+  def __init__(self, conf, *, host):
     pass
 
   """
@@ -164,3 +166,14 @@ class BaseSheet:
 
   def unserialize(data):
     return pickle.loads(base64.b85decode(data.encode("utf-8")))
+
+
+class BaseMatrix:
+  def export(self):
+    return dict()
+
+  def serialize(self):
+    return encode(self)
+
+  def unserialize(data):
+    return decode(data)

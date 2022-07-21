@@ -22,10 +22,9 @@ export abstract class MessageBackend extends BackendCommon {
     }) as NonNullable<Draft['compiled']>;
   }
 
-  async createChip(options: { modelId: string; }) {
+  async createChip() {
     return await this._request({
-      type: 'createChip',
-      modelId: options.modelId
+      type: 'createChip'
     }) as { chipId: ChipId; };
   }
 

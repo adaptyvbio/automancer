@@ -1,5 +1,5 @@
 import type { Draft as AppDraft } from '../draft';
-import type { Codes, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
+import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
 
 
 export abstract class BackendCommon {
@@ -28,7 +28,7 @@ export abstract class BackendCommon {
 
   abstract command(chipId: ChipId, command: RunnerCommand): Promise<void>;
   abstract compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
-  abstract createChip(options: { modelId: ChipModelId; }): Promise<{ chipId: ChipId; }>;
+  abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
@@ -46,7 +46,6 @@ export abstract class BackendCommon {
 
 
 export type ChipId = string;
-export type ChipModelId = string;
 export type DeviceId = string;
 export type DraftId = string;
 export type HostId = string;
@@ -64,19 +63,9 @@ export interface Chip {
     description: string | null;
     name: string;
   };
-  modelId: ChipModelId;
   name: string;
   runners: {
     control: ControlNamespace.Runner;
-  };
-}
-
-export interface ChipModel {
-  id: ChipModelId;
-  name: string;
-  previewUrl: string | null;
-  sheets: {
-    control: ControlNamespace.Sheet;
   };
 }
 
@@ -107,7 +96,6 @@ export interface MasterEntry {
 
 export interface Protocol {
   name: string | null;
-  modelIds: ChipModelId[] | null;
   segments: ProtocolSegment[];
   stages: ProtocolStage[];
   data: ProtocolData;
@@ -150,17 +138,16 @@ export interface HostState {
 
   chips: Record<ChipId, Chip>;
   drafts: Record<DraftId, Draft>;
-  models: Record<ChipModelId, ChipModel>;
   devices: Record<DeviceId, Device>;
 
-  executors: {
-    control: ControlNamespace.ExecutorState;
-  };
+  executors: ExecutorStates;
 }
 
 export type Namespace = 'control' | 'input' | 'timer';
 export type RunnerCommand = ControlNamespace.RunnerCommand;
 
+
+// -- Deprecated ------------------------------------------
 
 export namespace ControlNamespace {
   export type Signal = string;

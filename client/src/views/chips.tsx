@@ -3,6 +3,7 @@ import * as React from 'react';
 import type { Host, Route } from '../application';
 import { ChipId } from '../backends/common';
 import { Icon } from '../components/icon';
+import { Units } from '../units';
 import { Pool } from '../util';
 
 
@@ -23,7 +24,6 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
-    let models = Object.values(this.props.host.state.models);
 
     return (
       <main>
@@ -33,19 +33,34 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
         <div className="header header--2">
           <h2>Current chips</h2>
+          <button type="button" className="btn" onClick={() => {
+            this.pool.add(async () => {
+              let result = await this.props.host.backend.createChip();
+              this.chipIdAwaitingRedirect = result.chipId;
+            });
+          }}>
+            <div>New chip</div>
+          </button>
         </div>
 
         {(chips.length > 0)
           ? (
             <div className="card-list">
               {chips.map((chip) => {
-                let model = this.props.host.state.models[chip.modelId];
+                let previewUrl = null;
+
+                for (let [_namespace, unit] of Units) {
+                  previewUrl ??= unit.providePreview?.({ chip, host: this.props.host }) ?? null;
+
+                  if (previewUrl) {
+                    break;
+                  }
+                }
 
                 return (
                   <Card
-                    previewUrl={model.previewUrl}
+                    previewUrl={previewUrl}
                     title={chip.name}
-                    subtitle={model.name}
                     status={chip.master
                       ? { icon: 'receipt_long', label: (chip.master.protocol.name ?? 'Running') }
                       : { icon: 'dark_mode', label: 'Idle' }}
@@ -62,28 +77,6 @@ export class ViewChips extends React.Component<ViewChipsProps> {
               <p>No chip running</p>
             </div>
           )}
-
-
-        <header className="header header--2">
-          <h2>Add a chip</h2>
-          <button type="button" className="btn">
-            <div>Manage models</div>
-          </button>
-        </header>
-
-        <div className="card-list">
-          {models.map((model) => (
-            <Card
-              previewUrl={model.previewUrl}
-              title={model.name}
-              key={model.id} onClick={() => {
-                this.pool.add(async () => {
-                  let result = await this.props.host.backend.createChip({ modelId: model.id });
-                  this.chipIdAwaitingRedirect = result.chipId;
-                });
-              }} />
-          ))}
-        </div>
 
         {/* + Completed chips */}
       </main>

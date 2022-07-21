@@ -1,12 +1,11 @@
 import * as React from 'react';
 
 import type { Host, Route } from '../application';
-import { Chip, ChipId, ChipModel, ControlNamespace } from '../backends/common';
+import { Chip, ChipId } from '../backends/common';
 import { BarNav } from '../components/bar-nav';
 import { ChipControl } from '../components/chip-control';
 import { ChipProtocol } from '../components/chip-protocol';
 import { ChipSettings } from '../components/chip-settings';
-import { Diagram } from '../components/diagram';
 import { Pool } from '../util';
 import * as util from '../util';
 
@@ -37,10 +36,6 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
   get chip(): Chip {
     return this.props.host.state.chips[this.props.chipId];
-  }
-
-  get model(): ChipModel {
-    return this.props.host.state.models[this.chip.modelId];
   }
 
   componentDidUpdate() {

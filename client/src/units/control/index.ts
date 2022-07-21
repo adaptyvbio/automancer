@@ -39,6 +39,10 @@ export interface Code {
   arguments: (number | null)[];
 }
 
+export interface ExecutorState {
+  valves: Record<string, number>;
+}
+
 export interface Matrix {
   valves: {
     aliases: string[];

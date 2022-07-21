@@ -1,9 +1,13 @@
 from collections import namedtuple
+import sys
 
+from . import logger
 from .drivers import drivers
+from .model import Model
 from .runner import Runner
 from ..base import BaseExecutor
 from ...device import DeviceInformation
+from ...reader import LocatedError
 from ...util import schema as sc
 
 
@@ -32,7 +36,10 @@ schema = sc.Schema({
 
 class Executor(BaseExecutor):
   def __init__(self, conf, *, host):
+    self.models = dict()
+
     self._devices = list()
+    self._host = host
     self._valves = dict()
 
     conf = schema.transform(conf)
@@ -56,6 +63,20 @@ class Executor(BaseExecutor):
 
         self._valves[valve_name] = len(self._valves)
 
+  async def initialize(self):
+    logger.debug("Loading models")
+
+    for path in (self._host.data_dir / "models").glob("**/*.yml"):
+      try:
+        model = Model.load(path)
+        self.models[model.id] = model
+      except LocatedError as e:
+        e.display()
+        sys.exit(1)
+
+    logger.debug(f"Done loading {len(self.models)} models")
+
+
   def get_devices(self):
     return [
       DeviceInformation(
@@ -66,6 +87,9 @@ class Executor(BaseExecutor):
 
   def export(self):
     return {
+      "models": {
+        model.id: model.export() for model in self.models.values()
+      },
       "valves": self._valves
     }
 

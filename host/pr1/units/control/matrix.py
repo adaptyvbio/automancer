@@ -3,7 +3,6 @@ from collections import namedtuple
 from . import namespace
 from .runner import BinaryPermutation
 from ..base import BaseMatrix
-from ..microfluidics import namespace as mf_namespace
 
 
 Valve = namedtuple("Valve", ['host_valve_index'])
@@ -11,52 +10,44 @@ Valve = namedtuple("Valve", ['host_valve_index'])
 
 class Matrix(BaseMatrix):
   def __init__(self):
+    self._chip = None
+    self._host = None
+
     self.model_id = None
     self.valves = None
 
-    self._set_permutation()
+  def initialize(self, *, chip, host):
+    self._chip = chip
+    self._host = host
 
-  def _set_permutation(self):
-    self.permutation = BinaryPermutation([valve.host_valve_index for valve in self.valves]) if self.valves is not None else None
+  @property
+  def model(self):
+    return self._host.executors[namespace].models[self.model_id] if self.model_id else None
+
+  @property
+  def permutation(self):
+    return BinaryPermutation([valve.host_valve_index for valve in self.valves]) if self.valves is not None else None
+
+  def update(self, update_data):
+    self.model_id = update_data["modelId"]
+
+    if self.model_id:
+      self.valves = [Valve(
+        host_valve_index=(update_data["valves"][index]["hostValveIndex"] if update_data["valves"] else None)
+      ) for index in range(len(self.model.channels))]
+    else:
+      self.valves = None
 
   def export(self):
     return {
+      "modelId": self.model_id,
       "valves": [{
         "hostValveIndex": valve.host_valve_index
       } for valve in self.valves] if self.valves is not None else None
     }
 
-  def commit(self, *, chip, host):
-    model_id = chip.matrices[mf_namespace].model_id
+  def __getstate__(self):
+    return (self.model_id, self.valves)
 
-    if model_id != self.model_id:
-      self.model_id = model_id
-
-      if model_id:
-        model = host.executors[mf_namespace].models[model_id]
-        self.valves = [Valve(
-          host_valve_index=None
-        ) for _ in range(len(model.channels))]
-      else:
-        self.valves = None
-
-      self._set_permutation()
-
-  def update(self, update_data):
-    self.valves = [Valve(
-      host_valve_index=update_data["valves"][index]["hostValveIndex"]
-    ) for index in range(len(update_data["valves"]))]
-
-    self._set_permutation()
-
-  def load(sheet):
-    return Matrix(
-      sheet,
-      valves=[Valve(
-        aliases=list(),
-        host_valve_index=None
-      ) for _ in range(len(sheet.valves))]
-    )
-
-  # def unserialize(data, *, sheet):
-  #   return Matrix(sheet, valves=[Valve(**valve) for valve in data['valves']])
+  def __setstate__(self, state):
+    self.model_id, self.valves = state

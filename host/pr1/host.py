@@ -10,7 +10,6 @@ import uuid
 from . import reader, units
 from .chip import Chip
 from .master import Master
-from .units.microfluidics.model import Model
 from .protocol import Protocol
 from .util import schema as sc
 
@@ -89,6 +88,10 @@ class Host:
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
         chip = Chip.unserialize(path, units=self.units)
+
+        for matrix in chip.matrices.values():
+          matrix.initialize(chip=chip, host=self)
+
         chip.runners = dict()
 
         for namespace, unit in self.units.items():
@@ -296,9 +299,6 @@ class Host:
 
       for namespace, matrix_data in request["update"].items():
         chip.matrices[namespace].update(matrix_data)
-
-      for matrix in chip.matrices.values():
-        matrix.commit(chip=chip, host=self)
 
       chip.update_runners()
 

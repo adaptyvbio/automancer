@@ -161,10 +161,10 @@ class BaseExecutor:
 
 
 class BaseMatrix:
-  def commit(self, *, chip, host):
+  def initialize(self, *, chip, host):
     pass
 
-  def update(self, data):
+  def update(self, update_data):
     pass
 
   def export(self):

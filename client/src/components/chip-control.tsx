@@ -3,8 +3,7 @@ import * as React from 'react';
 import { Diagram } from './diagram';
 import type { Host, Route } from '../application';
 import { Chip, ChipId, ControlNamespace } from '../backends/common';
-import { namespace as vcNamespace } from '../units/control';
-import { namespace as mfNamespace } from '../units/microfluidics';
+import { namespace } from '../units/control';
 import { Pool } from '../util';
 import * as util from '../util';
 
@@ -34,21 +33,18 @@ export class ChipControl extends React.Component<ChipControlProps, ChipControlSt
   }
 
   render() {
-    let mfMatrix = this.chip.matrices[mfNamespace];
-    let model = (mfMatrix.modelId !== null)
-      ? this.props.host.state.executors[mfNamespace].models[mfMatrix.modelId]
-      : null;
+    let matrix = this.chip.matrices[namespace];
 
-    // console.log(model);
-    // console.log(matrix, sheet, runner);
+    let model = (matrix.modelId !== null)
+      ? this.props.host.state.executors[namespace].models[matrix.modelId]
+      : null;
 
     if (!model) {
       return <></>;
     }
 
-    let runner = this.chip.runners[vcNamespace]
+    let runner = this.chip.runners[namespace]
     let signal = BigInt(runner.signal);
-    let vcMatrix = this.chip.matrices[vcNamespace];
 
     return (
       <div className="blayout-contents">

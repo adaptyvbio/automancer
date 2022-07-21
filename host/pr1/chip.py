@@ -2,8 +2,6 @@ import json
 import time
 import uuid
 
-from .units.microfluidics.model import Model
-
 
 class Chip:
   def __init__(self, *, dir, id, matrices, metadata, spec):
@@ -44,7 +42,7 @@ class Chip:
       'name': name
     }
 
-    spec={ namespace: unit.version for namespace, unit in host.units.items() if hasattr(unit, 'version') }
+    spec = { namespace: unit.version for namespace, unit in host.units.items() if hasattr(unit, 'version') }
     matrices = { namespace: unit.Matrix() for namespace, unit in host.units.items() if hasattr(unit, 'Matrix') }
 
     chip = Chip(
@@ -56,7 +54,7 @@ class Chip:
     )
 
     for matrix in chip.matrices.values():
-      matrix.commit(chip=chip, host=host)
+      matrix.initialize(chip=chip, host=host)
 
     header = {
       'id': chip.id,

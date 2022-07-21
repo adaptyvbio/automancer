@@ -1,8 +1,9 @@
 import { CodeEditor } from './code-editor';
 import { MatrixEditor } from './matrix-editor';
 import type { CreateFeaturesOptions, Features } from '..';
-import type { ChipId, ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } from '../../backends/common';
+import type { Chip, ChipId, ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } from '../../backends/common';
 import * as util from '../../util';
+import { Host } from '../../application';
 
 
 export const ReprIcon = {
@@ -33,6 +34,27 @@ export const ReprIcon = {
 };
 
 
+export type ModelId = string;
+
+export interface Model {
+  id: ModelId;
+  name: string;
+  diagram: string | null;
+  previewUrl: string | null;
+  channels: {
+    id: string;
+    diagramRef: [number, number] | null;
+    inverse: boolean;
+    label: string | null;
+    repr: 'barrier' | 'flow' | 'isolate' | 'move' | 'push';
+  }[];
+  groups: {
+    channelIndices: number[];
+    label: string | null;
+  }[];
+}
+
+
 export const namespace = 'control';
 
 export interface Code {
@@ -40,10 +62,12 @@ export interface Code {
 }
 
 export interface ExecutorState {
+  models: Record<ModelId, Model>;
   valves: Record<string, number>;
 }
 
 export interface Matrix {
+  modelId: ModelId | null;
   valves: {
     hostValveIndex: number;
   }[] | null;
@@ -111,9 +135,24 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
 }
 
 
+export function providePreview(options: { chip: Chip; host: Host; }) {
+  let modelId = options.chip.matrices[namespace].modelId;
+
+  if (!modelId) {
+    return null;
+  }
+
+  let models = options.host.state.executors[namespace].models;
+  let model = models[modelId];
+
+  return model.previewUrl;
+}
+
+
 export default {
   CodeEditor,
   MatrixEditor,
   createCode,
-  createFeatures
+  createFeatures,
+  providePreview
 }

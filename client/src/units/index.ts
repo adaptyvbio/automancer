@@ -10,9 +10,6 @@ import * as Control from './control';
 import InputUnit from './input';
 import * as Input from './input';
 
-import MicrofluidicsUnit from './microfluidics';
-import * as Microfluidics from './microfluidics';
-
 import TimerUnit from './timer';
 import * as Timer from './timer';
 
@@ -72,7 +69,6 @@ export interface MatrixEditorProps<Matrix> {
 
 export interface Matrices {
   [Control.namespace]: Control.Matrix;
-  [Microfluidics.namespace]: Microfluidics.Matrix;
 }
 
 
@@ -80,7 +76,6 @@ export interface Matrices {
 
 export interface ExecutorStates {
   [Control.namespace]: Control.ExecutorState;
-  [Microfluidics.namespace]: Microfluidics.ExecutorState;
 }
 
 
@@ -122,11 +117,9 @@ export interface Unit<Code, Matrix> {
 export const Units = [
   [Control.namespace, ControlUnit],
   [Input.namespace, InputUnit],
-  [Microfluidics.namespace, MicrofluidicsUnit],
   [Timer.namespace, TimerUnit]
 ] as [
   [typeof Control.namespace, Unit<Control.Code, Control.Matrix>],
   [typeof Input.namespace, Unit<never, never>],
-  [typeof Microfluidics.namespace, Unit<never, Microfluidics.Matrix>],
   [typeof Timer.namespace, Unit<never, never>]
 ];

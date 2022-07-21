@@ -1,7 +1,6 @@
 import * as React from 'react';
 
-import { ControlNamespace } from '../backends/common';
-import { Model } from '../units/microfluidics';
+import { Model } from '../units/control';
 import * as util from '../util';
 
 

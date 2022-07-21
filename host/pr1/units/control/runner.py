@@ -2,7 +2,6 @@ from enum import IntEnum
 
 from . import namespace
 from ..base import BaseRunner
-from ..microfluidics import namespace as mf_namespace
 
 
 class ValveError(IntEnum):
@@ -27,11 +26,6 @@ class Runner(BaseRunner):
 
     self.update()
 
-  @property
-  def _model(self):
-    model_id = self._chip.matrices[mf_namespace].model_id
-    return self._host.executors[mf_namespace].models[model_id] if model_id else None
-
 
   # Client communication
 
@@ -47,12 +41,12 @@ class Runner(BaseRunner):
       "valves": [{
         "error": ValveError.Unbound if (self._matrix.valves[valve_index].host_valve_index is None) else None
       } for valve_index, valve in enumerate(self._matrix.valves)]
-    } if self._model else None
+    } if self._matrix.model else None
 
   # Called following a matrix update
   def update(self):
-    if self._model:
-      self._default_chip_signal = sum([1 << channel_index for channel_index, channel in enumerate(self._model.channels) if channel.inverse])
+    if self._matrix.model:
+      self._default_chip_signal = sum([1 << channel_index for channel_index, channel in enumerate(self._matrix.model.channels) if channel.inverse])
       self._write()
     else:
       self._default_chip_signal = None

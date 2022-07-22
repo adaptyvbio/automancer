@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { Chip, ChipModel, Master, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
+import type { Chip, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
 import type { Host } from '../application';
 import type { Draft } from '../draft';
 
@@ -42,8 +42,8 @@ export type CodeEditorInstance<Code> = React.Component<CodeEditorProps<Code>, un
 export interface CodeEditorProps<Code> {
   chip: Chip;
   draft: Draft;
-  model: ChipModel;
   code: Code;
+  host: Host;
   setCode(code: Code): void;
 }
 
@@ -106,7 +106,8 @@ export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
-  createCode?(protocol: Protocol, model: ChipModel): object;
+  canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
+  createCode?(protocol: Protocol): Code;
   createFeatures?(options: CreateFeaturesOptions): Features;
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 }

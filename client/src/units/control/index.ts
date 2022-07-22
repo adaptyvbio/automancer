@@ -1,7 +1,7 @@
 import { CodeEditor } from './code-editor';
 import { MatrixEditor } from './matrix-editor';
 import type { CreateFeaturesOptions, Features } from '..';
-import type { Chip, ChipId, ChipModel, ControlNamespace, Master, Protocol, ProtocolSegment } from '../../backends/common';
+import type { Chip, Protocol } from '../../backends/common';
 import * as util from '../../util';
 import { Host } from '../../application';
 
@@ -79,8 +79,9 @@ export interface ProtocolData {
     label: string;
     repr: (keyof typeof ReprIcon) | null;
   }>;
+  modelId: ModelId | null;
   parameters: {
-    defaultValveIndices: Record<ChipId, number>;
+    channelIndex: number | null;
     paramIndicesEncoded: string;
   }[];
 }
@@ -90,12 +91,19 @@ export interface SegmentData {
 }
 
 
-export function createCode(protocol: Protocol, model: ChipModel): ControlNamespace.Code {
+export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
+  let matrix = chip.matrices[namespace];
+  let protocolData = protocol.data[namespace];
+
+  return (matrix.modelId !== null) && (!protocolData.modelId || (matrix.modelId === protocolData.modelId));
+}
+
+export function createCode(protocol: Protocol): Code {
   let protocolData = protocol.data[namespace];
 
   return {
     arguments: protocolData.parameters.map((param) => {
-      return param.defaultValveIndices[model.id] ?? null;
+      return param.channelIndex;
     })
   };
 }
@@ -152,6 +160,8 @@ export function providePreview(options: { chip: Chip; host: Host; }) {
 export default {
   CodeEditor,
   MatrixEditor,
+
+  canChipRunProtocol,
   createCode,
   createFeatures,
   providePreview

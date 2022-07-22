@@ -158,8 +158,8 @@ class Host:
     try:
       protocol = Protocol(
         source,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-        models=self.models
+        host=self,
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() }
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
@@ -314,8 +314,8 @@ class Host:
 
       protocol = Protocol(
         request["source"],
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-        models=self.models
+        host=self,
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() }
       )
 
       location = {

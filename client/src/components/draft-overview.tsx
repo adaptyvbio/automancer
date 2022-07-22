@@ -49,8 +49,8 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
       plan: {
         context: null,
         location: {
-          data: null,
-          segmentIndex: 0
+          segmentIndex: 0,
+          state: null
         }
       }
     };
@@ -62,7 +62,6 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
 
     let plan = this.state.plan;
     let chip = plan.context && this.props.host.state.chips[plan.context.chipId];
-    let model = chip && this.props.host.state.models[chip.modelId];
 
     return (
       <div className="blayout-contents">
@@ -97,7 +96,6 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                   <select className="superimposed-target" onInput={(event) => {
                     let chipId = event.currentTarget.value;
                     let chip = this.props.host.state.chips[chipId];
-                    let model = this.props.host.state.models[chip.modelId];
 
                     this.setState((state) => ({
                       plan: {
@@ -107,7 +105,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                           data: Object.fromEntries(
                             Units
                               .filter(([_namespace, Unit]) => Unit.createCode)
-                              .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!, model)])
+                              .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!)])
                           ) as unknown as Codes
                         }
                       }
@@ -118,7 +116,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                       <option
                         value={chip.id}
                         key={chip.id}
-                        disabled={((protocol?.modelIds ?? undefined) && !protocol!.modelIds?.includes(chip.modelId)) || (chip.master !== null)}>
+                        disabled={(Units.some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
                         {chip.name}
                       </option>
                     ))}
@@ -142,8 +140,8 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                         <unit.CodeEditor
                           chip={chip!}
                           draft={this.props.draft}
-                          model={model!}
                           code={plan.context!.data[namespace as keyof Codes]}
+                          host={this.props.host}
                           setCode={(code: Codes[keyof Codes]) => {
                             this.setState((state) => ({
                               plan: setIn(state.plan, ['context', 'data', namespace], code)

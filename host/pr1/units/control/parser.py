@@ -3,8 +3,9 @@ import re
 import regex
 
 from . import namespace
-from .sheet import entity_schema
+from .model import entity_schema
 from ..base import BaseParser
+from ...reader import LocatedValue
 from ...util.parser import Identifier, UnclassifiedExpr, interpolate, regexp_identifier_start
 from ...util import schema as sc
 
@@ -12,7 +13,7 @@ from ...util import schema as sc
 regexp_query_atom = regex.compile(r"^([a-zA-Z][a-zA-Z0-9]*)(?:(?:\.([a-zA-Z][a-zA-Z0-9]*))|(\*))?", re.ASCII)
 
 Entity = namedtuple("Entity", ['display', 'label', 'repr'])
-ValveParameter = namedtuple("ValveParameter", ['default_valve_indices', 'param_indices_encoded'])
+ValveParameter = namedtuple("ValveParameter", ['channel_index', 'param_indices_encoded'])
 
 def encode_indices(items):
   return sum([1 << item for item in set(items)])
@@ -20,18 +21,15 @@ def encode_indices(items):
 
 # Schemas
 
-def parse_list(raw_list):
-  return [item.strip() for item in raw_list.split(",")]
-
 protocol_schema = sc.Dict({
   'valve_aliases': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Or({
     **entity_schema,
     'alias': str,
     'label': sc.Optional(str)
   }, str))),
+  'valve_model': sc.Optional(str),
   'valve_parameters': sc.Optional(sc.SimpleDict(key=Identifier(), value=sc.Noneable({
     **entity_schema,
-    'default': sc.Optional(sc.Transform(parse_list, str)),
     'label': sc.Optional(str),
     'imply': sc.Optional(str)
   }))),
@@ -40,13 +38,14 @@ protocol_schema = sc.Dict({
 
 
 class Parser(BaseParser):
-  protocol_keys = {'valve_aliases', 'valve_parameters', 'valves'}
+  protocol_keys = {'valve_aliases', 'valve_model', 'valve_parameters', 'valves'}
 
   def __init__(self, parent):
     self._block_stack = list()
     self._valve_stack = list()
     self._parent = parent
     self._entities = dict()
+    self._model = None
     self._valve_aliases = list()
     self._valve_names = dict()
     self._valve_parameters = list()
@@ -59,16 +58,14 @@ class Parser(BaseParser):
     data_protocol = protocol_schema.transform(data_protocol)
 
 
-    # -- Parse parameters ---------------------------------
-
     def register_entity(name, obj, param_indices):
       param_indices_encoded = encode_indices(param_indices)
 
       if not param_indices_encoded in self._entities:
         self._entities[param_indices_encoded] = Entity(
-          display=(obj['display'].value if obj and ('display' in obj) else 'active'),
-          label=(obj['label'].value if obj and ('label' in obj) else name.value),
-          repr=(obj['repr'].value if obj and ('repr' in obj) else None)
+          display=(LocatedValue.extract(obj['display']) if obj and ('display' in obj) else 'active'),
+          label=(LocatedValue.extract(obj['label']) if obj and ('label' in obj) else name.value),
+          repr=(LocatedValue.extract(obj['repr']) if obj and ('repr' in obj) else None)
         )
 
       if name in self._valve_names:
@@ -77,40 +74,39 @@ class Parser(BaseParser):
       self._valve_names[name] = param_indices
       return param_indices_encoded
 
+
+    # -- Parse model --------------------------------------
+
+    model_id = data_protocol.get('valve_model')
+
+    if model_id:
+      models = self._parent.host.executors[namespace].models
+
+      if not (model_id in models):
+        raise model_id.error(f"Invalid chip model id '{model_id}'")
+
+      self.model = models[model_id]
+
+      for channel_index, channel in enumerate(self.model.channels):
+        valve_info = {
+          'label': channel.label,
+          'repr': channel.repr
+        }
+
+        param_indices_encoded = register_entity(channel.id, valve_info, {len(self._valve_parameters)})
+
+        self._valve_parameters.append(
+          ValveParameter(
+            channel_index=channel_index,
+            param_indices_encoded=param_indices_encoded
+          )
+        )
+
+
+    # -- Parse parameters ---------------------------------
+
     for valve_name, valve_info_raw in data_protocol.get('valve_parameters', dict()).items():
       valve_info = valve_info_raw or dict()
-      default_valve_indices = dict()
-
-      if 'default' in valve_info:
-        if not self._parent.models:
-          raise valve_info['default'].error("No models referenced")
-
-        for ref in valve_info['default']:
-          try:
-            colon_index = ref.index(":")
-          except ValueError:
-            ref_model_ids = list(self._parent.models.keys())
-            ref_valve_name = ref
-          else:
-            ref_model_ids = [ref[0:colon_index]]
-            ref_valve_name = ref[(colon_index + 1):]
-
-          ref_match = False
-
-          for ref_model_id in ref_model_ids:
-            ref_model = self._parent.models.get(ref_model_id)
-
-            if not ref_model:
-              raise ref_model_id.error(f"Invalid chip model id '{ref_model_id}'")
-
-            ref_valve_index = ref_model.sheets[namespace].valve_names.get(ref_valve_name)
-
-            if (ref_valve_index is not None) and not (ref_model_id in default_valve_indices):
-              default_valve_indices[ref_model_id] = ref_valve_index
-              ref_match = True
-
-          if not ref_match:
-            raise ref_valve_name.error(f"Invalid valve name '{ref_valve_name}'")
 
       if 'imply' in valve_info:
         implication = self._parse_query([valve_info['imply']])
@@ -122,7 +118,7 @@ class Parser(BaseParser):
 
       self._valve_parameters.append(
         ValveParameter(
-          default_valve_indices=default_valve_indices,
+          channel_index=None,
           param_indices_encoded=param_indices_encoded,
         )
       )
@@ -180,8 +176,9 @@ class Parser(BaseParser):
           "repr": entity.repr
         } for param_indices_encoded, entity in self._entities.items()
       },
+      "modelId": (self._model and self._model.id),
       "parameters": [{
-        "defaultValveIndices": param.default_valve_indices,
+        "channelIndex": param.channel_index,
         "paramIndicesEncoded": str(param.param_indices_encoded)
       } for param in self._valve_parameters],
     }

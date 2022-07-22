@@ -21,7 +21,7 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
       icon: 'hourglass_empty',
       label: formatDuration(segmentData.duration)
         + ((options.location?.segmentIndex === options.segmentIndex)
-          ? (` (${(options.location.data?.progress ?? 0) * 100}%)`)
+          ? (` (${(options.location.state?.progress ?? 0) * 100}%)`)
           : '')
     }]
     : [];

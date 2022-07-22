@@ -83,13 +83,13 @@ class Parsers(BaseParser):
 
 
 class Protocol:
-  def __init__(self, text, parsers, models):
+  def __init__(self, text, parsers, *, host):
+    self.host = host
     self.parser_classes = parsers
     self.parser = Parsers(self, parsers)
 
     protocol_schema = sc.Dict({
       'name': sc.Optional(str),
-      'models': sc.Optional(sc.List(str)),
       'stages': sc.Optional(sc.List(sc.Dict({
         'name': sc.Optional(str),
         'steps': sc.List(sc.Dict({
@@ -102,22 +102,10 @@ class Protocol:
     data = reader.parse(text)
     data = protocol_schema.transform(data)
 
-    self.models = None
     self.segments = list()
     self.stages = list()
 
     self.name = data['name'].value if 'name' in data else None
-
-
-    # Get chip model instances from their ids
-    if 'models' in data:
-      self.models = dict()
-
-      for model_id in data['models']:
-        if not (model_id in models):
-          raise model_id.error(f"Invalid chip model id '{model_id}'")
-
-        self.models[model_id.value] = models[model_id]
 
 
     # Call enter_protocol()
@@ -176,7 +164,6 @@ class Protocol:
   def export(self):
     return {
       "name": self.name,
-      "modelIds": self.models and [model_id for model_id in self.models.keys()],
       "data": {
         namespace: parser.export_protocol() for namespace, parser in self.parser.parsers.items()
       },

@@ -4,15 +4,17 @@ import * as React from 'react';
 import { Code, namespace, ReprIcon } from '.';
 import type { CodeEditorInstance, CodeEditorProps } from '..';
 import type { Draft } from '../../draft';
-import type { Chip, ChipId, ChipModel, ControlNamespace, HostId, Protocol } from '../../backends/common';
+import type { Chip, ChipId, ControlNamespace, HostId, Protocol } from '../../backends/common';
 import { Icon } from '../../components/icon';
 
 
 export class CodeEditor extends React.Component<CodeEditorProps<Code>> implements CodeEditorInstance<Code> {
   render() {
+    let matrix = this.props.chip.matrices[namespace];
+    let model = this.props.host.state.executors[namespace].models[matrix.modelId!];
+
     let protocol = this.props.draft.compiled!.protocol!;
     let protocolData = protocol.data[namespace];
-    let sheet = this.props.model.sheets.control;
 
     let args = this.props.code.arguments;
 
@@ -22,7 +24,7 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
         <div className="pconfig-form">
           {protocolData.parameters.map((param, paramIndex) => {
             let argValveIndex = args[paramIndex];
-            let argValve = sheet.valves[argValveIndex!];
+            let argValve = model.channels[argValveIndex!];
             let entity = protocolData.entities[param.paramIndicesEncoded];
 
             return (
@@ -39,27 +41,18 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
                     });
                   }}>
                     <option value="">–</option>
-                    {sheet.groups.map((group, groupIndex) => (
+                    {model.groups.map((group, groupIndex) => (
                       <React.Fragment key={groupIndex}>
-                        <option disabled>{group.name}</option>
-                        {Array.from(sheet.valves.entries())
-                          .filter(([_valveIndex, valve]) => groupIndex === valve.group)
-                          .map(([valveIndex, valve]) => (
-                            <option value={valveIndex} key={valveIndex}>{valve.name}</option>
-                          ))}
+                        <option disabled>{group.label}</option>
+                        {group.channelIndices.map((channelIndex) => {
+                          let channel = model.channels[channelIndex];
+
+                          return (
+                            <option value={channelIndex} key={channelIndex}>{channel.label}</option>
+                          );
+                        })}
                       </React.Fragment>
                     ))}
-                    {/* onSelect={(selection) => {
-                    // this.setState((state) => ({ arguments: state.arguments.set(paramIndex, selection.get(1) as number) }));
-                    this.props.setCode({
-                      arguments: [
-                        ...args.slice(0, paramIndex),
-                        selection.get(1) as number,
-                        ...args.slice(paramIndex + 1)
-                      ]
-                    });
-                  }} */}
-                    {/* selectedOptionPath={argValveIndex !== null ? [argValve.group, argValveIndex] : null} /> */}
                   </select>
                   <div className="btn superimposed-visible">
                     {argValve && (
@@ -67,7 +60,7 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
                         <Icon name={ReprIcon[argValve.repr].forwards} />
                       </div>
                     )}
-                    <div>{argValve ? argValve.name : 'Select valve'}</div>
+                    <div>{argValve ? argValve.label : 'Select valve'}</div>
                   </div>
                 </div>
               </label>

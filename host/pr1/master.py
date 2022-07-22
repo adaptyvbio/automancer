@@ -7,7 +7,6 @@ class Master:
     self.chip = chip
     self.codes = codes
     self.protocol = protocol
-    # self.supdata = protocol.create_supdata(chip, codes)
 
     self._pause_options = None
     self._process_state = location['state']

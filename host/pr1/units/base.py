@@ -41,16 +41,10 @@ class BaseParser:
     return None
 
 
-  def create_supdata(self, chip, codes):
-    return None
-
   def export_protocol(self):
     return dict()
 
   def export_segment(data):
-    return None
-
-  def export_supdata(data):
     return None
 
 

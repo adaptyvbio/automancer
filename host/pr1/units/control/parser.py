@@ -183,35 +183,9 @@ class Parser(BaseParser):
       } for param in self._valve_parameters],
     }
 
-  def create_supdata(self, chip, codes):
-    code = codes[namespace]
-
-    def process_arg(param_index, arg):
-      param = self._valve_parameters[param_index]
-      valve = chip.model.sheets[namespace].valves[arg] if arg is not None else None
-
-      return {
-        'display': param.display or (valve and valve.default_display) or 'visible',
-        'repr': param.repr or (valve and valve.repr or param.repr) or 'flow'
-      }
-
-    arguments = [process_arg(param_index, arg) for param_index, arg in enumerate(code['arguments'])]
-
-    return {
-      'arguments': arguments
-    }
-
   def export_segment(data):
     return {
       "paramIndices": list(data['valves'])
-    }
-
-  def export_supdata(data):
-    return {
-      "arguments": [{
-        "display": arg['display'],
-        "repr": arg['repr']
-      } for arg in data['arguments']]
     }
 
   def _process_valves(self, expr = None, context = dict()):

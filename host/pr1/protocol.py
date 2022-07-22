@@ -155,12 +155,6 @@ class Protocol:
     # from pprint import pprint
     # pprint(self.segments)
 
-  def create_supdata(self, chip, codes):
-    return { namespace: parser.create_supdata(chip, codes) for namespace, parser in self.parser.parsers.items() }
-
-  def export_supdata(self, data):
-    return { namespace: Parser.export_supdata(data[namespace]) for namespace, Parser in self.parser_classes.items() }
-
   def export(self):
     return {
       "name": self.name,

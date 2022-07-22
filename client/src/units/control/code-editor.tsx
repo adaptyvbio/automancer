@@ -27,6 +27,10 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
             let argValve = model.channels[argValveIndex!];
             let entity = protocolData.entities[param.paramIndicesEncoded];
 
+            if (param.channelIndex !== null) {
+              return null;
+            }
+
             return (
               <label className="pconfig-entry" key={paramIndex}>
                 <div className="pconfig-entry-label">{entity.label}</div>

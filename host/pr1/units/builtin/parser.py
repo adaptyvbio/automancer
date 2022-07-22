@@ -13,6 +13,8 @@ schema = sc.Dict({
 }, allow_extra=True)
 
 class ShorthandsParser(BaseParser):
+  protocol_keys = {'shorthands'}
+
   def __init__(self, protocol):
     super().__init__(protocol)
     self._shorthands = dict()

@@ -18,6 +18,9 @@ type InboundMessage = {
   id: number;
   data: unknown;
 } | {
+  type: 'app.notification';
+  message: string;
+} | {
   type: 'app.session.close';
   id: string;
   status: number;
@@ -106,6 +109,11 @@ export default class WebsocketBackend extends MessageBackend {
           case 'response': {
             this.#requests[message.id].resolve(message.data);
             delete this.#requests[message.id];
+            break;
+          }
+
+          case 'app.notification': {
+            new Notification(message.message);
             break;
           }
 

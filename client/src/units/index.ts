@@ -10,6 +10,9 @@ import * as Control from './control';
 import InputUnit from './input';
 import * as Input from './input';
 
+import LocalNotificationUnit from './local-notification';
+import * as LocalNotification from './local-notification';
+
 import TimerUnit from './timer';
 import * as Timer from './timer';
 
@@ -88,6 +91,7 @@ export interface ProtocolData {
 export interface SegmentData {
   [Control.namespace]: Control.SegmentData;
   [Input.namespace]?: Input.SegmentData;
+  [LocalNotification.namespace]?: LocalNotification.SegmentData;
   [Timer.namespace]?: Timer.SegmentData;
 }
 
@@ -118,9 +122,11 @@ export interface Unit<Code, Matrix> {
 export const Units = [
   [Control.namespace, ControlUnit],
   [Input.namespace, InputUnit],
+  [LocalNotification.namespace, LocalNotificationUnit],
   [Timer.namespace, TimerUnit]
 ] as [
   [typeof Control.namespace, Unit<Control.Code, Control.Matrix>],
   [typeof Input.namespace, Unit<never, never>],
+  [typeof LocalNotification.namespace, Unit<never, never>],
   [typeof Timer.namespace, Unit<never, never>]
 ];

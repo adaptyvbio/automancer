@@ -19,13 +19,23 @@ from .session import Session
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s :: %(name)-18s :: %(message)s")
 logger = logging.getLogger("pr1.app")
 
-for handler in logging.root.handlers:
-  handler.addFilter(logging.Filter("pr1"))
+# for handler in logging.root.handlers:
+#   handler.addFilter(logging.Filter("pr1"))
 
 
 class Backend:
-  def __init__(self, data_dir):
-    self.data_dir = data_dir
+  def __init__(self, app):
+    self._app = app
+
+  @property
+  def data_dir(self):
+    return self._app.data_dir
+
+  def notify(self, message):
+    self._app.broadcast(json.dumps({
+      "type": "app.notification",
+      "message": message
+    }))
 
 class Client:
   def __init__(self, *, authenticated, conn):
@@ -120,7 +130,7 @@ class App():
       conf_path.open("w").write(reader.dumps(conf))
 
     self.conf = conf
-    self.host = Host(backend=Backend(data_dir=self.data_dir), update_callback=self.update)
+    self.host = Host(backend=Backend(self), update_callback=self.update)
     self.clients = dict()
     self.server = None
 

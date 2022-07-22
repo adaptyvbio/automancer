@@ -55,10 +55,13 @@ export class ProtocolTimeline extends React.Component<ProtocolTimelineProps, { w
         .flatMap((stage) => stage.steps)
         .map((step) => {
           let firstSegmentAnalysis = this.analysis.segments[step.seq[0]];
+          let firstSegmentTime = firstSegmentAnalysis
+            ? firstSegmentAnalysis.timeRange![0]
+            : this.analysis.done.time;
 
           return {
-            position: firstSegmentAnalysis.timeRange![0] / this.analysis.done.time,
-            time: firstSegmentAnalysis.timeRange![0]
+            position: firstSegmentTime / this.analysis.done.time,
+            time: firstSegmentTime
           };
         }),
       stages: this.props.protocol.stages.map((stage) => {

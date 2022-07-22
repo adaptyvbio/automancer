@@ -67,7 +67,11 @@ export function ProtocolOverview(props: {
                   <div className="poverview-step-item" key={stepIndex}>
                     <div className="poverview-step-header">
                       <div className="poverview-step-marker" />
-                      <div className="poverview-step-time">{firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–'}</div>
+                      <div className="poverview-step-time">
+                        {firstSegmentAnalysis
+                          ? (firstSegmentAnalysis.timeRange ? formatTime(firstSegmentAnalysis.timeRange[0]) : '–')
+                          : formatTime(analysis.done.time)}
+                      </div>
                       <div className="poverview-step-name">{step.name}</div>
                     </div>
                     {!isStepHidden

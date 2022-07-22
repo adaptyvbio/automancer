@@ -44,13 +44,27 @@ class ShorthandsParser(BaseParser):
 
 
 class FragmentParser(BaseParser):
+  priority = 900
+
   def parse_block(self, data_block):
+    if 'repeat' in data_block:
+      repeat, context = data_block['repeat']
+      count = int(repeat)
+    else:
+      count = 1
+
     if 'actions' in data_block:
       actions, context = data_block['actions']
 
       return {
         'role': 'collection',
-        'actions': [LocatedValue.transfer({ key: (value, context) for key, value in action.items() }, action) for action in actions]
+        'actions': [LocatedValue.transfer({ key: (value, context) for key, value in action.items() }, action) for action in actions] * count
+      }
+
+    if 'repeat' in data_block:
+      return {
+        'role': 'collection',
+        'actions': [LocatedValue.transfer({ key: value for key, value in data_block.items() if key != "repeat" }, data_block)] * count
       }
 
 
@@ -70,6 +84,7 @@ class ConditionParser(BaseParser):
         return {
           'role': 'none'
         }
+
 
 
 class Parser(Parsers):

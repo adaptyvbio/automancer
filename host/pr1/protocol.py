@@ -120,16 +120,20 @@ class Protocol:
       def add_context(props):
         return LocatedValue.transfer({ key: (value, dict()) for key, value in props.items() }, props)
 
-      for step_index, data_step in enumerate(data_stage.get('steps', list())):
+      step_index = 0
+
+      for data_step in data_stage.get('steps', list()):
         seq, name = self.parse_block(add_context(data_step))
 
-        step = Step(
-          description=data_step.get('description'),
-          name=(name or f"Step #{step_index + 1}"),
-          seq=seq
-        )
+        if seq[0] != seq[1]:
+          step = Step(
+            description=data_step.get('description'),
+            name=(name or f"Step #{step_index + 1}"),
+            seq=seq
+          )
 
-        steps.append(step)
+          steps.append(step)
+          step_index += 1
 
       # Compute the stage's seq
       if steps:
@@ -220,6 +224,7 @@ class Protocol:
     # Enumerate children blocks if a model returned a collection
     elif role == 'collection':
       start_index = len(self.segments)
+      end_index = start_index
 
       for data_action in claim['actions']:
         (_, end_index), _ = self.parse_block(data_action, depth=(depth + 1))

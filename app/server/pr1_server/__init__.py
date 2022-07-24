@@ -1,7 +1,8 @@
-import asyncio
-import collections
 from pathlib import Path
 import appdirs
+import argparse
+import asyncio
+import collections
 import json
 import logging
 import subprocess
@@ -12,15 +13,12 @@ import websockets
 from pr1 import Host, reader
 from pr1.util import schema as sc
 
-from .auth import agents as auth_agents
-from .session import Session
-
-
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s :: %(name)-18s :: %(message)s")
 logger = logging.getLogger("pr1.app")
 
-# for handler in logging.root.handlers:
-#   handler.addFilter(logging.Filter("pr1"))
+from .auth import agents as auth_agents
+from .bridges.stdio import StdioBridge
+from .bridges.websocket import WebsocketBridge
+from .session import Session
 
 
 class Backend:
@@ -37,53 +35,34 @@ class Backend:
       "message": message
     }))
 
-class Client:
-  def __init__(self, *, authenticated, conn):
-    self.authenticated = authenticated
-    self.conn = conn
-    self.sessions = dict()
-
-  @property
-  def id(self):
-    return self.conn.id
-
-
 conf_schema = sc.Schema({
-  'authentication': sc.Optional(sc.List(
-    sc.Or(*[Agent.conf_schema for Agent in auth_agents.values()])
-  )),
   'features': {
     'multiple_clients': sc.ParseType(bool),
     'restart': sc.ParseType(bool),
     'terminal': sc.ParseType(bool),
     'write_config': sc.ParseType(bool)
   },
-  'hostname': str,
-  'port': sc.ParseType(int),
+  'remote': sc.Optional({
+    'authentication': sc.Optional(sc.List(
+      sc.Or(*[Agent.conf_schema for Agent in auth_agents.values()])
+    )),
+    'hostname': str,
+    'port': sc.ParseType(int)
+  }),
   'version': sc.ParseType(int)
 })
 
-class App():
+class App:
   version = 1
 
-  def __init__(self):
+  def __init__(self, *, local):
+    # Create data directory if missing
+
     self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
-    self.data_dir.mkdir(exist_ok=True)
+    self.data_dir.mkdir(exist_ok=True, parents=True)
 
-    # if not self.data_dir.exists():
-    #   try:
-    #     self.data_dir.mkdir()
-    #   except PermissionError:
-    #     if sys.stdout.isatty():
-    #       print("Authenticate to create the data directory")
-    #       code = subprocess.call(["sudo", "mkdir", "-p", str(self.data_dir)])
 
-    #       if code != 0:
-    #         print("Could not create the data directory")
-    #         sys.exit(1)
-    #     else:
-    #       print("Run again as root or interactively to create the data directory")
-    #       sys.exit(1)
+    # Load or create configuration
 
     conf_path = self.data_dir / "app.yml"
 
@@ -98,19 +77,7 @@ class App():
       if conf['version'] > self.version:
         raise Exception("Incompatible version")
 
-      updated_conf = False
-
-      if 'authentication' in conf:
-        for index, conf_method in enumerate(conf['authentication']):
-          Agent = auth_agents[conf_method['type']]
-
-          if hasattr(Agent, 'update_conf'):
-            updated_conf_method = Agent.update_conf(conf_method)
-
-            if updated_conf_method:
-              conf['authentication'][index] = updated_conf_method
-              updated_conf = True
-
+      conf_updated = False
     else:
       conf = {
         'features': {
@@ -119,68 +86,44 @@ class App():
           'terminal': False,
           'write_config': False
         },
-        'hostname': "127.0.0.1",
-        'port': 4567,
+        **({ 'remote': {
+          'hostname': "127.0.0.1",
+          'port': 4567,
+        } } if not local else dict()),
         'version': self.version
       }
 
-      updated_conf = True
+      conf_updated = True
 
-    if updated_conf:
-      conf_path.open("w").write(reader.dumps(conf))
+
+    # Create bridges
+
+    self.bridges = set()
+
+    if 'remote' in conf:
+      conf_updated = conf_updated or WebsocketBridge.update_conf(conf['remote'])
+      self.bridges.add(WebsocketBridge(self, conf=conf['remote']))
+
+    if local:
+      self.brdiges.add(StdioBridge(self))
+
+
+    # Write configuration if it has been updated
+
+    if conf_updated:
+      logger.info("Writing app configuration")
+      conf_path.open("w").write(reader.dumps(conf) + "\n")
+
+
+    # Create host
 
     self.conf = conf
     self.host = Host(backend=Backend(self), update_callback=self.update)
-    self.clients = dict()
-    self.server = None
 
     self.updating = False
 
-    # id: hex(hash(json.dumps({ 'passwd': 'foobar' }, sort_keys=True)))[2:]
-    self.auth_agents = [
-      auth_agents[conf_method['type']](conf_method) for conf_method in conf['authentication']
-    ] if 'authentication' in conf else None
 
-
-  async def handle_client(self, client):
-    await client.conn.send(json.dumps({
-      "authMethods": [
-        agent.export() for agent in self.auth_agents
-      ] if self.auth_agents else None,
-      "version": self.version
-    }))
-
-    if self.auth_agents:
-      while True:
-        message = json.loads(await client.conn.recv())
-        agent = self.auth_agents[message["authMethodIndex"]]
-
-        if agent.test(message["data"]):
-          await client.conn.send(json.dumps({ "ok": True }))
-          break
-        else:
-          await client.conn.send(json.dumps({ "ok": False, "message": "Invalid credentials" }))
-
-    client.authenticated = True
-
-    await client.conn.send(json.dumps({
-      "type": "state",
-      "data": self.host.get_state()
-    }))
-
-    async for msg in client.conn:
-      message = json.loads(msg)
-
-      if message["type"] == "request":
-        response_data = await self.process_request(client, message["data"])
-
-        await client.conn.send(json.dumps({
-          "type": "response",
-          "id": message["id"],
-          "data": response_data
-        }))
-
-  async def process_request(self, client, request):
+  async def process_request(self, request, *, bridge, ref):
     if request["type"] == "app.session.create":
       id = str(uuid.uuid4())
       session = Session(size=(request["size"]["columns"], request["size"]["rows"]))
@@ -227,9 +170,6 @@ class App():
     else:
       return await self.host.process_request(request)
 
-  def broadcast(self, message):
-    websockets.broadcast([client.conn for client in self.clients.values()], message)
-
   def update(self):
     if not self.updating:
       self.updating = True
@@ -246,32 +186,38 @@ class App():
       loop.call_soon(send_state)
 
   def start(self):
+    logger.info("Starting app")
+
     loop = asyncio.get_event_loop()
-
-    # Debug
-    # chip, codes, draft = self.host._debug()
-    # self.host.start_plan(chip=chip, codes=codes, draft=draft, update_callback=self.update)
-
     loop.run_until_complete(self.host.initialize())
 
-    # async def task():
-    #   try:
-    #     await asyncio.sleep(2)
-    #     await self.server.close()
-    #   except asyncio.CancelledError:
-    #     print("Cancelled")
-    # t = loop.create_task(task())
-    # t = loop.create_task(task())
+    logger.debug(f"Initializing {len(self.bridges)} bridges")
 
-    loop.create_task(self.serve())
-    loop.create_task(self.host.start())
+    for bridge in self.bridges:
+      loop.run_until_complete(bridge.initialize())
+
+    tasks = set()
+
+    for bridge in self.bridges:
+      async def receive(message, *, ref = None):
+        if not message:
+          await bridge.send({
+            "type": "state",
+            "data": self.host.get_state()
+          }, ref=ref)
+        # elif message["type"] == "request":
+        #   self.process_request(message["data"], bridge=bridge, ref=ref)
+
+      task = loop.create_task(bridge.start(receive))
+      tasks.add(task)
+
+    task = loop.create_task(self.host.start())
+    tasks.add(task)
 
     try:
       loop.run_forever()
     except KeyboardInterrupt:
       logger.info("Stopping due to a keyboard interrupt")
-
-      tasks = asyncio.all_tasks(loop)
       logger.debug(f"Cancelling {len(tasks)} tasks")
 
       all_tasks = asyncio.gather(*tasks)
@@ -282,40 +228,16 @@ class App():
       except asyncio.CancelledError:
         pass
 
-      # all_tasks.exception()
+      logger.debug("Cancelled tasks")
     finally:
       loop.close()
 
-  async def serve(self):
-    async def handler(conn):
-      if self.conf['features']['multiple_clients'] and (len(self.clients) > 1):
-        return
-
-      client = Client(authenticated=False, conn=conn)
-      self.clients[client.id] = client
-
-      try:
-        await self.handle_client(client)
-      finally:
-        for session in client.sessions.values():
-          session.close()
-
-        del self.clients[client.id]
-
-    hostname = self.conf['hostname']
-    port = self.conf['port']
-
-    logger.debug(f"Websockets listening on {hostname}:{port}")
-
-    self.server = await websockets.serve(handler, host=hostname, port=port)
-
-    try:
-      await self.server.wait_closed()
-    except asyncio.CancelledError:
-      self.server.close()
-      # await self.server.wait_closed()
-
 
 def main():
-  app = App()
+  parser = argparse.ArgumentParser(description="PR–1 server")
+  parser.add_argument("--local", action='store_true')
+
+  args = parser.parse_args()
+
+  app = App(local=args.local)
   app.start()

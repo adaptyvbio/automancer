@@ -83,7 +83,7 @@ class Host:
     for executor in self.executors.values():
       await executor.initialize()
 
-    logger.debug("Done initializing executors")
+    logger.debug("Initialized executors")
 
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
@@ -100,10 +100,10 @@ class Host:
 
         self.chips[chip.id] = chip
 
-    if len(self.chips) < 1:
-      # debug
-      chip = self.create_chip(name="Default chip")
-      print(f"Created '{chip.id}'")
+    # if len(self.chips) < 1:
+    #   # debug
+    #   chip = self.create_chip(name="Default chip")
+    #   print(f"Created '{chip.id}'")
 
   async def start(self):
     try:
@@ -118,7 +118,7 @@ class Host:
     for executor in self.executors.values():
       await executor.destroy()
 
-    logger.debug("Done destroying executors")
+    logger.debug("Destroyed executors")
 
 
   def _debug(self):

@@ -27,8 +27,11 @@ app.whenReady().then(() => {
   let proc = childProcess.spawn(
     app.isPackaged
       ? path.join(process.resourcesPath, 'host/main')
-      : path.join(__dirname, 'tmp/host/main')
+      : path.join(__dirname, 'tmp/host/main'),
+    ['--local']
   );
+
+  proc.stderr.pipe(process.stderr);
 
   let rl = readline.createInterface({
     input: proc.stdout,

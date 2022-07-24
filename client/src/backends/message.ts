@@ -1,100 +1,125 @@
-import { BackendCommon, Chip, ChipId, ControlNamespace, ProtocolLocation } from './common';
-import type { Draft } from '../draft';
-import type { Codes } from '../units';
+import { HostState } from './common';
+import { RawMessageBackend } from './raw-message';
+import * as util from '../util';
+import { Deferred } from '../util';
 
 
-export abstract class MessageBackend extends BackendCommon {
-  protected abstract _request(message: unknown): Promise<unknown>;
+export type InboundMessage = {
+  type: 'state';
+  data: HostState;
+} | {
+  type: 'response';
+  id: number;
+  data: unknown;
+} | {
+  type: 'app.notification';
+  message: string;
+} | {
+  type: 'app.session.close';
+  id: string;
+  status: number;
+} | {
+  type: 'app.session.data';
+  id: string;
+  data: number[];
+};
 
-  async command(chipId: string, command: ControlNamespace.RunnerCommand) {
-    await this._request({
-      type: 'command',
-      chipId,
-      command
+
+export abstract class MessageBackend extends RawMessageBackend {
+  protected _notify(_message: string): void { };
+  protected abstract _send(message: unknown): Promise<void>;
+  protected abstract _start(listener: (message: InboundMessage) => void): Promise<void>;
+
+
+  #nextRequestId = 0;
+  #requests = new Map<number, Deferred<unknown>>();
+  #sessions = new Map<TerminalSession['id'], TerminalSession>();
+
+  closed: Promise<void>;
+
+  constructor() {
+    super();
+
+    this.closed = new Promise(() => {});
+  }
+
+  async start() {
+    let deferred: Deferred<void> | null = util.defer();
+
+    let listener = (message: InboundMessage) => {
+      switch (message.type) {
+        case 'state': {
+          this.state = message.data;
+
+          if (deferred !== null) {
+            deferred.resolve();
+          } else {
+            this._update();
+          }
+
+          break;
+        }
+
+        case 'response': {
+          this.#requests.get(message.id)?.resolve(message.data);
+          this.#requests.delete(message.id);
+
+          break;
+        }
+
+        case 'app.notification': {
+          this._notify(message.message);
+          break;
+        }
+
+        case 'app.session.close': {
+          this.#sessions.get(message.id)?._handleClose(message.status);
+          this.#sessions.delete(message.id);
+
+          break;
+        }
+
+        case 'app.session.data': {
+          this.#sessions.get(message.id)?._handleChunk(new Uint8Array(message.data));
+          break;
+        }
+      }
+    };
+
+    await this._start(listener);
+    await deferred.promise;
+    deferred = null;
+  }
+
+  protected async _request(request: unknown) {
+    let id = this.#nextRequestId++;
+    let deferred = util.defer<unknown>();
+
+    this.#requests.set(id, deferred);
+
+    await this._send({
+      type: 'request',
+      id,
+      data: request
     });
-  }
 
-  async compileDraft(draftId: string, source: string) {
-    return await this._request({
-      type: 'compileDraft',
-      draftId,
-      source
-    }) as NonNullable<Draft['compiled']>;
+    return await deferred.promise;
   }
+}
 
-  async createChip() {
-    return await this._request({
-      type: 'createChip'
-    }) as { chipId: ChipId; };
-  }
 
-  async deleteChip(chipId: ChipId) {
-    await this._request({
-      type: 'deleteChip',
-      chipId
-    });
-  }
+export type TerminalSession = AsyncIterable<Uint8Array> & {
+  id: string;
+  close(): Promise<void>;
+  closed: Promise<{ status: number; }>;
+  resize(size: TerminalSessionSize): Promise<void>;
+  write(chunk: Uint8Array): Promise<void>;
 
-  async pause(chipId: string, options: { neutral: boolean; }) {
-    await this._request({
-      type: 'pause',
-      chipId,
-      options
-    });
-  }
+  _handleChunk(chunk: Uint8Array): void;
+  _handleClose(status: number): void;
+}
 
-  async resume(chipId: string) {
-    await this._request({
-      type: 'resume',
-      chipId
-    });
-  }
-
-  async setChipMetadata(chipId: string, value: Partial<{ description: string | null; name: string; }>): Promise<void> {
-    await this._request({
-      type: 'setChipMetadata',
-      chipId,
-      value
-    });
-  }
-
-  async setLocation(chipId: string, location: ProtocolLocation) {
-    await this._request({
-      type: 'setLocation',
-      chipId,
-      location
-    });
-  }
-
-  async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
-    await this._request({
-      type: 'setMatrix',
-      chipId,
-      update
-    });
-  }
-
-  async skipSegment(chipId: ChipId, segmentIndex: number, processState?: object) {
-    await this._request({
-      type: 'skipSegment',
-      chipId,
-      processState: processState ?? null,
-      segmentIndex
-    });
-  }
-
-  async startPlan(options: {
-    chipId: string;
-    data: Codes;
-    location: ProtocolLocation;
-    source: string;
-  }) {
-    await this._request({
-      type: 'startPlan',
-      chipId: options.chipId,
-      data: options.data,
-      location: options.location,
-      source: options.source
-    });
-  }
+export interface TerminalSessionSize {
+  columns: number;
+  rows: number;
 }

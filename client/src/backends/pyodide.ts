@@ -1,8 +1,8 @@
 import { loadPyodide } from 'pyodide/pyodide';
 
-import { LocalBackendStorage } from '..';
+import { LocalBackendStorage } from '../application';
 import { HostState } from './common';
-import { MessageBackend } from './message';
+import { RawMessageBackend } from './raw-message';
 
 
 interface FS {
@@ -27,7 +27,7 @@ export interface PyodideBackendOptions {
   storage: LocalBackendStorage;
 }
 
-export class PyodideBackend extends MessageBackend {
+export class PyodideBackend extends RawMessageBackend {
   #options: PyodideBackendOptions;
   #pyodide!: Awaited<ReturnType<typeof loadPyodide>>;
 
@@ -87,25 +87,42 @@ export class PyodideBackend extends MessageBackend {
         pyodide.FS.writeFile(`${mountPath}/models/mitomi1024/definition.yml`, `id: m1024
 name: Mitomi 1024
 groups:
-  - id: inlet
-    name: Inlet controls
-    inverse: false
-  - id: special
-    name: Special controls
-valves:
-  - id: inlet/1
-    alias: in1
-    name: Inlet 1
-    inverse: false
-    display: visible
-  - id: inlet/2
-    alias: in2
-    name: Inlet 2
-  - id: inlet/3
-    alias: in3
-    name: Inlet 3
-  - id: special/button
-    name: Button`);
+  - label: Inlet controls
+    inverse: true
+    channels:
+      - id: Inlet1
+        label: Inlet 1
+        alias: gin
+        repr: move
+      - id: Inlet2
+        label: Inlet 2
+      - id: Inlet3
+        label: Inlet 3
+      - id: Inlet4
+        label: Inlet 4
+      - id: Inlet5
+        label: Inlet 5
+      - id: Inlet6
+        label: Inlet 6
+      - id: Inlet7
+        label: Inlet 7
+      - id: Inlet8
+        label: Inlet 8
+
+  - label: Special controls
+    channels:
+      - id: Button
+        repr: push
+      - id: Neck
+        label: Neck
+        repr: barrier
+      - id: Sandwich
+        label: Sandwich
+        repr: isolate
+      - id: Outlet
+        label: Outlet
+        inverse: true
+        repr: move`);
       }
     }
 
@@ -153,7 +170,8 @@ def update_callback():
   update_state(json.dumps(host.get_state()))
 
 async def process_request(request):
-  return pyodide.to_js(await host.process_request(json.loads(request)))
+  # return pyodide.to_js(await host.process_request(json.loads(request)))
+  return json.dumps(await host.process_request(json.loads(request)))
 
 host = Host(backend=Backend(), update_callback=update_callback)
 
@@ -166,7 +184,7 @@ update_callback()
   }
 
   protected async _request(request: unknown) {
-    return await this.#pyodide.globals.get('process_request')(JSON.stringify(request));
+    return JSON.parse(await this.#pyodide.globals.get('process_request')(JSON.stringify(request)));
   }
 }
 

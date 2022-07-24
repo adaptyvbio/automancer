@@ -2,13 +2,10 @@ from pathlib import Path
 import appdirs
 import argparse
 import asyncio
-import collections
 import json
 import logging
-import subprocess
 import sys
 import uuid
-import websockets
 
 from pr1 import Host, reader
 from pr1.util import schema as sc
@@ -18,6 +15,7 @@ logger = logging.getLogger("pr1.app")
 from .auth import agents as auth_agents
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
+from .client import ClientClosed
 from .session import Session
 
 
@@ -36,18 +34,18 @@ class Backend:
     }))
 
 conf_schema = sc.Schema({
+  'authentication': sc.Optional(sc.List(
+    sc.Or(*[Agent.conf_schema for Agent in auth_agents.values()])
+  )),
   'features': {
-    'multiple_clients': sc.ParseType(bool),
     'restart': sc.ParseType(bool),
     'terminal': sc.ParseType(bool),
     'write_config': sc.ParseType(bool)
   },
   'remote': sc.Optional({
-    'authentication': sc.Optional(sc.List(
-      sc.Or(*[Agent.conf_schema for Agent in auth_agents.values()])
-    )),
     'hostname': str,
-    'port': sc.ParseType(int)
+    'port': sc.ParseType(int),
+    'single_client': sc.Optional(sc.ParseType(bool))
   }),
   'version': sc.ParseType(int)
 })
@@ -81,14 +79,13 @@ class App:
     else:
       conf = {
         'features': {
-          'multiple_clients': True,
           'restart': False,
           'terminal': False,
           'write_config': False
         },
         **({ 'remote': {
           'hostname': "127.0.0.1",
-          'port': 4567,
+          'port': 4567
         } } if not local else dict()),
         'version': self.version
       }
@@ -96,16 +93,22 @@ class App:
       conf_updated = True
 
 
-    # Create bridges
+    # Create authentication agents
 
-    self.bridges = set()
+    if 'authentication' in conf:
+      for index, conf_method in enumerate(conf['authentication']):
+        Agent = auth_agents[conf_method['type']]
 
-    if 'remote' in conf:
-      conf_updated = conf_updated or WebsocketBridge.update_conf(conf['remote'])
-      self.bridges.add(WebsocketBridge(self, conf=conf['remote']))
+        if hasattr(Agent, 'update_conf'):
+          conf_updated_method = Agent.update_conf(conf_method)
 
-    if local:
-      self.brdiges.add(StdioBridge(self))
+          if conf_updated_method:
+            conf['authentication'][index] = conf_updated_method
+            conf_updated = True
+
+    self.auth_agents = [
+      auth_agents[conf_method['type']](conf_method) for conf_method in conf['authentication']
+    ] if 'authentication' in conf else None
 
 
     # Write configuration if it has been updated
@@ -115,15 +118,84 @@ class App:
       conf_path.open("w").write(reader.dumps(conf) + "\n")
 
 
+    # Create bridges
+
+    self.bridges = set()
+
+    if 'remote' in conf:
+      self.bridges.add(WebsocketBridge(self, conf=conf['remote']))
+
+    if local:
+      self.bridges.add(StdioBridge(self))
+
+
     # Create host
 
+    self.clients = dict()
     self.conf = conf
     self.host = Host(backend=Backend(self), update_callback=self.update)
 
     self.updating = False
 
 
-  async def process_request(self, request, *, bridge, ref):
+  async def handle_client(self, client):
+    try:
+      logger.debug(f"Added client '{client.id}'")
+      self.clients[client.id] = client
+      requires_auth = self.auth_agents and client.remote
+
+      await client.send({
+        "authMethods": [
+          agent.export() for agent in self.auth_agents
+        ] if requires_auth else None,
+        "features": {
+          "terminal": self.conf['features']['terminal'] and client.remote
+        },
+        "version": self.version
+      })
+
+      if requires_auth:
+        while True:
+          message = await client.recv()
+          agent = self.auth_agents[message["authMethodIndex"]]
+
+          if agent.test(message["data"]):
+            await client.send({ "ok": True })
+            break
+          else:
+            await client.send({ "ok": False, "message": "Invalid credentials" })
+
+      logger.debug(f"Authenticated client '{client.id}'")
+
+      await client.send({
+        "type": "state",
+        "data": self.host.get_state()
+      })
+
+      async for message in client:
+        response_data = await self.process_request(client, message["data"])
+        await client.send({
+          "type": "response",
+          "id": message["id"],
+          "data": response_data
+        })
+    except ClientClosed:
+      logger.debug(f"Disconnected client '{client.id}'")
+    finally:
+      for session in client.sessions.values():
+        session.close()
+
+      del self.clients[client.id]
+    logger.debug(f"Removed client '{client.id}'")
+
+  async def broadcast(self, message):
+    for client in list(self.clients.values()):
+      try:
+        await client.send(message)
+      except ClientClosed:
+        pass
+
+  async def process_request(self, client, request):
     if request["type"] == "app.session.create":
       id = str(uuid.uuid4())
       session = Session(size=(request["size"]["columns"], request["size"]["rows"]))
@@ -134,21 +206,21 @@ class App:
       async def start_session():
         try:
           async for chunk in session.start():
-            await client.conn.send(json.dumps({
+            await client.send({
               "type": "app.session.data",
               "id": id,
               "data": list(chunk)
-            }))
+            })
 
           del client.sessions[id]
           logger.info(f"Closed terminal session with id '{id}'")
 
-          await client.conn.send(json.dumps({
+          await client.send({
             "type": "app.session.close",
             "id": id,
             "status": session.status
-          }))
-        except websockets.ConnectionClosed:
+          })
+        except ClientClosed:
           pass
 
       loop = asyncio.get_event_loop()
@@ -174,16 +246,16 @@ class App:
     if not self.updating:
       self.updating = True
 
-      def send_state():
-        self.broadcast(json.dumps({
+      async def send_state():
+        await self.broadcast({
           "type": "state",
           "data": self.host.get_state()
-        }))
+        })
 
         self.updating = False
 
       loop = asyncio.get_event_loop()
-      loop.call_soon(send_state)
+      loop.create_task(send_state())
 
   def start(self):
     logger.info("Starting app")
@@ -199,16 +271,10 @@ class App:
     tasks = set()
 
     for bridge in self.bridges:
-      async def receive(message, *, ref = None):
-        if not message:
-          await bridge.send({
-            "type": "state",
-            "data": self.host.get_state()
-          }, ref=ref)
-        # elif message["type"] == "request":
-        #   self.process_request(message["data"], bridge=bridge, ref=ref)
+      async def handle_client(client):
+        await self.handle_client(client)
 
-      task = loop.create_task(bridge.start(receive))
+      task = loop.create_task(bridge.start(handle_client))
       tasks.add(task)
 
     task = loop.create_task(self.host.start())

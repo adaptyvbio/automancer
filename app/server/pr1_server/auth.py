@@ -29,7 +29,6 @@ class PasswordAgent:
     }
 
   def update_conf(conf):
-    # if (not password.startswith("$2")) or (len(password) != 60):
     if not conf.get('hashed'):
       return {
         **conf,

@@ -3,7 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
 import { Icon } from './icon';
-import { Draft, getDraftEntrySource } from '../draft';
+import { Draft } from '../draft';
 import * as util from '../util';
 
 
@@ -45,7 +45,13 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
   componentDidMount() {
     this.pool.add(async () => {
-      let source = await getDraftEntrySource(this.props.draft.entry);
+      let blob = await this.props.draft.item.getMainFile();
+
+      if (!blob) {
+        return;
+      }
+
+      let source = await blob.text();
 
       if (source === null) {
         return;

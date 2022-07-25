@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import type { DraftEntry as DraftDatabaseEntry } from '../app-backend';
-import type { Host, Route } from '../application';
+import type { Application, Host, Route } from '../application';
 import type { Draft, DraftId, DraftPrimitive } from '../draft';
 import { ContextMenuArea, ContextMenuAreaProps } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
@@ -19,12 +19,9 @@ const rtf = new Intl.RelativeTimeFormat('en', {
 
 
 export interface ViewProtocolsProps {
+  app: Application;
   drafts: Record<DraftId, Draft>;
   host: Host;
-
-  createDraft(location: DraftDatabaseEntry['location']): Promise<DraftId>;
-  deleteDraft(draftId: DraftId): Promise<void>;
-  setDraft(draft: DraftPrimitive): Promise<void>;
   setRoute(route: Route): void;
 }
 
@@ -45,33 +42,24 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
             <h2>All protocols</h2>
             <div className="actions">
               <button type="button" className="btn" onClick={() => {
-                this.pool.add(async () => {
-                  let draftId = await this.props.createDraft({
-                    type: 'app',
-                    source: `name: Untitled protocol\n\nstages:\n  - name: First stage\n    steps:\n      - duration: 20 min`,
-                  });
+                // this.pool.add(async () => {
+                //   let draftId = await this.props.createDraft({
+                //     type: 'app',
+                //     source: `name: Untitled protocol\n\nstages:\n  - name: First stage\n    steps:\n      - duration: 20 min`,
+                //   });
 
-                  this.props.setRoute(['protocol', draftId, 'overview']);
-                });
-              }}>
-                New protocol
-              </button>
+                //   this.props.setRoute(['protocol', draftId, 'overview']);
+                // });
+              }}>New file</button>
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {
-                  let handles = await util.wrapAbortable(window.showOpenFilePicker({
-                    types: [
-                      { accept: { 'text/yml': ['.yml', '.yaml'] } }
-                    ]
-                  }));
+                  let draftId = await this.props.app.appBackend.loadDraft();
 
-                  if (handles && (handles.length > 0)) {
-                    await this.props.createDraft({
-                      type: 'filesystem',
-                      handle: handles[0]
-                    });
+                  if (draftId) {
+                    this.props.setRoute(['protocol', draftId, 'overview']);
                   }
                 });
-              }}>Load file</button>
+              }}>Open file</button>
             </div>
           </header>
 
@@ -81,36 +69,41 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
               return (
                 <DraftEntry
-                  name={draft.entry.name ?? '[Untitled]'}
+                  name={draft.item.name ?? '[Untitled]'}
                   properties={[
-                    { id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.entry.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' },
+                    ...(draft.item.locationInfo
+                      ? [{ id: 'location', label: draft.item.locationInfo.name, icon: { directory: 'folder', file: 'description' }[draft.item.locationInfo.type] }]
+                      : []),
+                    ...(draft.item.lastModified
+                      ? [{ id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.item.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' }]
+                      : []),
                     ...(draft.compiled
                       ? [analysis
                         ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }
                         : { id: 'status', label: 'Error', icon: 'error' }]
-                      : []),
-                    ...((draft.entry.location.type === 'filesystem')
-                      ? [{ id: 'file', label: draft.entry.location.handle.name, icon: 'description' }]
                       : [])
                   ]}
                   createMenu={() => [
                     // { id: 'chip', name: 'Open chip', icon: 'memory' },
-                    { id: 'duplicate', name: 'Duplicate', icon: 'file_copy' },
-                    { id: '_divider', type: 'divider' },
-                    { id: 'archive', name: 'Archive', icon: 'archive' },
-                    { id: 'delete', name: 'Delete', icon: 'delete' }
+                    // { id: 'duplicate', name: 'Duplicate', icon: 'file_copy' },
+                    // { id: '_divider', type: 'divider' },
+                    // { id: 'archive', name: 'Archive', icon: 'archive' },
+                    ...((draft.item.kind === 'ref')
+                      ? [{ id: 'remove', name: 'Remove from list', icon: 'highlight_off' }]
+                      : [{ id: 'delete', name: 'Delete', icon: 'delete' }])
                   ]}
                   onClick={() => {
                     this.props.setRoute(['protocol', draft.id, 'overview']);
                   }}
                   onSelect={(path) => {
                     switch (path.first()) {
-                      case 'delete': {
-                        this.props.setRoute(['protocol']);
-
+                      case 'delete':
+                      case 'remove': {
                         this.pool.add(async () => {
-                          await this.props.deleteDraft(draft.id);
+                          await this.props.app.appBackend.deleteDraft(draft.id);
                         });
+
+                        break;
                       }
                     }
                   }}

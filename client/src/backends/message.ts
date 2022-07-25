@@ -35,14 +35,6 @@ export abstract class MessageBackend extends RawMessageBackend {
   #requests = new Map<number, Deferred<unknown>>();
   #sessions = new Map<TerminalSession['id'], TerminalSession>();
 
-  closed: Promise<void>;
-
-  constructor() {
-    super();
-
-    this.closed = new Promise(() => {});
-  }
-
   async start() {
     let deferred: Deferred<void> | null = util.defer();
 

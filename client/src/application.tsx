@@ -2,12 +2,13 @@ import * as idb from 'idb-keyval';
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
-import { AppBackend, DraftEntry } from './app-backend';
+import type { AppBackend, DraftItem } from './app-backends/base';
+import { BrowserAppBackend } from './app-backends/browser';
 import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/common';
 import WebsocketBackend from './backends/websocket';
 import { PyodideBackend } from './backends/pyodide';
 import { Sidebar } from './components/sidebar';
-import { Draft, DraftId, DraftPrimitive, DraftsRecord, getDraftEntrySource } from './draft';
+import { Draft, DraftId, DraftPrimitive, DraftsRecord } from './draft';
 import { ViewChip, ViewChipMode } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
@@ -92,13 +93,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   controller = new AbortController();
   pool = new Pool();
 
-  appBackend = new AppBackend({
+  appBackend = new BrowserAppBackend({
     onDraftsUpdate: (update, options) => {
       this.setState((state) => {
         let drafts = { ...state.drafts };
 
-        for (let [draftId, draftEntry] of Object.entries(update)) {
-          if (!draftEntry) {
+        for (let [draftId, draftItem] of Object.entries(update)) {
+          if (!draftItem) {
             delete drafts[draftId];
             continue;
           }
@@ -107,12 +108,12 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             id: draftId,
             ...(drafts[draftId] as Draft | undefined),
             compiled: null,
-            entry: draftEntry
+            item: draftItem
           };
 
-          if (this.host && !options.skipCompilation) {
+          if (this.host && !options?.skipCompilation) {
             this.pool.add(async () => {
-              await this.compileDraft(draftEntry!);
+              await this.compileDraft(draftItem!);
             });
           }
         }
@@ -261,7 +262,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     if (prevState.selectedHostId !== this.state.selectedHostId) {
       this.pool.add(async () => {
         for (let draft of Object.values(this.state.drafts)) {
-          await this.compileDraft(draft.entry);
+          await this.compileDraft(draft.item);
         }
       });
     }
@@ -272,65 +273,26 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
 
-  async compileDraft(draftEntry: DraftEntry) {
-    let source = await getDraftEntrySource(draftEntry);
+  async compileDraft(draftItem: DraftItem) {
+    let blob = await draftItem.getMainFile();
 
-    if (source !== null) {
-      let compiled = await this.host!.backend.compileDraft(draftEntry.id, source);
+    if (blob) {
+      let source = await blob.text();
+      let compiled = await this.host!.backend.compileDraft(draftItem.id, source);
 
-      await this.appBackend.setDraft({
-        id: draftEntry.id,
-        name: compiled.protocol?.name ?? draftEntry.name
+      await this.appBackend.setDraft(draftItem.id, {
+        name: compiled.protocol?.name ?? draftItem.name
       }, { skipCompilation: true });
 
       this.setState((state) => ({
         drafts: {
           ...state.drafts,
-          [draftEntry.id]: {
-            ...state.drafts[draftEntry.id],
+          [draftItem.id]: {
+            ...state.drafts[draftItem.id],
             compiled
           }
         }
       }));
-    }
-  }
-
-  async createDraft(location: DraftEntry['location']): Promise<DraftId> {
-    let lastModified = (location.type === 'filesystem')
-      ? (await location.handle.getFile()).lastModified
-      : Date.now();
-
-    let id = crypto.randomUUID();
-
-    await this.appBackend.setDraft({
-      id,
-      name: null,
-      lastModified,
-      location
-    });
-
-    return id;
-  }
-
-  async deleteDraft(draftId: DraftId) {
-    this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
-    await this.appBackend.deleteDraft(draftId);
-  }
-
-  async setDraft(draftPrimitive: DraftPrimitive) {
-    let draft = this.state.drafts[draftPrimitive.id];
-
-    switch (draft.entry.location.type) {
-      case 'app': {
-        await this.appBackend.setDraft({
-          ...draft.entry,
-          lastModified: Date.now(),
-          location: {
-            ...draft.entry.location,
-            source: draftPrimitive.source
-          }
-        });
-      }
     }
   }
 
@@ -349,9 +311,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   render() {
-    let createDraft = this.createDraft.bind(this);
-    let deleteDraft = this.deleteDraft.bind(this);
-    let setDraft = this.setDraft.bind(this);
+    // let createDraft = this.createDraft.bind(this);
+    // let deleteDraft = this.deleteDraft.bind(this);
+    // let setDraft = this.setDraft.bind(this);
     let setRoute = this.setRoute.bind(this);
 
     let contents = (() => {
@@ -371,11 +333,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
           case 'protocol': return (
             <ViewProtocols
+              app={this}
               drafts={this.state.drafts}
               host={this.host}
-              createDraft={createDraft}
-              deleteDraft={deleteDraft}
-              setDraft={setDraft}
               setRoute={setRoute} />
           )
 
@@ -412,10 +372,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
             return (
               <ViewDraft
+                app={this}
                 draft={draft}
                 host={this.host}
                 mode={route[2] as ViewDraftMode}
-                setDraft={setDraft}
                 setRoute={setRoute} />
             );
           };

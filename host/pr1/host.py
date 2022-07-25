@@ -276,6 +276,9 @@ class Host:
       # TODO: checks
       del self.chips[request["chipId"]]
 
+    if request["type"] == "createDraftSample":
+      return "# Example protocol\nname: My protocol\n\nstages:\n  - steps:\n      - name: Step no. 1\n        duration: 5 min"
+
     if request["type"] == "pause":
       chip = self.chips[request["chipId"]]
       chip.master.pause({

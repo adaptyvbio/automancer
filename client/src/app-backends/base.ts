@@ -25,7 +25,7 @@ export interface AppBackendOptions {
 export interface AppBackend {
   initialize?(): Promise<void>;
 
-  createDraft?(): Promise<DraftId | null>;
+  createDraft(source: string): Promise<DraftId | null>;
   deleteDraft(draftId: DraftId): Promise<void>;
   loadDraft(): Promise<DraftId | null>;
   setDraft(draftId: DraftId, primitive: DraftPrimitive, options?: { skipCompilation?: unknown; }): Promise<void>;

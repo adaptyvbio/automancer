@@ -86,6 +86,41 @@ export class BrowserAppBackend implements AppBackend {
     }
   }
 
+  async createDraft(source: string) {
+    let handle = await util.wrapAbortable(window.showDirectoryPicker());
+
+    if (!handle) {
+      return null;
+    }
+
+    let newDraftEntry = {
+      id: crypto.randomUUID(),
+      name: null,
+
+      location: {
+        type: ('user-filesystem' as 'user-filesystem'),
+        handle,
+        mainFilePath: 'protocol.yml'
+      }
+    };
+
+    let fileHandle = await handle.getFileHandle(newDraftEntry.location.mainFilePath, { create: true });
+    let writable = await fileHandle.createWritable();
+
+    await writable.write(source);
+    await writable.close();
+
+    await idb.update<MainEntry>('main', (mainEntry) => ({
+      ...mainEntry!,
+      draftIds: [...this.#draftIds, newDraftEntry.id]
+    }), this.#store);
+
+    await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
+    this.#options.onDraftsUpdate({ [newDraftEntry.id]: createDraftItem(newDraftEntry) });
+
+    return newDraftEntry.id;
+  }
+
   async deleteDraft(draftId: string): Promise<void> {
     let draftEntry = (await idb.get<DraftEntry>(draftId, this.#store))!;
 
@@ -109,25 +144,22 @@ export class BrowserAppBackend implements AppBackend {
   }
 
   async loadDraft(): Promise<DraftId | null> {
-    let handle = await window.showDirectoryPicker();
+    let handle = await util.wrapAbortable(window.showDirectoryPicker());
 
     if (!handle) {
       return null;
     }
 
-    // let lastModified = 0;
     let files: Record<string, Blob> = {};
 
     for await (let entry of handle.values()) {
       if (entry.kind === 'file') {
         let file = await entry.getFile();
 
-        // lastModified = Math.max(file.lastModified, lastModified);
         files[entry.name] = file;
       }
     }
 
-    // lastModified = Math.min(lastModified, Date.now());
     let mainFilePath = Object.keys(files).find((path) => path.endsWith('.yml')) ?? null;
 
     if (!mainFilePath) {
@@ -145,15 +177,13 @@ export class BrowserAppBackend implements AppBackend {
       }
     };
 
-    let newDraftItem = createDraftItem(newDraftEntry);
-
     await idb.update<MainEntry>('main', (mainEntry) => ({
       ...mainEntry!,
       draftIds: [...this.#draftIds, newDraftEntry.id]
     }), this.#store);
 
     await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-    this.#options.onDraftsUpdate({ [newDraftItem.id]: newDraftItem });
+    this.#options.onDraftsUpdate({ [newDraftEntry.id]: createDraftItem(newDraftEntry) });
 
     return newDraftEntry.id;
   }

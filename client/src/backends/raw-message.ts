@@ -36,6 +36,12 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
+  async createDraftSample() {
+    return await this._request({
+      type: 'createDraftSample'
+    }) as string;
+  }
+
   async pause(chipId: string, options: { neutral: boolean; }) {
     await this._request({
       type: 'pause',

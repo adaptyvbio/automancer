@@ -42,14 +42,14 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
             <h2>All protocols</h2>
             <div className="actions">
               <button type="button" className="btn" onClick={() => {
-                // this.pool.add(async () => {
-                //   let draftId = await this.props.createDraft({
-                //     type: 'app',
-                //     source: `name: Untitled protocol\n\nstages:\n  - name: First stage\n    steps:\n      - duration: 20 min`,
-                //   });
+                this.pool.add(async () => {
+                  let sample = await this.props.host.backend.createDraftSample();
+                  let draftId = await this.props.app.appBackend.createDraft(sample);
 
-                //   this.props.setRoute(['protocol', draftId, 'overview']);
-                // });
+                  if (draftId) {
+                    this.props.setRoute(['protocol', draftId, 'overview']);
+                  }
+                });
               }}>New file</button>
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {

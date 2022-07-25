@@ -30,6 +30,7 @@ export abstract class BackendCommon {
   abstract compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
+  abstract createDraftSample(): Promise<string>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
   abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;

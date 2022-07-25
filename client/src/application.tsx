@@ -97,10 +97,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     onDraftsUpdate: (update, options) => {
       this.setState((state) => {
         let drafts = { ...state.drafts };
+        let openDraftIds = state.openDraftIds;
 
         for (let [draftId, draftItem] of Object.entries(update)) {
           if (!draftItem) {
             delete drafts[draftId];
+            openDraftIds = openDraftIds.remove(draftId);
+
             continue;
           }
 
@@ -118,7 +121,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           }
         }
 
-        return { drafts };
+        return { drafts, openDraftIds };
       });
     }
   });

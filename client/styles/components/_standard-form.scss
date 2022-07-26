@@ -3,6 +3,7 @@
 
 
 $main-color: #404452;
+$background-color: #fff;
 $placeholder-color: #aaa;
 $keyline-shadow: rgba($main-color, 16%) 0 0 0 1px;
 $keyline-bottom-shadow: #0000001f 0 1px 1px;
@@ -39,6 +40,7 @@ $height: 2rem;
     height: $height;
     padding: 0 $hor-padding;
 
+    background-color: $background-color;
     border-radius: 4px;
 
     --focus-shadow: 0 0 transparent;

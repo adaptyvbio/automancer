@@ -1,7 +1,8 @@
 @use "./constants" as *;
 
 
-$icon-size: 24px;
+$color-left: rgb(38, 37, 40);
+$color-right: #e7e3e6;
 
 
 .startup {
@@ -14,7 +15,10 @@ $icon-size: 24px;
 
   &-root {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    > * {
+      grid-column: 1;
+      grid-row: 1;
+    }
 
     width: 800px;
     // height: 450px;
@@ -27,6 +31,12 @@ $icon-size: 24px;
     box-shadow: 6px 6px 6px #0001;
   }
 
+  &-home {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    height: 100%;
+  }
+
   &-left {
     &-root {
       display: flex;
@@ -36,7 +46,7 @@ $icon-size: 24px;
       padding: 3rem;
       padding-top: 6rem;
 
-      background-color: rgb(38, 37, 40);
+      background-color: $color-left;
       color: #fff;
     }
 
@@ -115,7 +125,7 @@ $icon-size: 24px;
       justify-content: space-between;
 
       padding: 1rem;
-      background-color: #e7e3e6;
+      background-color: $color-right;
     }
 
     &-entry {
@@ -164,15 +174,84 @@ $icon-size: 24px;
   }
 
 
-  // &-root._transitioning {
+  $duration: 800ms;
+  $delay: 100ms;
+  $total-duration: ($duration + $delay * 2);
 
-  // }
+  &-editor {
+    &-root {
+      height: 100%;
+      background-color: $color-left;
+    }
 
-  // &-root._transitioning &-left-root > * {
-  //   visibility: hidden;
-  // }
+    &-holder {
+      height: 100%;
+      background-color: $color-right;
 
-  // &-root._transitioning &-right-root {
+      transition: transform $duration $delay;
+    }
 
-  // }
+    &-contents {
+      display: grid;
+      grid-template-rows: 1fr auto;
+
+      height: 100%;
+      padding: 2rem 4rem;
+
+      h2 {
+        margin-top: 1rem;
+        font-size: 2rem;
+      }
+    }
+
+    &-action {
+      &-root {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      &-list {
+        display: flex;
+        column-gap: 0.4rem;
+      }
+
+      &-item {
+        padding: 0.6rem 1rem;
+        border-radius: 6px;
+
+        color: #333;
+        font-weight: 500;
+
+        &:hover {
+          background-color: #0001;
+        }
+      }
+    }
+  }
+
+
+  &-root._transitioning &-home {
+    visibility: hidden;
+  }
+
+  &-root:not(._transitioning) &-home {
+    transition: visibility 0s $total-duration;
+  }
+
+  &-root:not(._transitioning) &-editor-root {
+    transition: visibility 0s $total-duration;
+    visibility: hidden;
+  }
+
+  &-root:not(._transitioning) &-editor-holder {
+    transform: scaleX(33.3333%) translateX(100%);
+  }
+
+  &-root._transitioning &-editor-contents {
+    transition: visibility 0s $total-duration;
+  }
+
+  &-root:not(._transitioning) &-editor-contents {
+    visibility: hidden;
+  }
 }

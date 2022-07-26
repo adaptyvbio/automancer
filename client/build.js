@@ -34,6 +34,7 @@ esbuild.build({
   watch: argv.watch,
 	loader: {
 		'.ttf': 'file',
+		'.woff': 'file',
 		'.woff2': 'file'
 	},
 	external: ['vm', 'path', 'fs/promises'] // For pyodide

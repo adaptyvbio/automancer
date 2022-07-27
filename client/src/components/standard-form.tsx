@@ -100,12 +100,19 @@ export function Select<T extends number | string | null>(props: {
 
 export function TextField(props: {
   label: string;
+  onBlur?(): void;
+  onInput(value: string): void;
   placeholder: string;
+  value: string;
 }) {
   return (
     <label className="sform-group">
       <div className="sform-label">{props.label}</div>
-      <input type="text" className="sform-textfield" placeholder={props.placeholder} />
+      <input type="text" className="sform-textfield"
+        placeholder={props.placeholder}
+        onBlur={props.onBlur}
+        onInput={(event) => void props.onInput(event.currentTarget.value)}
+        value={props.value} />
     </label>
   );
 }

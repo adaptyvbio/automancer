@@ -7,36 +7,38 @@
   <body>
     <div id="root"></div>
     <script type="module">
-      import createClient from './dist/index.js';
+      import createClient, { createBrowserApp } from './dist/index.js';
 
       navigator.serviceWorker.register('./service-worker.js');
 
-      let id = crypto.randomUUID();
+      createBrowserApp(document.getElementById('root'));
 
-      createClient(document.getElementById('root'), {
-        settings: {
-          hosts: {
-            [id]: {
-              id,
-              builtin: false,
-              disabled: false,
-              hostId: null,
-              locked: false,
-              name: null,
-              backendOptions: {
-                // type: 'local',
-                // storage: {
-                //   type: 'memory'
-                // }
-                type: 'remote',
-                address: 'localhost',
-                port: 4567,
-                secure: false
-              }
-            }
-          }
-        }
-      });
+      // let id = crypto.randomUUID();
+
+      // createClient(document.getElementById('root'), {
+      //   settings: {
+      //     hosts: {
+      //       [id]: {
+      //         id,
+      //         builtin: false,
+      //         disabled: false,
+      //         hostId: null,
+      //         locked: false,
+      //         name: null,
+      //         backendOptions: {
+      //           // type: 'local',
+      //           // storage: {
+      //           //   type: 'memory'
+      //           // }
+      //           type: 'remote',
+      //           address: 'localhost',
+      //           port: 4567,
+      //           secure: false
+      //         }
+      //       }
+      //     }
+      //   }
+      // });
     </script>
   </body>
 </html>

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Application, Settings } from './application';
+import { BrowserApp } from './browser-app';
 import { Startup } from './startup';
 
 import '../lib/styles.css';
@@ -21,7 +22,7 @@ export default function createClient(element: Element, options: {
 }
 
 
-export function createStartup(element: Element) {
+export function createBrowserApp(element: Element) {
   let root = createRoot(element);
-  root.render(<Startup />);
+  root.render(<BrowserApp />);
 }

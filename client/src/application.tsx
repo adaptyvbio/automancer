@@ -23,6 +23,7 @@ import { analyzeProtocol } from './analysis';
 export interface Host {
   backend: BackendCommon;
   id: HostId;
+  settingsId: string;
   state: HostState;
 }
 
@@ -35,8 +36,9 @@ export type LocalBackendStorage = {
   type: 'memory';
 };
 
-export type HostSettingsEntryBackendOptions = {
+export type HostBackendOptions = {
   type: 'remote';
+  auth: HostBackendAuthOptions | null;
   address: string;
   port: number;
   secure: boolean;
@@ -51,20 +53,37 @@ export type HostSettingsEntryBackendOptions = {
   type: 'inactive';
 };
 
-export interface HostSettingsEntry {
+export type HostBackendAuthOptions = {
+  methodIndex: number;
+
+  type: 'password';
+  password: string;
+};
+
+
+export interface HostSettings {
   id: string;
   builtin: boolean;
-  disabled: boolean;
   hostId: HostId | null;
   locked: boolean;
-  name: string | null;
+  label: string | null;
 
-  backendOptions: HostSettingsEntryBackendOptions;
+  backendOptions: HostBackendOptions;
 }
+
+export type HostSettingsRecord = Record<string, HostSettings>;
+
+export function formatHostSettings(hostSettings: HostSettings): string | null {
+  switch (hostSettings.backendOptions.type) {
+    case 'remote': return `${hostSettings.backendOptions.address}:${hostSettings.backendOptions.port}`;
+    default: return null;
+  }
+}
+
 
 export interface Settings {
   defaultHostId: HostId | null;
-  hosts: Record<string, HostSettingsEntry>;
+  hosts: HostSettingsRecord;
 }
 
 
@@ -151,7 +170,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       : null;
   }
 
-  updateHostLocation(hostSettingsEntry: HostSettingsEntry) {
+  updateHostLocation(hostSettingsEntry: HostSettings) {
     if (hostSettingsEntry.hostId) {
       this.setState((state) => ({
         hosts: removeIn(state.hosts, [hostSettingsEntry.hostId]),

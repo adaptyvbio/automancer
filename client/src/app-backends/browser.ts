@@ -3,6 +3,8 @@ import * as idb from 'idb-keyval';
 import { Draft, DraftId, DraftPrimitive } from '../draft';
 import { AppBackend, AppBackendOptions, DraftItem } from './base';
 import * as util from '../util';
+import { HostId } from '../backends/common';
+import { HostSettings, HostSettingsRecord } from '../application';
 
 
 interface MainEntry {
@@ -28,6 +30,11 @@ interface DraftEntry {
   };
 }
 
+interface HostSettingsEntry {
+  hosts: Record<HostId, HostSettings>;
+}
+
+
 export class BrowserAppBackend implements AppBackend {
   static version = 1;
 
@@ -39,6 +46,42 @@ export class BrowserAppBackend implements AppBackend {
   constructor(options: AppBackendOptions) {
     this.#options = options;
   }
+
+  async deleteHostSettings(settingsId: string) {
+    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => {
+      let { [settingsId]: _, ...hosts } = hostSettingsEntry!.hosts;
+
+      return {
+        ...hostSettingsEntry!,
+        hosts
+      };
+    }, this.#store);
+  }
+
+  async getHostSettings() {
+    let hostSettingsEntry = await idb.get<HostSettingsEntry>('hosts', this.#store);
+
+    if (!hostSettingsEntry) {
+      hostSettingsEntry = {
+        hosts: {}
+      };
+
+      await idb.set('hosts', hostSettingsEntry, this.#store);
+    }
+
+    return hostSettingsEntry.hosts;
+  }
+
+  async setHostSettings(settings: HostSettings) {
+    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => ({
+      ...hostSettingsEntry!,
+      hosts: {
+        ...hostSettingsEntry!.hosts,
+        [settings.id]: settings
+      }
+    }), this.#store);
+  }
+
 
   async initialize() {
     if (Notification.permission === 'default') {
@@ -54,17 +97,7 @@ export class BrowserAppBackend implements AppBackend {
       let draftEntries = await idb.getMany<DraftEntry>(mainEntry.draftIds, this.#store);
       let draftItems = Object.fromEntries(
         draftEntries.map((draftEntry) => {
-          // let draftItem = {
-          //   id: draftEntry.id,
-          //   name: draftEntry.name,
-          //   kind: ('ref' as 'ref'),
-          //   lastModified: Date.now(),
-          //   getFiles: async () => ({}),
-          //   mainFilePath: null
-          // };
-
-          let draftItem = createDraftItem(draftEntry);
-          return [draftItem.id, draftItem];
+          return [draftEntry.id, createDraftItem(draftEntry)];
         })
       );
 

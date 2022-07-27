@@ -1,5 +1,7 @@
+import { HostBackendOptions } from '../application';
 import type { Draft as AppDraft } from '../draft';
 import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
+import WebsocketBackend from './websocket';
 
 
 export abstract class BackendCommon {
@@ -44,6 +46,11 @@ export abstract class BackendCommon {
     source: string;
   }): Promise<void>;
 }
+
+export type BackendAuthAgentSpec = {
+  type: 'password';
+  description: string;
+};
 
 
 export type ChipId = string;
@@ -146,6 +153,19 @@ export interface HostState {
 
 export type Namespace = 'control' | 'input' | 'timer';
 export type RunnerCommand = ControlNamespace.RunnerCommand;
+
+
+export function createBackend(options: HostBackendOptions): BackendCommon {
+  switch (options.type) {
+    case 'remote': {
+      return new WebsocketBackend({
+        address: options.address,
+        port: options.port,
+        secure: options.secure
+      });
+    }
+  }
+}
 
 
 // -- Deprecated ------------------------------------------

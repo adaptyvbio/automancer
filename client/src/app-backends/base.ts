@@ -1,3 +1,4 @@
+import { HostSettings, HostSettingsRecord } from '../application';
 import { DraftId, DraftPrimitive } from '../draft';
 
 
@@ -24,6 +25,10 @@ export interface AppBackendOptions {
 
 export interface AppBackend {
   initialize?(): Promise<void>;
+
+  deleteHostSettings(settingsId: string): Promise<void>;
+  getHostSettings(): Promise<HostSettingsRecord>;
+  setHostSettings(settings: HostSettings): Promise<void>;
 
   createDraft(source: string): Promise<DraftId | null>;
   deleteDraft(draftId: DraftId): Promise<void>;

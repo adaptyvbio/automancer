@@ -1,5 +1,5 @@
-import { HostSettings, HostSettingsRecord } from '../application';
-import { DraftId, DraftPrimitive } from '../draft';
+import type { HostSettings, HostSettingsRecord } from '../host';
+import type { DraftId, DraftPrimitive } from '../draft';
 
 
 export interface DraftItem {
@@ -17,14 +17,12 @@ export interface DraftItem {
 }
 
 export type DraftsUpdateRecord = Record<DraftId, DraftItem | undefined>;
-
-export interface AppBackendOptions {
-  onDraftsUpdate(update: DraftsUpdateRecord, options?: { skipCompilation?: unknown; }): void;
-}
+export type DraftsUpdateEvent = { update: DraftsUpdateRecord; options: { skipCompilation: boolean; } };
+export type DraftsUpdateListener = (event: DraftsUpdateEvent) => void;
 
 
 export interface AppBackend {
-  initialize?(): Promise<void>;
+  initialize(): Promise<void>;
 
   deleteHostSettings(settingsId: string): Promise<void>;
   getHostSettings(): Promise<HostSettingsRecord>;
@@ -34,10 +32,11 @@ export interface AppBackend {
   deleteDraft(draftId: DraftId): Promise<void>;
   loadDraft(): Promise<DraftId | null>;
   setDraft(draftId: DraftId, primitive: DraftPrimitive, options?: { skipCompilation?: unknown; }): Promise<void>;
+  onDraftsUpdate(listener: DraftsUpdateListener, options?: { signal?: AbortSignal; }): void;
 
   notify(message: string): Promise<void>;
 }
 
 export interface AppBackendClass {
-  new(options: AppBackendOptions): AppBackend;
+  new(): AppBackend;
 }

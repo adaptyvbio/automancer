@@ -1,10 +1,9 @@
-import { HostBackendOptions } from '../application';
+import type { BaseBackend } from './base';
 import type { Draft as AppDraft } from '../draft';
 import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
-import WebsocketBackend from './websocket';
 
 
-export abstract class BackendCommon {
+export abstract class BackendCommon implements BaseBackend {
   private _listeners: Set<() => void> = new Set();
 
   abstract closed: Promise<void>;
@@ -153,19 +152,6 @@ export interface HostState {
 
 export type Namespace = 'control' | 'input' | 'timer';
 export type RunnerCommand = ControlNamespace.RunnerCommand;
-
-
-export function createBackend(options: HostBackendOptions): BackendCommon {
-  switch (options.type) {
-    case 'remote': {
-      return new WebsocketBackend({
-        address: options.address,
-        port: options.port,
-        secure: options.secure
-      });
-    }
-  }
-}
 
 
 // -- Deprecated ------------------------------------------

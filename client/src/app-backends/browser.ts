@@ -1,10 +1,10 @@
 import * as idb from 'idb-keyval';
 
 import { Draft, DraftId, DraftPrimitive } from '../draft';
-import { AppBackend, AppBackendOptions, DraftItem } from './base';
+import { AppBackend, DraftItem, DraftsUpdateEvent, DraftsUpdateListener } from './base';
 import * as util from '../util';
 import { HostId } from '../backends/common';
-import { HostSettings, HostSettingsRecord } from '../application';
+import type { Host, HostSettings, HostSettingsRecord } from '../host';
 
 
 interface MainEntry {
@@ -39,12 +39,11 @@ export class BrowserAppBackend implements AppBackend {
   static version = 1;
 
   #draftIds = new Set<DraftId>();
-  #options: AppBackendOptions;
+  #draftListeners = new Set<DraftsUpdateListener>();
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
-  constructor(options: AppBackendOptions) {
-    this.#options = options;
+  constructor() {
   }
 
   async deleteHostSettings(settingsId: string) {
@@ -102,7 +101,7 @@ export class BrowserAppBackend implements AppBackend {
       );
 
       this.#draftIds = new Set(mainEntry.draftIds);
-      this.#options.onDraftsUpdate(draftItems);
+      this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: draftItems });
     } else {
       let entry: MainEntry = {
         draftIds: [],
@@ -149,7 +148,7 @@ export class BrowserAppBackend implements AppBackend {
     }), this.#store);
 
     await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-    this.#options.onDraftsUpdate({ [newDraftEntry.id]: createDraftItem(newDraftEntry) });
+    this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: { [newDraftEntry.id]: createDraftItem(newDraftEntry) } });
 
     return newDraftEntry.id;
   }
@@ -173,7 +172,7 @@ export class BrowserAppBackend implements AppBackend {
 
     await idb.del(draftId, this.#store);
 
-    this.#options.onDraftsUpdate({ [draftId]: undefined }, {});
+    this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: { [draftId]: undefined } });
   }
 
   async loadDraft(): Promise<DraftId | null> {
@@ -216,7 +215,7 @@ export class BrowserAppBackend implements AppBackend {
     }), this.#store);
 
     await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-    this.#options.onDraftsUpdate({ [newDraftEntry.id]: createDraftItem(newDraftEntry) });
+    this._triggerDraftsUpdate({ options: { skipCompilation: true }, update: { [newDraftEntry.id]: createDraftItem(newDraftEntry) } });
 
     return newDraftEntry.id;
   }
@@ -254,9 +253,24 @@ export class BrowserAppBackend implements AppBackend {
 
     await idb.set(draftId, updatedDraftEntry, this.#store);
 
-    this.#options.onDraftsUpdate({
-      [draftId]: createDraftItem(updatedDraftEntry)
-    }, options);
+    this._triggerDraftsUpdate({
+      options: { skipCompilation: !!options?.skipCompilation },
+      update: { [draftId]: createDraftItem(updatedDraftEntry) }
+    });
+  }
+
+  onDraftsUpdate(listener: DraftsUpdateListener, options?: { signal?: AbortSignal | undefined; }) {
+    this.#draftListeners.add(listener);
+
+    options?.signal?.addEventListener('abort', () => {
+      this.#draftListeners.delete(listener);
+    });
+  }
+
+  private _triggerDraftsUpdate(event: DraftsUpdateEvent) {
+    for (let listener of this.#draftListeners) {
+      listener(event);
+    }
   }
 }
 

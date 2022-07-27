@@ -1,119 +1,96 @@
-import * as idb from 'idb-keyval';
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
 import type { AppBackend, DraftItem } from './app-backends/base';
-import { BrowserAppBackend } from './app-backends/browser';
-import { BackendCommon, ChipId, HostId, HostState, Protocol } from './backends/common';
-import WebsocketBackend from './backends/websocket';
-import { PyodideBackend } from './backends/pyodide';
+import type { ChipId } from './backends/common';
+import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
-import { Draft, DraftId, DraftPrimitive, DraftsRecord } from './draft';
-import { ViewChip, ViewChipMode } from './views/chip';
+import type { Draft, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import type { Host, HostSettings, HostSettingsRecord } from './host';
+import { ViewChip, type ViewChipMode } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { Pool } from './util';
-import * as util from './util';
-import { analyzeProtocol } from './analysis';
-
-
-
-export interface Host {
-  backend: BackendCommon;
-  id: HostId;
-  settingsId: string;
-  state: HostState;
-}
-
-export type LocalBackendStorage = {
-  type: 'filesystem';
-  handle: FileSystemDirectoryHandle;
-} | {
-  type: 'persistent';
-} | {
-  type: 'memory';
-};
-
-export type HostBackendOptions = {
-  type: 'remote';
-  auth: HostBackendAuthOptions | null;
-  address: string;
-  port: number;
-  secure: boolean;
-} | {
-  type: 'internal';
-  Backend: { new(): BackendCommon; };
-} | {
-  type: 'local';
-  id: string;
-  storage: LocalBackendStorage;
-} | {
-  type: 'inactive';
-};
-
-export type HostBackendAuthOptions = {
-  methodIndex: number;
-
-  type: 'password';
-  password: string;
-};
-
-
-export interface HostSettings {
-  id: string;
-  builtin: boolean;
-  hostId: HostId | null;
-  locked: boolean;
-  label: string | null;
-
-  backendOptions: HostBackendOptions;
-}
-
-export type HostSettingsRecord = Record<string, HostSettings>;
-
-export function formatHostSettings(hostSettings: HostSettings): string | null {
-  switch (hostSettings.backendOptions.type) {
-    case 'remote': return `${hostSettings.backendOptions.address}:${hostSettings.backendOptions.port}`;
-    default: return null;
-  }
-}
-
-
-export interface Settings {
-  defaultHostId: HostId | null;
-  hosts: HostSettingsRecord;
-}
-
-
-// ---
 
 
 export type Route = (number | string)[];
 
 
 export interface ApplicationProps {
-  initialSettings: Settings;
+  appBackend: AppBackend;
+  hostSettings: HostSettings;
+  hostSettingsRecord: HostSettingsRecord;
 }
 
 export interface ApplicationState {
-  hosts: Record<HostId, Host>;
-  settings: Settings;
+  host: Host | null;
 
   drafts: DraftsRecord;
   openDraftIds: ImSet<DraftId>;
 
   currentRoute: Route | null;
-  selectedHostId: HostId | null;
 }
 
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
   controller = new AbortController();
   pool = new Pool();
 
-  appBackend = new BrowserAppBackend({
-    onDraftsUpdate: (update, options) => {
+  constructor(props: ApplicationProps) {
+    super(props);
+
+    this.state = {
+      host: null,
+
+      drafts: {},
+      openDraftIds: ImSet(),
+
+      currentRoute: null
+    };
+  }
+
+  get appBackend(): AppBackend {
+    return this.props.appBackend;
+  }
+
+  async initializeHost() {
+    let backend = createBackend(this.props.hostSettings.backendOptions);
+
+    try {
+      await backend.start();
+    } catch (err) {
+      console.error(`Backend of host failed to start with error: ${(err as Error).message}`);
+      console.error(err);
+      return;
+    }
+
+    console.log('Initial state ->', backend.state);
+
+    let host: Host = {
+      backend,
+      id: backend.state.info.id,
+      state: backend.state
+    };
+
+    this.setState({ host });
+
+    backend.closed
+      .catch((err) => {
+        console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
+        console.error(err);
+      })
+      .finally(() => {
+        this.setState({ host: null });
+      });
+  }
+
+  componentDidMount() {
+    window.addEventListener('beforeunload', () => {
+      this.state.host?.backend.close();
+    }, { signal: this.controller.signal });
+
+    this.props.appBackend.onDraftsUpdate(({ options, update }) => {
       this.setState((state) => {
         let drafts = { ...state.drafts };
         let openDraftIds = state.openDraftIds;
@@ -133,155 +110,35 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             item: draftItem
           };
 
-          if (this.host && !options?.skipCompilation) {
+          if (this.state.host && !options?.skipCompilation) {
             this.pool.add(async () => {
-              await this.compileDraft(draftItem!);
+              // await this.compileDraft(draftItem!);
             });
           }
         }
 
         return { drafts, openDraftIds };
       });
-    }
-  });
-
-  constructor(props: ApplicationProps) {
-    super(props);
-
-    this.state = {
-      hosts: {},
-      settings: props.initialSettings,
-
-      drafts: {},
-      openDraftIds: ImSet(),
-
-      currentRoute: ['chip'],
-      selectedHostId: null
-    };
-
-    for (let hostSettings of Object.values(props.initialSettings.hosts)) {
-      this.updateHostLocation(hostSettings);
-    }
-  }
-
-  get host() {
-    return this.state.selectedHostId
-      ? this.state.hosts[this.state.selectedHostId]
-      : null;
-  }
-
-  updateHostLocation(hostSettingsEntry: HostSettings) {
-    if (hostSettingsEntry.hostId) {
-      this.setState((state) => ({
-        hosts: removeIn(state.hosts, [hostSettingsEntry.hostId]),
-        settings: setIn(state.settings, ['hosts', hostSettingsEntry.id, 'hostId'], null)
-      }));
-    }
-
-    let backend = (() => {
-      switch (hostSettingsEntry.backendOptions.type) {
-        case 'internal': return new hostSettingsEntry.backendOptions.Backend();
-
-        case 'local': return new PyodideBackend({
-          id: hostSettingsEntry.backendOptions.id,
-          storage: hostSettingsEntry.backendOptions.storage
-        });
-
-        case 'remote': return new WebsocketBackend({
-          address: hostSettingsEntry.backendOptions.address,
-          port: hostSettingsEntry.backendOptions.port,
-          secure: hostSettingsEntry.backendOptions.secure
-        });
-      }
-    })();
-
-    if (backend) {
-      (async () => {
-        try {
-          await backend.start();
-        } catch (err) {
-          console.error(`Backend of host failed to start with error: ${(err as Error).message}`);
-          console.error(err);
-          return;
-        }
-
-        console.log('Initial state ->', backend.state);
-
-        let host = {
-          backend,
-          id: backend.state.info.id,
-          state: backend.state
-        };
-
-        this.setState((state) => ({
-          hosts: setIn(state.hosts, [host.id], host),
-          settings: setIn(state.settings, ['hosts', hostSettingsEntry.id, 'hostId'], host.id)
-        }));
-
-        backend.onUpdate(() => {
-          console.log('New state ->', backend!.state);
-
-          this.setState((state) => ({
-            hosts: setIn(state.hosts, [host.id, 'state'], backend!.state)
-          }));
-        });
-
-        if (!this.state.selectedHostId) {
-          this.setState({
-            selectedHostId: host.id
-          });
-        }
-
-        backend.closed
-          .catch((err) => {
-            console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
-            console.error(err);
-          })
-          .finally(() => {
-            this.setState((state) => ({
-              hosts: removeIn(state.hosts, [host.id]),
-              settings: setIn(state.settings, ['hosts', hostSettingsEntry.id, 'hostId'], null)
-            }));
-          });
-      })();
-    }
-  }
-
-  componentDidMount() {
-    window.addEventListener('beforeunload', () => {
-      for (let host of Object.values(this.state.hosts)) {
-        host.backend.close();
-      }
-    }, { signal: this.controller.signal });
-
-
-    this.pool.add(async () => {
-      // await new Promise((r) => setTimeout(r, 200));
-      await this.appBackend.initialize();
     });
 
+    this.pool.add(async () => {
+      await this.props.appBackend.initialize();
+      await this.initializeHost();
 
-    let route;
+      let route;
 
-    try {
-      route = JSON.parse(window.sessionStorage['route']);
-    } catch {
-      return;
-    }
+      try {
+        route = JSON.parse(window.sessionStorage['route']);
+      } catch {
+        route = ['chip'];
+      }
 
-    this.setRoute(route);
+      this.setRoute(route);
+    });
   }
 
   componentDidUpdate(_prevProps: ApplicationProps, prevState: ApplicationState) {
-    // if (this.state) {
-    //   console.group()
-    //   Object.entries(this.state).forEach(([key, val]) =>
-    //     prevState[key] !== val && console.log(`State '${key}' changed`)
-    //   );
-    //   console.groupEnd()
-    // }
-
-    if (prevState.selectedHostId !== this.state.selectedHostId) {
+    if (!prevState.host && this.state.host) {
       this.pool.add(async () => {
         for (let draft of Object.values(this.state.drafts)) {
           await this.compileDraft(draft.item);
@@ -300,9 +157,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     if (blob) {
       let source = await blob.text();
-      let compiled = await this.host!.backend.compileDraft(draftItem.id, source);
+      let compiled = await this.state.host!.backend.compileDraft(draftItem.id, source);
 
-      await this.appBackend.setDraft(draftItem.id, {
+      await this.props.appBackend.setDraft(draftItem.id, {
         name: compiled.protocol?.name ?? draftItem.name
       }, { skipCompilation: true });
 
@@ -341,7 +198,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let contents = (() => {
       let route = this.state.currentRoute;
 
-      if (!route || !this.host) {
+      if (!route || !this.state.host) {
         return null;
       }
 
@@ -349,7 +206,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         switch (route[0]) {
           case 'chip': return (
             <ViewChips
-              host={this.host}
+              host={this.state.host}
               setRoute={setRoute} />
           );
 
@@ -357,13 +214,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewProtocols
               app={this}
               drafts={this.state.drafts}
-              host={this.host}
+              host={this.state.host}
               setRoute={setRoute} />
           )
 
           case 'terminal': return (
             <ViewTerminalSession
-              host={this.host}
+              host={this.state.host}
               setRoute={setRoute} />
           );
         }
@@ -372,7 +229,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           case 'chip': return (
             <ViewChip
               chipId={route[1] as ChipId}
-              host={this.host}
+              host={this.state.host}
               mode={route[2] as ViewChipMode}
               setRoute={setRoute} />
           );
@@ -396,7 +253,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               <ViewDraft
                 app={this}
                 draft={draft}
-                host={this.host}
+                host={this.state.host}
                 mode={route[2] as ViewDraftMode}
                 setRoute={setRoute} />
             );
@@ -411,10 +268,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           currentRoute={this.state.currentRoute}
           setRoute={setRoute}
 
-          hosts={this.state.hosts}
-          selectedHostId={this.state.selectedHostId}
+          host={this.state.host}
+          hostSettingsRecord={this.props.hostSettingsRecord}
+          selectedHostSettingsId={this.props.hostSettings.id}
           onSelectHost={(id) => {
-            this.setState({ selectedHostId: id });
+            // this.setState({ selectedHostId: id });
           }}
 
           drafts={this.state.drafts}

@@ -2,14 +2,15 @@ import '@fontsource/space-mono';
 import * as React from 'react';
 
 import { HostCreator } from './startup/host-creator';
-import { BackendCommon, HostId } from './backends/common';
+import type { HostId } from './backends/common';
 import * as util from './util';
-import { formatHostSettings, HostSettings, HostSettingsRecord } from './application';
+import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
 import { ContextMenuArea } from './components/context-menu-area';
+import { BaseBackend } from './backends/base';
 
 
 interface StartupProps {
-  createHostSettings(options: { backend: BackendCommon; settings: HostSettings; }): void;
+  createHostSettings(options: { backend: BaseBackend; settings: HostSettings; }): void;
   deleteHostSettings(settingsId: string): void;
   launchDefaultHost?(): void;
   launchHost(settingsId: string): void;

@@ -1,9 +1,10 @@
 import { Set as ImSet, List } from 'immutable';
 import * as React from 'react';
 
-import { Host, Route } from '../application';
-import { HostId } from '../backends/common';
-import { Draft, DraftId } from '../draft';
+import type { Host, HostSettingsRecord } from '../host';
+import type { Route } from '../application';
+import type { HostId } from '../backends/common';
+import type { Draft, DraftId } from '../draft';
 import * as util from '../util';
 
 
@@ -11,8 +12,9 @@ export interface SidebarProps {
   currentRoute: Route | null;
   setRoute(route: Route): void;
 
-  hosts: Record<HostId, Host>;
-  selectedHostId: HostId | null;
+  host: Host | null;
+  hostSettingsRecord: HostSettingsRecord;
+  selectedHostSettingsId: string | null;
   onSelectHost(id: HostId | null): void;
 
   drafts: Record<DraftId, Draft>;
@@ -21,8 +23,8 @@ export interface SidebarProps {
 
 export class Sidebar extends React.Component<SidebarProps> {
   render() {
-    let host: Host | undefined = this.props.hosts[this.props.selectedHostId!];
-    let hosts = Object.values(this.props.hosts);
+    let hostSettings = this.props.hostSettingsRecord[this.props.selectedHostSettingsId!];
+    let hostSettingsRecord = Object.values(this.props.hostSettingsRecord);
 
     let currentRoute = this.props.currentRoute;
     let currentRouteList = currentRoute && List(currentRoute);
@@ -41,7 +43,7 @@ export class Sidebar extends React.Component<SidebarProps> {
           routeRef?: Route;
         }[] | null;
       }[];
-    }[] = host
+    }[] = this.props.host
       ? [
         { id: 'main',
         entries: [
@@ -53,7 +55,7 @@ export class Sidebar extends React.Component<SidebarProps> {
             label: 'Chips',
             icon: 'memory',
             route: ['chip'],
-            children: Object.values(host.state.chips).map((chip) => ({
+            children: Object.values(this.props.host.state.chips).map((chip) => ({
               id: chip.id,
               label: chip.name,
               route: ['chip', chip.id, 'settings'],
@@ -93,20 +95,20 @@ export class Sidebar extends React.Component<SidebarProps> {
             <span className="material-symbols-rounded">developer_board</span>
           </div>
           <div className="sidebar-host-select">
-            {(hosts.length > 0) && (
-              <select className="sidebar-host-input" value={this.props.selectedHostId ?? ''} onChange={(event) => {
+            {(hostSettingsRecord.length > 0) && (
+              <select className="sidebar-host-input" value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
                 this.props.onSelectHost(event.currentTarget.value || null);
               }}>
-                {!host && <option value="">–</option>}
-                {hosts.map((host) => (
-                  <option key={host.id} value={host.id}>{host.state.info.name}</option>
+                {!this.props.host && <option value="">–</option>}
+                {hostSettingsRecord.map((hostSettings) => (
+                  <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
                 ))}
               </select>
             )}
             <div className="sidebar-host-selected">
               <div className="sidebar-host-subtitle">Host</div>
-              <div className="sidebar-host-title">{host?.state.info.name ?? '–'}</div>
-              {(hosts.length > 0) && (
+              <div className="sidebar-host-title">{this.props.host?.state.info.name ?? '–'}</div>
+              {(hostSettingsRecord.length > 0) && (
                 <div className="sidebar-host-expand">
                   <span className="material-symbols-rounded">unfold_more</span>
                 </div>

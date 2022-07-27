@@ -1,9 +1,9 @@
 import * as React from 'react';
 
-import { AppBackend } from './app-backends/base';
+import type { AppBackend } from './app-backends/base';
 import { BrowserAppBackend } from './app-backends/browser';
-import { Application, Host, HostSettings, HostSettingsRecord } from './application';
-import { createBackend, HostId } from './backends/common';
+import { Application } from './application';
+import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { Startup } from './startup';
 import { Pool } from './util';
 
@@ -45,7 +45,9 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
       return (
         <Application
           appBackend={this.appBackend}
-          settingsId={this.state.currentSettingsId} />
+          hostSettings={this.state.hostSettings[this.state.currentSettingsId]}
+          hostSettingsRecord={this.state.hostSettings}
+          key={this.state.currentSettingsId} />
       );
     }
 
@@ -74,12 +76,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
         hostSettings={this.state.hostSettings}
 
         launchHost={(settingsId) => {
-          let hostSettings = this.state.hostSettings![settingsId];
-          let backend = createBackend(hostSettings.backendOptions);
-
-          this.setState({
-            currentSettingsId: settingsId
-          });
+          this.setState({ currentSettingsId: settingsId });
         }} />
     );
   }

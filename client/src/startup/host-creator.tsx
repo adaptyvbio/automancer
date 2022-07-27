@@ -1,15 +1,15 @@
 import * as React from 'react';
-import { HostBackendOptions, HostSettings } from '../application';
-import { BackendCommon, createBackend } from '../backends/common';
 
-import WebsocketBackend from '../backends/websocket';
+import type { HostBackendOptions, HostSettings } from '../host';
+import { createBackend } from '../backends/misc';
 import * as Form from '../components/standard-form';
+import type { BaseBackend } from '../backends/base';
 
 
 export interface HostCreatorProps {
   onCancel(): void;
   onDone(result: {
-    backend: BackendCommon;
+    backend: BaseBackend;
     settings: HostSettings;
   }): void;
 }
@@ -67,7 +67,7 @@ export interface HostCreatorStepData {
 export interface HostCreatorStepProps<Data = HostCreatorData> {
   cancel(): void;
   done(result: {
-    backend: BackendCommon;
+    backend: BaseBackend;
     settings: HostSettings;
   }): void;
 
@@ -208,7 +208,7 @@ export namespace HostCreatorStep {
 
   export namespace S2 {
     export interface Data extends HostCreatorStepData {
-      backend: BackendCommon;
+      backend: BaseBackend;
       options: HostBackendOptions;
       stepIndex: 2;
     }

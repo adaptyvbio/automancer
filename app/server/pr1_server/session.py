@@ -1,10 +1,7 @@
 import array
 import asyncio
-import fcntl
 import os
-import pty
 import subprocess
-import termios
 
 
 class Session:
@@ -18,6 +15,9 @@ class Session:
     return self._proc.poll()
 
   def resize(self, new_size = None):
+    import fcntl
+    import termios
+
     if new_size:
       self._size = new_size
 
@@ -25,6 +25,8 @@ class Session:
     fcntl.ioctl(self._master, termios.TIOCSWINSZ, buf)
 
   async def start(self):
+    import pty
+
     master, slave = pty.openpty()
     self._master = master
 

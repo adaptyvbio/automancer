@@ -6,7 +6,7 @@
     "build": "npm run build-js && npm run build-other && npm run build-host && npm run make",
     "build-host": "rm -rf tmp && mkdir tmp && cp -r ../server/dist/main tmp/host",
     "build-js": "esbuild src/host/renderer.jsx src/startup/renderer.jsx --bundle --external:electron --outdir=lib --format=iife --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --external:vm --external:path --external:fs/promises",
-    "build-other": "zsh -c 'esbuild node_modules/pr1-client/dist/*/**/*.js --outbase=node_modules/pr1-client/dist --outdir=lib'",
+    "build-other": "cp -r node_modules/pr1-client/dist/vs lib/vs",
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron .",

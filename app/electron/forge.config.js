@@ -10,9 +10,6 @@ module.exports = {
     name: 'PR–1'
   },
   makers: [
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin']
-    }
+    { name: '@electron-forge/maker-zip' }
   ]
 }

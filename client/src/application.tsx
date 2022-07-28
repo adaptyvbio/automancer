@@ -55,7 +55,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async initializeHost() {
-    let backend = createBackend(this.props.hostSettings.backendOptions);
+    let backendOptions = this.props.hostSettings.backendOptions;
+    let backend = (await this.appBackend.createBackend?.(backendOptions))
+      ?? (await createBackend(backendOptions));
 
     try {
       await backend.start();
@@ -66,6 +68,17 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }
 
     console.log('Initial state ->', backend.state);
+
+    backend.onUpdate(() => {
+      console.log('New state ->', backend.state);
+
+      this.setState((state) => ({
+        host: {
+          ...state.host!,
+          state: backend.state
+        }
+      }));
+    }, { signal: this.controller.signal });
 
     let host: Host = {
       backend,
@@ -112,7 +125,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
           if (this.state.host && !options?.skipCompilation) {
             this.pool.add(async () => {
-              // await this.compileDraft(draftItem!);
+              await this.compileDraft(draftItem!);
             });
           }
         }
@@ -190,9 +203,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   render() {
-    // let createDraft = this.createDraft.bind(this);
-    // let deleteDraft = this.deleteDraft.bind(this);
-    // let setDraft = this.setDraft.bind(this);
     let setRoute = this.setRoute.bind(this);
 
     let contents = (() => {
@@ -263,7 +273,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     })();
 
     return (
-      <>
+      <div className="app">
         <Sidebar
           currentRoute={this.state.currentRoute}
           setRoute={setRoute}
@@ -278,7 +288,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           drafts={this.state.drafts}
           openDraftIds={this.state.openDraftIds} />
         {contents}
-      </>
+      </div>
     );
   }
 }

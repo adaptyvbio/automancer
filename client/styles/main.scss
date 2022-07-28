@@ -40,6 +40,10 @@ body {
 
 
 #root {
+  height: 100%;
+}
+
+.app {
   display: grid;
   column-gap: $border-gap;
   grid-template-columns: 280px 1fr;

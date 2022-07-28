@@ -46,8 +46,8 @@ export interface HostSettings {
   id: string;
   builtin: boolean;
   hostId: HostId | null;
-  locked: boolean;
   label: string | null;
+  locked: boolean;
 
   backendOptions: HostBackendOptions;
 }
@@ -56,6 +56,7 @@ export type HostSettingsRecord = Record<string, HostSettings>;
 
 export function formatHostSettings(hostSettings: HostSettings): string | null {
   switch (hostSettings.backendOptions.type) {
+    case 'internal': return 'This computer';
     case 'remote': return `${hostSettings.backendOptions.address}:${hostSettings.backendOptions.port}`;
     default: return null;
   }

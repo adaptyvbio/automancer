@@ -1,5 +1,6 @@
-import type { HostSettings, HostSettingsRecord } from '../host';
+import type { HostBackendOptions, HostSettings, HostSettingsRecord } from '../host';
 import type { DraftId, DraftPrimitive } from '../draft';
+import { BaseBackend } from '../backends/base';
 
 
 export interface DraftItem {
@@ -35,6 +36,8 @@ export interface AppBackend {
   onDraftsUpdate(listener: DraftsUpdateListener, options?: { signal?: AbortSignal; }): void;
 
   notify(message: string): Promise<void>;
+
+  createBackend?(options: HostBackendOptions): Promise<BaseBackend | null>;
 }
 
 export interface AppBackendClass {

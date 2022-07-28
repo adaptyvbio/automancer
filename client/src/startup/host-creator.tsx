@@ -4,9 +4,12 @@ import type { HostBackendOptions, HostSettings } from '../host';
 import { createBackend } from '../backends/misc';
 import * as Form from '../components/standard-form';
 import type { BaseBackend } from '../backends/base';
+import { AppBackend } from '../app-backends/base';
+import { Application } from '../application';
 
 
 export interface HostCreatorProps {
+  app: Application;
   onCancel(): void;
   onDone(result: {
     backend: BaseBackend;
@@ -92,7 +95,7 @@ export namespace HostCreatorStep {
         <>
           <div className="startup-editor-contents">
             <div className="startup-editor-inner">
-              <h2>Create a setup</h2>
+              <h2>New setup</h2>
               <Form.Form>
                 <Form.Select
                   label="Protocol"
@@ -158,15 +161,15 @@ export namespace HostCreatorStep {
         if (startBackend.current) {
           startBackend.current = false;
 
-          let backend = createBackend(props.data.options);
-
-          backend.start().then(() => {
+          (async () => {
+            let backend = await createBackend(props.data.options);
+            await backend.start();
             props.setData({
               stepIndex: 2,
               backend,
               options: props.data.options
             });
-          }, (err) => {
+          })().catch((err) => {
             setError(err.message);
           });
         }
@@ -175,7 +178,7 @@ export namespace HostCreatorStep {
       return (
         <div className="startup-editor-contents">
           <div className="startup-editor-inner">
-            <h2>Connecting to the server</h2>
+            <h2>New setup</h2>
             {error && (
               <div className="startup-editor-status">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000000"><path d="M12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13h-2v-2h2v2zm0-4h-2V7h2v6z" opacity=".3" /><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-5h2v2h-2zm0-8h2v6h-2z" /></svg>
@@ -214,13 +217,15 @@ export namespace HostCreatorStep {
     }
 
     export function Component(props: HostCreatorStepProps<Data>) {
+      let label = props.data.backend.state.info.name;
+
       return (
         <div className="startup-editor-contents">
           <div className="startup-editor-inner">
-            <h2>Connecting to the server</h2>
+            <h2>New setup</h2>
             <div className="startup-editor-status">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none" /><path d="M12 4c-4.41 0-8 3.59-8 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm-2 13l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" opacity=".3" /><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z" /></svg>
-              <p>Host created succesfully</p>
+              <p>Succesfully connected to "{label}"</p>
             </div>
           </div>
           <div className="startup-editor-action-root">
@@ -234,7 +239,7 @@ export namespace HostCreatorStep {
                     builtin: false,
                     hostId: null,
                     locked: false,
-                    label: null,
+                    label,
 
                     backendOptions: props.data.options
                   }

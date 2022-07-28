@@ -68,7 +68,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                 <div className="startup-left-title">PR–1</div>
               </div>
               <div className="startup-left-bar">
-                <div>Version 1.6 (110)</div>
+                <div>Version 1</div>
                 {this.props.launchDefaultHost && (
                   <button type="button" className="startup-left-action" onClick={() => {
                     this.props.launchDefaultHost!();
@@ -106,7 +106,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                 <button type="button" className="startup-right-entry-item" onClick={() => {
                   this.setState({ hostCreatorOpen: true });
                 }}>
-                  <div className="startup-right-entry-title">Connect to new host</div>
+                  <div className="startup-right-entry-title">New setup</div>
                 </button>
               </div>
             </div>

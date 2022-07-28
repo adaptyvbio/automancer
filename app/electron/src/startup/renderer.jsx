@@ -34,7 +34,10 @@ class App extends React.Component {
         createHostSettings={(options) => {
           console.log(options);
         }}
-        hostSettings={this.state.hostSettings} />
+        hostSettings={this.state.hostSettings}
+        launchHost={(settingsId) => {
+          window.api.launchHost(settingsId);
+        }} />
     );
   }
 }

@@ -7,6 +7,7 @@
     "build:js:watch": "node build.js --watch",
     "build:css": "sass styles/main.scss:lib/styles.css --no-source-map",
     "build:css:watch": "sass styles/main.scss:lib/styles.css --watch",
+    "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular",
     "test:types": "tsc"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/react-dom": "^18.0.5",
     "@types/wicg-file-system-access": "^2020.9.5",
     "esbuild": "^0.13.2",
+    "madge": "^5.0.1",
     "minimist": "^1.2.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

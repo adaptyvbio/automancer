@@ -153,14 +153,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                   <div className="pconfig-submit">
                     <button type="button" className="btn" onClick={() => {
                       this.pool.add(async () => {
-                        let source = await getDraftEntrySource(this.props.draft.entry);
+                        let blob = await this.props.draft.item.getMainFile();
 
-                        if (source !== null) {
+                        if (blob !== null) {
                           await this.props.host.backend.startPlan({
                             chipId: plan.context!.chipId,
                             data: plan.context!.data,
                             location: plan.location,
-                            source
+                            source: await blob.text()
                           });
 
                           this.props.setRoute(['chip', plan.context!.chipId, 'protocol']);

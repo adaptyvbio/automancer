@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { BrowserWindow, app, ipcMain } = require('electron');
+const { BrowserWindow, app, dialog, ipcMain } = require('electron');
 const readline = require('readline');
 const path = require('path');
 const childProcess = require('child_process');
@@ -11,12 +11,21 @@ class CoreApplication {
 
   constructor(app) {
     this.app = app;
+
     this.data = null;
-    this.host = null;
+    this.dataDirPath = path.join(app.getPath('userData'), 'App Data');
+    this.dataPath = path.join(this.dataDirPath, 'app.json');
 
     this.internalHost = null;
     this.startupWindow = null;
     this.hostWindows = {};
+
+    this.app.on('will-quit', (event) => {
+      if (this.internalHost) {
+        event.preventDefault();
+        this.internalHost.close();
+      }
+    });
   }
 
   async createStartupWindow() {
@@ -68,36 +77,115 @@ class CoreApplication {
       }
     });
 
+    ipcMain.handle('drafts:create', async (_event, source) => {
+      let result = await dialog.showSaveDialog();
+
+      if (result.canceled) {
+        return null;
+      }
+
+      let id = crypto.randomUUID();
+      let draftEntry = {
+        id,
+        name: path.basename(result.filePath),
+        path: result.filePath
+      };
+
+      await fs.writeFile(draftEntry.path, source);
+
+      await this.setData({
+        drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+      });
+
+      return draftEntry;
+    });
+
+    ipcMain.handle('drafts:delete', async (_event, draftId) => {
+      let { [draftId]: _, ...drafts } = this.data.drafts;
+      await this.setData({ drafts });
+    });
+
+    ipcMain.handle('drafts:get-source', async (_event, draftId) => {
+      let draftEntry = this.data.drafts[draftId];
+
+      return (await fs.readFile(draftEntry.path)).toString();
+    });
+
+    ipcMain.handle('drafts:list', async () => {
+      return this.data.drafts;
+    });
+
+    ipcMain.handle('drafts:load', async (_event) => {
+      let result = await dialog.showOpenDialog({
+        filters: [
+          { name: 'Protocols', extensions: ['.yml', '.yaml'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (result.canceled) {
+        return null;
+      }
+
+      let draftPath = result.filePaths[0];
+      let id = crypto.randomUUID();
+
+      let draftEntry = {
+        id,
+        name: path.basename(draftPath),
+        path: draftPath
+      };
+
+      await this.setData({
+        drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+      });
+
+      return draftEntry;
+    });
+
+    ipcMain.handle('drafts:update', async (_event, draftId, primitive) => {
+      let draftEntry = this.data.drafts[draftId];
+      let updatedDraftEntry = draftEntry;
+
+      if (primitive.name !== void 0) {
+        updatedDraftEntry = { ...draftEntry, name: primitive.name };
+
+        await this.setData({
+          drafts: { ...this.data.drafts, [draftId]: updatedDraftEntry }
+        });
+      }
+
+      if (primitive.source !== void 0) {
+        await fs.writeFile(draftEntry.path, primitive.source);
+      }
+
+      return updatedDraftEntry;
+    });
+
     this.createStartupWindow();
   }
 
   async loadData() {
-    let appDataPath = path.join(app.getPath('userData'), 'App Data');
-    await fs.mkdir(appDataPath, { recursive: true });
+    await fs.mkdir(this.dataDirPath, { recursive: true });
 
-    let appConfData;
-    let appConfPath = path.join(appDataPath, 'app.json');
+    if (await fsExists(this.dataPath)) {
+      let buffer = await fs.readFile(this.dataPath);
+      this.data = JSON.parse(buffer.toString());
 
-    if (await fsExists(appConfPath)) {
-      let buffer = await fs.readFile(appConfPath);
-      appConfData = JSON.parse(buffer.toString());
-
-      if (appConfData.version !== CoreApplication.version) {
-        throw new Error('App version mismatch');
-      }
+      // if (appConfData.version !== CoreApplication.version) {
+      //   throw new Error('App version mismatch');
+      // }
     } else {
-      let appConfHandle = await fs.open(appConfPath, 'w');
-      appConfData = {
+      this.setData({
         drafts: {},
         version: CoreApplication.version
-      };
-
-      appConfHandle.write(JSON.stringify(appConfData));
-
-      await appConfHandle.close();
+      });
     }
+  }
 
-    this.data = appConfData;
+  async setData(data) {
+    this.data = { ...this.data, ...data };
+    await fs.writeFile(this.dataPath, JSON.stringify(this.data));
   }
 }
 
@@ -231,13 +319,17 @@ class InternalHost {
       this.process.on('close', (code) => {
         resolve();
         // console.log(`child process exited with code ${code}`);
-        app.exit(1);
+        app.exit(0);
       });
     });
   }
 
   addClient(win) {
     this.clients.push({ ready: false, window: win });
+  }
+
+  close() {
+    this.process.kill(2);
   }
 }
 

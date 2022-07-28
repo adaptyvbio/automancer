@@ -13,14 +13,62 @@ class ElectronAppBackend {
   }
 
   async initialize() {
+    let draftEntries = await window.api.drafts.list();
 
+    this._triggerDraftsUpdate({
+      options: { skipCompilation: false },
+      update: Object.fromEntries(
+        Object.values(draftEntries).map((draftEntry) => [draftEntry.id, createDraftItem(draftEntry)])
+      )
+    });
+  }
+
+  async createDraft(source) {
+    let draftEntry = await window.api.drafts.create(source);
+
+    if (!draftEntry) {
+      return null;
+    }
+
+    this._triggerDraftsUpdate({
+      options: { skipCompilation: false },
+      update: { [draftEntry.id]: createDraftItem(draftEntry) }
+    });
+
+    return draftEntry.id;
+  }
+
+  async deleteDraft(draftId) {
+    await window.api.drafts.delete(draftId);
+
+    this._triggerDraftsUpdate({
+      options: { skipCompilation: false },
+      update: { [draftId]: null }
+    });
   }
 
   async loadDraft() {
-    await window.api.drafts.load();
-    this._triggerDraftsUpdate({ options: { skipCompilation: true }, update: { [newDraftEntry.id]: createDraftItem(newDraftEntry) } });
+    let draftEntry = await window.api.drafts.load();
 
-    return newDraftEntry.id;
+    if (!draftEntry) {
+      return null;
+    }
+
+    this._triggerDraftsUpdate({
+      options: { skipCompilation: true },
+      update: { [draftEntry.id]: createDraftItem(draftEntry) }
+    });
+
+    return draftEntry.id;
+  }
+
+  async setDraft(draftId, primitive, options) {
+    let draftEntry = await window.api.drafts.update(draftId, primitive);
+
+    this._triggerDraftsUpdate({
+      options,
+      update: { [draftId]: createDraftItem(draftEntry) }
+    });
   }
 
   onDraftsUpdate(listener, options) {
@@ -45,6 +93,23 @@ class ElectronAppBackend {
     return null;
   }
 }
+
+function createDraftItem(draftEntry) {
+  return {
+    id: draftEntry.id,
+    name: draftEntry.name,
+    kind: 'ref',
+    lastModified: null,
+    getMainFile: async () => {
+      return await window.api.drafts.getSource(draftEntry.id);
+    },
+    locationInfo: {
+      type: 'file',
+      name: draftEntry.path
+    }
+  };
+}
+
 
 class App extends React.Component {
   constructor(props) {

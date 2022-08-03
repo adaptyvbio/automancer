@@ -7,17 +7,16 @@ import sys
 import time
 import uuid
 
-from . import reader, units
+from . import logger, reader
 from .chip import Chip
 from .master import Master
-from .protocol import Protocol
+# from .protocol import Protocol
+from .unit import UnitManager
 from .util import schema as sc
 
 
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
 DraftError = namedtuple("DraftError", ['message', 'range'])
-
-logger = logging.getLogger("pr1.host")
 
 class Host:
   def __init__(self, backend, update_callback):
@@ -37,7 +36,12 @@ class Host:
     conf_schema = sc.Schema({
       'id': str,
       'name': str,
-      'units': sc.Noneable(dict),
+      'units': sc.SimpleDict(str, {
+        'development': sc.Optional(sc.ParseType(bool)),
+        'enabled': sc.Optional(sc.ParseType(bool)),
+        'module': sc.Optional(str),
+        'path': sc.Optional(str)
+      }),
       'version': sc.ParseType(int)
     })
 
@@ -63,18 +67,19 @@ class Host:
     self.id = conf['id']
     self.name = conf['name']
     self.start_time = round(time.time() * 1000)
-    self.units = units.units
 
 
     # -- Load units ---------------------------------------
 
-    logger.info(f"Registering {len(self.units)} units: {', '.join(self.units.keys())}")
+    manager = UnitManager(conf['units'])
 
-    conf_units = conf['units'] or dict()
+    logger.info(f"Loaded {len(manager.units)} units")
 
-    self.executors = {
-      namespace: unit.Executor(conf_units.get(namespace, dict()), host=self) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
-    }
+    # conf_units = conf['units'] or dict()
+
+    # self.executors = {
+    #   namespace: unit.Executor(conf_units.get(namespace, dict()), host=self) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
+    # }
 
   async def initialize(self):
     logger.info("Initializing host")

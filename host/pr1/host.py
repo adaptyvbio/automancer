@@ -28,8 +28,6 @@ class Host:
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
-    # os.chmod(self.data_dir, 0o775)
-
 
     # -- Load configuration -------------------------------
 
@@ -40,6 +38,7 @@ class Host:
         'development': sc.Optional(sc.ParseType(bool)),
         'enabled': sc.Optional(sc.ParseType(bool)),
         'module': sc.Optional(str),
+        'options': sc.Optional(dict),
         'path': sc.Optional(str)
       }),
       'version': sc.ParseType(int)
@@ -71,15 +70,17 @@ class Host:
 
     # -- Load units ---------------------------------------
 
-    manager = UnitManager(conf['units'])
+    self.manager = UnitManager(conf['units'])
 
-    logger.info(f"Loaded {len(manager.units)} units")
+    logger.info(f"Loaded {len(self.manager.units)} units")
 
-    # conf_units = conf['units'] or dict()
+    self.executors = {
+      name: unit.Executor(self.manager.units_info[name].options, host=self) for name, unit in self.manager.units.items() if hasattr(unit, 'Executor')
+    }
 
-    # self.executors = {
-    #   namespace: unit.Executor(conf_units.get(namespace, dict()), host=self) for namespace, unit in self.units.items() if hasattr(unit, 'Executor')
-    # }
+  @property
+  def units(self):
+    return self.manager.units
 
   async def initialize(self):
     logger.info("Initializing host")
@@ -92,23 +93,20 @@ class Host:
 
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
-        chip = Chip.unserialize(path, units=self.units)
+        chip = Chip.unserialize(path, host=self)
 
-        for matrix in chip.matrices.values():
-          matrix.initialize(chip=chip, host=self)
-
-        chip.runners = dict()
-
-        for namespace, unit in self.units.items():
-          if hasattr(unit, 'Runner'):
-            chip.runners[namespace] = unit.Runner(chip=chip, host=self)
+        if (not chip.archived) and chip.supported:
+          chip.ensure_runners(host=self)
 
         self.chips[chip.id] = chip
 
-    # if len(self.chips) < 1:
-    #   # debug
-    #   chip = self.create_chip(name="Default chip")
-    #   print(f"Created '{chip.id}'")
+    logger.debug(f"Loaded {len(self.chips)} existing chips")
+    logger.debug(f"  including {sum(chip.archived for chip in self.chips.values())} archived chips")
+    logger.debug(f"  including {sum(not chip.supported for chip in self.chips.values())} unsupported chips")
+
+    # debug
+    if len(self.chips) < 1:
+      self.create_chip(name="Default chip")
 
   async def start(self):
     try:
@@ -125,21 +123,6 @@ class Host:
 
     logger.debug("Destroyed executors")
 
-
-  def _debug(self):
-    # -- Debug --------------------------------------------
-
-    chip = self.create_chip(name="Default chip")
-    # _chip = self.create_chip(model_id=list(self.models.keys())[1], name="Other chip")
-    draft = self.create_draft(str(uuid.uuid4()), (Path(__file__).parent.parent.parent / "test.yml").open().read())
-
-    codes = {
-      'control': {
-        'arguments': [None, 0, None, 1]
-      }
-    }
-
-    return chip, codes, draft
 
     # self.start_plan(chip, codes, draft, update_callback=update_callback)
 
@@ -191,13 +174,11 @@ class Host:
       host=self
     )
 
-    chip.runners = dict()
-
-    for namespace, unit in self.units.items():
-      if hasattr(unit, 'Runner'):
-        chip.runners[namespace] = unit.Runner(chip=chip, host=self)
-
+    chip.ensure_runners(host=self)
     self.chips[chip.id] = chip
+
+    logger.info(f"Created chip '{chip.id}'")
+
     return chip
 
   def start_plan(self, chip, codes, location, protocol):

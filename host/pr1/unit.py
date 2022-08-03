@@ -12,6 +12,7 @@ class UnitInfo:
     self.development = False
     self.enabled = True
     self.module = module
+    self.options = dict()
     self.path = path
     self.source_name = source_name
     self.unit = unit
@@ -28,6 +29,10 @@ class UnitInfo:
   @property
   def name(self):
     return self.unit.name
+
+  @property
+  def version(self):
+    return self.unit.version
 
 class UnitManager:
   def __init__(self, conf):
@@ -90,6 +95,7 @@ class UnitManager:
         unit_conf = conf[name]
         unit_info.development = unit_conf.get('development', False)
         unit_info.enabled = unit_conf.get('enabled', True)
+        unit_info.options = unit_conf.get('options', dict())
 
       self.units_info[name] = unit_info
 

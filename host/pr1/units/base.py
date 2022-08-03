@@ -1,4 +1,5 @@
 from collections import namedtuple
+import pickle
 
 from ..util.encoder import decode, encode
 
@@ -165,7 +166,7 @@ class BaseMatrix:
     return dict()
 
   def serialize(self):
-    return encode(self)
+    return pickle.dumps(self)
 
   def unserialize(data):
-    return decode(data)
+    return pickle.loads(data)

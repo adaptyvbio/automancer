@@ -45,6 +45,7 @@ conf_schema = sc.Schema({
   'remote': sc.Optional({
     'hostname': str,
     'port': sc.ParseType(int),
+    'authenticate_http_clients': sc.Optional(sc.ParseType(bool)),
     'single_client': sc.Optional(sc.ParseType(bool))
   }),
   'version': sc.ParseType(int)
@@ -118,6 +119,13 @@ class App:
       conf_path.open("w").write(reader.dumps(conf) + "\n")
 
 
+    # Create host
+
+    self.clients = dict()
+    self.conf = conf
+    self.host = Host(backend=Backend(self), update_callback=self.update)
+
+
     # Create bridges
 
     self.bridges = set()
@@ -129,11 +137,7 @@ class App:
       self.bridges.add(StdioBridge(self))
 
 
-    # Create host
-
-    self.clients = dict()
-    self.conf = conf
-    self.host = Host(backend=Backend(self), update_callback=self.update)
+    # Misc
 
     self.updating = False
 

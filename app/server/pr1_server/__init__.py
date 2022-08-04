@@ -42,10 +42,13 @@ conf_schema = sc.Schema({
     'terminal': sc.ParseType(bool),
     'write_config': sc.ParseType(bool)
   },
+  'identifier': str,
   'remote': sc.Optional({
     'hostname': str,
     'port': sc.ParseType(int),
-    'authenticate_http_clients': sc.Optional(sc.ParseType(bool)),
+    'secure': sc.Optional(sc.ParseType(bool)),
+    'static_authenticate_clients': sc.Optional(sc.ParseType(bool)),
+    'static_port': sc.Optional(sc.ParseType(int)),
     'single_client': sc.Optional(sc.ParseType(bool))
   }),
   'version': sc.ParseType(int)
@@ -79,6 +82,8 @@ class App:
       conf_updated = False
     else:
       conf = {
+        'identifier': str(uuid.uuid4()),
+        'version': self.version,
         'features': {
           'restart': False,
           'terminal': False,
@@ -87,8 +92,7 @@ class App:
         **({ 'remote': {
           'hostname': "127.0.0.1",
           'port': 4567
-        } } if not local else dict()),
-        'version': self.version
+        } } if not local else dict())
       }
 
       conf_updated = True
@@ -129,9 +133,11 @@ class App:
     # Create bridges
 
     self.bridges = set()
+    self.remote_bridge = None
 
     if 'remote' in conf:
-      self.bridges.add(WebsocketBridge(self, conf=conf['remote']))
+      self.remote_bridge = WebsocketBridge(self, conf=conf['remote'])
+      self.bridges.add(self.remote_bridge)
 
     if local:
       self.bridges.add(StdioBridge(self))
@@ -145,6 +151,7 @@ class App:
   async def handle_client(self, client):
     try:
       logger.debug(f"Added client '{client.id}'")
+
       self.clients[client.id] = client
       requires_auth = self.auth_agents and client.remote
 
@@ -155,6 +162,8 @@ class App:
         "features": {
           "terminal": self.conf['features']['terminal'] and client.remote
         },
+        "identifier": self.conf['identifier'],
+        "staticUrl": (self.remote_bridge.static_url if self.remote_bridge else None),
         "version": self.version
       })
 

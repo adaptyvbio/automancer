@@ -4,12 +4,10 @@ import type { HostBackendOptions, HostSettings } from '../host';
 import { createBackend } from '../backends/misc';
 import * as Form from '../components/standard-form';
 import type { BaseBackend } from '../backends/base';
-import { AppBackend } from '../app-backends/base';
 import { Application } from '../application';
 
 
 export interface HostCreatorProps {
-  app: Application;
   onCancel(): void;
   onDone(result: {
     backend: BaseBackend;
@@ -91,57 +89,62 @@ export namespace HostCreatorStep {
     }
 
     export function Component(props: HostCreatorStepProps<Data>) {
-      return (
-        <>
-          <div className="startup-editor-contents">
-            <div className="startup-editor-inner">
-              <h2>New setup</h2>
-              <Form.Form>
-                <Form.Select
-                  label="Protocol"
-                  onInput={() => { }}
-                  options={[
-                    { id: 'websocket', label: 'Secure WebSocket' }
-                  ]}
-                  value="websocket" />
-                <Form.TextField
-                  label="Address"
-                  onInput={(address) => void props.setData({ ...props.data, address })}
-                  placeholder="e.g. 192.168.1.143"
-                  value={props.data.address} />
-                <Form.TextField
-                  label="Port"
-                  onInput={(port) => void props.setData({ ...props.data, port })}
-                  placeholder="e.g. 4567"
-                  value={props.data.port} />
-              </Form.Form>
-            </div>
+      let firstInputRef = React.createRef<HTMLSelectElement>();
 
-            <div className="startup-editor-action-root">
-              <div className="startup-editor-action-list">
-                <button type="button" className="startup-editor-action-item" onClick={() => void props.cancel()}>Cancel</button>
-              </div>
-              <div className="startup-editor-action-list">
-                <button type="button" className="startup-editor-action-item" onClick={() => {
-                  props.setData({
-                    stepIndex: 1,
-                    options: {
-                      type: 'remote',
-                      auth: null,
-                      address: props.data.address,
-                      port: parseInt(props.data.port),
-                      secure: false
-                    },
-                    rawOptions: {
-                      address: props.data.address,
-                      port: props.data.port
-                    }
-                  });
-                }}>Next</button>
-              </div>
+      React.useEffect(() => {
+        firstInputRef.current!.focus();
+      }, []);
+
+      return (
+        <form className="startup-editor-contents" onSubmit={() => {
+          props.setData({
+            stepIndex: 1,
+            options: {
+              type: 'remote',
+              auth: null,
+              address: props.data.address,
+              port: parseInt(props.data.port),
+              secure: false
+            },
+            rawOptions: {
+              address: props.data.address,
+              port: props.data.port
+            }
+          });
+        }}>
+          <div className="startup-editor-inner">
+            <h2>New setup</h2>
+            <Form.Form>
+              <Form.Select
+                label="Protocol"
+                onInput={(_id) => { }}
+                options={[
+                  { id: 'websocket', label: 'Secure WebSocket' }
+                ]}
+                value="websocket"
+                selectRef={firstInputRef} />
+              <Form.TextField
+                label="Address"
+                onInput={(address) => void props.setData({ ...props.data, address })}
+                placeholder="e.g. 192.168.1.143"
+                value={props.data.address} />
+              <Form.TextField
+                label="Port"
+                onInput={(port) => void props.setData({ ...props.data, port })}
+                placeholder="e.g. 4567"
+                value={props.data.port} />
+            </Form.Form>
+          </div>
+
+          <div className="startup-editor-action-root">
+            <div className="startup-editor-action-list">
+              <button type="button" className="startup-editor-action-item" onClick={() => void props.cancel()}>Cancel</button>
+            </div>
+            <div className="startup-editor-action-list">
+              <button type="submit" className="startup-editor-action-item">Next</button>
             </div>
           </div>
-        </>
+        </form>
       );
     }
   }

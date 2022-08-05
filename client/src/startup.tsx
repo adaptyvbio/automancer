@@ -20,6 +20,7 @@ interface StartupProps {
 interface StartupState {
   hostCreatorIndex: number;
   hostCreatorOpen: boolean;
+  hostCreatorVisible: boolean;
 }
 
 export class Startup extends React.Component<StartupProps, StartupState> {
@@ -28,8 +29,17 @@ export class Startup extends React.Component<StartupProps, StartupState> {
 
     this.state = {
       hostCreatorIndex: 0,
-      hostCreatorOpen: false
+      hostCreatorOpen: false,
+      hostCreatorVisible: false
     };
+  }
+
+  resetHostCreator() {
+    this.setState((state) => ({
+      hostCreatorIndex: (state.hostCreatorIndex + 1),
+      hostCreatorOpen: false,
+      hostCreatorVisible: false
+    }));
   }
 
   render() {
@@ -37,21 +47,19 @@ export class Startup extends React.Component<StartupProps, StartupState> {
       <div className="startup-container">
         <div className={util.formatClass('startup-root', { '_transitioning': this.state.hostCreatorOpen })}>
           <div className="startup-editor-root">
+            <div className="startup-editor-indicator" onTransitionEnd={(event) => {
+              if ((event.currentTarget === event.target) && this.state.hostCreatorOpen) {
+                this.setState({ hostCreatorVisible: true });
+              }
+            }} />
             <div className="startup-editor-holder">
-              {(
+              {this.state.hostCreatorVisible && (
                 <HostCreator
                   onCancel={() => {
-                    this.setState((state) => ({
-                      hostCreatorIndex: (state.hostCreatorIndex + 1),
-                      hostCreatorOpen: false
-                    }));
+                    this.resetHostCreator();
                   }}
                   onDone={({ backend, settings }) => {
-                    this.setState((state) => ({
-                      hostCreatorIndex: (state.hostCreatorIndex + 1),
-                      hostCreatorOpen: false
-                    }));
-
+                    this.resetHostCreator();
                     this.props.createHostSettings({ backend, settings });
                   }}
                   key={this.state.hostCreatorIndex} />

@@ -78,16 +78,20 @@ export function Select<T extends number | string | null>(props: {
     disabled?: unknown;
     label: string;
   }[];
+  selectRef: React.RefObject<HTMLSelectElement>;
   value: T;
 }) {
   return (
     <label className="sform-group">
       <div className="sform-label">{props.label}</div>
       <div className="sform-select">
-        <select value={props.options.findIndex((option) => option.id === props.value)} onInput={(event) => {
-          let optionIndex = parseInt(event.currentTarget.value);
-          props.onInput(props.options[optionIndex].id);
-        }}>
+        <select
+          value={props.options.findIndex((option) => option.id === props.value)}
+          onInput={(event) => {
+            let optionIndex = parseInt(event.currentTarget.value);
+            props.onInput(props.options[optionIndex].id);
+          }}
+          ref={props.selectRef}>
           {props.options.map((option, optionIndex) =>
             <option value={optionIndex} key={option.id}>{option.label}</option>
           )}

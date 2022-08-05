@@ -1,3 +1,4 @@
+@use "sass:math";
 @use "./constants" as *;
 
 
@@ -69,7 +70,7 @@ $color-right: #e7e3e6;
         height: 100%;
 
         $k: 4;
-        $x: 50% / ($k + 0.5);
+        $x: math.div(50%, ($k + 0.5));
         // background-image: repeating-linear-gradient(-45deg, $app-blue 0 #{$x}, transparent #{$x} #{$x * 2});
         -webkit-mask-image: repeating-linear-gradient(-45deg, #000 0 #{$x}, transparent #{$x} #{$x * 2});
         background-image: linear-gradient(-45deg, darken($app-blue, 15%), $app-blue);
@@ -257,7 +258,11 @@ $color-right: #e7e3e6;
         color: #333;
         font-weight: 500;
 
-        &:hover {
+        &:focus-visible {
+          box-shadow: $highlight-shadow;
+        }
+
+        &:focus-visible, &:hover {
           background-color: #0001;
         }
       }
@@ -282,11 +287,7 @@ $color-right: #e7e3e6;
     transform: scaleX(33.3333%) translateX(100%);
   }
 
-  &-root._transitioning &-editor-contents {
-    transition: visibility 0s $total-duration;
-  }
-
-  &-root:not(._transitioning) &-editor-contents {
-    visibility: hidden;
+  &-root._transitioning &-editor-indicator {
+    transition: $total-duration;
   }
 }

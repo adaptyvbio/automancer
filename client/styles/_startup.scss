@@ -2,7 +2,7 @@
 @use "./constants" as *;
 
 
-$color-left: rgb(38, 37, 40);
+$color-left: #000;
 $color-right: #e7e3e6;
 
 
@@ -44,8 +44,7 @@ $color-right: #e7e3e6;
       flex-direction: column;
       justify-content: space-between;
 
-      padding: 3rem;
-      padding-top: 6rem;
+      padding: 6rem 4rem 3rem 4rem;
 
       background-color: $color-left;
       color: #fff;
@@ -58,25 +57,10 @@ $color-right: #e7e3e6;
     }
 
     &-logo {
-      width: 3.8rem;
-      aspect-ratio: 1;
+      width: 100px;
+      height: auto;
 
-      background-color: #fff;
-      border-radius: 8px;
-
-      padding: 8px;
-
-      &-inner {
-        height: 100%;
-
-        $k: 4;
-        $x: math.div(50%, ($k + 0.5));
-        // background-image: repeating-linear-gradient(-45deg, $app-blue 0 #{$x}, transparent #{$x} #{$x * 2});
-        -webkit-mask-image: repeating-linear-gradient(-45deg, #000 0 #{$x}, transparent #{$x} #{$x * 2});
-        background-image: linear-gradient(-45deg, darken($app-blue, 15%), $app-blue);
-
-        border-radius: 6px;
-      }
+      margin-left: -1rem;
     }
 
     &-title {
@@ -94,6 +78,12 @@ $color-right: #e7e3e6;
       align-items: center;
       column-gap: 1rem;
       justify-content: space-between;
+
+      code {
+        margin-left: 1ch;
+        font-family: "Space Mono";
+        font-size: 0.95em;
+      }
     }
 
     &-action {

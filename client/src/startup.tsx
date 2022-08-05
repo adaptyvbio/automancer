@@ -11,26 +11,53 @@ import { ContextMenuArea } from './components/context-menu-area';
 interface StartupProps {
   createHostSettings(options: { settings: HostSettings; }): void;
   deleteHostSettings(settingsId: string): void;
-  launchDefaultHost?(): void;
   launchHost(settingsId: string): void;
   hostSettings: HostSettingsRecord;
 }
 
 interface StartupState {
+  fullDisplay: boolean;
   hostCreatorIndex: number;
   hostCreatorOpen: boolean;
   hostCreatorVisible: boolean;
 }
 
 export class Startup extends React.Component<StartupProps, StartupState> {
+  controller = new AbortController();
+
   constructor(props: StartupProps) {
     super(props);
 
     this.state = {
+      fullDisplay: false,
       hostCreatorIndex: 0,
       hostCreatorOpen: false,
       hostCreatorVisible: false
     };
+  }
+
+  componentDidMount() {
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Alt') {
+        this.setState({ fullDisplay: true });
+      }
+    }, { signal: this.controller.signal });
+
+    document.addEventListener('keyup', (event) => {
+      if ((event.key === 'Alt') && this.state.fullDisplay) {
+        this.setState({ fullDisplay: false });
+      }
+    }, { signal: this.controller.signal });
+
+    window.addEventListener('blur', () => {
+      if (this.state.fullDisplay) {
+        this.setState({ fullDisplay: false });
+      }
+    }, { signal: this.controller.signal });
+  }
+
+  componentWillUnmount() {
+    this.controller.abort();
   }
 
   resetHostCreator() {
@@ -69,20 +96,13 @@ export class Startup extends React.Component<StartupProps, StartupState> {
           <div className="startup-home">
             <div className="startup-left-root">
               <div className="startup-left-header">
-                <div className="startup-left-logo">
-                  <div className="startup-left-logo-inner"></div>
-                </div>
-                <div className="startup-left-title">PR–1</div>
+                <img src="static/logo.jpeg" width="330" height="300" className="startup-left-logo" />
+                <div className="startup-left-title">Universal Lab Experience</div>
               </div>
               <div className="startup-left-bar">
-                <div>Version 1</div>
-                {this.props.launchDefaultHost && (
-                  <button type="button" className="startup-left-action" onClick={() => {
-                    this.props.launchDefaultHost!();
-                  }}>
-                    <div>Use local host</div>
-                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none" /><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" /></svg>
-                  </button>
+                <div>Version 1.0</div>
+                {this.state.fullDisplay && (
+                  <div>License no. <code>CF 59 AF 6E</code></div>
                 )}
               </div>
             </div>

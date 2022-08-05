@@ -5,22 +5,17 @@ import { HostState } from './common';
 import { InboundMessage, MessageBackend } from './message';
 import type { Deferred } from '../util';
 import * as util from '../util';
+import { HostRemoteBackendOptions } from '../host';
 
-
-interface Options {
-  address: string;
-  port: number;
-  secure: boolean;
-}
 
 export default class WebsocketBackend extends MessageBackend {
-  #options: Options;
+  #options: HostRemoteBackendOptions;
   #socket!: ModernWebsocket;
 
   closed!: Promise<void>;
   state!: HostState;
 
-  constructor(options: Options) {
+  constructor(options: HostRemoteBackendOptions) {
     super();
     this.#options = options;
   }
@@ -40,15 +35,22 @@ export default class WebsocketBackend extends MessageBackend {
       let iter = conn.iter();
       let initMessage = JSON.parse((await iter.next()).value);
 
+
       if (initMessage.authMethods) {
-        this.#socket.send(JSON.stringify({
-          authMethodIndex: 0,
-          data: { password: 'foobar' }
-        }));
+        let authResultMessage;
 
-        let authResultMessage = JSON.parse((await iter.next()).value);
+        if (this.#options.auth) {
+          this.#socket.send(JSON.stringify({
+            authMethodIndex: this.#options.auth.methodIndex,
+            data: { password: this.#options.auth.password }
+          }));
 
-        if (!authResultMessage.ok) {
+          authResultMessage = JSON.parse((await iter.next()).value);
+        } else {
+          authResultMessage = null;
+        }
+
+        if (!authResultMessage?.ok) {
           throw new Error('Authentication not ok');
         }
       }
@@ -62,5 +64,68 @@ export default class WebsocketBackend extends MessageBackend {
         listener(JSON.parse(msg));
       }
     });
+  }
+
+  static async test(options: HostRemoteBackendOptions): Promise<(
+    { ok: true;
+      identifier: string;
+      label: string; }
+  | { ok: false;
+      reason: 'unauthorized'; }
+  | { ok: false;
+      reason: 'invalid_auth';
+      message: string | null; }
+  | { ok: false;
+      reason: 'unknown';
+      message: string | null; }
+  )> {
+    try {
+      let socket = new ModernWebsocket(`${options.secure ? 'wss' : 'ws'}://${options.address}:${options.port}`);
+
+      return await socket.listen(async (conn) => {
+        let iter = conn.iter();
+        let initMessage = JSON.parse((await iter.next()).value);
+
+        if (initMessage.authMethods) {
+          if (!options.auth) {
+            return {
+              ok: false,
+              reason: 'unauthorized'
+            };
+          }
+
+          socket.send(JSON.stringify({
+            authMethodIndex: options.auth.methodIndex,
+            data: {
+              password: options.auth.password
+            }
+          }));
+
+          let resultMessage = JSON.parse((await iter.next()).value);
+
+          if (!resultMessage.ok) {
+            return {
+              ok: false,
+              reason: 'invalid_auth',
+              message: resultMessage.message
+            };
+          }
+        }
+
+        let stateMessage = JSON.parse((await iter.next()).value);
+
+        return {
+          ok: true,
+          identifier: initMessage.identifier,
+          label: stateMessage.data.info.name
+        };
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        reason: 'unknown',
+        message: (err as { message: string; }).message ?? null
+      };
+    }
   }
 }

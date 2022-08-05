@@ -53,7 +53,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
 
     return (
       <Startup
-        createHostSettings={({ backend, settings }) => {
+        createHostSettings={({ settings }) => {
           this.pool.add(async () => {
             await this.appBackend.setHostSettings(settings);
           });

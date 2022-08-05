@@ -8,13 +8,15 @@ export interface Host {
   state: HostState;
 }
 
-export type HostBackendOptions = {
+export interface HostRemoteBackendOptions {
   type: 'remote';
   auth: HostBackendAuthOptions | null;
   address: string;
   port: number;
   secure: boolean;
-} | {
+}
+
+export type HostBackendOptions = HostRemoteBackendOptions | {
   type: 'internal';
   Backend: { new(): BaseBackend; };
 } | {

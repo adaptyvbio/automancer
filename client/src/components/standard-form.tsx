@@ -78,7 +78,7 @@ export function Select<T extends number | string | null>(props: {
     disabled?: unknown;
     label: string;
   }[];
-  selectRef: React.RefObject<HTMLSelectElement>;
+  targetRef?: React.RefObject<HTMLSelectElement>;
   value: T;
 }) {
   return (
@@ -91,7 +91,7 @@ export function Select<T extends number | string | null>(props: {
             let optionIndex = parseInt(event.currentTarget.value);
             props.onInput(props.options[optionIndex].id);
           }}
-          ref={props.selectRef}>
+          ref={props.targetRef}>
           {props.options.map((option, optionIndex) =>
             <option value={optionIndex} key={option.id}>{option.label}</option>
           )}
@@ -106,7 +106,8 @@ export function TextField(props: {
   label: string;
   onBlur?(): void;
   onInput(value: string): void;
-  placeholder: string;
+  placeholder?: string;
+  targetRef?: React.RefObject<HTMLInputElement>;
   value: string;
 }) {
   return (
@@ -116,7 +117,8 @@ export function TextField(props: {
         placeholder={props.placeholder}
         onBlur={props.onBlur}
         onInput={(event) => void props.onInput(event.currentTarget.value)}
-        value={props.value} />
+        value={props.value}
+        ref={props.targetRef} />
     </label>
   );
 }

@@ -9,11 +9,7 @@ import { AppBackend } from '../app-backends/base';
 export async function createBackend(options: HostBackendOptions): Promise<BaseBackend> {
   switch (options.type) {
     case 'remote': {
-      return new WebsocketBackend({
-        address: options.address,
-        port: options.port,
-        secure: options.secure
-      });
+      return new WebsocketBackend(options);
     }
   }
 }

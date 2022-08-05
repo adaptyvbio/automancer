@@ -6,11 +6,10 @@ import type { HostId } from './backends/common';
 import * as util from './util';
 import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
 import { ContextMenuArea } from './components/context-menu-area';
-import { BaseBackend } from './backends/base';
 
 
 interface StartupProps {
-  createHostSettings(options: { backend: BaseBackend; settings: HostSettings; }): void;
+  createHostSettings(options: { settings: HostSettings; }): void;
   deleteHostSettings(settingsId: string): void;
   launchDefaultHost?(): void;
   launchHost(settingsId: string): void;
@@ -58,9 +57,9 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                   onCancel={() => {
                     this.resetHostCreator();
                   }}
-                  onDone={({ backend, settings }) => {
+                  onDone={({ settings }) => {
                     this.resetHostCreator();
-                    this.props.createHostSettings({ backend, settings });
+                    this.props.createHostSettings({ settings });
                   }}
                   key={this.state.hostCreatorIndex} />
               )}

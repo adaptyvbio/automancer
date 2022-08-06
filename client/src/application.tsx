@@ -7,7 +7,7 @@ import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
 import type { Draft, DraftId, DraftPrimitive, DraftsRecord } from './draft';
 import type { Host, HostSettings, HostSettingsRecord } from './host';
-import { ViewChip, type ViewChipMode } from './views/chip';
+import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
@@ -27,7 +27,6 @@ export interface ApplicationProps {
 
 export interface ApplicationState {
   host: Host | null;
-  units: Record<string, Unit<never, never>> | null;
 
   drafts: DraftsRecord;
   openDraftIds: ImSet<DraftId>;
@@ -44,7 +43,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.state = {
       host: null,
-      units: null,
 
       drafts: {},
       openDraftIds: ImSet(),
@@ -86,7 +84,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let host: Host = {
       backend,
       id: backend.state.info.id,
-      state: backend.state
+      state: backend.state,
+      units: (null as unknown as Host['units'])
     };
 
     this.setState({ host });
@@ -94,13 +93,20 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.pool.add(async () => {
       let units = Object.fromEntries(
         await Promise.all(
-          Object.values(host.state.info.units).map(async (unitInfo) => {
-            return [unitInfo.name, await backend.loadUnit(unitInfo)];
-          })
+          Object.values(host.state.info.units)
+            .filter((unitInfo) => unitInfo.enabled)
+            .map(async (unitInfo) => {
+              return [unitInfo.name, await backend.loadUnit(unitInfo)];
+            })
         )
       );
 
-      this.setState({ units });
+      this.setState((state) => ({
+        host: {
+          ...state.host!,
+          units
+        }
+      }));
     });
 
     backend.closed
@@ -223,7 +229,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let contents = (() => {
       let route = this.state.currentRoute;
 
-      if (!route || !this.state.host || !this.state.units) {
+      if (!route || !this.state.host?.units) {
         return null;
       }
 
@@ -255,7 +261,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             <ViewChip
               chipId={route[1] as ChipId}
               host={this.state.host}
-              mode={route[2] as ViewChipMode}
+              tab={route[2] as string}
               setRoute={setRoute} />
           );
 

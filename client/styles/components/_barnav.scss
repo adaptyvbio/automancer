@@ -1,5 +1,6 @@
 @use "../constants" as *;
 @use "../common/header";
+@use "../mixins" as *;
 
 
 .barnav {
@@ -7,26 +8,32 @@
     display: flex;
     column-gap: 0.6rem;
 
-    padding: 0 2rem;
+    padding-right: 2rem;
+
+    overflow-x: auto;
+    @include no-scrollbar();
   }
 
   &-entry {
     display: flex;
     align-items: center;
     column-gap: 0.6rem;
+    flex-shrink: 0;
 
     width: auto;
     padding: 0.4rem 1rem;
 
+    --background: #fff;
+    background-color: var(--background);
     border: 1px solid transparent;
     border-radius: 4px;
 
     &:hover {
-      background-color: #fafafa;
+      --background: #fafafa;
     }
 
     &._selected {
-      background-color: #eee;
+      --background: #eee;
       border-color: #ddd;
     }
 
@@ -42,14 +49,6 @@
   &-icon {
     display: flex;
   }
-
-  // &-entry._selected &-icon {
-  //   font-variation-settings:
-  //     'FILL' 1,
-  //     'wght' 400,
-  //     'GRAD' 0,
-  //     'opsz' 48;
-  // }
 
   &-label {
     font-weight: 500;

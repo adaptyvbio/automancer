@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-import type { Host, Route } from '../application';
+import type { Route } from '../application';
+import type { Host } from '../host';
 import { Chip, ChipId } from '../backends/common';
 import { BarNav } from '../components/bar-nav';
 import { ChipControl } from '../components/chip-control';
@@ -10,12 +11,10 @@ import { Pool } from '../util';
 import * as util from '../util';
 
 
-export type ViewChipMode = 'control' | 'protocol' | 'settings';
-
 export interface ViewChipProps {
   chipId: ChipId;
   host: Host;
-  mode: ViewChipMode;
+  tab: string;
   setRoute(route: Route): void;
 }
 
@@ -39,7 +38,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   componentDidUpdate() {
-    if ((this.props.mode === 'protocol') && !this.chip.master) {
+    if ((this.props.tab === 'protocol') && !this.chip.master) {
       this.props.setRoute(['chip', this.chip.id, 'settings']);
     }
   }
@@ -48,12 +47,19 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     return (nextState !== this.state)
       || (nextProps.host.state !== this.props.host.state)
       || (nextProps.chipId !== this.props.chipId)
-      || (nextProps.mode !== this.props.mode);
+      || (nextProps.tab !== this.props.tab);
   }
 
   render() {
+    let unitNavEntries = Object.values(this.props.host.units)
+      .flatMap((unit) => unit.getChipTabs?.(this.chip) ?? [])
+      .map((entry) => ({
+        ...entry,
+        id: 'units.' + entry.id
+      }));
+
     let component = (() => {
-      switch (this.props.mode) {
+      switch (this.props.tab) {
         case 'control': return (
           <ChipControl
             chipId={this.props.chipId}
@@ -70,6 +76,16 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
             host={this.props.host} />
         );
       }
+
+      for (let entry of unitNavEntries) {
+        if (entry.id === this.props.tab) {
+          let Component = entry.component;
+          return <Component
+            chipId={this.chip.id}
+            host={this.props.host}
+            setRoute={this.props.setRoute} />
+        }
+      }
     })();
 
     return (
@@ -79,14 +95,14 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
           <BarNav
             entries={[
               { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
-              { id: 'control', label: 'Valve control', icon: 'tune' },
               { id: 'settings', label: 'Settings', icon: 'settings' },
-              { id: 'history', label: 'History', icon: 'history', disabled: true }
+              { id: 'history', label: 'History', icon: 'history', disabled: true },
+              ...unitNavEntries
             ]}
-            selectEntry={(mode) => {
-              this.props.setRoute(['chip', this.props.chipId, mode]);
+            selectEntry={(tab) => {
+              this.props.setRoute(['chip', this.props.chipId, tab]);
             }}
-            selectedEntryId={this.props.mode} />
+            selectedEntryId={this.props.tab} />
         </div>
 
         {component}

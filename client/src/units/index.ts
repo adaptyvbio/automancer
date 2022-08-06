@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { Chip, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
+import type { Chip, ChipId, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
 import type { Host } from '../host';
 import type { Draft } from '../draft';
 
@@ -15,6 +15,7 @@ import * as LocalNotification from './local-notification';
 
 import TimerUnit from './timer';
 import * as Timer from './timer';
+import { Route } from '../application';
 
 
 //> Feature
@@ -106,13 +107,30 @@ export interface OperatorLocationData {
 
 //> Unit
 
+interface NavEntry<Props> {
+  id: string;
+  disabled?: unknown;
+  label: string;
+  icon: string;
+  component: { new(props: Props): React.Component<Props, unknown>; };
+}
+
+export interface ChipTabComponent {
+  chipId: ChipId;
+  host: Host;
+  setRoute(route: Route): void;
+}
+
 export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
+  name: UnitName;
+
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): Code;
   createFeatures?(options: CreateFeaturesOptions): Features;
+  getChipTabs?(chip: Chip): NavEntry<ChipTabComponent>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 }
 

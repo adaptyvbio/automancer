@@ -1,7 +1,7 @@
 .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
 }
 
 .header--1 {

@@ -1,4 +1,4 @@
-import { Codes } from '../units';
+import { Codes, Unit, UnitInfo } from '../units';
 import type { Chip, ChipId, HostState, ProtocolLocation, RunnerCommand } from './common';
 import type { Draft as AppDraft } from '../draft';
 
@@ -30,4 +30,6 @@ export interface BaseBackend {
     location: ProtocolLocation;
     source: string;
   }): Promise<void>;
+
+  loadUnit(unitInfo: UnitInfo): Promise<Unit<never, never>>;
 }

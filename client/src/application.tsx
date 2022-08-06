@@ -13,6 +13,7 @@ import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { Pool } from './util';
+import { Unit } from './units';
 
 
 export type Route = (number | string)[];
@@ -26,6 +27,7 @@ export interface ApplicationProps {
 
 export interface ApplicationState {
   host: Host | null;
+  units: Record<string, Unit<never, never>> | null;
 
   drafts: DraftsRecord;
   openDraftIds: ImSet<DraftId>;
@@ -42,6 +44,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.state = {
       host: null,
+      units: null,
 
       drafts: {},
       openDraftIds: ImSet(),
@@ -87,6 +90,18 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     };
 
     this.setState({ host });
+
+    this.pool.add(async () => {
+      let units = Object.fromEntries(
+        await Promise.all(
+          Object.values(host.state.info.units).map(async (unitInfo) => {
+            return [unitInfo.name, await backend.loadUnit(unitInfo)];
+          })
+        )
+      );
+
+      this.setState({ units });
+    });
 
     backend.closed
       .catch((err) => {
@@ -208,7 +223,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let contents = (() => {
       let route = this.state.currentRoute;
 
-      if (!route || !this.state.host) {
+      if (!route || !this.state.host || !this.state.units) {
         return null;
       }
 

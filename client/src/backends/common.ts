@@ -1,6 +1,6 @@
 import type { BaseBackend } from './base';
 import type { Draft as AppDraft } from '../draft';
-import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
+import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData, Unit, UnitInfo } from '../units';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -44,6 +44,8 @@ export abstract class BackendCommon implements BaseBackend {
     location: ProtocolLocation;
     source: string;
   }): Promise<void>;
+
+  abstract loadUnit(unitInfo: UnitInfo): Promise<Unit<never, never>>;
 }
 
 export type BackendAuthAgentSpec = {
@@ -138,9 +140,7 @@ export interface HostState {
     id: HostId;
     name: string;
     startTime: number;
-
-    hardware: string | null;
-    software: string | null;
+    units: Record<string, UnitInfo>;
   };
 
   chips: Record<ChipId, Chip>;

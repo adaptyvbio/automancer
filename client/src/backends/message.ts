@@ -41,7 +41,8 @@ export abstract class MessageBackend extends RawMessageBackend {
     let listener = (message: InboundMessage) => {
       switch (message.type) {
         case 'state': {
-          this.state = message.data;
+          this.state ??= ({} as HostState);
+          Object.assign(this.state, message.data);
 
           if (deferred !== null) {
             deferred.resolve();

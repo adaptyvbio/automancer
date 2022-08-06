@@ -262,7 +262,7 @@ class App:
       async def send_state():
         await self.broadcast({
           "type": "state",
-          "data": self.host.get_state()
+          "data": self.host.get_state_update()
         })
 
         self.updating = False

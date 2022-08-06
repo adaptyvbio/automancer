@@ -3,42 +3,22 @@
   <head>
     <meta charset="utf-8">
     <link href="dist/index.css" rel="stylesheet">
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "./dist/libraries/react.js",
+          "react-dom": "./dist/libraries/react-dom.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module">
       import { createBrowserApp } from './dist/index.js';
 
-      navigator.serviceWorker.register('./service-worker.js');
-
+      // navigator.serviceWorker.register('./service-worker.js');
       createBrowserApp(document.getElementById('root'));
-
-      // let id = crypto.randomUUID();
-
-      // createClient(document.getElementById('root'), {
-      //   settings: {
-      //     hosts: {
-      //       [id]: {
-      //         id,
-      //         builtin: false,
-      //         disabled: false,
-      //         hostId: null,
-      //         locked: false,
-      //         name: null,
-      //         backendOptions: {
-      //           // type: 'local',
-      //           // storage: {
-      //           //   type: 'memory'
-      //           // }
-      //           type: 'remote',
-      //           address: 'localhost',
-      //           port: 4567,
-      //           secure: false
-      //         }
-      //       }
-      //     }
-      //   }
-      // });
     </script>
   </body>
 </html>

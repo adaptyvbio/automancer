@@ -1,18 +1,26 @@
 import ModernWebsocket from 'modern-websocket';
 
-
 import { HostState } from './common';
 import { InboundMessage, MessageBackend } from './message';
 import type { Deferred } from '../util';
 import * as util from '../util';
 import { HostRemoteBackendOptions } from '../host';
+import { Unit, UnitInfo } from '../units';
 
+
+interface WebsocketBackendInfo {
+  features: {
+    terminal: boolean;
+  };
+  staticUrl: string;
+}
 
 export default class WebsocketBackend extends MessageBackend {
   #options: HostRemoteBackendOptions;
   #socket!: ModernWebsocket;
 
   closed!: Promise<void>;
+  info!: WebsocketBackendInfo;
   state!: HostState;
 
   constructor(options: HostRemoteBackendOptions) {
@@ -22,6 +30,11 @@ export default class WebsocketBackend extends MessageBackend {
 
   async close() {
     await this.#socket.close();
+  }
+
+  async loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>> {
+    let url = new URL(`./${unitInfo.name}/${unitInfo.version}/index.js`, this.info.staticUrl);
+    return await import(url.href);
   }
 
   protected async _send(message: unknown) {
@@ -35,6 +48,7 @@ export default class WebsocketBackend extends MessageBackend {
       let iter = conn.iter();
       let initMessage = JSON.parse((await iter.next()).value);
 
+      this.info = initMessage;
 
       if (initMessage.authMethods) {
         let authResultMessage;
@@ -57,6 +71,8 @@ export default class WebsocketBackend extends MessageBackend {
 
       let stateMessage = JSON.parse((await iter.next()).value);
       listener(stateMessage);
+
+      console.log(await this.loadUnit(this.state.info.units.acme));
     });
 
     this.closed = this.#socket.listen(async (conn) => {
@@ -65,6 +81,7 @@ export default class WebsocketBackend extends MessageBackend {
       }
     });
   }
+
 
   static async test(options: HostRemoteBackendOptions): Promise<(
     { ok: true;

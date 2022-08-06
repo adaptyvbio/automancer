@@ -121,7 +121,10 @@ class WebsocketBridge:
         if (authorization is None) or (not any(client.id == authorization for client in self.clients)):
           return aiohttp.web.Response(status=403, text="Invalid authorization header")
 
-      return await handler(request)
+      res = await handler(request)
+      res.headers['Access-Control-Allow-Origin'] = '*'
+
+      return res
 
     self.static_app = aiohttp.web.Application(middlewares=[middleware])
 

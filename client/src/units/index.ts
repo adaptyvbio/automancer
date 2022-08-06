@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import type { Chip, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
-import type { Host } from '../application';
+import type { Host } from '../host';
 import type { Draft } from '../draft';
 
 import ControlUnit from './control';
@@ -117,16 +117,19 @@ export interface Unit<Code, Matrix> {
 }
 
 
+//> UnitInfo
+
+export interface UnitInfo {
+  development: boolean;
+  enabled: boolean;
+  name: string;
+  version: string;
+}
+
+export type UnitName = string;
+
+
 //> Units
 
-export const Units = [
-  [Control.namespace, ControlUnit],
-  [Input.namespace, InputUnit],
-  [LocalNotification.namespace, LocalNotificationUnit],
-  [Timer.namespace, TimerUnit]
-] as [
-  [typeof Control.namespace, Unit<Control.Code, Control.Matrix>],
-  [typeof Input.namespace, Unit<never, never>],
-  [typeof LocalNotification.namespace, Unit<never, never>],
-  [typeof Timer.namespace, Unit<never, never>]
-];
+// TODO: deprecate
+export const Units = [];

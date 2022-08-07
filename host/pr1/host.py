@@ -28,6 +28,10 @@ class Host:
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
+    self.previous_state = {
+      "info": None
+    }
+
 
     # -- Load configuration -------------------------------
 
@@ -77,6 +81,7 @@ class Host:
     self.executors = {
       name: unit.Executor(self.manager.units_info[name].options, host=self) for name, unit in self.manager.units.items() if hasattr(unit, 'Executor')
     }
+
 
   @property
   def units(self):
@@ -220,7 +225,15 @@ class Host:
       "info": {
         "id": self.id,
         "name": self.name,
-        "startTime": self.start_time
+        "startTime": self.start_time,
+        "units": {
+          unit_info.name: {
+            "development": unit_info.development,
+            "enabled": unit_info.enabled,
+            "name": unit_info.name,
+            "version": unit_info.version
+          } for unit_info in self.manager.units_info.values()
+        }
       },
       "chips": {
         chip.id: chip.export() for chip in self.chips.values()
@@ -232,6 +245,22 @@ class Host:
         namespace: executor.export() for namespace, executor in self.executors.items()
       }
     }
+
+  def get_state_update(self):
+    state = self.get_state()
+    state_update = dict()
+
+    if state["info"] != self.previous_state["info"]:
+      state_update.update({ "info": state["info"] })
+
+    state_update.update({
+      "chips": state["chips"],
+      "devices": state["devices"],
+      "executors": state["executors"]
+    })
+
+    self.previous_state = state
+    return state_update
 
   async def process_request(self, request):
     if request["type"] == "compileDraft":

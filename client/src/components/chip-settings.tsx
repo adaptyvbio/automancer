@@ -1,13 +1,13 @@
 import { setIn } from 'immutable';
 import * as React from 'react';
 
-import type { Host, Route } from '../application';
-// import { Chip, HostState } from '../backends/common';
+import type { Host } from '../host';
 import { Chip, ChipId, ControlNamespace, HostId } from '../backends/common';
 import { Pool } from '../util';
 import * as util from '../util';
 import { Icon } from '../components/icon';
 import { Matrices, Units } from '../units';
+import * as Form from './standard-form';
 
 
 export interface ChipSettingsProps {
@@ -51,21 +51,16 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
   render() {
     return (
       <div className="blayout-contents">
-        <div className="form-container">
+        <div>
           <div className="header header--2">
             <h2>General</h2>
           </div>
 
-          {/* <p>These will be conserved once the chip is archived.</p> */}
-
-          <label className="form-control">
-            <div>Name</div>
-            <input
-              type="text"
-              placeholder="e.g. Alpha"
-              value={this.state.name}
-              onInput={(event) => {
-                this.setState({ name: event.currentTarget.value });
+          <Form.Form>
+            <Form.TextField
+              label="Name"
+              onInput={(name) => {
+                this.setState({ name });
               }}
               onBlur={() => {
                 this.pool.add(async () => {
@@ -73,23 +68,27 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
                     await this.props.host.backend.setChipMetadata(this.chip.id, { name: this.state.name });
                   }
                 });
-              }} />
-          </label>
-          <label className="form-control">
-            <div>Details</div>
-            <textarea placeholder="e.g. Produced on March 23rd"
-              onInput={(event) => {
-                this.setState({ description: event.currentTarget.value });
+              }}
+              placeholder="e.g. Alpha"
+              value={this.state.name} />
+
+            <Form.TextArea
+              label="Description"
+              onInput={(description) => {
+                this.setState({ description });
               }}
               onBlur={() => {
                 this.pool.add(async () => {
-                  await this.props.host.backend.setChipMetadata(this.chip.id, { description: (this.state.description || null) });
+                  if (this.state.description) {
+                    await this.props.host.backend.setChipMetadata(this.chip.id, { description: this.state.description });
+                  }
                 });
               }}
+              placeholder="e.g. Produced on March 23rd"
               value={this.state.description} />
-          </label>
+          </Form.Form>
 
-          {Units.map(([namespace, unit]) => {
+          {Object.values(this.props.host.units).map((unit) => {
             if (!unit.MatrixEditor) {
               return null;
             }
@@ -97,15 +96,15 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
             return <unit.MatrixEditor
               chip={this.chip}
               host={this.props.host}
-              matrix={this.chip.matrices[namespace as keyof Matrices]}
+              matrix={this.chip.matrices[unit.name as keyof Matrices]}
               setMatrix={(matrix) => {
                 this.pool.add(async () => {
                   await this.props.host.backend.setMatrix(this.chip.id, {
-                    [namespace]: matrix
+                    [unit.name]: matrix
                   });
                 });
               }}
-              key={namespace} />
+              key={unit.name} />
           })}
         </div>
       </div>

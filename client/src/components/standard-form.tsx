@@ -102,6 +102,28 @@ export function Select<T extends number | string | null>(props: {
   );
 }
 
+export function TextArea(props: {
+  label: string;
+  onBlur?(): void;
+  onInput(value: string): void;
+  placeholder?: string;
+  targetRef?: React.RefObject<HTMLTextAreaElement>;
+  value: string;
+}) {
+  return (
+    <label className="sform-group">
+      <div className="sform-label">{props.label}</div>
+      <textarea className="sform-textarea"
+        placeholder={props.placeholder}
+        onBlur={props.onBlur}
+        onInput={(event) => void props.onInput(event.currentTarget.value)}
+        value={props.value}
+        rows={3}
+        ref={props.targetRef} />
+    </label>
+  );
+}
+
 export function TextField(props: {
   label: string;
   onBlur?(): void;

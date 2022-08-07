@@ -4,6 +4,8 @@
 
 
 .barnav {
+  $duration: $dur-medium;
+
   &-root {
     display: flex;
     column-gap: 0.6rem;
@@ -15,6 +17,8 @@
   }
 
   &-entry {
+    --background: #fff;
+
     display: flex;
     align-items: center;
     column-gap: 0.6rem;
@@ -22,19 +26,12 @@
 
     width: auto;
     padding: 0.4rem 1rem;
+    position: relative;
 
-    --background: #fff;
-    background-color: var(--background);
-    border: 1px solid transparent;
-    border-radius: 4px;
+    transition: color $duration;
 
-    &:hover {
-      --background: #fafafa;
-    }
-
-    &._selected {
+    &:hover, &._selected {
       --background: #eee;
-      border-color: #ddd;
     }
 
     &:not(._selected, :hover) {
@@ -43,6 +40,35 @@
 
     &:disabled {
       color: #bbb;
+    }
+
+    &::before {
+      content: "";
+      width: 100%;
+      height: 100%;
+
+      background-color: #eee;
+      border: 1px solid transparent;
+      border-radius: 4px;
+
+      position: absolute;
+      left: 0;
+
+      z-index: -1;
+    }
+
+    &:hover::before {
+      transition: opacity $duration, scale $duration;
+    }
+
+    &:not(:hover, ._selected)::before {
+      opacity: 0;
+      scale: 0 1;
+      transition: opacity $duration, scale 0s $duration;
+    }
+
+    &._selected::before {
+      border-color: #ddd;
     }
   }
 

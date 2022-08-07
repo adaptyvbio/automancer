@@ -7,7 +7,7 @@ export interface Host {
   backend: BaseBackend;
   id: HostId;
   state: HostState;
-  units: Record<UnitName, Unit<never, never>>;
+  units: Record<UnitName, Unit<unknown, unknown>>;
 }
 
 export interface HostRemoteBackendOptions {

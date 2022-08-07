@@ -36,9 +36,9 @@ $height: 2rem;
     font-weight: 500;
   }
 
-  &-durationfield, &-select select, &-textfield {
-    height: $height;
-    padding: 0 $hor-padding;
+  &-durationfield, &-select select, &-textarea, &-textfield {
+    padding-left: $hor-padding;
+    padding-right: $hor-padding;
 
     background-color: $background-color;
     border-radius: 4px;
@@ -50,6 +50,12 @@ $height: 2rem;
       --focus-shadow: #{$focus-shadow};
     }
   }
+
+  &-durationfield, &-select select, &-textfield {
+    height: $height;
+    padding: 0 $hor-padding;
+  }
+
 
   &-checkboxlist {
     display: flex;
@@ -130,7 +136,7 @@ $height: 2rem;
     }
   }
 
-  &-textfield {
+  &-textarea, &-textfield {
     box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
 
     color: $main-color;
@@ -138,5 +144,10 @@ $height: 2rem;
     &::placeholder {
       color: $placeholder-color;
     }
+  }
+
+  &-textarea {
+    padding: calc((#{$height} - 1.2em) * 0.5) $hor-padding;
+    resize: vertical;
   }
 }

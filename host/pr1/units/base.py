@@ -159,7 +159,7 @@ class BaseExecutor:
 
 
 class BaseMatrix:
-  def attach(self, *, chip, host):
+  def __init__(self, *, chip, host):
     pass
 
   def create(self):
@@ -172,7 +172,13 @@ class BaseMatrix:
     return dict()
 
   def serialize(self):
-    return pickle.dumps(self)
+    return None
 
-  def unserialize(data):
-    return pickle.loads(data)
+  def unserialize(self, state):
+    pass
+
+  def serialize_raw(self):
+    return pickle.dumps(self.serialize())
+
+  def unserialize_raw(self, data):
+    self.unserialize(pickle.loads(data))

@@ -4,15 +4,11 @@ from . import logger, name
 
 
 class Matrix(BaseMatrix):
-  def __init__(self):
-    self._chip = None
-    self._host = None
-
-    self._voice = None
-
-  def attach(self, *, chip, host):
+  def __init__(self, *, chip, host):
     self._chip = chip
     self._host = host
+
+    self._voice = None
 
   def create(self):
     voices = self._host.executors[name]._voices
@@ -26,9 +22,9 @@ class Matrix(BaseMatrix):
   def update(self, data):
     self._voice = data["voice"]
 
-  def __getstate__(self):
+  def serialize(self):
     return (self._voice, )
 
-  def __setstate__(self, state):
+  def unserialize(self, state):
     voice, = state
     self._voice = voice

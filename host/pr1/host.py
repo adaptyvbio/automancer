@@ -98,12 +98,16 @@ class Host:
 
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
-        chip = Chip.unserialize(path, host=self)
+        try:
+          chip = Chip.unserialize(path, host=self)
+        except Exception as e:
+          print(e)
+          logger.warn(f"Chip '{path.name}' is corrupted and will be ignored.")
+        else:
+          if (not chip.archived) and chip.supported:
+            chip.ensure_runners(host=self)
 
-        if (not chip.archived) and chip.supported:
-          chip.ensure_runners(host=self)
-
-        self.chips[chip.id] = chip
+          self.chips[chip.id] = chip
 
     logger.debug(f"Loaded {len(self.chips)} existing chips")
     logger.debug(f"  including {sum(chip.archived for chip in self.chips.values())} archived chips")

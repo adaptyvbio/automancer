@@ -25,12 +25,12 @@ class UnsupportedChip:
 
 
 class Chip:
-  def __init__(self, *, archived, dir, id, matrices, metadata, unit_list, unit_versions):
+  def __init__(self, *, archived, dir, id, metadata, unit_list, unit_versions):
     self.archived = archived
     self.dir = dir
     self.id = id
     self.master = None
-    self.matrices = matrices
+    self.matrices = None
     self.metadata = metadata
     self.runners = None
     self.unit_list = unit_list
@@ -55,7 +55,7 @@ class Chip:
       'id': self.id,
       'archived': self.archived,
       'matrices': {
-        name: base64.b85encode(matrix.serialize()).decode("utf-8") for name, matrix in self.matrices.items()
+        name: base64.b85encode(matrix.serialize_raw()).decode("utf-8") for name, matrix in self.matrices.items()
       },
       'metadata': self.metadata,
       'unit_list': self.unit_list,
@@ -85,7 +85,7 @@ class Chip:
     for name in self.unit_list:
       matrix = self.matrices.get(name)
 
-      matrix_payload = matrix.serialize() if matrix else pickle.dumps(None)
+      matrix_payload = matrix.serialize_raw() if matrix else pickle.dumps(None)
       payload.extend(struct.pack("H", len(matrix_payload)))
       payload.extend(matrix_payload)
 
@@ -128,20 +128,19 @@ class Chip:
     }
 
     unit_versions = { namespace: unit.version for namespace, unit in host.units.items() }
-    matrices = { namespace: unit.Matrix() for namespace, unit in host.units.items() if hasattr(unit, 'Matrix') }
 
     chip = Chip(
       archived=False,
       id=chip_id,
       dir=chip_dir,
-      matrices=matrices,
       metadata=metadata,
       unit_list=list(unit_versions.keys()),
       unit_versions=unit_versions
     )
 
+    chip.matrices = { namespace: unit.Matrix(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Matrix') }
+
     for matrix in chip.matrices.values():
-      matrix.attach(chip=chip, host=host)
       matrix.create()
 
     chip._save_header()
@@ -183,21 +182,20 @@ class Chip:
 
     #   history_file.seek(payload_size, 1)
 
-    matrices = {
-      name: host.units[name].Matrix.unserialize(base64.b85decode(raw_matrix.encode("utf-8"))) for name, raw_matrix in header['matrices'].items()
-    }
-
     chip = Chip(
       archived=header['archived'],
       dir=chip_dir,
       id=header['id'],
-      matrices=matrices,
       metadata=header['metadata'],
       unit_list=header['unit_list'],
       unit_versions=header['unit_versions']
     )
 
-    for matrix in chip.matrices.values():
-      matrix.attach(chip=chip, host=host)
+    chip.matrices = {
+      name: host.units[name].Matrix(chip=chip, host=host) for name in header['matrices'].keys()
+    }
+
+    for name, matrix in chip.matrices.items():
+      matrix.unserialize_raw(base64.b85decode(header['matrices'][name].encode("utf-8")))
 
     return chip

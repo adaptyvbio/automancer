@@ -46,6 +46,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   shouldComponentUpdate(nextProps: ViewChipProps, nextState: ViewChipState) {
     return (nextState !== this.state)
       || (nextProps.host.state !== this.props.host.state)
+      || (nextProps.host.units !== this.props.host.units)
       || (nextProps.chipId !== this.props.chipId)
       || (nextProps.tab !== this.props.tab);
   }

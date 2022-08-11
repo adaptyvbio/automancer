@@ -33,7 +33,7 @@ export default class WebsocketBackend extends MessageBackend {
   }
 
   async loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>> {
-    let url = new URL(`./${unitInfo.name}/${unitInfo.version}/index.js`, this.info.staticUrl);
+    let url = new URL(`./${unitInfo.name}/${unitInfo.version}/index.js?${Date.now()}`, this.info.staticUrl);
     return await import(url.href);
   }
 

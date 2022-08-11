@@ -240,7 +240,7 @@ class Host:
         }
       },
       "chips": {
-        chip.id: chip.export() for chip in self.chips.values()
+        chip.id: chip.export() for chip in self.chips.values() if (not chip.archived) and chip.supported
       },
       "devices": {
         device.id: device.export() for executor in self.executors.values() for device in executor.get_devices()

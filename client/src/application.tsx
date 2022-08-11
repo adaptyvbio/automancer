@@ -92,24 +92,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.setState({ host });
 
-    this.pool.add(async () => {
-      let units = Object.fromEntries(
-        await Promise.all(
-          Object.values(host.state.info.units)
-            .filter((unitInfo) => unitInfo.enabled)
-            .map(async (unitInfo) => {
-              return [unitInfo.name, await backend.loadUnit(unitInfo)];
-            })
-        )
-      );
-
-      this.setState((state) => ({
-        host: {
-          ...state.host!,
-          units
-        }
-      }));
-    });
+    this.pool.add(async () => void await this.loadUnitClients(host));
 
     backend.closed
       .catch((err) => {
@@ -119,12 +102,46 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       .finally(() => {
         this.setState({ host: null });
       });
+
+      return backend.state;
+  }
+
+  async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
+    console.group('Loading units');
+
+    let units = Object.fromEntries(
+      await Promise.all(
+        Object.values(host.state.info.units)
+          .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development))
+          .map(async (unitInfo) => {
+            console.log(`%cLoading unit %c${unitInfo.name}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+            return [unitInfo.name, await host.backend.loadUnit(unitInfo)];
+          })
+      )
+    );
+
+    console.groupEnd();
+
+    this.setState((state) => ({
+      host: {
+        ...state.host!,
+        units
+      }
+    }));
   }
 
   componentDidMount() {
     window.addEventListener('beforeunload', () => {
       this.state.host?.backend.close();
     }, { signal: this.controller.signal });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'KeyR') {
+        if (event.altKey) {
+          this.pool.add(async () => void await this.loadUnitClients(undefined, { development: true }));
+        }
+      }
+    });
 
     this.props.appBackend.onDraftsUpdate(({ options, update }) => {
       this.setState((state) => {
@@ -159,13 +176,21 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.pool.add(async () => {
       await this.props.appBackend.initialize();
-      await this.initializeHost();
+      let state = await this.initializeHost();
 
-      let route;
+      if (!state) {
+        return;
+      }
+
+      let route!: Route;
 
       try {
         route = JSON.parse(window.sessionStorage['route']);
       } catch {
+        route = ['chip'];
+      }
+
+      if ((route[0] === 'chip') && (route.length === 3) && !(state.chips[route[1]])) {
         route = ['chip'];
       }
 

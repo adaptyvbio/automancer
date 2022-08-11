@@ -2,6 +2,7 @@ import { setIn } from 'immutable';
 import * as React from 'react';
 
 import type { Host } from '../host';
+import { ErrorBoundary } from './error-boundary';
 import { Chip, ChipId, ControlNamespace, HostId } from '../backends/common';
 import { Pool } from '../util';
 import * as util from '../util';
@@ -93,18 +94,23 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
               return null;
             }
 
-            return <unit.MatrixEditor
-              chip={this.chip}
-              host={this.props.host}
-              matrix={this.chip.matrices[unit.name as keyof Matrices]}
-              setMatrix={(matrix) => {
-                this.pool.add(async () => {
-                  await this.props.host.backend.setMatrix(this.chip.id, {
-                    [unit.name]: matrix
-                  });
-                });
-              }}
-              key={unit.name} />
+            return (
+              <ErrorBoundary
+                getErrorMessage={() => <>Failed to render the settings editor of unit <strong>{unit.name}</strong>.</>}
+                key={unit.name}>
+                <unit.MatrixEditor
+                  chip={this.chip}
+                  host={this.props.host}
+                  matrix={this.chip.matrices[unit.name as keyof Matrices]}
+                  setMatrix={(matrix) => {
+                    this.pool.add(async () => {
+                      await this.props.host.backend.setMatrix(this.chip.id, {
+                        [unit.name]: matrix
+                      });
+                    });
+                  }} />
+              </ErrorBoundary>
+            );
           })}
         </div>
       </div>

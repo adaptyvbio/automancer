@@ -50,6 +50,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
           appBackend={this.appBackend}
           hostSettings={this.state.hostSettingsData.hosts[this.state.currentSettingsId]}
           hostSettingsRecord={this.state.hostSettingsData.hosts}
+          setStartup={() => void this.setState({ currentSettingsId: null })}
           key={this.state.currentSettingsId} />
       );
     }

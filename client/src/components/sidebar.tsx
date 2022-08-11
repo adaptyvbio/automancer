@@ -11,6 +11,7 @@ import * as util from '../util';
 export interface SidebarProps {
   currentRoute: Route | null;
   setRoute(route: Route): void;
+  setStartup(): void;
 
   host: Host | null;
   hostSettingsRecord: HostSettingsRecord;
@@ -42,6 +43,7 @@ export class Sidebar extends React.Component<SidebarProps> {
           route: Route | null;
           routeRef?: Route;
         }[] | null;
+        onClick?: () => void;
       }[];
     }[] = this.props.host
       ? [
@@ -79,12 +81,17 @@ export class Sidebar extends React.Component<SidebarProps> {
             route: ['terminal'] }
         ] },
         { id: 'last',
-        entries: [
-          { id: 'settings',
-            label: 'Settings',
-            icon: 'settings',
-            route: null }
-        ] }
+          entries: [
+            { id: 'settings',
+              label: 'Settings',
+              icon: 'settings',
+              route: null },
+            { id: 'startup',
+              label: 'Start menu',
+              icon: 'home',
+              route: null,
+              onClick: () => void this.props.setStartup() }
+          ] },
       ]
       : [];
 
@@ -128,9 +135,9 @@ export class Sidebar extends React.Component<SidebarProps> {
                       '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
                     })}
                     key={entry.id}
-                    onClick={(entry.route ?? undefined) && (() => {
+                    onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
                       this.props.setRoute(entry.route!);
-                    })}>
+                    }))}>
                     <div className="sidebar-item-icon">
                       <span className="material-symbols-rounded">{entry.icon}</span>
                     </div>

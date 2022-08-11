@@ -23,6 +23,8 @@ export interface ApplicationProps {
   appBackend: AppBackend;
   hostSettings: HostSettings;
   hostSettingsRecord: HostSettingsRecord;
+
+  setStartup(): void;
 }
 
 export interface ApplicationState {
@@ -298,6 +300,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         <Sidebar
           currentRoute={this.state.currentRoute}
           setRoute={setRoute}
+          setStartup={this.props.setStartup}
 
           host={this.state.host}
           hostSettingsRecord={this.props.hostSettingsRecord}

@@ -31,5 +31,5 @@ export interface BaseBackend {
     source: string;
   }): Promise<void>;
 
-  loadUnit(unitInfo: UnitInfo): Promise<Unit<never, never>>;
+  loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>>;
 }

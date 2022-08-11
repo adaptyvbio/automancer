@@ -10,7 +10,7 @@ import uuid
 from . import logger, reader
 from .chip import Chip
 from .master import Master
-# from .protocol import Protocol
+from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
 
@@ -152,7 +152,7 @@ class Host:
       protocol = Protocol(
         source,
         host=self,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() }
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
       )
     except reader.LocatedError as e:
       errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
@@ -314,11 +314,7 @@ class Host:
 
     if request["type"] == "setMatrix":
       chip = self.chips[request["chipId"]]
-
-      for namespace, matrix_data in request["update"].items():
-        chip.matrices[namespace].update(matrix_data)
-
-      chip.update_runners()
+      chip.update_matrices(request["update"])
 
     if request["type"] == "skipSegment":
       chip = self.chips[request["chipId"]]

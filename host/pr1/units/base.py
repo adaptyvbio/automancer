@@ -1,11 +1,14 @@
 from collections import namedtuple
 import pickle
 
-from ..util.encoder import decode, encode
+from .. import logger as root_logger
 
 
 # used?
 Device = namedtuple("Device", ["description", "build", "id", "name"])
+
+
+logger = root_logger.getChild("unit")
 
 
 class BaseParser:
@@ -156,7 +159,10 @@ class BaseExecutor:
 
 
 class BaseMatrix:
-  def initialize(self, *, chip, host):
+  def attach(self, *, chip, host):
+    pass
+
+  def create(self):
     pass
 
   def update(self, update_data):

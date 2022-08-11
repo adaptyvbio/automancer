@@ -6,6 +6,7 @@
     <script type="importmap">
       {
         "imports": {
+          "pr1": "./dist/index.js",
           "react": "./dist/libraries/react.js",
           "react-dom": "./dist/libraries/react-dom.js"
         }
@@ -15,7 +16,7 @@
   <body>
     <div id="root"></div>
     <script type="module">
-      import { createBrowserApp } from './dist/index.js';
+      import { createBrowserApp } from 'pr1';
 
       // navigator.serviceWorker.register('./service-worker.js');
       createBrowserApp(document.getElementById('root'));

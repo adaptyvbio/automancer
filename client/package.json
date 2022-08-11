@@ -1,14 +1,16 @@
 {
-  "name": "pr1-client",
+  "name": "pr1",
   "version": "0.0.0",
   "main": "dist/index.js",
+  "types": "lib/types/index.d.ts",
   "scripts": {
+    "build": "npm run build:css && npm run build:js && (npm run build:types || true)",
     "build:js": "node build.js",
     "build:js:watch": "node build.js --watch",
-    "build:css": "sass styles/main.scss:lib/styles.css --no-source-map",
-    "build:css:watch": "sass styles/main.scss:lib/styles.css --watch",
-    "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular",
-    "test:types": "tsc"
+    "build:css": "sass styles/main.scss:lib/styles/index.css --no-source-map",
+    "build:css:watch": "sass styles/main.scss:lib/styles/index.css --watch",
+    "build:types": "tsc",
+    "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular"
   },
   "dependencies": {
     "@floating-ui/react-dom-interactions": "^0.6.3",

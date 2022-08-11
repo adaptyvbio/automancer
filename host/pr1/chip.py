@@ -41,10 +41,6 @@ class Chip:
     self._history_path = (dir / ".history.dat")
     self._history_file = None
 
-  def _initialize_matrices(self, *, host):
-    for matrix in self.matrices.values():
-      matrix.initialize(chip=self, host=host)
-
   def _push_history(self, *, flags, payload):
     if not self._history_file:
       self._history_file = self._history_path.open("ab", buffering=0)
@@ -144,7 +140,10 @@ class Chip:
       unit_versions=unit_versions
     )
 
-    chip._initialize_matrices(host=host)
+    for matrix in chip.matrices.values():
+      matrix.attach(chip=chip, host=host)
+      matrix.create()
+
     chip._save_header()
     chip.update_matrices()
     chip.update_metadata()
@@ -198,5 +197,7 @@ class Chip:
       unit_versions=header['unit_versions']
     )
 
-    chip._initialize_matrices(host=host)
+    for matrix in chip.matrices.values():
+      matrix.attach(chip=chip, host=host)
+
     return chip

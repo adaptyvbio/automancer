@@ -34,6 +34,7 @@ class UnitInfo:
   def version(self):
     return self.unit.version
 
+
 class UnitManager:
   def __init__(self, conf):
     self.load(conf)

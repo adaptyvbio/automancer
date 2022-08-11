@@ -45,7 +45,7 @@ export abstract class BackendCommon implements BaseBackend {
     source: string;
   }): Promise<void>;
 
-  abstract loadUnit(unitInfo: UnitInfo): Promise<Unit<never, never>>;
+  abstract loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>>;
 }
 
 export type BackendAuthAgentSpec = {

@@ -93,7 +93,7 @@ export function Select<T extends number | string | null>(props: {
           }}
           ref={props.targetRef}>
           {props.options.map((option, optionIndex) =>
-            <option value={optionIndex} key={option.id}>{option.label}</option>
+            <option value={optionIndex} disabled={!!option.disabled} key={option.id}>{option.label}</option>
           )}
         </select>
         <Icon name="expand_more" />

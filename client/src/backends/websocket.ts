@@ -71,8 +71,6 @@ export default class WebsocketBackend extends MessageBackend {
 
       let stateMessage = JSON.parse((await iter.next()).value);
       listener(stateMessage);
-
-      console.log(await this.loadUnit(this.state.info.units.acme));
     });
 
     this.closed = this.#socket.listen(async (conn) => {

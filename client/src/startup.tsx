@@ -6,13 +6,17 @@ import type { HostId } from './backends/common';
 import * as util from './util';
 import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
 import { ContextMenuArea } from './components/context-menu-area';
+import { MenuDef } from './components/context-menu';
 
 
 interface StartupProps {
+  defaultSettingsId: string | null;
+  hostSettings: HostSettingsRecord;
+
   createHostSettings(options: { settings: HostSettings; }): void;
   deleteHostSettings(settingsId: string): void;
   launchHost(settingsId: string): void;
-  hostSettings: HostSettingsRecord;
+  setDefaultHostSettings(settingsId: string | null): void;
 }
 
 interface StartupState {
@@ -37,6 +41,9 @@ export class Startup extends React.Component<StartupProps, StartupState> {
   }
 
   componentDidMount() {
+    // debug
+    // this.props.launchHost('a067b394-4f75-426e-b92b-7a0aa65cbf71');
+
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Alt') {
         this.setState({ fullDisplay: true });
@@ -97,7 +104,8 @@ export class Startup extends React.Component<StartupProps, StartupState> {
             <div className="startup-left-root">
               <div className="startup-left-header">
                 <img src="static/logo.jpeg" width="330" height="300" className="startup-left-logo" />
-                <div className="startup-left-title">Universal Lab Experience</div>
+                <div className="startup-left-title">PR–1</div>
+                {/* <div className="startup-left-title">Universal Lab Experience</div> */}
               </div>
               <div className="startup-left-bar">
                 <div>Version 1.0</div>
@@ -108,26 +116,47 @@ export class Startup extends React.Component<StartupProps, StartupState> {
             </div>
             <div className="startup-right-root">
               <div className="startup-right-entry-list">
-                {Object.values(this.props.hostSettings).map((hostSettings) => (
-                  <ContextMenuArea
-                    createMenu={(_event) => [
-                      { id: 'delete', name: 'Delete', icon: 'delete', disabled: hostSettings.builtin }
-                    ]}
-                    onSelect={(path) => {
-                      if (path.first()! === 'delete') {
-                        this.props.deleteHostSettings(hostSettings.id);
-                      }
-                    }}
-                    key={hostSettings.id}>
-                    <button type="button" className="startup-right-entry-item" onClick={() => {
-                      this.props.launchHost(hostSettings.id);
-                    }}>
-                      <div className="startup-right-entry-title">{hostSettings.label ?? 'Untitled host'}</div>
-                      <div className="startup-right-entry-path">{formatHostSettings(hostSettings)}</div>
-                      <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none" /><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" /></svg>
-                    </button>
-                  </ContextMenuArea>
-                ))}
+                {Object.values(this.props.hostSettings).map((hostSettings) => {
+                  let isDefault = (this.props.defaultSettingsId === hostSettings.id);
+
+                  return (
+                    <ContextMenuArea
+                      createMenu={(_event) => [
+                        ...(isDefault
+                          ? [{ id: 'default.unset', name: 'Unset as default' }]
+                          : [{ id: 'default.set', name: 'Set as default' }]),
+                        { id: '_divider', type: 'divider' },
+                        { id: 'delete', name: 'Delete', icon: 'delete', disabled: hostSettings.builtin },
+                      ] as MenuDef}
+                      onSelect={(path) => {
+                        switch (path.first()!) {
+                          case 'delete': {
+                            this.props.deleteHostSettings(hostSettings.id);
+                            break;
+                          }
+
+                          case 'default.set': {
+                            this.props.setDefaultHostSettings(hostSettings.id);
+                            break;
+                          }
+
+                          case 'default.unset': {
+                            this.props.setDefaultHostSettings(null);
+                            break;
+                          }
+                        }
+                      }}
+                      key={hostSettings.id}>
+                      <button type="button" className="startup-right-entry-item" onClick={() => {
+                        this.props.launchHost(hostSettings.id);
+                      }}>
+                        <div className="startup-right-entry-title">{hostSettings.label ?? 'Untitled host'}{isDefault ? ' (default)' : ''}</div>
+                        <div className="startup-right-entry-path">{formatHostSettings(hostSettings)}</div>
+                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none" /><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" /></svg>
+                      </button>
+                    </ContextMenuArea>
+                  );
+                })}
               </div>
               <div className="startup-right-entry-list">
                 <button type="button" className="startup-right-entry-item" onClick={() => {

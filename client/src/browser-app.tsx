@@ -3,14 +3,14 @@ import * as React from 'react';
 import type { AppBackend } from './app-backends/base';
 import { BrowserAppBackend } from './app-backends/browser';
 import { Application } from './application';
-import type { Host, HostSettings, HostSettingsRecord } from './host';
+import type { Host, HostSettingsData, HostSettingsRecord } from './host';
 import { Startup } from './startup';
 import { Pool } from './util';
 
 
 interface BrowserAppState {
   currentSettingsId: string | null;
-  hostSettings: HostSettingsRecord | null;
+  hostSettingsData: HostSettingsData | null;
 }
 
 export class BrowserApp extends React.Component<{}, BrowserAppState> {
@@ -24,20 +24,23 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
 
     this.state = {
       currentSettingsId: null,
-      hostSettings: null
+      hostSettingsData: null
     };
   }
 
   componentDidMount() {
     this.pool.add(async () => {
+      let hostSettingsData = await this.appBackend.getHostSettingsData();
+
       this.setState({
-        hostSettings: await this.appBackend.getHostSettings()
+        currentSettingsId: hostSettingsData.defaultHostSettingsId,
+        hostSettingsData
       });
     });
   }
 
   render() {
-    if (!this.state.hostSettings) {
+    if (!this.state.hostSettingsData) {
       return <div />;
     }
 
@@ -45,8 +48,8 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
       return (
         <Application
           appBackend={this.appBackend}
-          hostSettings={this.state.hostSettings[this.state.currentSettingsId]}
-          hostSettingsRecord={this.state.hostSettings}
+          hostSettings={this.state.hostSettingsData.hosts[this.state.currentSettingsId]}
+          hostSettingsRecord={this.state.hostSettingsData.hosts}
           key={this.state.currentSettingsId} />
       );
     }
@@ -58,26 +61,47 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
             await this.appBackend.setHostSettings(settings);
           });
 
-          this.setState({
-            hostSettings: {
-              ...this.state.hostSettings,
-              [settings.id]: settings
+          this.setState((state) => ({
+            hostSettingsData: {
+              ...state.hostSettingsData!,
+              hosts: {
+                ...state.hostSettingsData!.hosts,
+                [settings.id]: settings
+              }
             }
-          });
+          }));
         }}
         deleteHostSettings={(settingsId) => {
           this.pool.add(async () => {
             await this.appBackend.deleteHostSettings(settingsId);
           });
 
-          let { [settingsId]: _, ...hostSettings } = this.state.hostSettings!;
-          this.setState({ hostSettings });
+          let { [settingsId]: _, ...hostSettings } = this.state.hostSettingsData!.hosts;
+          this.setState((state) => ({
+            hostSettingsData: {
+              ...state.hostSettingsData!,
+              hosts: hostSettings
+            }
+          }));
         }}
-        hostSettings={this.state.hostSettings}
-
         launchHost={(settingsId) => {
           this.setState({ currentSettingsId: settingsId });
-        }} />
+        }}
+        setDefaultHostSettings={(settingsId) => {
+          this.pool.add(async () => {
+            await this.appBackend.setDefaultHostSettings(settingsId);
+          });
+
+          this.setState((state) => ({
+            hostSettingsData: {
+              ...state.hostSettingsData!,
+              defaultHostSettingsId: settingsId
+            }
+          }));
+        }}
+
+        defaultSettingsId={this.state.hostSettingsData!.defaultHostSettingsId}
+        hostSettings={this.state.hostSettingsData!.hosts} />
     );
   }
 }

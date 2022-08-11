@@ -58,6 +58,11 @@ export interface HostSettings {
 
 export type HostSettingsRecord = Record<string, HostSettings>;
 
+export interface HostSettingsData {
+  defaultHostSettingsId: HostId | null;
+  hosts: HostSettingsRecord;
+}
+
 export function formatHostSettings(hostSettings: HostSettings): string | null {
   switch (hostSettings.backendOptions.type) {
     case 'internal': return 'This computer';

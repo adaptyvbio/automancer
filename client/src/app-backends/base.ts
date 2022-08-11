@@ -1,4 +1,4 @@
-import type { HostBackendOptions, HostSettings, HostSettingsRecord } from '../host';
+import type { HostBackendOptions, HostSettings, HostSettingsData, HostSettingsRecord } from '../host';
 import type { DraftId, DraftPrimitive } from '../draft';
 import { BaseBackend } from '../backends/base';
 
@@ -26,7 +26,8 @@ export interface AppBackend {
   initialize(): Promise<void>;
 
   deleteHostSettings(settingsId: string): Promise<void>;
-  getHostSettings(): Promise<HostSettingsRecord>;
+  getHostSettingsData(): Promise<HostSettingsData>;
+  setDefaultHostSettings(settingsId: string | null): Promise<void>;
   setHostSettings(settings: HostSettings): Promise<void>;
 
   createDraft(source: string): Promise<DraftId | null>;

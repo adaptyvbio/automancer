@@ -31,6 +31,7 @@ interface DraftEntry {
 }
 
 interface HostSettingsEntry {
+  defaultHostSettingsId: HostId | null;
   hosts: Record<HostId, HostSettings>;
 }
 
@@ -57,18 +58,26 @@ export class BrowserAppBackend implements AppBackend {
     }, this.#store);
   }
 
-  async getHostSettings() {
+  async getHostSettingsData() {
     let hostSettingsEntry = await idb.get<HostSettingsEntry>('hosts', this.#store);
 
     if (!hostSettingsEntry) {
       hostSettingsEntry = {
+        defaultHostSettingsId: null,
         hosts: {}
       };
 
       await idb.set('hosts', hostSettingsEntry, this.#store);
     }
 
-    return hostSettingsEntry.hosts;
+    return hostSettingsEntry;
+  }
+
+  async setDefaultHostSettings(settingsId: string | null) {
+    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => ({
+      ...hostSettingsEntry!,
+      defaultHostSettingsId: settingsId
+    }), this.#store);
   }
 
   async setHostSettings(settings: HostSettings) {

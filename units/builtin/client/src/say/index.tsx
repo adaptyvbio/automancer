@@ -1,17 +1,20 @@
 import { Form, MatrixEditorProps } from 'pr1';
 import React from 'react';
 
-import Voices from './voices';
-
 
 export const name = 'say';
 
 export interface Matrix {
-  voice: string;
+  voice: Voice['name'];
+}
+
+interface Voice {
+  name: string;
+  locale: string;
 }
 
 const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
-const voiceOptions = Object.entries(group(Voices, (voice) => voice.locale))
+const getVoiceOptions = (voices: Voice[]) => Object.entries(group(voices, (voice) => voice.locale))
   .map(([locale, voices]) => ({
     locale,
     localeLabel: languageNames.of(locale.replace('_', '-'))!,
@@ -27,6 +30,8 @@ const voiceOptions = Object.entries(group(Voices, (voice) => voice.locale))
 
 
 export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
+  let executor = props.host.state.executors[name];
+
   return (
     <div>
       <div className="header header--2">
@@ -39,7 +44,7 @@ export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
           onInput={(voiceName) => {
             props.setMatrix({ voice: voiceName });
           }}
-          options={voiceOptions} />
+          options={getVoiceOptions(executor.voices)} />
       </Form.Form>
     </div>
   );

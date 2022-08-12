@@ -231,10 +231,10 @@ class Host:
     for unit_info in self.manager.units_info.values():
       if unit_info.enabled and unit_info.development:
         if hasattr(unit_info.unit, 'Executor'):
-          self.executors[unit_info.name] = unit_info.unit.Executor(unit_info.options, host=self)
-          await self.executors[unit_info.name].initialize()
+          self.executors[unit_info.namespace] = unit_info.unit.Executor(unit_info.options, host=self)
+          await self.executors[unit_info.namespace].initialize()
         else:
-          self.executors.pop(unit_info.name, None)
+          self.executors.pop(unit_info.namespace, None)
 
   def get_state(self):
     return {
@@ -243,10 +243,18 @@ class Host:
         "name": self.name,
         "startTime": self.start_time,
         "units": {
-          unit_info.name: {
+          unit_info.namespace: {
             "development": unit_info.development,
             "enabled": unit_info.enabled,
-            "name": unit_info.name,
+            "metadata": {
+              "author": unit_info.metadata.author,
+              "description": unit_info.metadata.description,
+              "license": unit_info.metadata.license,
+              "title": unit_info.metadata.title,
+              "url": unit_info.metadata.url,
+              "version": unit_info.metadata.version
+            },
+            "namespace": unit_info.namespace,
             "version": unit_info.version
           } for unit_info in self.manager.units_info.values()
         }

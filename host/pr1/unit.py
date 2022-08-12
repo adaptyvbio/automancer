@@ -27,8 +27,12 @@ class UnitInfo:
       self.package_version = metadata.get('version')
 
   @property
-  def name(self):
-    return self.unit.name
+  def metadata(self):
+    return self.unit.metadata
+
+  @property
+  def namespace(self):
+    return self.unit.namespace
 
   @property
   def version(self):
@@ -42,7 +46,7 @@ class UnitManager:
   def load(self, conf):
     units_info = list()
 
-    for name, unit_conf in conf.items():
+    for namespace, unit_conf in conf.items():
       if 'module' in unit_conf:
         module = unit_conf['module'].value
 
@@ -57,7 +61,7 @@ class UnitManager:
         units_info.append(UnitInfo(
           module=module,
           path=unit.__file__,
-          source_name=name,
+          source_name=namespace,
           unit=unit
         ))
 
@@ -80,36 +84,36 @@ class UnitManager:
     self.units_info = dict()
 
     for unit_info in units_info:
-      name = unit_info.name
+      namespace = unit_info.namespace
 
-      if name in self.units:
-        logger.warn(f"Duplicate unit with name '{name}'")
+      if namespace in self.units:
+        logger.warn(f"Duplicate unit with name '{namespace}'")
         logger.warn("This unit will be ignored.")
         continue
 
-      if name != unit_info.source_name:
-        logger.warn(f"Invalid name '{name}' for source with name '{unit_info.source_name}'")
+      if namespace != unit_info.source_name:
+        logger.warn(f"Invalid name '{namespace}' for source with name '{unit_info.source_name}'")
         logger.warn("This unit will be ignored.")
         continue
 
-      if name in conf:
-        unit_conf = conf[name]
+      if namespace in conf:
+        unit_conf = conf[namespace]
         unit_info.development = unit_conf.get('development', False)
         unit_info.enabled = unit_conf.get('enabled', True)
         unit_info.options = unit_conf.get('options', dict())
 
-      self.units_info[name] = unit_info
+      self.units_info[namespace] = unit_info
 
-      logger.debug(f"Registered unit '{name}' from module '{unit_info.module}'" + (f" and package '{unit_info.package_name}' with version '{unit_info.package_version}'" if unit_info.package_name else str()))
+      logger.debug(f"Registered unit '{namespace}' from module '{unit_info.module}'" + (f" and package '{unit_info.package_name}' with version '{unit_info.package_version}'" if unit_info.package_name else str()))
 
     for unit_info in self.units_info.values():
       if unit_info.enabled:
-        self.units[unit_info.name] = unit_info.unit
+        self.units[unit_info.namespace] = unit_info.unit
 
         if unit_info.development:
-          logger.info(f"Loaded unit '{unit_info.name}' in development mode")
+          logger.info(f"Loaded unit '{unit_info.namespace}' in development mode")
         else:
-          logger.debug(f"Loaded unit '{unit_info.name}'")
+          logger.debug(f"Loaded unit '{unit_info.namespace}'")
 
   def reload(self):
     for unit_info in self.units_info.values():
@@ -124,6 +128,6 @@ class UnitManager:
             reload_count += 1
 
         unit_info.unit = importlib.reload(unit_info.unit)
-        self.units[unit_info.name] = unit_info.unit
+        self.units[unit_info.namespace] = unit_info.unit
 
-        logger.debug(f"Reloaded unit '{unit_info.name}' by reloading {reload_count} modules")
+        logger.debug(f"Reloaded unit '{unit_info.namespace}' by reloading {reload_count} modules")

@@ -1,6 +1,6 @@
 from pr1.units.base import BaseMatrix
 
-from . import logger, name
+from . import logger, namespace
 
 
 class Matrix(BaseMatrix):
@@ -11,7 +11,7 @@ class Matrix(BaseMatrix):
     self._voice = None
 
   def create(self):
-    voices = self._host.executors[name]._voices
+    voices = self._host.executors[namespace]._voices
     self._voice = next(voice for voice in voices if voice.locale == "en_US").name
 
   def export(self):

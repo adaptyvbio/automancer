@@ -125,7 +125,7 @@ export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
-  name: UnitName;
+  namespace: UnitNamespace;
 
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): Code;
@@ -140,11 +140,20 @@ export interface Unit<Code, Matrix> {
 export interface UnitInfo {
   development: boolean;
   enabled: boolean;
-  name: string;
-  version: string;
+  namespace: string;
+  version: number;
+
+  metadata: {
+    author: string | null;
+    description: string | null;
+    license: string | null;
+    title: string | null;
+    url: string | null;
+    version: string | null;
+  };
 }
 
-export type UnitName = string;
+export type UnitNamespace = string;
 
 
 //> Units

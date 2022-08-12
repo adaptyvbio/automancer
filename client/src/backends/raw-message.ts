@@ -50,6 +50,12 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
+  async reloadUnits() {
+    await this._request({
+      type: 'reloadUnits'
+    });
+  }
+
   async resume(chipId: string) {
     await this._request({
       type: 'resume',

@@ -223,6 +223,18 @@ class Host:
     # import asyncio
     # asyncio.run(chip.master.wait())
 
+  async def reload_units(self):
+    logger.info("Reloading development units")
+
+    self.manager.reload()
+
+    for unit_info in self.manager.units_info.values():
+      if unit_info.enabled and unit_info.development:
+        if hasattr(unit_info.unit, 'Executor'):
+          self.executors[unit_info.name] = unit_info.unit.Executor(unit_info.options, host=self)
+          await self.executors[unit_info.name].initialize()
+        else:
+          self.executors.pop(unit_info.name, None)
 
   def get_state(self):
     return {
@@ -303,6 +315,9 @@ class Host:
       chip.master.pause({
         'neutral': request["options"]["neutral"]
       })
+
+    if request["type"] == "reloadUnits":
+      await self.reload_units()
 
     if request["type"] == "resume":
       chip = self.chips[request["chipId"]]

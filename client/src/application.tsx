@@ -107,8 +107,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
-    console.group('Loading units');
-
     let units = Object.fromEntries(
       await Promise.all(
         Object.values(host.state.info.units)
@@ -119,8 +117,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           })
       )
     );
-
-    console.groupEnd();
 
     this.setState((state) => ({
       host: {
@@ -136,10 +132,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }, { signal: this.controller.signal });
 
     document.addEventListener('keydown', (event) => {
-      if (event.code === 'KeyR') {
-        if (event.altKey) {
-          this.pool.add(async () => void await this.loadUnitClients(undefined, { development: true }));
-        }
+      if (event.code === 'KeyR' && (event.altKey || event.ctrlKey)) {
+        this.pool.add(async () => {
+          if (event.ctrlKey && this.state.host) {
+            await this.state.host.backend.reloadUnits();
+          }
+
+          if (event.altKey) {
+            await this.loadUnitClients(undefined, { development: true });
+          }
+        });
       }
     });
 

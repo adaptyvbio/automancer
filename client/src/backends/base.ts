@@ -19,6 +19,7 @@ export interface BaseBackend {
   deleteChip(chipId: ChipId): Promise<void>;
   createDraftSample(): Promise<string>;
   pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
+  reloadUnits(): Promise<void>;
   resume(chipId: ChipId): Promise<void>;
   setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;

@@ -110,3 +110,20 @@ class UnitManager:
           logger.info(f"Loaded unit '{unit_info.name}' in development mode")
         else:
           logger.debug(f"Loaded unit '{unit_info.name}'")
+
+  def reload(self):
+    for unit_info in self.units_info.values():
+      if unit_info.development and unit_info.enabled:
+        reload_count = 1
+
+        importlib.reload(unit_info.unit)
+
+        for name, module in reversed(sys.modules.copy().items()):
+          if name.startswith(unit_info.module + "."):
+            importlib.reload(module)
+            reload_count += 1
+
+        unit_info.unit = importlib.reload(unit_info.unit)
+        self.units[unit_info.name] = unit_info.unit
+
+        logger.debug(f"Reloaded unit '{unit_info.name}' by reloading {reload_count} modules")

@@ -33,6 +33,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract createDraftSample(): Promise<string>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
+  abstract reloadUnits(): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
   abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;

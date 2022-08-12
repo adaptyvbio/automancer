@@ -147,6 +147,7 @@ $height: 2rem;
   }
 
   &-textarea {
+    min-height: 50px;
     padding: calc((#{$height} - 1.2em) * 0.5) $hor-padding;
     resize: vertical;
   }

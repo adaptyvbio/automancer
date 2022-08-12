@@ -4,6 +4,26 @@ import { Icon } from './icon';
 import * as util from '../util';
 
 
+export function Actions(props: React.PropsWithChildren<{}>) {
+  return (
+    <div className="sform-actions">
+      {props.children}
+    </div>
+  );
+}
+
+export function Action(props: {
+  label: string;
+  type?: 'button' | 'submit';
+}) {
+  return (
+    <button type={props.type ?? 'button'} className="sform-action">
+      {props.label}
+    </button>
+  );
+}
+
+
 export function Checkbox(props: {
   label: string;
 }) {

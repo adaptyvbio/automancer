@@ -36,12 +36,14 @@ $height: 2rem;
     font-weight: 500;
   }
 
-  &-durationfield, &-select select, &-textarea, &-textfield {
+  &-action, &-durationfield, &-select select, &-textarea, &-textfield {
     padding-left: $hor-padding;
     padding-right: $hor-padding;
 
     background-color: $background-color;
     border-radius: 4px;
+
+    color: $main-color;
 
     --focus-shadow: 0 0 transparent;
     transition: box-shadow 150ms;
@@ -93,8 +95,6 @@ $height: 2rem;
     width: max-content;
     box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
 
-    color: $main-color;
-
     label {
       display: flex;
       align-items: baseline;
@@ -121,9 +121,6 @@ $height: 2rem;
     @include superimposed-children();
     align-items: center;
 
-    // max-width: 300px;
-    color: $main-color;
-
     select {
       padding-right: calc(#{$hor-padding} + 0.8 * #{$icon-size} + 0.6rem);
       box-shadow: var(--focus-shadow), $keyline-bottom-shadow, $keyline-shadow, $box-shadow;
@@ -139,8 +136,6 @@ $height: 2rem;
   &-textarea, &-textfield {
     box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
 
-    color: $main-color;
-
     &::placeholder {
       color: $placeholder-color;
     }
@@ -150,5 +145,22 @@ $height: 2rem;
     min-height: 50px;
     padding: calc((#{$height} - 1.2em) * 0.5) $hor-padding;
     resize: vertical;
+  }
+
+  &-actions {
+    display: flex;
+    justify-content: end;
+    column-gap: 0.6rem;
+
+    margin-top: 1rem;
+  }
+
+  &-actions &-action {
+    width: auto;
+  }
+
+  &-action {
+    padding: calc((#{$height} - 1.2em) * 0.5) ($hor-padding * 1.2);
+    box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
   }
 }

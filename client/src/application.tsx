@@ -12,6 +12,7 @@ import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
+import { ViewSettings } from './views/settings';
 import { Pool } from './util';
 import { Unit } from './units';
 
@@ -112,8 +113,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         Object.values(host.state.info.units)
           .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development))
           .map(async (unitInfo) => {
-            console.log(`%cLoading unit %c${unitInfo.name}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
-            return [unitInfo.name, await host.backend.loadUnit(unitInfo)];
+            console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+            return [unitInfo.namespace, await host.backend.loadUnit(unitInfo)];
           })
       )
     );
@@ -143,7 +144,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           }
         });
       }
-    });
+    }, { signal: this.controller.signal });
 
     this.props.appBackend.onDraftsUpdate(({ options, update }) => {
       this.setState((state) => {
@@ -277,6 +278,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               host={this.state.host}
               setRoute={setRoute} />
           )
+
+          case 'settings': return (
+            <ViewSettings
+              app={this}
+              host={this.state.host}
+              setRoute={setRoute} />
+          );
 
           case 'terminal': return (
             <ViewTerminalSession

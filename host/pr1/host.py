@@ -249,6 +249,10 @@ class Host:
             "metadata": {
               "author": unit_info.metadata.author,
               "description": unit_info.metadata.description,
+              "icon": {
+                "kind": unit_info.metadata.icon.kind,
+                "value": unit_info.metadata.icon.value
+              } if unit_info.metadata.icon else None,
               "license": unit_info.metadata.license,
               "title": unit_info.metadata.title,
               "url": unit_info.metadata.url,

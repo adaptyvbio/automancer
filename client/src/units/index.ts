@@ -150,6 +150,11 @@ export interface UnitInfo {
     title: string | null;
     url: string | null;
     version: string | null;
+
+    icon: {
+      kind: 'icon' | 'svg';
+      value: string;
+    } | null;
   };
 }
 

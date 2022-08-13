@@ -7,7 +7,8 @@ from .. import logger as root_logger
 # used?
 Device = namedtuple("Device", ["description", "build", "id", "name"])
 
-Metadata = namedtuple("Metadata", ["author", "description", "license", "title", "url", "version"], defaults=[None, None, None, None, None, None])
+Metadata = namedtuple("Metadata", ["author", "description", "icon", "license", "title", "url", "version"], defaults=[None, None, None, None, None, None, None])
+MetadataIcon = namedtuple("MetadataIcon", ["kind", "value"])
 
 
 logger = root_logger.getChild("unit")

@@ -1,14 +1,16 @@
 from importlib.resources import files
 from pathlib import Path
 
-from pr1.units.base import Metadata, logger as parent_logger
+from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
 
 namespace = "say"
 version = 0
 
 metadata = Metadata(
-  description="Voice reports using the macOS say command",
-  title="Voice reports"
+  description="Voice reports powered by the built-in macOS voice synthesis command `say`.",
+  icon=MetadataIcon(kind='icon', value="mic"),
+  title="Voice reports",
+  version="v1.0"
 )
 
 client_path = Path(files(__name__ + '.client'))

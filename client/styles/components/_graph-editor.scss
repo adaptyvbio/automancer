@@ -2,15 +2,31 @@
 
 
 .geditor {
+  &-root {
+    --cell-size: 30px;
+    --node-header-height: 40px;
+    --node-padding: 10px;
+
+    // nodePadding + nodeHeaderHeight * 0.5 == cellSize
+  }
+
+  &-svg {
+    background-color: #f1f1f1;
+    overflow: visible;
+  }
+
+
   &-nodeobject {
-    // padding: 5px;
+    padding: var(--node-padding);
   }
 
   &-node {
-    // height: 100%;
+    display: grid;
+    grid-template-rows: var(--node-header-height) 1fr;
+    height: 100%;
 
     background-color: #fff;
-    border: 2px solid $app-blue;
+    border: 0px solid $app-blue;
     border-radius: 6px;
     box-shadow: 2px 3px 2px #0001;
   }
@@ -20,9 +36,7 @@
     display: flex;
     align-items: center;
 
-    height: 40px;
     padding: 0 1.6rem;
-
     border-bottom: 1px solid #ddd;
   }
 
@@ -36,6 +50,7 @@
     flex-direction: column;
     row-gap: 0.4rem;
 
+    align-self: center;
     padding: 0.8rem 1.6rem;
   }
 

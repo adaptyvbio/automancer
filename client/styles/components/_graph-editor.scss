@@ -1,0 +1,51 @@
+@use "../constants" as *;
+
+
+.geditor {
+  &-nodeobject {
+    // padding: 5px;
+  }
+
+  &-node {
+    // height: 100%;
+
+    background-color: #fff;
+    border: 2px solid $app-blue;
+    border-radius: 6px;
+    box-shadow: 2px 3px 2px #0001;
+  }
+
+
+  &-header {
+    display: flex;
+    align-items: center;
+
+    height: 40px;
+    padding: 0 1.6rem;
+
+    border-bottom: 1px solid #ddd;
+  }
+
+  &-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  &-body {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.4rem;
+
+    padding: 0.8rem 1.6rem;
+  }
+
+  &-feature {
+    display: flex;
+    align-items: center;
+    column-gap: 0.8rem;
+  }
+
+  &-featurelabel {
+    font-weight: 500;
+  }
+}

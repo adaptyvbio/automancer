@@ -104,6 +104,12 @@ function UnitInfoEntry(props: {
     let metadataIcon = unitInfo.metadata.icon ?? { kind: 'icon', value: 'mic' };
 
     switch (metadataIcon.kind) {
+      case 'bitmap': return (
+        <div className="usettings-icon">
+          <div className="usettings-icon-mask" style={{ '-webkit-mask-image': `url(${metadataIcon.value})` } as React.CSSProperties} />
+        </div>
+      );
+
       case 'icon': return (
         <div className="usettings-icon">
           <Icon name={metadataIcon.value} />

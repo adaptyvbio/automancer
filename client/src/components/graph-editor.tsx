@@ -1,19 +1,8 @@
+import { Set as ImSet } from 'immutable';
 import * as React from 'react';
+
 import { Icon } from './icon';
-
-
-interface Node {
-  id: string;
-  title: string;
-  features: {
-    icon: string;
-    label: string;
-  }[];
-  position: {
-    x: number;
-    y: number;
-  };
-}
+import * as util from '../util';
 
 
 export interface GraphEditorProps {
@@ -21,7 +10,8 @@ export interface GraphEditorProps {
 }
 
 export interface GraphEditorState {
-  nodes: Node[];
+  nodes: NodeDef[];
+  selectedNodeIds: ImSet<NodeId>;
   size: {
     width: number;
     height: number;
@@ -29,6 +19,36 @@ export interface GraphEditorState {
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
+  action: {
+    type: 'select';
+    singleTargetId: NodeId | null;
+    startPoint: {
+      x: number;
+      y: number;
+    };
+    targets: {
+      id: NodeId;
+      startPosition: {
+        x: number;
+        y: number;
+      };
+    }[];
+  } | {
+    type: 'move';
+    startPoint: {
+      x: number;
+      y: number;
+    };
+    targets: {
+      id: NodeId;
+      startPosition: {
+        x: number;
+        y: number;
+      };
+    }[];
+  } | null = null;
+
+  mouseDown = false;
   refContainer = React.createRef<HTMLDivElement>();
 
   constructor(props: GraphEditorProps) {
@@ -38,7 +58,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       nodes: [
         {
           id: '0',
-          title: 'Wash',
+          title: 'Alpha',
           features: [
             { icon: 'hourglass_empty', label: '10 min' },
             { icon: 'air', label: 'Neutravidin' }
@@ -50,7 +70,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         },
         {
           id: '1',
-          title: 'Wash',
+          title: 'Beta',
           features: [
             { icon: 'hourglass_empty', label: '10 min' },
             { icon: 'air', label: 'Neutravidin' }
@@ -59,8 +79,21 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             x: 18,
             y: 2
           }
+        },
+        {
+          id: '2',
+          title: 'Gamma',
+          features: [
+            { icon: 'hourglass_empty', label: '10 min' },
+            { icon: 'air', label: 'Neutravidin' }
+          ],
+          position: {
+            x: 18,
+            y: 8
+          }
         }
       ],
+      selectedNodeIds: ImSet(),
       size: null
     };
   }
@@ -94,10 +127,10 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let nodeWidth = Math.round((220 + nodePadding * 2) / cellSize);
     let nodeHeight = Math.ceil((nodeHeaderHeight + 80 + nodePadding * 2) / cellSize);
 
-    let link = {
-      start: { x: 11, y: 6 },
-      end: { x: 18, y: 3 }
-    };
+    // let link = {
+    //   start: { x: 11, y: 6 },
+    //   end: { x: 18, y: 3 }
+    // };
 
     let settings = {
       cellSize,
@@ -108,7 +141,81 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
 
     return (
-      <div className="geditor-root" ref={this.refContainer}>
+      <div className="geditor-root" ref={this.refContainer}
+        onMouseMove={(event) => {
+          if (this.action?.type === 'select') {
+            this.action = {
+              type: 'move',
+              startPoint: this.action.startPoint,
+              targets: this.action.targets
+            };
+          }
+
+          if (this.action?.type === 'move') {
+            let dx = event.clientX - this.action.startPoint.x;
+            let dy = event.clientY - this.action.startPoint.y;
+
+            this.setState((state) => {
+              if (!this.action) {
+                return null;
+              }
+
+              return {
+                nodes: state.nodes.map((node) => {
+                  let target = this.action!.targets.find((target) => target.id === node.id);
+
+                  if (!target) {
+                    return node;
+                  }
+
+                  return {
+                    ...node,
+                    position: {
+                      x: target.startPosition.x + dx / settings.cellSize,
+                      y: target.startPosition.y + dy / settings.cellSize
+                    }
+                  };
+                })
+              };
+            });
+          }
+        }}
+        onMouseUp={(event) => {
+          if ((this.action?.type === 'select') && (this.action.singleTargetId)) {
+            this.setState({
+              selectedNodeIds: ImSet.of(this.action.singleTargetId)
+            });
+          }
+
+          if (this.action?.type === 'move') {
+            let dx = event.clientX - this.action.startPoint.x;
+            let dy = event.clientY - this.action.startPoint.y;
+
+            let action = this.action;
+
+            this.setState((state) => {
+              return {
+                nodes: state.nodes.map((node) => {
+                  let target = action.targets.find((target) => target.id === node.id);
+
+                  if (!target) {
+                    return node;
+                  }
+
+                  return {
+                    ...node,
+                    position: {
+                      x: target.startPosition.x + Math.round(dx / settings.cellSize),
+                      y: target.startPosition.y + Math.round(dy / settings.cellSize)
+                    }
+                  };
+                })
+              };
+            });
+          }
+
+          this.action = null;
+        }}>
         <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className="geditor-svg">
           <g>
             {new Array(cellCountX * cellCountY).fill(0).map((_, index) => {
@@ -118,84 +225,94 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             })}
           </g>
 
-          <Link link={link} settings={settings} />
+          <Link
+            autoMove={this.action?.type !== 'move'}
+            link={{
+              start: {
+                x: this.state.nodes[0].position.x + nodeWidth,
+                y: this.state.nodes[0].position.y + 1
+              },
+              end: {
+                x: this.state.nodes[1].position.x,
+                y: this.state.nodes[1].position.y + 1
+              }
+            }}
+            settings={settings} />
 
           {this.state.nodes.map((node) => (
-            <React.Fragment key={node.id}>
-              <foreignObject
-                x={cellSize * node.position.x}
-                y={cellSize * node.position.y}
-                width={cellSize * nodeWidth}
-                height={cellSize * nodeHeight}
-                className="geditor-nodeobject">
-                <div className="geditor-node">
-                  <div className="geditor-header">
-                    <div className="geditor-title">{node.title}</div>
-                  </div>
-                  <div className="geditor-body">
-                    {node.features.map((feature, index) => (
-                      <div className="geditor-feature" key={index}>
-                        <Icon name={feature.icon} />
-                        <div className="geditor-featurelabel">{feature.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </foreignObject>
+            <Node
+              autoMove={this.action?.type !== 'move'}
+              node={node}
+              onMouseDown={(event) => {
+                event.preventDefault();
 
-              <circle
-                cx={cellSize * node.position.x + nodePadding}
-                cy={cellSize * node.position.y + nodePadding + nodeHeaderHeight * 0.5}
-                r="5"
-                fill="#fff"
-                stroke="#000"
-                strokeWidth="2" />
-              <circle
-                cx={cellSize * (node.position.x + nodeWidth) - nodePadding}
-                cy={cellSize * node.position.y + nodePadding + nodeHeaderHeight * 0.5}
-                r="5"
-                fill="#fff"
-                stroke="#000"
-                strokeWidth="2" />
-            </React.Fragment>
+                // let selectedNodeIds = event.metaKey
+                //   ? util.toggleSet(this.state.selectedNodeIds, node.id)
+                //   : ImSet.of(node.id);
+
+                // this.setState({ selectedNodeIds });
+
+                let singleTargetId: NodeId | null = null;
+                let selectedNodeIds;
+                let targetNodeIds: ImSet<NodeId>;
+
+                if (event.metaKey) {
+                  selectedNodeIds = util.toggleSet(this.state.selectedNodeIds, node.id);
+                  targetNodeIds = selectedNodeIds.has(node.id)
+                    ? selectedNodeIds
+                    : ImSet();
+                } else {
+                  selectedNodeIds = this.state.selectedNodeIds.has(node.id)
+                    ? this.state.selectedNodeIds
+                    : ImSet.of(node.id);
+                  targetNodeIds = selectedNodeIds;
+
+                  if (this.state.selectedNodeIds.has(node.id)) {
+                    singleTargetId = node.id;
+                  }
+                }
+
+                this.setState({ selectedNodeIds });
+
+                // this.setState((state) => {
+                //   if (event.metaKey) {
+                //     return { selectedNodeIds: util.toggleSet(state.selectedNodeIds, node.id) };
+                //   } else if ((state.selectedNodeIds.size > 1) || !state.selectedNodeIds.has(node.id)) {
+                //     return { selectedNodeIds: ImSet([node.id]) };
+                //   } else {
+                //     return null; // return { selectedNodeIds: ImSet() };
+                //   }
+                // });
+
+                if (!targetNodeIds.isEmpty()) {
+                  this.action = {
+                    type: 'select',
+                    singleTargetId,
+                    startPoint: {
+                      x: event.clientX,
+                      y: event.clientY
+                    },
+                    targets: targetNodeIds.toArray().map((nodeId) => {
+                      let node = this.state.nodes.find((node) => node.id === nodeId)!;
+
+                      return {
+                        id: nodeId,
+                        startPosition: node.position
+                      };
+                    })
+                  };
+                }
+              }}
+              selected={this.state.selectedNodeIds.has(node.id)}
+              settings={settings}
+              key={node.id} />
           ))}
-          {/* <foreignObject
-            x={cellSize * 5 - nodeOverflow}
-            y={cellSize * 2 - nodeOverflow}
-            width={cellSize * 8 + nodeOverflow * 2}
-            height={cellSize * 5 + nodeOverflow * 2}
-            className="geditor-nodeobject">
-            <div className="geditor-node">
-              <div className="geditor-header">
-                <div className="geditor-title">Wash</div>
-              </div>
-              <div className="geditor-body">
-                <div className="geditor-feature">
-                  <Icon name="hourglass_empty" />
-                  <div className="geditor-featurelabel">100 ms</div>
-                </div>
-                <div className="geditor-feature">
-                  <Icon name="air" />
-                  <div className="geditor-featurelabel">Biotin</div>
-                </div>
-              </div>
-            </div>
-          </foreignObject> */}
-
-          {/* <path d={`M${cellSize * 10} ${cellSize * 12}L${cellSize * 12} ${cellSize * 12}Q${cellSize * 13} ${cellSize * 12} ${cellSize * 13} ${cellSize * 11}L${cellSize * 13} ${cellSize * 8}`} fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
-          <path d={`M${cellSize * 10} ${cellSize * 12}L${cellSize * 15} ${cellSize * 12}`} stroke="#f1f1f1" strokeLinecap="round" strokeWidth="5" />
-          <path d={`M${cellSize * 10} ${cellSize * 12}L${cellSize * 15} ${cellSize * 12}`} stroke="#000" strokeLinecap="round" strokeWidth="2" /> */}
         </svg>
       </div>
     );
   }
 }
 
-
-interface LinkIntf {
-  start: { x: number; y: number; };
-  end: { x: number; y: number; };
-}
 
 interface Settings {
   cellSize: number;
@@ -205,8 +322,85 @@ interface Settings {
   nodeHeight: number;
 }
 
+
+type NodeId = string;
+
+interface NodeDef {
+  id: NodeId;
+  title: string;
+  features: {
+    icon: string;
+    label: string;
+  }[];
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+function Node(props: {
+  autoMove: unknown;
+  node: NodeDef;
+  onMouseDown?(event: React.MouseEvent): void;
+  selected: unknown;
+  settings: Settings;
+}) {
+  let { node, settings } = props;
+
+  return (
+    <g
+      className={util.formatClass('geditor-noderoot', { '_automove': props.autoMove })}
+      transform={`translate(${settings.cellSize * node.position.x} ${settings.cellSize * node.position.y})`}>
+      <foreignObject
+        x="0"
+        y="0"
+        width={settings.cellSize * settings.nodeWidth}
+        height={settings.cellSize * settings.nodeHeight}
+        className="geditor-nodeobject">
+        <div
+          className={util.formatClass('geditor-node', { '_selected': props.selected })}
+          onMouseDown={props.onMouseDown}>
+          <div className="geditor-header">
+            <div className="geditor-title">{node.title}</div>
+          </div>
+          <div className="geditor-body">
+            {node.features.map((feature, index) => (
+              <div className="geditor-feature" key={index}>
+                <Icon name={feature.icon} />
+                <div className="geditor-featurelabel">{feature.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </foreignObject>
+
+      <circle
+        cx={settings.nodePadding}
+        cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
+        r="5"
+        fill="#fff"
+        stroke="#000"
+        strokeWidth="2" />
+      <circle
+        cx={settings.cellSize * settings.nodeWidth - settings.nodePadding}
+        cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
+        r="5"
+        fill="#fff"
+        stroke="#000"
+        strokeWidth="2" />
+    </g>
+  );
+}
+
+
+interface LinkDef {
+  start: { x: number; y: number; };
+  end: { x: number; y: number; };
+}
+
 function Link(props: {
-  link: LinkIntf;
+  autoMove: unknown;
+  link: LinkDef;
   settings: Settings;
 }) {
   let { link, settings } = props;
@@ -231,13 +425,10 @@ function Link(props: {
     let curveStartY = settings.cellSize * (link.start.y + 1 * dir);
     let curveEndY = settings.cellSize * (link.end.y - 1 * dir);
 
-    // d += `L${midX} ${startY}L${midX} ${endY}`;
     d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
-    // d += `L${midStartX} ${startY}q${settings.cellSize} 0 ${settings.cellSize} ${settings.cellSize}L${midX} ${curveEndY}q0 ${settings.cellSize} ${settings.cellSize} ${settings.cellSize}`;
-    // d += `L${midStartX} ${startY}q${cellSize} 0 ${cellSize} ${cellSize}L${midX} ${curveEndY}q0 ${cellSize} ${cellSize} ${cellSize}`;
   }
 
   d += `L${endX} ${endY}`;
 
-  return <path d={d} fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
+  return <path d={d} className={util.formatClass('geditor-link', { '_automove': props.autoMove })} />
 }

@@ -16,6 +16,12 @@
   }
 
 
+  &-noderoot {
+    &._automove {
+      transition: transform 150ms;
+    }
+  }
+
   &-nodeobject {
     padding: var(--node-padding);
   }
@@ -26,9 +32,15 @@
     height: 100%;
 
     background-color: #fff;
-    border: 0px solid $app-blue;
+    border: 2px solid #ddd;
     border-radius: 6px;
     box-shadow: 2px 3px 2px #0001;
+
+    user-select: none;
+
+    &._selected {
+      border-color: $app-blue;
+    }
   }
 
 
@@ -62,5 +74,17 @@
 
   &-featurelabel {
     font-weight: 500;
+  }
+
+
+  &-link {
+    fill: none;
+    stroke: #000;
+    stroke-linecap: round;
+    stroke-width: 2px;
+
+    &._automove {
+      transition: d 150ms;
+    }
   }
 }

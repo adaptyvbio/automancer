@@ -13,7 +13,7 @@ export interface BaseBackend {
 
   onUpdate(listener: () => void, options?: { signal?: AbortSignal; }): void;
 
-  command(chipId: ChipId, command: RunnerCommand): Promise<void>;
+  command<T>(chipId: ChipId, command: T): Promise<void>;
   compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
   createChip(): Promise<{ chipId: ChipId; }>;
   deleteChip(chipId: ChipId): Promise<void>;

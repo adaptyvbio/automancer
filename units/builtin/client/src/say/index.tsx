@@ -1,8 +1,8 @@
 import { Form, MatrixEditorProps } from 'pr1';
-import React from 'react';
+import { React } from 'pr1';
 
 
-export const name = 'say';
+export const namespace = 'say';
 
 export interface Matrix {
   voice: Voice['name'];
@@ -30,7 +30,8 @@ const getVoiceOptions = (voices: Voice[]) => Object.entries(group(voices, (voice
 
 
 export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
-  let executor = props.host.state.executors[name];
+  let executor = props.host.state.executors[namespace];
+  let [testSample, setTestSample] = React.useState('');
 
   return (
     <div>
@@ -45,6 +46,22 @@ export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
             props.setMatrix({ voice: voiceName });
           }}
           options={getVoiceOptions(executor.voices)} />
+      </Form.Form>
+      <Form.Form onSubmit={() => {
+        setTestSample('');
+
+        props.host.backend.command(props.chip.id, {
+          [namespace]: {
+            message: testSample
+          }
+        });
+      }}>
+        <Form.TextField
+          label="Test sample"
+          placeholder="Hello world"
+          onInput={(value) => void setTestSample(value)}
+          value={testSample} />
+        <Form.Action type="submit" label="Test" />
       </Form.Form>
     </div>
   );

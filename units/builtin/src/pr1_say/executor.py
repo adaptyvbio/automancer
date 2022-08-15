@@ -12,7 +12,7 @@ class Executor(BaseExecutor):
     self._voices = None
 
   async def initialize(self):
-    proc = await asyncio.create_subprocess_shell("say -v ?", stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(*["say", "-v", "?"], stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
     stdout, stderr = await proc.communicate()
 
     if proc.returncode == 0:
@@ -34,10 +34,10 @@ class Executor(BaseExecutor):
       if stderr:
         logger.error(repr(stderr.decode("utf-8")))
 
-  async def run(self, message):
+  async def run(self, message, voice):
     logger.debug(f"Saying '{message}'")
 
-    proc = await asyncio.create_subprocess_shell(f"say '{message}'")
+    proc = await asyncio.create_subprocess_exec(*["/usr/bin/say", "-v", voice, message])
     await proc.wait()
 
     if proc.returncode != 0:

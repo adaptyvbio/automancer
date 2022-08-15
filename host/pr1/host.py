@@ -13,6 +13,7 @@ from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
+from .util.misc import log_exception
 
 
 Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
@@ -100,9 +101,9 @@ class Host:
       if not path.name.startswith("."):
         try:
           chip = Chip.unserialize(path, host=self)
-        except Exception as e:
-          print(e)
-          logger.warn(f"Chip '{path.name}' is corrupted and will be ignored.")
+        except Exception:
+          logger.warn(f"Chip '{path.name}' is corrupted and will be ignored. The exception is printed below.")
+          log_exception(logger)
         else:
           if (not chip.archived) and chip.supported:
             chip.ensure_runners(host=self)
@@ -305,7 +306,7 @@ class Host:
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       namespace, command = next(iter(request["command"].items()))
-      chip.runners[namespace].command(command)
+      await chip.runners[namespace].command(command)
 
     if request["type"] == "createChip":
       chip = self.create_chip(name="Untitled chip")

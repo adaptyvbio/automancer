@@ -7,6 +7,10 @@ import time
 import uuid
 
 # flags (4)
+#  0 - reserved
+#  1 - matrix update
+#  2 - metadata update (deprecated)
+#  3 - process
 # time (8)
 # payload size (4)
 message_header_format = "IQI"
@@ -25,6 +29,8 @@ class UnsupportedChip:
 
 
 class Chip:
+  version = 1
+
   def __init__(self, *, archived, dir, id, metadata, unit_list, unit_versions):
     self.archived = archived
     self.dir = dir
@@ -55,35 +61,40 @@ class Chip:
       'id': self.id,
       'archived': self.archived,
       'matrices': {
-        name: base64.b85encode(matrix.serialize_raw()).decode("utf-8") for name, matrix in self.matrices.items()
+        namespace: base64.b85encode(matrix.serialize_raw()).decode("utf-8") for namespace, matrix in self.matrices.items()
       },
       'metadata': self.metadata,
       'unit_list': self.unit_list,
-      'unit_versions': self.unit_versions
+      'unit_versions': self.unit_versions,
+      'version': self.version
     }, self._header_path.open("w"))
 
   @property
   def supported(self):
     return True
 
+  def push_process(self, namespace, data):
+    unit_index = self.unit_list.index(namespace)
+    self._push_history(flags=3, payload=(struct.pack("H", unit_index) + data))
+
   def ensure_runners(self, *, host):
     if not self.runners:
       self.runners = dict()
 
-      for name in self.unit_list:
-        unit = host.units[name]
+      for namespace in self.unit_list:
+        unit = host.units[namespace]
 
         if hasattr(unit, 'Runner'):
-          self.runners[name] = unit.Runner(chip=self, host=host)
+          self.runners[namespace] = unit.Runner(chip=self, host=host)
 
   def update_matrices(self, update = dict()):
-    for name, matrix_data in update.items():
-      self.matrices[name].update(matrix_data)
+    for namespace, matrix_data in update.items():
+      self.matrices[namespace].update(matrix_data)
 
     payload = bytearray()
 
-    for name in self.unit_list:
-      matrix = self.matrices.get(name)
+    for namespace in self.unit_list:
+      matrix = self.matrices.get(namespace)
 
       matrix_payload = matrix.serialize_raw() if matrix else pickle.dumps(None)
       payload.extend(struct.pack("H", len(matrix_payload)))
@@ -153,14 +164,22 @@ class Chip:
     header_path = chip_dir / ".header.json"
     header = json.load(header_path.open())
 
-    for name, version in header['unit_versions'].items():
-      if not (name in host.units) or (host.units[name].version != version):
-        return UnsupportedChip(
-          archived=header['archived'],
-          dir=chip_dir,
-          id=header['id'],
-          metadata=header['metadata']
-        )
+    if (header['version'] != Chip.version) or any((not namespace in host.units) or (host.units[namespace].version != unit_version) for namespace, unit_version in header['unit_versions'].items()):
+      return UnsupportedChip(
+        archived=header['archived'],
+        dir=chip_dir,
+        id=header['id'],
+        metadata=header['metadata']
+      )
+
+    # for namespace, version in header['unit_versions'].items():
+    #   if not (namespace in host.units) or (host.units[namespace].version != version):
+    #     return UnsupportedChip(
+    #       archived=header['archived'],
+    #       dir=chip_dir,
+    #       id=header['id'],
+    #       metadata=header['metadata']
+    #     )
 
     # history_path = chip_dir / ".history.dat"
     # history_file = history_path.open("rb")

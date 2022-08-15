@@ -10,10 +10,11 @@ import '../lib/styles/index.css';
 import 'material-symbols';
 
 export { Application } from './application';
+export { Chip } from './backends/common';
 export { MessageBackend } from './backends/message';
 export { Startup } from './startup';
 export * as Form from './components/standard-form';
-export { MatrixEditorProps } from './units';
+export { ChipTabComponentProps, MatrixEditorProps } from './units';
 export { React, ReactDOM };
 
 

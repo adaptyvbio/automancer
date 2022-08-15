@@ -10,6 +10,10 @@ class Matrix(BaseMatrix):
 
     self._voice = None
 
+  @property
+  def voice(self):
+    return self._voice
+
   def create(self):
     voices = self._host.executors[namespace]._voices
     self._voice = next(voice for voice in voices if voice.locale == "en_US").name

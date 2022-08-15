@@ -96,16 +96,16 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
 
             return (
               <ErrorBoundary
-                getErrorMessage={() => <>Failed to render the settings editor of unit <strong>{unit.name}</strong>.</>}
-                key={unit.name}>
+                getErrorMessage={() => <>Failed to render the settings editor of unit <strong>{unit.namespace}</strong>.</>}
+                key={unit.namespace}>
                 <unit.MatrixEditor
                   chip={this.chip}
                   host={this.props.host}
-                  matrix={this.chip.matrices[unit.name as keyof Matrices]}
+                  matrix={this.chip.matrices[unit.namespace as keyof Matrices]}
                   setMatrix={(matrix) => {
                     this.pool.add(async () => {
                       await this.props.host.backend.setMatrix(this.chip.id, {
-                        [unit.name]: matrix
+                        [unit.namespace]: matrix
                       });
                     });
                   }} />

@@ -65,7 +65,7 @@ class BaseRunner:
   def __init__(self, chip, *, host):
     pass
 
-  async def initialize(self):
+  async def command(self, data):
     pass
 
   def export(self):

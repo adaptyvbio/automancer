@@ -76,12 +76,23 @@ export function DurationField(props: React.PropsWithChildren<{
   );
 }
 
-export function Form(props: React.PropsWithChildren<{}>) {
-  return (
-    <div className="sform-form">
-      {props.children}
-    </div>
-  );
+export function Form(props: React.PropsWithChildren<{
+  onSubmit?(): void;
+}>) {
+  return props.onSubmit
+    ? (
+      <form onSubmit={props.onSubmit && ((event) => {
+        event.preventDefault();
+        props.onSubmit!();
+      })} className="sform-form">
+        {props.children}
+      </form>
+    )
+    : (
+      <div className="sform-form">
+        {props.children}
+      </div>
+    );
 }
 
 export function Header(props: React.PropsWithChildren<{}>) {

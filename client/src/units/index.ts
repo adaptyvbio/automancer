@@ -115,7 +115,7 @@ interface NavEntry<Props> {
   component: { new(props: Props): React.Component<Props, unknown>; };
 }
 
-export interface ChipTabComponent {
+export interface ChipTabComponentProps {
   chipId: ChipId;
   host: Host;
   setRoute(route: Route): void;
@@ -130,7 +130,7 @@ export interface Unit<Code, Matrix> {
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): Code;
   createFeatures?(options: CreateFeaturesOptions): Features;
-  getChipTabs?(chip: Chip): NavEntry<ChipTabComponent>[];
+  getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 }
 
@@ -152,7 +152,7 @@ export interface UnitInfo {
     version: string | null;
 
     icon: {
-      kind: 'icon' | 'svg';
+      kind: 'bitmap' | 'icon' | 'svg';
       value: string;
     } | null;
   };

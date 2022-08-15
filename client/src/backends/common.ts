@@ -27,7 +27,7 @@ export abstract class BackendCommon implements BaseBackend {
     }
   }
 
-  abstract command(chipId: ChipId, command: RunnerCommand): Promise<void>;
+  abstract command<T>(chipId: ChipId, command: T): Promise<void>;
   abstract compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;

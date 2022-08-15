@@ -162,5 +162,7 @@ $height: 2rem;
   &-action {
     padding: calc((#{$height} - 1.2em) * 0.5) ($hor-padding * 1.2);
     box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
+
+    text-align: center;
   }
 }

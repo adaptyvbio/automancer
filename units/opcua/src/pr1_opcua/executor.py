@@ -2,9 +2,12 @@ import asyncio
 from asyncua import Client, ua
 from pr1.util import schema as sc
 from pr1.units.base import BaseExecutor
+import logging
 
 from . import logger, namespace
 
+
+logging.getLogger("asyncua.client.client").setLevel(logging.WARNING)
 
 variants_map = {
   'bool': ua.VariantType.Boolean,
@@ -20,58 +23,27 @@ conf_schema = sc.Schema({
     'id': str,
     'nodes': sc.Noneable(sc.List({
       'id': str,
-      'name': str,
+      'location': str,
       'type': sc.Or(*variants_map.keys())
     }))
   })
 })
 
 
-class HostDevice:
-  label = None
-  model = "Generic OPC-UA device"
-  owner = namespace
-
-  def __init__(self, node_names, nodes):
-    self._nodes = nodes
-    self._node_names = node_names
-
-  async def read(self, node_index):
-    return await self._nodes[node_index].read()
-
-  async def write(self, node_index, value):
-    await self._nodes[node_index].write(value)
-
-
-class HostDeviceNode:
-  def __init__(self):
-    self.connected = True
-
-  #   self._claimant_index = None
-
-  # def claim(self, claimant_index):
-  #   self._claimant_index = claimant_index
-
-  async def read(self):
-    raise NotImplementedError
-
-  async def write(self, value):
-    raise NotImplementedError
-
-
-class DeviceNode(HostDeviceNode):
-  def __init__(self, node, type):
-    super().__init__()
+class DeviceNode:
+  def __init__(self, id, node, type):
+    self.connected = False
+    self.id = id
+    self.type = type
+    self.value = None
 
     self._node = node
-    self._type = type
     self._variant = variants_map[type]
-
-    self.connected = False
 
   async def _connect(self):
     try:
-      await self._node.get_value()
+      # print(await self._node.read_data_type_as_variant_type() == self._variant)
+      self.value = await self._node.get_value()
     except ua.uaerrors._auto.BadNodeIdUnknown:
       logger.error(f"Missing node '{self._node.nodeid}'")
     else:
@@ -82,28 +54,35 @@ class DeviceNode(HostDeviceNode):
 
   async def write(self, value):
     if self.connected:
-      await self._node.write_value(ua.Variant([value], self._variant))
+      await self._node.write_value(ua.DataValue(value))
+      self.value = value
 
 
 class Device:
-  def __init__(self, id, address, nodes_conf):
+  model = "Generic OPC-UA device"
+  owner = namespace
+
+  def __init__(self, id, *, label, address, nodes_conf, update_callback):
+    self.connected = False
+    self.id = id
+    self.label = label
+
     self._address = address
     self._client = Client(address)
-    self._id = id
-
-    self._host_device = HostDevice(
-      node_names={node['name']: node_index for node_index, node in enumerate(nodes_conf)},
-      nodes=[
-        DeviceNode(
-          node=self._client.get_node(node_conf['id'].value),
-          type=node_conf['type']
-        ) for node_conf in nodes_conf
-      ]
-    )
+    self._update_callback = update_callback
 
     self._check_task = None
     self._reconnect_task = None
-    self.connected = False
+
+    self._node_ids = { node['id']: node_index for node_index, node in enumerate(nodes_conf) }
+    self.nodes = [
+      DeviceNode(
+        id=node['id'],
+        node=self._client.get_node(node['location'].value),
+        type=node['type']
+      ) for node in nodes_conf
+    ]
+
 
   async def initialize(self):
     await self._connect()
@@ -128,13 +107,14 @@ class Device:
 
     try:
       await self._client.connect()
-    except (ConnectionRefusedError, asyncio.exceptions.TimeoutError):
+    # An OSError will occur if the computer is not connected to a network.
+    except (ConnectionRefusedError, OSError, asyncio.TimeoutError):
       return
 
     logger.info(f"Connected to '{self._address}'")
     self.connected = True
 
-    for node in self._host_device._nodes:
+    for node in self.nodes:
       await node._connect()
 
     server_state_node = self._client.get_node("ns=0;i=2259")
@@ -144,12 +124,20 @@ class Device:
         while True:
           await server_state_node.get_value()
           await asyncio.sleep(1)
-      except ConnectionError:
+      except (ConnectionError, asyncio.TimeoutError):
         logger.error(f"Lost connection to '{self._address}'")
 
         self.connected = False
+
+        for node in self.nodes:
+          node.connected = False
+          node.value = None
+
         self._reconnect()
+        self._update_callback()
       except asyncio.CancelledError:
+        pass
+      finally:
         self._check_task = None
 
     self._check_task = asyncio.create_task(check_loop())
@@ -162,6 +150,7 @@ class Device:
           await self._connect()
 
           if self.connected:
+            self._update_callback()
             return
 
           await asyncio.sleep(interval)
@@ -189,19 +178,19 @@ class Executor(BaseExecutor):
       device = Device(
         address=device_conf['address'],
         id=device_id,
-        # label=device_conf.get('label'),
-        nodes_conf=device_conf['nodes']
+        label=device_conf.get('label'),
+        nodes_conf=device_conf['nodes'],
+        update_callback=self._host.update_callback
       )
 
       self._devices[device_id] = device
-      self._host.devices[device_id] = device._host_device
+      self._host.devices[device_id] = device
 
   async def initialize(self):
     for device in self._devices.values():
       await device.initialize()
-      # await device._host_device.read(0)
 
   async def destroy(self):
     for device in self._devices.values():
       await device.destroy()
-      del self._host.devices[device._id]
+      del self._host.devices[device.id]

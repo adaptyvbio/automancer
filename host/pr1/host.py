@@ -233,11 +233,13 @@ class Host:
 
     for unit_info in self.manager.units_info.values():
       if unit_info.enabled and unit_info.development:
+        if unit_info.namespace in self.executors:
+          await self.executors[unit_info.namespace].destroy()
+          del self.executors[unit_info.namespace]
+
         if hasattr(unit_info.unit, 'Executor'):
           self.executors[unit_info.namespace] = unit_info.unit.Executor(unit_info.options, host=self)
           await self.executors[unit_info.namespace].initialize()
-        else:
-          self.executors.pop(unit_info.namespace, None)
 
   def get_state(self):
     return {

@@ -1,10 +1,9 @@
 import asyncio
 from asyncua import Client, ua
-from collections import namedtuple
 from pr1.util import schema as sc
 from pr1.units.base import BaseExecutor
 
-from . import logger
+from . import logger, namespace
 
 
 variants_map = {
@@ -17,7 +16,8 @@ variants_map = {
 conf_schema = sc.Schema({
   'devices': sc.List({
     'address': str,
-    'name': str,
+    'label': sc.Optional(str),
+    'id': str,
     'nodes': sc.Noneable(sc.List({
       'id': str,
       'name': str,
@@ -28,8 +28,11 @@ conf_schema = sc.Schema({
 
 
 class HostDevice:
+  label = None
+  model = "Generic OPC-UA device"
+  owner = namespace
+
   def __init__(self, node_names, nodes):
-    # self._claimants = list()
     self._nodes = nodes
     self._node_names = node_names
 
@@ -39,33 +42,6 @@ class HostDevice:
   async def write(self, node_index, value):
     await self._nodes[node_index].write(value)
 
-  # def get_adapter(self, name):
-  #   try:
-  #     claimant_index = self._claimants.index(name)
-  #   except ValueError:
-  #     claimant_index = len(self._claimants)
-  #     self._claimants.append(name)
-
-  #   return HostDeviceAdapter(device=self, claimant_index=claimant_index)
-
-
-# class HostDeviceAdapter:
-#   def __init__(self, device, claimant_index):
-#     self._claimant_index = claimant_index
-#     self._device = device
-
-#   def claim(self, mask = None):
-#     for node_index, node in enumerate(self._nodes):
-#       if (mask is None) or (mask & (1 << node_index)) > 0:
-#         node.claim()
-
-#   def get_node_index(self, name):
-#     return self._device._node_names.get(name)
-
-  # def set_node_value(self, index, value):
-    # node =
-
-    # self._claimant_index =
 
 class HostDeviceNode:
   def __init__(self):
@@ -110,9 +86,10 @@ class DeviceNode(HostDeviceNode):
 
 
 class Device:
-  def __init__(self, address, nodes_conf):
+  def __init__(self, id, address, nodes_conf):
     self._address = address
     self._client = Client(address)
+    self._id = id
 
     self._host_device = HostDevice(
       node_names={node['name']: node_index for node_index, node in enumerate(nodes_conf)},
@@ -124,13 +101,34 @@ class Device:
       ]
     )
 
+    self._check_task = None
+    self._reconnect_task = None
     self.connected = False
 
   async def initialize(self):
+    await self._connect()
+
+    if not self.connected:
+      logger.error(f"Failed connecting to '{self._address}'")
+      self._reconnect()
+
+  async def destroy(self):
+    if self.connected:
+      await self._client.disconnect()
+
+    if self._check_task:
+      self._check_task.cancel()
+
+    if self._reconnect_task:
+      self._reconnect_task.cancel()
+
+
+  async def _connect(self):
+    logger.debug(f"Connecting to '{self._address}'")
+
     try:
       await self._client.connect()
     except (ConnectionRefusedError, asyncio.exceptions.TimeoutError):
-      logger.error(f"Connection to '{self._address}' failed")
       return
 
     logger.info(f"Connected to '{self._address}'")
@@ -142,22 +140,37 @@ class Device:
     server_state_node = self._client.get_node("ns=0;i=2259")
 
     async def check_loop():
-      while True:
-        try:
+      try:
+        while True:
           await server_state_node.get_value()
-        except ConnectionError:
-          logger.error(f"Connection to '{self._address}' lost")
-          self.connected = False
-          return
+          await asyncio.sleep(1)
+      except ConnectionError:
+        logger.error(f"Lost connection to '{self._address}'")
 
-        await asyncio.sleep(1)
+        self.connected = False
+        self._reconnect()
+      except asyncio.CancelledError:
+        self._check_task = None
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(check_loop())
+    self._check_task = asyncio.create_task(check_loop())
 
-  async def destroy(self):
-    if self.connected:
-      await self._client.disconnect()
+
+  def _reconnect(self, interval = 1):
+    async def reconnect():
+      try:
+        while True:
+          await self._connect()
+
+          if self.connected:
+            return
+
+          await asyncio.sleep(interval)
+      except asyncio.CancelledError:
+        pass
+      finally:
+        self._reconnect_task = None
+
+    self._reconnect_task = asyncio.create_task(reconnect())
 
 
 class Executor(BaseExecutor):
@@ -165,17 +178,23 @@ class Executor(BaseExecutor):
     conf = conf_schema.transform(conf)
 
     self._devices = dict()
+    self._host = host
 
     for device_conf in conf['devices']:
-      device_name = device_conf['name']
+      device_id = device_conf['id']
 
-      if device_name in host.devices:
-        raise device_name.error(f"Duplicate device name '{device_name}'")
+      if device_id in self._host.devices:
+        raise device_id.error(f"Duplicate device id '{device_id}'")
 
-      device = Device(address=device_conf['address'], nodes_conf=device_conf['nodes'])
+      device = Device(
+        address=device_conf['address'],
+        id=device_id,
+        # label=device_conf.get('label'),
+        nodes_conf=device_conf['nodes']
+      )
 
-      self._devices[device_name] = device
-      host.devices[device_name] = device._host_device
+      self._devices[device_id] = device
+      self._host.devices[device_id] = device._host_device
 
   async def initialize(self):
     for device in self._devices.values():
@@ -185,3 +204,4 @@ class Executor(BaseExecutor):
   async def destroy(self):
     for device in self._devices.values():
       await device.destroy()
+      del self._host.devices[device._id]

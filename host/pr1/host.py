@@ -29,6 +29,8 @@ class Host:
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
+    self.devices = dict()
+
     self.previous_state = {
       "info": None
     }

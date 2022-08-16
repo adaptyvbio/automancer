@@ -48,6 +48,10 @@ $height: 2rem;
     --focus-shadow: 0 0 transparent;
     transition: box-shadow 150ms;
 
+    &:disabled {
+      opacity: 0.5;
+    }
+
     &:focus-within {
       --focus-shadow: #{$focus-shadow};
     }

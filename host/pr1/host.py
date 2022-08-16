@@ -327,6 +327,10 @@ class Host:
     if request["type"] == "createDraftSample":
       return "# Example protocol\nname: My protocol\n\nstages:\n  - steps:\n      - name: Step no. 1\n        duration: 5 min"
 
+    if request["type"] == "instruct":
+      namespace, instruction = next(iter(request["instruction"].items()))
+      await self.executors[namespace].instruct(instruction)
+
     if request["type"] == "pause":
       chip = self.chips[request["chipId"]]
       chip.master.pause({

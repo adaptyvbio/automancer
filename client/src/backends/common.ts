@@ -32,6 +32,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract createDraftSample(): Promise<string>;
+  abstract instruct<T>(instruction: T): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract reloadUnits(): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;

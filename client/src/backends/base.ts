@@ -18,6 +18,7 @@ export interface BaseBackend {
   createChip(): Promise<{ chipId: ChipId; }>;
   deleteChip(chipId: ChipId): Promise<void>;
   createDraftSample(): Promise<string>;
+  instruct<T>(instruction: T): Promise<void>;
   pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   reloadUnits(): Promise<void>;
   resume(chipId: ChipId): Promise<void>;

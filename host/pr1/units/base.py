@@ -152,12 +152,25 @@ class BaseExecutor:
     return dict()
 
   """
+  Answers a client request.
+
+  Parameters
+  ----------
+  instruction : any
+    Instruction provided by the client.
+  """
+  async def instruct(self, instruction):
+    pass
+
+  """
   Returns true if the provided version is supported.
 
-  Parameters : any
+  Parameters
+  ----------
+  version : any
     Version to be tested.
   """
-  def supports(_version):
+  def supports(version):
     return True
 
 

@@ -102,6 +102,7 @@ export function Header(props: React.PropsWithChildren<{}>) {
 }
 
 export function Select<T extends number | string | null>(props: {
+  disabled?: unknown;
   label: string;
   onInput(value: T): void;
   options: {
@@ -117,6 +118,7 @@ export function Select<T extends number | string | null>(props: {
       <div className="sform-label">{props.label}</div>
       <div className="sform-select">
         <select
+          disabled={!!props.disabled}
           value={props.options.findIndex((option) => option.id === props.value)}
           onInput={(event) => {
             let optionIndex = parseInt(event.currentTarget.value);

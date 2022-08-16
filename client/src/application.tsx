@@ -122,7 +122,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.setState((state) => ({
       host: {
         ...state.host!,
-        units
+        units: {
+          ...state.host!.units,
+          ...units
+        }
       }
     }));
   }

@@ -7,7 +7,7 @@ export abstract class RawMessageBackend extends BackendCommon {
   protected abstract _request(request: unknown): Promise<unknown>;
 
 
-  async command(chipId: string, command: ControlNamespace.RunnerCommand) {
+  async command<T>(chipId: string, command: T) {
     await this._request({
       type: 'command',
       chipId,
@@ -40,6 +40,13 @@ export abstract class RawMessageBackend extends BackendCommon {
     return await this._request({
       type: 'createDraftSample'
     }) as string;
+  }
+
+  async instruct<T>(instruction: T) {
+    await this._request({
+      type: 'instruct',
+      instruction
+    });
   }
 
   async pause(chipId: string, options: { neutral: boolean; }) {

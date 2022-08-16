@@ -5,7 +5,7 @@ import { React } from 'pr1';
 export const namespace = 'gpio';
 
 
-export function getChipTabs(chip: Chip) {
+export function getGeneralTabs() {
   return [
     {
       id: 'gpio',
@@ -39,7 +39,11 @@ function DevicesTab(props: ChipTabComponentProps) {
   };
 
   return (
-    <div className="blayout-contents">
+    <main>
+      <header className="header header--1">
+        <h1>Devices</h1>
+      </header>
+
       {Object.values(executor.devices).map((device) => (
         <React.Fragment key={device.id}>
           <header className="header header--2">
@@ -77,6 +81,6 @@ function DevicesTab(props: ChipTabComponentProps) {
           </Form.Form>
         </React.Fragment>
       ))}
-    </div>
+    </main>
   );
 }

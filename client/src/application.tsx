@@ -328,7 +328,20 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
                 mode={route[2] as ViewDraftMode}
                 setRoute={setRoute} />
             );
-          };
+          }
+
+          case 'unit': {
+            let unit = this.state.host!.units[route[1]];
+            let entries = (unit.getGeneralTabs?.() ?? []);
+            let entry = entries.find((entry) => entry.id === route![2]);
+            let Component = entry!.component;
+
+            return (
+              <Component
+                host={this.state.host!}
+                setRoute={this.setRoute} />
+            );
+          }
         }
       }
     })();

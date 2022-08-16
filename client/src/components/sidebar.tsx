@@ -30,6 +30,13 @@ export class Sidebar extends React.Component<SidebarProps> {
     let currentRoute = this.props.currentRoute;
     let currentRouteList = currentRoute && List(currentRoute);
 
+    let unitEntries = this.props.host?.units && Object.values(this.props.host.units)
+      .flatMap((unit) => (unit.getGeneralTabs?.() ?? []).map((entry) => ({
+        ...entry,
+        id: 'unit.' + entry.id,
+        route: ['unit', unit.namespace, entry.id]
+      })));
+
     let groups: {
       id: string;
       entries: {
@@ -80,6 +87,9 @@ export class Sidebar extends React.Component<SidebarProps> {
             icon: 'terminal',
             route: ['terminal'] }
         ] },
+        ...(unitEntries && (unitEntries?.length > 0)
+          ? [{ id: 'unit', entries: unitEntries }]
+          : []),
         { id: 'last',
           entries: [
             { id: 'settings',

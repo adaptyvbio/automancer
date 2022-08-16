@@ -121,6 +121,11 @@ export interface ChipTabComponentProps {
   setRoute(route: Route): void;
 }
 
+export interface GeneralTabComponentProps {
+  host: Host;
+  setRoute(route: Route): void;
+}
+
 export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
@@ -131,6 +136,7 @@ export interface Unit<Code, Matrix> {
   createCode?(protocol: Protocol): Code;
   createFeatures?(options: CreateFeaturesOptions): Features;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
+  getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 }
 

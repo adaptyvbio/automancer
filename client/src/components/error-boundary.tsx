@@ -18,7 +18,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       return (
-        <div className="eboundary" style={this.props.wide ? {} : { maxHeight: '220px' }}>
+        <div className="eboundary" style={this.props.wide ? {} : { height: '220px' }}>
           <p>{this.props.getErrorMessage?.() ?? 'An error occured.'} <button type="button" onClick={() => {
             this.setState({ hasError: false });
           }}>Retry</button></p>

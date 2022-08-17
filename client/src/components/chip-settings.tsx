@@ -7,7 +7,6 @@ import { Chip, ChipId, ControlNamespace, HostId } from '../backends/common';
 import { Pool } from '../util';
 import * as util from '../util';
 import { Icon } from '../components/icon';
-import { Matrices, Units } from '../units';
 import * as Form from './standard-form';
 
 
@@ -100,15 +99,7 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
                 key={unit.namespace}>
                 <unit.MatrixEditor
                   chip={this.chip}
-                  host={this.props.host}
-                  matrix={this.chip.matrices[unit.namespace as keyof Matrices]}
-                  setMatrix={(matrix) => {
-                    this.pool.add(async () => {
-                      await this.props.host.backend.setMatrix(this.chip.id, {
-                        [unit.namespace]: matrix
-                      });
-                    });
-                  }} />
+                  host={this.props.host} />
               </ErrorBoundary>
             );
           })}

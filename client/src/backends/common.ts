@@ -1,6 +1,6 @@
 import type { BaseBackend } from './base';
 import type { Draft as AppDraft } from '../draft';
-import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData, Unit, UnitInfo } from '../units';
+import type { Codes, ExecutorStates, OperatorLocationData, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -27,7 +27,7 @@ export abstract class BackendCommon implements BaseBackend {
     }
   }
 
-  abstract command<T>(chipId: ChipId, command: T): Promise<void>;
+  abstract command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   abstract compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
@@ -38,7 +38,6 @@ export abstract class BackendCommon implements BaseBackend {
   abstract resume(chipId: ChipId): Promise<void>;
   abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
-  abstract setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
     chipId: ChipId;
@@ -69,15 +68,12 @@ export interface Device {
 export interface Chip {
   id: ChipId;
   master: Master | null;
-  matrices: Matrices;
   metadata: {
     description: string | null;
     name: string;
   };
   name: string;
-  runners: {
-    control: ControlNamespace.Runner;
-  };
+  runners: Record<UnitNamespace, unknown>;
 }
 
 export interface Draft {

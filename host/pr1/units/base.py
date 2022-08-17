@@ -62,14 +62,29 @@ class BaseParser:
 
 
 class BaseRunner:
-  def __init__(self, chip, *, host):
+  def __init__(self, *, chip, host):
     pass
 
   async def command(self, data):
     pass
 
+  def create(self):
+    pass
+
   def export(self):
     return dict()
+
+  def serialize(self):
+    return None
+
+  def unserialize(self, state):
+    pass
+
+  def serialize_raw(self):
+    return pickle.dumps(self.serialize())
+
+  def unserialize_raw(self, data):
+    self.unserialize(pickle.loads(data))
 
   def start_protocol(self, runner):
     pass
@@ -161,29 +176,3 @@ class BaseExecutor:
   """
   async def instruct(self, instruction):
     pass
-
-
-class BaseMatrix:
-  def __init__(self, *, chip, host):
-    pass
-
-  def create(self):
-    pass
-
-  def update(self, update_data):
-    pass
-
-  def export(self):
-    return dict()
-
-  def serialize(self):
-    return None
-
-  def unserialize(self, state):
-    pass
-
-  def serialize_raw(self):
-    return pickle.dumps(self.serialize())
-
-  def unserialize_raw(self, data):
-    self.unserialize(pickle.loads(data))

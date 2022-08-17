@@ -58,17 +58,15 @@ export interface Codes {
 
 //> MatrixEditor
 
-export interface MatrixEditorComponent<Matrix> {
-  new(props: MatrixEditorProps<Matrix>): MatrixEditorInstance<Matrix>;
+export interface MatrixEditorComponent {
+  new(props: MatrixEditorProps): MatrixEditorInstance;
 }
 
-export type MatrixEditorInstance<Matrix> = React.Component<MatrixEditorProps<Matrix>, unknown>;
+export type MatrixEditorInstance = React.Component<MatrixEditorProps, unknown>;
 
-export interface MatrixEditorProps<Matrix> {
+export interface MatrixEditorProps {
   chip: Chip;
   host: Host;
-  matrix: Matrix;
-  setMatrix(matrix: Matrix): void;
 }
 
 export interface Matrices {
@@ -128,7 +126,7 @@ export interface GeneralTabComponentProps {
 
 export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
-  MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
+  MatrixEditor?: MatrixEditorComponent;
 
   namespace: UnitNamespace;
   styleSheets?: CSSStyleSheet[];

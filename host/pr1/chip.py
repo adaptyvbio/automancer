@@ -8,7 +8,7 @@ import uuid
 
 # flags (4)
 #  0 - reserved
-#  1 - matrix update
+#  1 - runner update
 #  2 - metadata update (deprecated)
 #  3 - process
 # time (8)
@@ -36,9 +36,8 @@ class Chip:
     self.dir = dir
     self.id = id
     self.master = None
-    self.matrices = None
-    self.metadata = metadata
     self.runners = None
+    self.metadata = metadata
     self.unit_list = unit_list
     self.unit_versions = unit_versions
 
@@ -60,8 +59,8 @@ class Chip:
     json.dump({
       'id': self.id,
       'archived': self.archived,
-      'matrices': {
-        namespace: base64.b85encode(matrix.serialize_raw()).decode("utf-8") for namespace, matrix in self.matrices.items()
+      'runners': {
+        namespace: base64.b85encode(runner.serialize_raw()).decode("utf-8") for namespace, runner in self.runners.items()
       },
       'metadata': self.metadata,
       'unit_list': self.unit_list,
@@ -77,35 +76,19 @@ class Chip:
     unit_index = self.unit_list.index(namespace)
     self._push_history(flags=3, payload=(struct.pack("H", unit_index) + data))
 
-  def ensure_runners(self, *, host):
-    if not self.runners:
-      self.runners = dict()
-
-      for namespace in self.unit_list:
-        unit = host.units[namespace]
-
-        if hasattr(unit, 'Runner'):
-          self.runners[namespace] = unit.Runner(chip=self, host=host)
-
-  def update_matrices(self, update = dict()):
-    for namespace, matrix_data in update.items():
-      self.matrices[namespace].update(matrix_data)
-
+  def update_runners(self, *namespaces):
     payload = bytearray()
 
+    # for namespace in (namespaces or self.unit_list):
     for namespace in self.unit_list:
-      matrix = self.matrices.get(namespace)
+      runner = self.runners.get(namespace)
 
-      matrix_payload = matrix.serialize_raw() if matrix else pickle.dumps(None)
-      payload.extend(struct.pack("H", len(matrix_payload)))
-      payload.extend(matrix_payload)
+      runner_payload = runner.serialize_raw() if runner else pickle.dumps(None)
+      payload.extend(struct.pack("H", len(runner_payload)))
+      payload.extend(runner_payload)
 
     self._push_history(flags=1, payload=payload)
     self._save_header()
-
-    if self.runners:
-      for runner in self.runners.values():
-        runner.update()
 
   def update_metadata(self, update = dict()):
     self.metadata = { **self.metadata, **update }
@@ -117,12 +100,9 @@ class Chip:
       "id": self.id,
       "archived": self.archived,
       "master": self.master and self.master.export(),
-      "matrices": {
-        namespace: matrix.export() for namespace, matrix in self.matrices.items()
-      },
       "name": self.metadata['name'],
       "metadata": self.metadata,
-      "runners": self.runners and {
+      "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
       }
     }
@@ -149,13 +129,13 @@ class Chip:
       unit_versions=unit_versions
     )
 
-    chip.matrices = { namespace: unit.Matrix(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Matrix') }
+    chip.runners = { namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner') }
 
-    for matrix in chip.matrices.values():
-      matrix.create()
+    for runner in chip.runners.values():
+      runner.create()
 
     chip._save_header()
-    chip.update_matrices()
+    chip.update_runners()
     chip.update_metadata()
 
     return chip
@@ -184,7 +164,7 @@ class Chip:
     # history_path = chip_dir / ".history.dat"
     # history_file = history_path.open("rb")
 
-    # matrices = None
+    # runners = None
     # metadata = None
 
     # while True:
@@ -210,11 +190,11 @@ class Chip:
       unit_versions=header['unit_versions']
     )
 
-    chip.matrices = {
-      name: host.units[name].Matrix(chip=chip, host=host) for name in header['matrices'].keys()
+    chip.runners = {
+      name: host.units[name].Runner(chip=chip, host=host) for name in header['runners'].keys()
     }
 
-    for name, matrix in chip.matrices.items():
-      matrix.unserialize_raw(base64.b85decode(header['matrices'][name].encode("utf-8")))
+    for name, runner in chip.runners.items():
+      runner.unserialize_raw(base64.b85decode(header['runners'][name].encode("utf-8")))
 
     return chip

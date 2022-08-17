@@ -107,9 +107,6 @@ class Host:
           logger.warn(f"Chip '{path.name}' is corrupted and will be ignored. The exception is printed below.")
           log_exception(logger)
         else:
-          if (not chip.archived) and chip.supported:
-            chip.ensure_runners(host=self)
-
           self.chips[chip.id] = chip
 
     logger.debug(f"Loaded {len(self.chips)} existing chips")
@@ -117,7 +114,7 @@ class Host:
     logger.debug(f"  including {sum(not chip.supported for chip in self.chips.values())} unsupported chips")
 
     # debug
-    if len(self.chips) < 1:
+    if not any(chip.supported and (not chip.archived) for chip in self.chips.values()):
       self.create_chip(name="Default chip")
 
   async def start(self):
@@ -186,9 +183,7 @@ class Host:
       host=self
     )
 
-    chip.ensure_runners(host=self)
     self.chips[chip.id] = chip
-
     logger.info(f"Created chip '{chip.id}'")
 
     return chip
@@ -309,8 +304,7 @@ class Host:
 
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
-      namespace, command = next(iter(request["command"].items()))
-      await chip.runners[namespace].command(command)
+      await chip.runners[request["namespace"]].command(request["command"])
 
     if request["type"] == "createChip":
       chip = self.create_chip(name="Untitled chip")
@@ -351,10 +345,6 @@ class Host:
     if request["type"] == "setLocation":
       chip = self.chips[request["chipId"]]
       chip.master.set_location(chip.master.import_location(request["location"]))
-
-    if request["type"] == "setMatrix":
-      chip = self.chips[request["chipId"]]
-      chip.update_matrices(request["update"])
 
     if request["type"] == "skipSegment":
       chip = self.chips[request["chipId"]]

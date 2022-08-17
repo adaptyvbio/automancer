@@ -1,4 +1,4 @@
-import { Codes, Unit, UnitInfo } from '../units';
+import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { Chip, ChipId, HostState, ProtocolLocation, RunnerCommand } from './common';
 import type { Draft as AppDraft } from '../draft';
 
@@ -13,7 +13,7 @@ export interface BaseBackend {
 
   onUpdate(listener: () => void, options?: { signal?: AbortSignal; }): void;
 
-  command<T>(chipId: ChipId, command: T): Promise<void>;
+  command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
   createChip(): Promise<{ chipId: ChipId; }>;
   deleteChip(chipId: ChipId): Promise<void>;
@@ -24,7 +24,6 @@ export interface BaseBackend {
   resume(chipId: ChipId): Promise<void>;
   setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
-  setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>): Promise<void>;
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   startPlan(options: {
     chipId: ChipId;

@@ -1,17 +1,18 @@
 import { BackendCommon, Chip, ChipId, ControlNamespace, HostState, ProtocolLocation } from './common';
 import type { Draft } from '../draft';
-import type { Codes } from '../units';
+import type { Codes, UnitNamespace } from '../units';
 
 
 export abstract class RawMessageBackend extends BackendCommon {
   protected abstract _request(request: unknown): Promise<unknown>;
 
 
-  async command<T>(chipId: string, command: T) {
+  async command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }) {
     await this._request({
       type: 'command',
-      chipId,
-      command
+      chipId: options.chipId,
+      command: options.command,
+      namespace: options.namespace
     });
   }
 
@@ -83,14 +84,6 @@ export abstract class RawMessageBackend extends BackendCommon {
       type: 'setLocation',
       chipId,
       location
-    });
-  }
-
-  async setMatrix(chipId: ChipId, update: Partial<Chip['matrices']>) {
-    await this._request({
-      type: 'setMatrix',
-      chipId,
-      update
     });
   }
 

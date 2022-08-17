@@ -24,5 +24,4 @@ client_path = Path(files(__name__ + '.client'))
 logger = parent_logger.getChild(namespace)
 
 from .executor import Executor
-from .matrix import Matrix
 from .runner import Runner

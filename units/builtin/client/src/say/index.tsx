@@ -4,7 +4,19 @@ import { React } from 'pr1';
 
 export const namespace = 'say';
 
-export interface Matrix {
+export type Command = {
+  type: 'run';
+  message: string;
+} | {
+  type: 'setVoice';
+  value: Voice['name'];
+};
+
+export interface Executor {
+  voices: Voice[];
+}
+
+export interface Runner {
   voice: Voice['name'];
 }
 
@@ -29,8 +41,9 @@ const getVoiceOptions = (voices: Voice[]) => Object.entries(group(voices, (voice
   });
 
 
-export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
-  let executor = props.host.state.executors[namespace];
+export function MatrixEditor(props: MatrixEditorProps) {
+  let executor = props.host.state.executors[namespace] as Executor;
+  let runner = props.chip.runners[namespace] as Runner;
   let [testSample, setTestSample] = React.useState('');
 
   return (
@@ -41,17 +54,27 @@ export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
       <Form.Form>
         <Form.Select
           label="Voice"
-          value={props.matrix.voice}
+          value={runner.voice}
           onInput={(voiceName) => {
-            props.setMatrix({ voice: voiceName });
+            props.host.backend.command<Command>({
+              chipId: props.chip.id,
+              namespace,
+              command: {
+                type: 'setVoice',
+                value: voiceName
+              }
+            });
           }}
           options={getVoiceOptions(executor.voices)} />
       </Form.Form>
       <Form.Form onSubmit={() => {
         setTestSample('');
 
-        props.host.backend.command(props.chip.id, {
-          [namespace]: {
+        props.host.backend.command({
+          chipId: props.chip.id,
+          namespace,
+          command: {
+            type: 'run',
             message: testSample
           }
         });

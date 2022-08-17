@@ -3,10 +3,11 @@ import * as React from 'react';
 
 export type ErrorBoundaryProps = React.PropsWithChildren<{
   getErrorMessage?(): JSX.Element;
+  wide?: unknown;
 }>;
 
 export interface ErrorBoundaryState {
-  hasError: false;
+  hasError: boolean;
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -17,7 +18,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       return (
-        <div className="eboundary">
+        <div className="eboundary" style={this.props.wide ? {} : { maxHeight: '220px' }}>
           <p>{this.props.getErrorMessage?.() ?? 'An error occured.'} <button type="button" onClick={() => {
             this.setState({ hasError: false });
           }}>Retry</button></p>

@@ -7,6 +7,7 @@ import { BarNav } from '../components/bar-nav';
 import { ChipControl } from '../components/chip-control';
 import { ChipProtocol } from '../components/chip-protocol';
 import { ChipSettings } from '../components/chip-settings';
+import { ErrorBoundary } from '../components/error-boundary';
 import { Pool } from '../util';
 import * as util from '../util';
 
@@ -52,12 +53,13 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   render() {
-    let unitNavEntries = Object.values(this.props.host.units)
-      .flatMap((unit) => unit.getChipTabs?.(this.chip) ?? [])
-      .map((entry) => ({
+    let unitEntries = Object.values(this.props.host.units)
+      .flatMap((unit) => (unit.getChipTabs?.(this.chip) ?? []).map((entry) => ({
         ...entry,
-        id: 'units.' + entry.id
-      }));
+        id: 'unit.' + entry.id,
+        initialId: entry.id,
+        namespace: unit.namespace
+      })));
 
     let component = (() => {
       switch (this.props.tab) {
@@ -78,13 +80,20 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
         );
       }
 
-      for (let entry of unitNavEntries) {
+      for (let entry of unitEntries) {
         if (entry.id === this.props.tab) {
           let Component = entry.component;
-          return <Component
-            chipId={this.chip.id}
-            host={this.props.host}
-            setRoute={this.props.setRoute} />
+
+          return (
+            <ErrorBoundary
+              getErrorMessage={() => <>Failed to render the <strong>{entry.initialId}</strong> tab of unit <strong>{entry.namespace}</strong>.</>}
+              wide={true}>
+              <Component
+                chipId={this.chip.id}
+                host={this.props.host}
+                setRoute={this.props.setRoute} />
+            </ErrorBoundary>
+          );
         }
       }
     })();
@@ -98,7 +107,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
               { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
               { id: 'settings', label: 'Settings', icon: 'settings' },
               { id: 'history', label: 'History', icon: 'history', disabled: true },
-              ...unitNavEntries
+              ...unitEntries
             ]}
             selectEntry={(tab) => {
               this.props.setRoute(['chip', this.props.chipId, tab]);

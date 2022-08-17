@@ -16,6 +16,8 @@ export * from './host';
 export { Startup } from './startup';
 export * as Form from './components/standard-form';
 export * from './units';
+export { Pool } from './util';
+export * as util from './util';
 export { React, ReactDOM };
 
 

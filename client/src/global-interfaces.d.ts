@@ -10,6 +10,10 @@ declare global {
     randomUUID(): string;
   }
 
+  interface Document {
+    adoptedStyleSheets: CSSStyleSheet[];
+  }
+
   interface Window {
     MonacoEnvironment?: monaco.Environment | undefined;
   }

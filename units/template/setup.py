@@ -13,6 +13,6 @@ setup(
     ]
   },
   package_data={
-    "pr1_template.pr1_template.client": ["*.js"]
+    "pr1_template.client": ["*"]
   }
 )

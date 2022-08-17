@@ -14,7 +14,7 @@ import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
 import { Pool } from './util';
-import { Unit } from './units';
+import { Unit, UnitNamespace } from './units';
 
 
 export type Route = (number | string)[];
@@ -108,16 +108,37 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
-    let units = Object.fromEntries(
-      await Promise.all(
-        Object.values(host.state.info.units)
-          .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development))
-          .map(async (unitInfo) => {
-            console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
-            return [unitInfo.namespace, await host.backend.loadUnit(unitInfo)];
-          })
-      )
+    let targetUnitsInfo = Object.values(host.state.info.units)
+      .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development));
+
+    if (host.units) {
+      let expiredStyleSheets = targetUnitsInfo.flatMap((unitInfo) => {
+        let unit = host.units[unitInfo.namespace];
+        return unit?.styleSheets ?? [];
+      });
+
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => !expiredStyleSheets.includes(sheet));
+    }
+
+    let units: Record<UnitNamespace, Unit<unknown, unknown>> = Object.fromEntries(
+      (await Promise.all(
+        targetUnitsInfo.map(async (unitInfo) => {
+          console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+
+          try {
+            let unit = await host.backend.loadUnit(unitInfo);
+            return [unitInfo.namespace, unit];
+          } catch (err) {
+            console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+            console.error(err);
+
+            return [unitInfo.namespace, null];
+          }
+        })
+      )).filter(([_namespace, unit]) => unit)
     );
+
+    document.adoptedStyleSheets.push(...Object.values(units).flatMap((unit) => unit.styleSheets ?? []));
 
     this.setState((state) => ({
       host: {

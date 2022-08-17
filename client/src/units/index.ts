@@ -131,6 +131,7 @@ export interface Unit<Code, Matrix> {
   MatrixEditor?: Matrix extends never ? void : MatrixEditorComponent<Matrix>;
 
   namespace: UnitNamespace;
+  styleSheets?: CSSStyleSheet[];
 
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): Code;

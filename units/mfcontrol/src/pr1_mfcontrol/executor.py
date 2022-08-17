@@ -1,3 +1,4 @@
+from collections import namedtuple
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
 from pr1.util.parser import Identifier, IdentifierPath
@@ -7,9 +8,11 @@ from . import logger
 from .model import Model
 
 
+Valve = namedtuple("Valve", ['label', 'node'])
+
 schema = sc.Schema({
   'valves': sc.List({
-    'id': Identifier(),
+    'label': sc.Optional(Identifier()),
     'location': IdentifierPath(length=2)
   })
 })
@@ -22,14 +25,13 @@ class Executor(BaseExecutor):
     self._host = host
 
     self.models = dict()
-    self._valves = None
+    self.valves = None
 
   async def initialize(self):
-    self._valves = dict()
+    self.valves = list()
 
-    for valve in self._conf['valves']:
-      valve_location = valve['location']
-      valve_id = valve['id']
+    for valve_conf in self._conf['valves']:
+      valve_location = valve_conf['location']
 
       device = self._host.devices.get(valve_location[0])
 
@@ -41,10 +43,10 @@ class Executor(BaseExecutor):
       if node is None:
         raise valve_location[1].error(f"Missing node")
 
-      if valve_id in self._valves:
-        raise valve_id.error(f"Duplicate valve id '{valve_id}'")
-
-      self._valves[valve_id] = node
+      self.valves.append(Valve(
+        label=(valve_conf['label'] or valve_location),
+        node=node
+      ))
 
     logger.debug("Loading models")
 
@@ -68,7 +70,7 @@ class Executor(BaseExecutor):
       "models": {
         model.id: model.export() for model in self.models.values()
       },
-      "valves": {
-        valve_id: valve_index for valve_index, valve_id in enumerate(self._valves.keys())
-      }
+      "valves": [
+        { "label": valve.label } for valve in self.valves
+      ]
     }

@@ -1,12 +1,18 @@
+/// <reference path="types.d.ts" />
+
 import type { Chip, CreateFeaturesOptions, Features, Host, Protocol } from 'pr1';
 
 // import { CodeEditor } from './code-editor';
+import { ManualControl } from './manual-control';
 import * as util from './util';
+import mainStyles from './index.css' assert { type: 'css' };
+
 
 export { MatrixEditor } from './matrix-editor';
 
-
 export const namespace = 'mfcontrol';
+export const styleSheets = [mainStyles];
+
 
 export const ReprIcon = {
   'barrier': {
@@ -62,16 +68,36 @@ export interface Code {
   arguments: (number | null)[];
 }
 
-export interface ExecutorState {
-  models: Record<ModelId, Model>;
-  valves: Record<string, number>;
+export type Command = {
+  type: 'setModel';
+  modelId: ModelId;
+} | {
+  type: 'setValveMap';
+  valveMap: number[];
 }
 
-export interface Matrix {
-  model: Model | null;
-  valves: {
-    hostValveIndex: number;
-  }[] | null;
+export interface Executor {
+  models: Record<ModelId, Model>;
+  valves: { label: string; }[];
+}
+
+export interface Runner {
+  settings: {
+    model: Model | null;
+    valveMap: number[] | null;
+  };
+
+  state: {
+    signal: string;
+    valves: {
+      error: number | null;
+    }[];
+  };
+}
+
+export enum RunnerValveError {
+  Unbound = 0,
+  Disconnected = 1
 }
 
 export interface ProtocolData {
@@ -92,12 +118,12 @@ export interface SegmentData {
 }
 
 
-export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
-  let matrix = chip.matrices[namespace];
-  let protocolData = protocol.data[namespace];
+// export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
+//   let matrix = chip.matrices[namespace];
+//   let protocolData = protocol.data[namespace];
 
-  return (matrix.modelId !== null) && (!protocolData.modelId || (matrix.modelId === protocolData.modelId));
-}
+//   return (matrix.modelId !== null) && (!protocolData.modelId || (matrix.modelId === protocolData.modelId));
+// }
 
 export function createCode(protocol: Protocol): Code {
   let protocolData = protocol.data[namespace];
@@ -108,7 +134,6 @@ export function createCode(protocol: Protocol): Code {
     })
   };
 }
-
 
 export function createFeatures(options: CreateFeaturesOptions): Features {
   let previousSegmentData = options.protocol.segments[options.segmentIndex - 1]?.data[namespace];
@@ -143,16 +168,19 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
   });
 }
 
+export function getChipTabs(chip: Chip) {
+  let runner = chip.runners[namespace] as Runner;
+
+  return [
+    { id: 'manual',
+      label: 'Valve control',
+      icon: 'tune',
+      disabled: !runner.settings.model,
+      component: ManualControl }
+  ];
+}
 
 export function providePreview(options: { chip: Chip; host: Host; }) {
-  let modelId = options.chip.matrices[namespace].modelId;
-
-  if (!modelId) {
-    return null;
-  }
-
-  let models = options.host.state.executors[namespace].models;
-  let model = models[modelId];
-
-  return model.previewUrl;
+  let runner = options.chip.runners[namespace] as Runner;
+  return runner.settings.model?.previewUrl ?? null;
 }

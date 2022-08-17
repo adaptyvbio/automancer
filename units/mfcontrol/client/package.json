@@ -1,15 +1,16 @@
 {
   "scripts": {
-    "build": "npm run build:js && npm run build:python",
-    "build:js": "esbuild --bundle src/*/index.ts --external:pr1 --external:react --format=esm --outbase=src --outdir=dist",
+    "build": "npm run build:js && npm run build:css && npm run build:python",
+    "build:css": "sass styles:dist --no-source-map",
+    "build:js": "esbuild --bundle src/*/index.ts --external:*.css --external:pr1 --external:react --format=esm --outbase=src --outdir=dist --target=esnext",
     "build:python": "find dist -maxdepth 1 -mindepth 1 -exec touch {}/__init__.py \\;"
+  },
+  "dependencies": {
+    "immutable": "^4.1.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.16",
     "esbuild": "^0.14.53",
     "pr1": "file:../../../client"
-  },
-  "dependencies": {
-    "immutable": "^4.1.0"
   }
 }

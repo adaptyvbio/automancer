@@ -13,6 +13,6 @@ setup(
     ]
   },
   package_data={
-    "pr1_mfcontrol.pr1_mfcontrol.client": ["*.js"]
+    "pr1_mfcontrol.client": ["*"]
   }
 )

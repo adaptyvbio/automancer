@@ -1,17 +1,17 @@
 import { setIn } from 'immutable';
-import { Form, MatrixEditorInstance, MatrixEditorProps, React } from 'pr1';
+import { Form, MatrixEditorInstance, MatrixEditorProps, Pool, React } from 'pr1';
 
-import { ExecutorState, Matrix, namespace } from '.';
+import { Executor, Runner, namespace, Command } from '.';
 
 
-export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> implements MatrixEditorInstance<Matrix> {
+export class MatrixEditor extends React.Component<MatrixEditorProps> implements MatrixEditorInstance {
+  pool = new Pool();
+
   render() {
-    let executor = this.props.host.state.executors[namespace] as ExecutorState;
+    let executor = this.props.host.state.executors[namespace] as Executor;
+    let runner = this.props.chip.runners[namespace] as Runner;
 
-    let hostValves = executor.valves;
-    let valves = this.props.matrix.valves;
-
-    let currentModel = this.props.matrix.model;
+    let currentModel = runner.settings.model;
     let similarModel = currentModel && (Object.values(executor.models).find((model) => model.id === currentModel!.id) ?? null);
     let isSimilarModelCurrent = similarModel && (similarModel.hash === currentModel!.hash);
     let model = isSimilarModelCurrent ? similarModel : currentModel;
@@ -28,7 +28,16 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
             label="Chip model"
             onInput={(modelId) => {
               if (modelId !== '_current') {
-                this.props.setMatrix({ modelId });
+                this.pool.add(async () => {
+                  await this.props.host.backend.command({
+                    chipId: this.props.chip.id,
+                    namespace,
+                    command: {
+                      type: 'setModel',
+                      modelId
+                    }
+                  });
+                });
               }
             }}
             options={[
@@ -42,7 +51,7 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
             value={model && (isSimilarModelCurrent ? model.id : '_current')} />
         </Form.Form>
 
-        {valves && model!.groups.map((group, groupIndex) => (
+        {model?.groups.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
             <Form.Header>{group.label}</Form.Header>
             <Form.Form>
@@ -54,15 +63,22 @@ export class MatrixEditor extends React.Component<MatrixEditorProps<Matrix>> imp
                     <Form.Select
                       label={channel.label ?? `Channel ${channelIndex}`}
                       onInput={(value) => {
-                        this.props.setMatrix({
-                          valves: setIn(this.props.matrix.valves, [channelIndex, 'hostValveIndex'], value)
-                      });
+                        this.pool.add(async () => {
+                          await this.props.host.backend.command<Command>({
+                            chipId: this.props.chip.id,
+                            namespace,
+                            command: {
+                              type: 'setValveMap',
+                              valveMap: setIn(runner.settings.valveMap!, [channelIndex], value)
+                            }
+                          });
+                        });
                       }}
                       options={[
                         { id: null, label: 'None' },
-                        ...Object.entries(hostValves).map(([valveName, hostValveIndex]) => ({ id: hostValveIndex, label: valveName }))
+                        ...Array.from(executor.valves.entries()).map(([hostValveIndex, valve]) => ({ id: hostValveIndex, label: valve.label }))
                       ]}
-                      value={valves![channelIndex].hostValveIndex} />
+                      value={runner.settings.valveMap![channelIndex]} />
                   </React.Fragment>
                 );
               })}

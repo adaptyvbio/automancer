@@ -162,17 +162,6 @@ class BaseExecutor:
   async def instruct(self, instruction):
     pass
 
-  """
-  Returns true if the provided version is supported.
-
-  Parameters
-  ----------
-  version : any
-    Version to be tested.
-  """
-  def supports(version):
-    return True
-
 
 class BaseMatrix:
   def __init__(self, *, chip, host):

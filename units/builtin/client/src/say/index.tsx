@@ -34,7 +34,7 @@ export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
   let [testSample, setTestSample] = React.useState('');
 
   return (
-    <div>
+    <>
       <div className="header header--2">
         <h2>Voice reports</h2>
       </div>
@@ -63,7 +63,7 @@ export function MatrixEditor(props: MatrixEditorProps<Matrix>) {
           value={testSample} />
         <Form.Action type="submit" label="Test" />
       </Form.Form>
-    </div>
+    </>
   );
 }
 

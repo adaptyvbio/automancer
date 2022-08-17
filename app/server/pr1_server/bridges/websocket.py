@@ -4,6 +4,7 @@ import random
 import ssl
 from collections import namedtuple
 
+from aiohttp.abc import AbstractAccessLogger
 import aiohttp.web
 import websockets
 from OpenSSL import SSL, crypto
@@ -16,6 +17,11 @@ from ..client import BaseClient, ClientClosed
 logger = parent_logger.getChild("bridges.websocket")
 
 CertInfo = namedtuple("CertInfo", ["cert_path", "common_name", "expired", "fingerprint_sha1", "fingerprint_sha256", "key_path", "serial"])
+
+
+class AccessLogger(AbstractAccessLogger):
+  def log(self, request, response, time):
+    self.logger.debug(f"{request.method} {request.path} -> {response.status}")
 
 
 class Client(BaseClient):
@@ -132,7 +138,7 @@ class WebsocketBridge:
       *[aiohttp.web.static(f"/{name}/{unit.version}", unit.client_path) for name, unit in self.app.host.units.items() if hasattr(unit, 'client_path')]
     ])
 
-    self.static_runner = aiohttp.web.AppRunner(self.static_app)
+    self.static_runner = aiohttp.web.AppRunner(self.static_app, access_log_class=AccessLogger)
     self.static_site = None
     self.static_url = None
 
@@ -175,7 +181,7 @@ class WebsocketBridge:
       ssl_context = None
 
     self.static_site = aiohttp.web.TCPSite(self.static_runner, hostname, port=static_port, ssl_context=ssl_context)
-    self.data_server = await websockets.serve(handler, host=hostname, port=data_port, ssl=ssl_context)
+    self.data_server = await websockets.serve(handler, host=hostname, port=data_port, max_size=(5 * (2 ** 20)), ssl=ssl_context)
 
 
     # Start

@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "build": "npm run build:js && npm run build:python",
+    "build:js": "esbuild --bundle src/*/index.ts --external:pr1 --external:react --format=esm --outbase=src --outdir=dist",
+    "build:python": "find dist -maxdepth 1 -mindepth 1 -exec touch {}/__init__.py \\;"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.16",
+    "esbuild": "^0.14.53",
+    "pr1": "file:../../../client"
+  },
+  "dependencies": {
+    "immutable": "^4.1.0"
+  }
+}

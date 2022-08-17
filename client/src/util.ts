@@ -1,11 +1,6 @@
 import { List, Range, type Set as ImSet } from 'immutable';
 
 
-export function encodeIndices(arr: number[]): bigint {
-  return arr.reduce((sum, item) => sum | (1n << BigInt(item)), 0n);
-}
-
-
 export function findCommon<T>(arr: Iterable<T>): T | null {
   let value!: T;
   let valueSet = false;

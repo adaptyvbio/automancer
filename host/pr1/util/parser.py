@@ -9,9 +9,9 @@ from .schema import SchemaType
 
 ## Identifiers
 
-regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*$", re.ASCII)
-regexp_identifier_alt = re.compile(r"^[a-zA-Z0-9]+$", re.ASCII)
-regexp_identifier_start = re.compile(r"^[a-zA-Z][a-zA-Z0-9]*", re.ASCII)
+regexp_identifier = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$", re.ASCII)
+regexp_identifier_alt = re.compile(r"^[a-zA-Z0-9_]+$", re.ASCII)
+regexp_identifier_start = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*", re.ASCII)
 
 def check_identifier(identifier, *, allow_leading_digit = False):
   regexp = regexp_identifier_alt if allow_leading_digit else regexp_identifier
@@ -29,6 +29,24 @@ class Identifier(SchemaType):
   def validate(self, test):
     check_identifier(test, allow_leading_digit=self._allow_leading_digit)
 
+
+class IdentifierPath(SchemaType):
+  def __init__(self, *, length = None):
+    super().__init__(str)
+
+    self._identifier = Identifier()
+    self._length = length
+
+  def transform(self, test):
+    segments = test.split("/")
+
+    for segment in segments:
+      self._identifier.validate(segment)
+
+    if (self._length is not None) and len(segments) != self._length:
+      raise test.error(f"Invalid identifier path, expected {self._length} segments")
+
+    return segments
 
 
 ## Calls

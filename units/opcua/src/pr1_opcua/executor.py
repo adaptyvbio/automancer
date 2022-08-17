@@ -101,6 +101,14 @@ class Device:
     if self._reconnect_task:
       self._reconnect_task.cancel()
 
+  def get_node(self, id):
+    node_index = self._node_ids.get(id)
+
+    if node_index is None:
+      return None
+
+    return self.nodes[node_index]
+
 
   async def _connect(self):
     logger.debug(f"Connecting to '{self._address}'")

@@ -142,7 +142,6 @@ export function DraftEntry(props: ContextMenuAreaProps & {
           ))}
         </div>
         <div className="lproto-action-item">
-          {/* <div className="proto-action-label">Edit</div> */}
           <Icon name="arrow_forward" />
         </div>
       </button>

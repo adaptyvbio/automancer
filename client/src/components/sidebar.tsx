@@ -56,13 +56,9 @@ export class Sidebar extends React.Component<SidebarProps> {
       ? [
         { id: 'main',
         entries: [
-          // { id: 'dashboard',
-          //   label: 'Dashboard',
-          //   icon: 'dashboard',
-          //   route: ['dashboard'] },
           { id: 'chip',
-            label: 'Chips',
-            icon: 'memory',
+            label: 'Experiments',
+            icon: 'science',
             route: ['chip'],
             children: Object.values(this.props.host.state.chips).map((chip) => ({
               id: chip.id,

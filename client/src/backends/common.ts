@@ -69,6 +69,7 @@ export interface Chip {
   id: ChipId;
   master: Master | null;
   metadata: {
+    created_time: number;
     description: string | null;
     name: string;
   };

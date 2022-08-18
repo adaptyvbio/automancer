@@ -1,0 +1,94 @@
+@use "../common/mixins" as common;
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.clist {
+  &-root {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: 1fr 1fr;
+
+    margin: 1rem 0;
+    max-width: calc(2 * 400px + 2rem);
+  }
+
+  &-blank {
+    display: flex;
+    height: 200px;
+
+    margin: 1rem 0;
+    border-radius: 4px;
+
+    color: #666;
+    font-size: 1.1rem;
+    font-weight: 500;
+
+    p {
+      margin: auto;
+      max-width: 400px;
+    }
+  }
+
+  &-entrywide {
+    @include common.card();
+
+    display: grid;
+    gap: 1rem;
+    grid-template: auto 1fr / minmax(0, 1fr) 60%;
+
+    height: 215px;
+    padding: 1.4rem 2rem 1.6rem 2rem;
+    transition: var(--card-transitions), scale $dur-short;
+
+    &:active {
+      scale: 0.95;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #000;
+      outline-offset: 3px;
+    }
+  }
+
+  &-header {
+    grid-column: 1 / -1;
+  }
+
+  &-title {
+    @include text-ellipsis();
+
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  &-data {
+    & {
+      align-self: center;
+
+      &:last-child {
+        grid-column: span 2;
+      }
+    }
+
+    dt {
+      color: #666;
+      font-size: 0.95rem;
+      font-weight: 500;
+
+      &:not(:first-child) {
+        margin-top: 1rem;
+      }
+    }
+
+    dd {
+      @include text-ellipsis();
+      font-size: 1.05rem;
+    }
+  }
+
+  &-preview {
+    align-self: center;
+    margin-bottom: 1rem;
+  }
+}

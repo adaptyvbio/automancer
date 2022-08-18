@@ -1,3 +1,4 @@
+@use "../common/mixins" as common;
 @use "../constants" as *;
 
 
@@ -13,27 +14,13 @@
   }
 
   &-entry {
+    @include common.card();
+
     display: grid;
     gap: 0.4rem 2rem;
     grid-template: auto auto / 1fr auto;
 
     padding: 1rem 1.4rem;
-
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    box-shadow: 2px 2px 6px rgba(#000, 2%);
-
-    transition: border-color $dur-short, box-shadow $dur-short;
-
-    &:focus-visible, &._context {
-      outline: 2px solid #000;
-      outline-offset: 3px;
-    }
-
-    &:focus, &:hover, &._context {
-      border-color: #ccc;
-      box-shadow: 2px 2px 6px rgba(#000, 6%);
-    }
   }
 
   &-label {
@@ -80,7 +67,7 @@
     }
   }
 
-  &-entry:not(:focus, :hover) &-action-item {
+  &-entry:not(:focus-visible, :hover) &-action-item {
     opacity: 0;
     transform: translateX(-60%);
   }

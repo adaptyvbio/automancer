@@ -15,6 +15,41 @@ export function formatDuration(input: number): string {
   }
 }
 
+
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', {
+  localeMatcher: 'best fit',
+  numeric: 'auto',
+  style: 'long'
+});
+
+
+const timeDivisions: {
+  amount: number;
+  name: Intl.RelativeTimeFormatUnit;
+}[] = [
+  { amount: 60, name: 'seconds' },
+  { amount: 60, name: 'minutes' },
+  { amount: 24, name: 'hours' },
+  { amount: 7, name: 'days' },
+  { amount: 4.34524, name: 'weeks' },
+  { amount: 12, name: 'months' },
+  { amount: Infinity, name: 'years' }
+];
+
+export function formatRelativeDate(date: Date | number): string {
+  let duration = (new Date(date).getTime() - Date.now()) / 1000;
+
+  for (let division of timeDivisions) {
+    if (Math.abs(duration) < division.amount) {
+      return relativeTimeFormatter.format(Math.round(duration), division.name);
+    }
+
+    duration /= division.amount;
+  }
+
+  throw new Error();
+}
+
 export function formatRelativeTime(input: number): string {
   let seconds = Math.round(input / 1000);
   let minutes = Math.floor(seconds / 60) % 60;

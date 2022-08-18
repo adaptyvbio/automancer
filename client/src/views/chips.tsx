@@ -1,10 +1,12 @@
 import * as React from 'react';
 
-import type { Host, Route } from '../application';
+import type { Route } from '../application';
+import type { Host } from '../host';
 import { ChipId } from '../backends/common';
+import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
-import { Units } from '../units';
 import { Pool } from '../util';
+import { formatRelativeDate } from '../format';
 
 
 export interface ViewChipsProps {
@@ -27,29 +29,29 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
     return (
       <main>
-        <div className="header header--1">
-          <h1>Chips</h1>
-        </div>
+        <header className="header header--1">
+          <h1>Experiments</h1>
+        </header>
 
         <div className="header header--2">
-          <h2>Current chips</h2>
+          <h2>Active experiments</h2>
           <button type="button" className="btn" onClick={() => {
             this.pool.add(async () => {
               let result = await this.props.host.backend.createChip();
               this.chipIdAwaitingRedirect = result.chipId;
             });
           }}>
-            <div>New chip</div>
+            <div>New experiment</div>
           </button>
         </div>
 
         {(chips.length > 0)
           ? (
-            <div className="card-list">
+            <div className="clist-root">
               {chips.map((chip) => {
-                let previewUrl = null;
+                let previewUrl: string | null = null;
 
-                for (let [_namespace, unit] of Units) {
+                for (let unit of Object.values(this.props.host.units)) {
                   previewUrl ??= unit.providePreview?.({ chip, host: this.props.host }) ?? null;
 
                   if (previewUrl) {
@@ -58,65 +60,89 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                 }
 
                 return (
-                  <Card
-                    previewUrl={previewUrl}
-                    title={chip.name}
-                    status={chip.master
-                      ? { icon: 'receipt_long', label: (chip.master.protocol.name ?? 'Running') }
-                      : { icon: 'dark_mode', label: 'Idle' }}
-                    key={chip.id}
-                    onClick={() => {
+                  <ContextMenuArea
+                    createMenu={(_event) => [
+                      { id: 'duplicate', name: 'Duplicate', icon: 'content_copy', disabled: true },
+                      { id: 'reveal', name: 'Reveal in Finder', icon: 'folder', disabled: true },
+                      { id: '_divider', type: 'divider' },
+                      { id: 'archive', name: 'Archive', icon: 'archive', disabled: true },
+                      { id: 'delete', name: 'Move to trash', icon: 'delete', disabled: true }
+                    ]}
+                    onSelect={(_path) => { }}
+                    key={chip.id}>
+                    <button type="button" className="clist-entrywide" onClick={() => {
                       this.props.setRoute(['chip', chip.id, 'settings']);
-                    }} />
+                    }}>
+                      <div className="clist-header">
+                        <div className="clist-title">{chip.metadata.name}</div>
+                      </div>
+                      <dl className="clist-data">
+                        <dt>Created</dt>
+                        <dd>{formatRelativeDate(chip.metadata.created_time * 1000)}</dd>
+                        <dt>Owner</dt>
+                        <dd>Bob</dd>
+                        <dt>Chip model</dt>
+                        <dd>Mitomi 768</dd>
+                      </dl>
+                      {previewUrl && (
+                        <div className="clist-preview">
+                          <img src={previewUrl} />
+                        </div>
+                      )}
+                    </button>
+                  </ContextMenuArea>
                 );
               })}
             </div>
           )
           : (
-            <div className="card-blank">
-              <p>No chip running</p>
+            <div className="clist-blank">
+              <p>No active experiment</p>
             </div>
           )}
 
-        {/* + Completed chips */}
-      </main>
-    );
-  }
-}
+        {/* <header className="header header--2">
+          <h2>Archived chips</h2>
+        </header>
 
+        <div className="lproto-container">
+          <div className="lproto-list">
+            <button type="button" className="lproto-entry">
+              <div className="lproto-label">PWM attempt number 3</div>
+              <div className="lproto-property-list">
+                <div className="lproto-property-item">
+                  <Icon name="schedule" />
+                  <div className="lproto-property-label">yesterday (14 hrs)</div>
+                </div>
+                <div className="lproto-property-item">
+                  <Icon name="face" />
+                  <div className="lproto-property-label">Bob</div>
+                </div>
+              </div>
+              <div className="lproto-action-item">
+                <Icon name="arrow_forward" />
+              </div>
+            </button>
 
-function Card(props: {
-  onClick(event: React.SyntheticEvent<HTMLButtonElement, MouseEvent>): void;
-  previewUrl: string | null;
-  title: string;
-  subtitle?: string;
-  status?: {
-    icon: string;
-    label: string;
-  };
-}) {
-  return (
-    <button type="button" className="card-item" onClick={props.onClick}>
-      <div className="card-image">
-        {props.previewUrl
-          ? <img src={props.previewUrl} />
-          : (
-            <div className="card-image-placeholder">
-              <Icon name="image_not_supported" />
-              <div>No preview</div>
-            </div>
-          )}
-      </div>
-      <div className="card-body">
-        <div className="card-title">{props.title}</div>
-        {props.subtitle && <div className="card-subtitle">{props.subtitle}</div>}
-        {props.status && (
-          <div className="card-status">
-            <Icon name={props.status.icon} />
-            <div>{props.status.label}</div>
+            <button type="button" className="lproto-entry" disabled>
+              <div className="lproto-label">[Corrupted chip]</div>
+              <div className="lproto-property-list">
+                <div className="lproto-property-item">
+                  <Icon name="broken_image" />
+                  <div className="lproto-property-label">Corrupted</div>
+                </div>
+                <div className="lproto-property-item">
+                  <Icon name="weight" />
+                  <div className="lproto-property-label">2.25 MB</div>
+                </div>
+              </div>
+              <div className="lproto-action-item">
+                <Icon name="arrow_forward" />
+              </div>
+            </button>
           </div>
-        )}
-      </div>
-    </button>
-  );
+        </div> */}
+      </main>
+    )
+  }
 }

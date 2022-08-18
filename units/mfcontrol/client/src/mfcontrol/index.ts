@@ -72,6 +72,9 @@ export type Command = {
   type: 'setModel';
   modelId: ModelId;
 } | {
+  type: 'setSignal';
+  signal: string;
+} | {
   type: 'setValveMap';
   valveMap: number[];
 }
@@ -97,7 +100,8 @@ export interface Runner {
 
 export enum RunnerValveError {
   Unbound = 0,
-  Disconnected = 1
+  Disconnected = 1,
+  Unwritable = 2
 }
 
 export interface ProtocolData {

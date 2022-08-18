@@ -1,6 +1,6 @@
 import { Chip, ChipTabComponentProps, Pool, React, util } from 'pr1';
 
-import { type Runner, namespace, RunnerValveError } from '.';
+import { type Runner, namespace, RunnerValveError, Command } from '.';
 import { Diagram } from './diagram';
 
 
@@ -34,94 +34,136 @@ export class ManualControl extends React.Component<ChipTabComponentProps, Manual
     let signal = BigInt(runner.state.signal);
 
     return (
-      <div className="blayout-contents">
+      <div className="mcontrol-root">
+        {/* <MockGroup name="Inlet" n={8} />
+        <MockGroup name="Multiplexer" n={8} />
+        <MockGroup name="Special" n={4} /> */}
+
         {model.diagram && (
-          <>
-            <div className="header header--2">
-              <h2>Diagram</h2>
-            </div>
-            <div>
-              <Diagram
-                model={model}
-                signal={signal}
-                targetChannelIndex={this.state.targetChannelIndex} />
-            </div>
-          </>
+          <Diagram
+            model={model}
+            signal={signal}
+            targetChannelIndex={this.state.targetChannelIndex} />
         )}
 
-        <div className="header header--2">
-          <h2>Manual control</h2>
-        </div>
+        {model.groups.map((group, groupIndex) => (
+          <React.Fragment key={groupIndex}>
+            <div className="mcontrol-group">
+              <h3 className="mcontrol-group-title">{group.label}</h3>
+              <div className="mcontrol-group-entries">
+                {group.channelIndices.map((channelIndex) => {
+                  let channel = model!.channels[channelIndex];
+                  let active = ((1n << BigInt(channelIndex)) & signal) > 0;
+                  let channelMask = 1n << BigInt(channelIndex);
+                  let status = runner.state.valves[channelIndex];
 
-        <div className="mcontrol-root">
-          {model.groups.map((group, groupIndex) => (
-            <React.Fragment key={groupIndex}>
-              <div className="mcontrol-group">
-                <h3 className="mcontrol-group-title">{group.label}</h3>
-                <div className="mcontrol-group-entries">
-                  {group.channelIndices.map((channelIndex) => {
-                    let channel = model!.channels[channelIndex];
-                    let active = ((1n << BigInt(channelIndex)) & signal) > 0;
-                    let modelValveMask = 1n << BigInt(channelIndex);
-                    let status = runner.state.valves[channelIndex];
+                    let icon = {
+                      'barrier': 'vertical_align_center',
+                      'flow': 'air',
+                      'isolate': 'view_column',
+                      'move': 'moving',
+                      'push': 'download'
+                    }[channel.repr];
 
-                      let icon = {
-                        'barrier': 'vertical_align_center',
-                        'flow': 'air',
-                        'isolate': 'view_column',
-                        'move': 'moving',
-                        'push': 'download'
-                      }[channel.repr];
-
-                      return (
-                        <div
-                          className={util.formatClass('mcontrol-entry', { '_on': active })}
-                          key={channel.id}
-                          onMouseEnter={() => {
-                            this.setState({ targetChannelIndex: channelIndex });
-                          }}
-                          onMouseLeave={() => {
-                            this.setState({ targetChannelIndex: null });
-                          }}>
-                          <div className="mcontrol-icon">
-                            <span className="material-symbols-rounded">{icon}</span>
-                          </div>
-                          <div className="mcontrol-label">{channel.label ?? `Channel ${channelIndex}`}</div>
-                          <div className="mcontrol-sublabel">{channel.id}</div>
-                          <div className="mcontrol-statuses">
-                            {(status.error !== null) && (
-                              <div className="mcontrol-status mcontrol-status--warning">
-                                <div className="mcontrol-status-icon">
-                                  <span className="material-symbols-rounded">error</span>
-                                </div>
-                                <div className="mcontrol-status-label">{RunnerValveError[status.error]}</div>
-                              </div>
-                            )}
-                          </div>
-                          <div className="mcontrol-switches">
-                            <button type="button" className="mcontrol-switch" onClick={() => {
-                              // this.props.host.backend.command(this.chip.id, {
-                              //   control: {
-                              //     type: 'signal',
-                              //     signal: String((signal! & ~modelValveMask) | (modelValveMask * BigInt(active ? 0 : 1)))
-                              //   }
-                              // });
-                            }}>
-                              <div className="mcontrol-switch-icon">
-                                <span className="material-symbols-rounded">{icon}</span>
-                              </div>
-                              <div className="mcontrol-switch-label">{active ? 'On' : 'Off'}</div>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
+                    return (
+                      <ManualControlEntry
+                        active={active}
+                        icon={icon}
+                        label={channel.label ?? `Channel ${channelIndex}`}
+                        sublabel={channel.id}
+                        onMouseEnter={() => {
+                          this.setState({ targetChannelIndex: channelIndex });
+                        }}
+                        onMouseLeave={() => {
+                          this.setState({ targetChannelIndex: null });
+                        }}
+                        onSwitch={() => {
+                          this.pool.add(async () => {
+                            await this.props.host.backend.command<Command>({
+                              chipId: this.chip.id,
+                              namespace,
+                              command: {
+                                type: 'setSignal',
+                                signal: String((signal! & ~channelMask) | (channelMask * BigInt(active ? 0 : 1)))
+                              }
+                            });
+                          });
+                        }}
+                        statuses={status.error !== null ? [{ label: RunnerValveError[status.error] }] : []}
+                        key={channel.id} />
+                    );
+                  })}
               </div>
-            </React.Fragment>
-          ))}
-        </div>
+            </div>
+          </React.Fragment>
+        ))}
       </div>
     );
   }
+}
+
+
+function ManualControlEntry(props: {
+  active: boolean;
+  icon: string;
+  label: string;
+  onMouseEnter?(): void;
+  onMouseLeave?(): void;
+  onSwitch(): void;
+  statuses: {
+    label: string;
+  }[];
+  sublabel: string;
+}) {
+  return (
+    <div
+      className={util.formatClass('mcontrol-entry', { '_on': props.active })}
+      onMouseEnter={props.onMouseEnter}
+      onMouseLeave={props.onMouseLeave}>
+      <div className="mcontrol-icon">
+        <span className="material-symbols-rounded">{props.icon}</span>
+      </div>
+      <div className="mcontrol-label">{props.label}</div>
+      <div className="mcontrol-sublabel">{props.sublabel}</div>
+      <div className="mcontrol-statuses">
+        {props.statuses.map((status, statusIndex) => (
+          <div className="mcontrol-status mcontrol-status--warning" key={statusIndex}>
+            <div className="mcontrol-status-icon">
+              <span className="material-symbols-rounded">error</span>
+            </div>
+            <div className="mcontrol-status-label">{status.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mcontrol-switches">
+        <button type="button" className="mcontrol-switch" onClick={props.onSwitch}>
+          <div className="mcontrol-switch-icon">
+            <span className="material-symbols-rounded">{props.icon}</span>
+          </div>
+          <div className="mcontrol-switch-label">{props.active ? 'On' : 'Off'}</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function MockGroup(props: { name: string; n: number; }) {
+  return (
+    <div className="mcontrol-group">
+      <h3 className="mcontrol-group-title">{props.name}</h3>
+      <div className="mcontrol-group-entries">
+        {new Array(props.n).fill(0).map((_, index) => (
+          <ManualControlEntry
+            active={false}
+            icon="air"
+            label={`${props.name} ${index + 1}`}
+            onSwitch={() => {}}
+            sublabel={`${props.name.toLowerCase()}/${index + 1}`}
+            statuses={[]}
+            key={index} />
+        ))}
+      </div>
+    </div>
+  );
 }

@@ -47,7 +47,7 @@ export class Diagram extends React.Component<DiagramProps> {
   render() {
     return (
       <div
-        className={util.formatClass('diagram', { '_target': (this.props.targetChannelIndex !== null) })}
+        className={util.formatClass('mcontrol-diagram', { '_target': (this.props.targetChannelIndex !== null) })}
         dangerouslySetInnerHTML={{ __html: this.props.model.diagram! }}
         ref={this.ref} />
     );

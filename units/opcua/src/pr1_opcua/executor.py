@@ -32,30 +32,37 @@ conf_schema = sc.Schema({
 
 class DeviceNode:
   def __init__(self, id, node, type):
-    self.connected = False
     self.id = id
     self.type = type
     self.value = None
+
+    self.connected = False
+    self.unwritable = False
 
     self._node = node
     self._variant = variants_map[type]
 
   async def _connect(self):
     try:
-      # print(await self._node.read_data_type_as_variant_type() == self._variant)
-      self.value = await self._node.get_value()
+      value = await self._node.get_value()
     except ua.uaerrors._auto.BadNodeIdUnknown:
       logger.error(f"Missing node '{self._node.nodeid}'")
     else:
       self.connected = True
 
+      if self.value is None:
+        self.value = value
+      else:
+        await self.write(self.value)
+
   async def read(self):
-    return await self._node.read_value()
+    return await self._node.read_value() if self.connected else self.value
 
   async def write(self, value):
     if self.connected:
       await self._node.write_value(ua.DataValue(value))
-      self.value = value
+
+    self.value = value
 
 
 class Device:

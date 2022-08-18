@@ -12,6 +12,7 @@ Valve = namedtuple("Valve", ['host_valve_index'])
 class ValveError(IntEnum):
   Unbound = 0
   Disconnected = 1
+  Unwritable = 2
 
 
 class Runner(BaseRunner):
@@ -30,6 +31,27 @@ class Runner(BaseRunner):
   def _default_signal(self):
     return sum([1 << channel_index for channel_index, channel in enumerate(self._model.channels) if channel.inverse]) if self._model else None
 
+  async def _read(self):
+    self._signal = 0
+
+    for channel_index, valve_index in enumerate(self._valve_map):
+      if valve_index is not None:
+        valve = self._executor.valves[valve_index]
+
+        if await valve.node.read():
+          self._signal |= (1 << channel_index)
+
+    self._signal ^= self._default_signal
+
+  async def _write(self):
+    final_signal = self._default_signal ^ self._signal
+
+    for channel_index, valve_index in enumerate(self._valve_map):
+      if valve_index is not None:
+        active = final_signal & (1 << channel_index) > 0
+        valve = self._executor.valves[valve_index]
+        await valve.node.write(active)
+
   async def command(self, data):
     if data["type"] == "setModel":
       model_id = data["modelId"]
@@ -38,6 +60,7 @@ class Runner(BaseRunner):
         self._model = self._host.executors[namespace].models[model_id]
         self._signal = 0
         self._valve_map = [None] * len(self._model.channels)
+        await self._write()
       else:
         self._model = None
         self._signal = None
@@ -45,8 +68,13 @@ class Runner(BaseRunner):
 
       self._chip.update_runners(namespace)
 
+    if data["type"] == "setSignal":
+      self._signal = int(data["signal"])
+      await self._write()
+
     if data["type"] == "setValveMap":
       self._valve_map = data["valveMap"]
+      await self._write()
       self._chip.update_runners(namespace)
 
   def export(self):
@@ -60,6 +88,9 @@ class Runner(BaseRunner):
 
       if not valve.node.connected:
         return { "error": ValveError.Disconnected }
+
+      if valve.node.unwritable:
+        return { "error": ValveError.Unwritable }
 
       return { "error": None }
 

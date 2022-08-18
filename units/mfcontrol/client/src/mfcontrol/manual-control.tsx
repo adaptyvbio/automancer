@@ -1,6 +1,6 @@
 import { Chip, ChipTabComponentProps, Pool, React, util } from 'pr1';
 
-import { type Runner, namespace, RunnerValveError, Command } from '.';
+import { type Runner, namespace, RunnerValveError, Command, ReprData } from '.';
 import { Diagram } from './diagram';
 
 
@@ -57,42 +57,36 @@ export class ManualControl extends React.Component<ChipTabComponentProps, Manual
                   let channelMask = 1n << BigInt(channelIndex);
                   let status = runner.state.valves[channelIndex];
 
-                    let icon = {
-                      'barrier': 'vertical_align_center',
-                      'flow': 'air',
-                      'isolate': 'view_column',
-                      'move': 'moving',
-                      'push': 'download'
-                    }[channel.repr];
+                  let icon = ReprData.icons[channel.repr].forwards;
 
-                    return (
-                      <ManualControlEntry
-                        active={active}
-                        icon={icon}
-                        label={channel.label ?? `Channel ${channelIndex}`}
-                        sublabel={channel.id}
-                        onMouseEnter={() => {
-                          this.setState({ targetChannelIndex: channelIndex });
-                        }}
-                        onMouseLeave={() => {
-                          this.setState({ targetChannelIndex: null });
-                        }}
-                        onSwitch={() => {
-                          this.pool.add(async () => {
-                            await this.props.host.backend.command<Command>({
-                              chipId: this.chip.id,
-                              namespace,
-                              command: {
-                                type: 'setSignal',
-                                signal: String((signal! & ~channelMask) | (channelMask * BigInt(active ? 0 : 1)))
-                              }
-                            });
+                  return (
+                    <ManualControlEntry
+                      active={active}
+                      icon={icon}
+                      label={channel.label ?? `Channel ${channelIndex}`}
+                      sublabel={channel.id}
+                      onMouseEnter={() => {
+                        this.setState({ targetChannelIndex: channelIndex });
+                      }}
+                      onMouseLeave={() => {
+                        this.setState({ targetChannelIndex: null });
+                      }}
+                      onSwitch={() => {
+                        this.pool.add(async () => {
+                          await this.props.host.backend.command<Command>({
+                            chipId: this.chip.id,
+                            namespace,
+                            command: {
+                              type: 'setSignal',
+                              signal: String((signal! & ~channelMask) | (channelMask * BigInt(active ? 0 : 1)))
+                            }
                           });
-                        }}
-                        statuses={status.error !== null ? [{ label: RunnerValveError[status.error] }] : []}
-                        key={channel.id} />
-                    );
-                  })}
+                        });
+                      }}
+                      statuses={status.error !== null ? [{ label: RunnerValveError[status.error] }] : []}
+                      key={channel.id} />
+                  );
+                })}
               </div>
             </div>
           </React.Fragment>

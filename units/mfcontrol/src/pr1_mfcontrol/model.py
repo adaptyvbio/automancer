@@ -2,11 +2,16 @@ import functools
 import json
 import mimetypes
 from collections import namedtuple
+from pathlib import Path
 
 from pr1.reader import LocatedValue, parse
 from pr1.util import schema as sc
 from pr1.util.blob import Blob
 from pr1.util.parser import Identifier, check_identifier
+
+
+repr_data = json.load((Path(__file__).parent / "data/repr.json").open())
+repr_values = list(repr_data['icons'].keys())
 
 
 Channel = namedtuple("Channel", ['diagram_ref', 'id', 'inverse', 'label', 'repr'])
@@ -28,7 +33,6 @@ def parse_diagram_ref(value):
 
 
 display_values = ['active', 'delta', 'inactive', 'never']
-repr_values = ['barrier', 'flow', 'isolate', 'move', 'push', 'subset']
 
 entity_schema = {
   'display': sc.Optional(sc.Or(*[sc.Exact(value) for value in display_values])),
@@ -167,7 +171,7 @@ class Model:
           # alias=data_channel['alias'],
           diagram_ref=diagram_ref,
           inverse=(data_channel.get('inverse', False) != group_inverse),
-          repr=data_channel.get('repr', 'flow')
+          repr=data_channel.get('repr', repr_data['default'])
         ))
 
       groups.append(ChannelGroup(

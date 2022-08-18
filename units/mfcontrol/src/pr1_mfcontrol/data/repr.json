@@ -1,0 +1,57 @@
+{
+  "default": "flow",
+  "icons": {
+    "barrier": {
+      "forwards": "vertical_align_center",
+      "backwards": "-vertical_align_center"
+    },
+    "cycle": {
+      "forwards": "cycle",
+      "backwards": "-cycle"
+    },
+    "fill": {
+      "forwards": "format_color_fill",
+      "backwards": "-format_color_fill"
+    },
+    "flow": {
+      "forwards": "air",
+      "backwards": "-air"
+    },
+    "isolate": {
+      "forwards": "view_column",
+      "backwards": "-view_column"
+    },
+    "left": {
+      "forwards": "turn_slight_left",
+      "backwards": "-turn_slight_left"
+    },
+    "merge": {
+      "forwards": "call_merge",
+      "backwards": "-call_merge"
+    },
+    "move": {
+      "forwards": "moving",
+      "backwards": "-moving"
+    },
+    "push": {
+      "forwards": "download",
+      "backwards": "upload"
+    },
+    "right": {
+      "forwards": "turn_slight_right",
+      "backwards": "-turn_slight_right"
+    },
+    "split": {
+      "forwards": "call_split",
+      "backwards": "-call_split"
+    },
+    "subset": {
+      "forwards": "table_rows",
+      "backwards": "-table_rows"
+    },
+    "valve": {
+      "forwards": "valve",
+      "backwards": "-valve"
+    }
+  }
+}

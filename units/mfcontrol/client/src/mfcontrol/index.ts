@@ -5,6 +5,7 @@ import type { Chip, CreateFeaturesOptions, Features, Host, Protocol } from 'pr1'
 // import { CodeEditor } from './code-editor';
 import { ManualControl } from './manual-control';
 import * as util from './util';
+import ReprData from '../../../src/pr1_mfcontrol/data/repr.json';
 import mainStyles from './index.css' assert { type: 'css' };
 
 
@@ -14,33 +15,7 @@ export const namespace = 'mfcontrol';
 export const styleSheets = [mainStyles];
 
 
-export const ReprIcon = {
-  'barrier': {
-    forwards: 'vertical_align_center',
-    backwards: '-vertical_align_center'
-  },
-  'flow': {
-    forwards: 'air',
-    backwards: '-air'
-  },
-  'isolate': {
-    forwards: 'view_column',
-    backwards: '-view_column'
-  },
-  'move': {
-    forwards: 'moving',
-    backwards: '-moving'
-  },
-  'push': {
-    forwards: 'download',
-    backwards: 'upload'
-  },
-  'subset': {
-    forwards: 'table_rows',
-    backwards: '-table_rows'
-   }
-};
-
+export { ReprData };
 
 export type ModelId = string;
 
@@ -108,7 +83,7 @@ export interface ProtocolData {
   entities: Record<string, {
     display: ('delta' | 'active' | 'inactive' | 'never') | null;
     label: string;
-    repr: (keyof typeof ReprIcon) | null;
+    repr: (keyof typeof ReprData.icons) | null;
   }>;
   modelId: ModelId | null;
   parameters: {
@@ -161,7 +136,7 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
       return [];
     }
 
-    let icon = ReprIcon[entity.repr ?? 'flow'];
+    let icon = ReprData.icons[entity.repr ?? ReprData.default];
 
     return [{
       icon: (entity.display === 'inactive') || ((entity.display === 'delta') && !active)

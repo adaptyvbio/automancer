@@ -1,4 +1,5 @@
 from collections import namedtuple
+import functools
 import pickle
 
 from .. import logger as root_logger
@@ -176,3 +177,14 @@ class BaseExecutor:
   """
   async def instruct(self, instruction):
     pass
+
+  """
+  Hashes this executor options of this setup.
+
+  Returns
+  -------
+  str
+  """
+  @functools.cached_property
+  def hash(self):
+    return str()

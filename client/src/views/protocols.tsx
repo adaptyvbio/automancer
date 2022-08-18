@@ -119,6 +119,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
 
 export function DraftEntry(props: ContextMenuAreaProps & {
+  disabled?: unknown;
   name: string;
   properties: {
     id: string;
@@ -131,7 +132,7 @@ export function DraftEntry(props: ContextMenuAreaProps & {
     <ContextMenuArea
       createMenu={props.createMenu}
       onSelect={props.onSelect}>
-      <button type="button" className="lproto-entry" onClick={props.onClick}>
+      <button type="button" className="lproto-entry" disabled={!!props.disabled} onClick={props.onClick}>
         <div className="lproto-label">{props.name}</div>
         <div className="lproto-property-list">
           {props.properties.map((property) => (

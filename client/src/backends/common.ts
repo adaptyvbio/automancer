@@ -36,7 +36,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract reloadUnits(): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
-  abstract setChipMetadata(chipId: ChipId, value: Partial<Chip['metadata']>): Promise<void>;
+  abstract setChipMetadata(chipId: ChipId, value: Partial<ChipMetadata>): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
@@ -65,17 +65,49 @@ export interface Device {
   name: string;
 }
 
+
 export interface Chip {
   id: ChipId;
+  condition: ChipCondition.Ok;
   master: Master | null;
-  metadata: {
-    created_time: number;
-    description: string | null;
-    name: string;
-  };
+  metadata: ChipMetadata;
   name: string;
   runners: Record<UnitNamespace, unknown>;
 }
+
+export type GeneralChip = Chip | PartialChip | ObsoleteChip | CorruptedChip;
+
+export interface PartialChip {
+  id: ChipId;
+  condition: ChipCondition.Unsuitable | ChipCondition.Unsupported;
+  metadata: ChipMetadata;
+}
+
+export interface CorruptedChip {
+  id: ChipId;
+  condition: ChipCondition.Corrupted;
+}
+
+export interface ObsoleteChip {
+  id: ChipId;
+  condition: ChipCondition.Obsolete;
+}
+
+
+export enum ChipCondition {
+  Ok = 0,
+  Unsuitable = 1,
+  Unsupported = 2,
+  Obsolete = 3,
+  Corrupted = 4
+}
+
+export interface ChipMetadata {
+  created_time: number;
+  description: string | null;
+  name: string;
+}
+
 
 export interface Draft {
   id: DraftId;
@@ -142,7 +174,7 @@ export interface HostState {
     units: Record<string, UnitInfo>;
   };
 
-  chips: Record<ChipId, Chip>;
+  chips: Record<ChipId, GeneralChip>;
   drafts: Record<DraftId, Draft>;
   devices: Record<DeviceId, Device>;
 

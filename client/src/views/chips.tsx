@@ -1,8 +1,10 @@
 import * as React from 'react';
+import seqOrd from 'seq-ord';
 
+import { DraftEntry } from './protocols';
 import type { Route } from '../application';
 import type { Host } from '../host';
-import { ChipId } from '../backends/common';
+import { Chip, ChipCondition, ChipId } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
 import { Pool } from '../util';
@@ -26,6 +28,18 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
+    let activeChips = (chips.filter(chip => (chip.condition === ChipCondition.Ok)) as Chip[])
+      .sort((a, b) => b.metadata.created_time - a.metadata.created_time);
+
+    let pastChips = chips
+      .filter(chip => (chip.condition !== ChipCondition.Ok))
+      .sort(seqOrd(function* (a, b, rules) {
+        yield rules.numeric(a.condition, b.condition);
+
+        if (('metadata' in a) && ('metadata' in b)) {
+          yield rules.numeric(b.metadata.created_time, a.metadata.created_time);
+        }
+      }));
 
     return (
       <main>
@@ -45,10 +59,10 @@ export class ViewChips extends React.Component<ViewChipsProps> {
           </button>
         </div>
 
-        {(chips.length > 0)
+        {(activeChips.length > 0)
           ? (
             <div className="clist-root">
-              {chips.map((chip) => {
+              {activeChips.map((chip) => {
                 let previewUrl: string | null = null;
 
                 for (let unit of Object.values(this.props.host.units)) {
@@ -101,47 +115,59 @@ export class ViewChips extends React.Component<ViewChipsProps> {
             </div>
           )}
 
-        {/* <header className="header header--2">
-          <h2>Archived chips</h2>
-        </header>
+        {(pastChips.length > 0) && (
+          <>
+            <header className="header header--2">
+              <h2>Past experiments</h2>
+            </header>
 
-        <div className="lproto-container">
-          <div className="lproto-list">
-            <button type="button" className="lproto-entry">
-              <div className="lproto-label">PWM attempt number 3</div>
-              <div className="lproto-property-list">
-                <div className="lproto-property-item">
-                  <Icon name="schedule" />
-                  <div className="lproto-property-label">yesterday (14 hrs)</div>
-                </div>
-                <div className="lproto-property-item">
-                  <Icon name="face" />
-                  <div className="lproto-property-label">Bob</div>
-                </div>
-              </div>
-              <div className="lproto-action-item">
-                <Icon name="arrow_forward" />
-              </div>
-            </button>
+            <div className="lproto-container">
+              <div className="lproto-list">
+                {pastChips.map((chip) => {
+                  switch (chip.condition) {
+                    case ChipCondition.Unsuitable:
+                    case ChipCondition.Unsupported: return (
+                      <DraftEntry
+                        createMenu={() => []}
+                        disabled={true}
+                        name={chip.metadata.name}
+                        onSelect={() => { }}
+                        properties={[
+                          { id: 'issues', label: 'Unsupported', icon: 'error' },
+                          { id: 'created', label: formatRelativeDate(chip.metadata.created_time * 1000), icon: 'schedule' }
+                        ]}
+                        key={chip.id} />
+                    );
 
-            <button type="button" className="lproto-entry" disabled>
-              <div className="lproto-label">[Corrupted chip]</div>
-              <div className="lproto-property-list">
-                <div className="lproto-property-item">
-                  <Icon name="broken_image" />
-                  <div className="lproto-property-label">Corrupted</div>
-                </div>
-                <div className="lproto-property-item">
-                  <Icon name="weight" />
-                  <div className="lproto-property-label">2.25 MB</div>
-                </div>
+                    case ChipCondition.Obsolete: return (
+                      <DraftEntry
+                        createMenu={() => []}
+                        disabled={true}
+                        name="[Obsolete experiment]"
+                        onSelect={() => { }}
+                        properties={[
+                          { id: 'obsolete', label: 'Obsolete', icon: 'broken_image' }
+                        ]}
+                        key={chip.id} />
+                    );
+
+                    case ChipCondition.Corrupted: return (
+                      <DraftEntry
+                        createMenu={() => []}
+                        disabled={true}
+                        name="[Corrupted experiment]"
+                        onSelect={() => { }}
+                        properties={[
+                          { id: 'corrupted', label: 'Corrupted', icon: 'broken_image' }
+                        ]}
+                        key={chip.id} />
+                    );
+                  }
+                })}
               </div>
-              <div className="lproto-action-item">
-                <Icon name="arrow_forward" />
-              </div>
-            </button>
-          </div>
-        </div> */}
+            </div>
+          </>
+        )}
       </main>
     )
   }

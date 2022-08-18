@@ -8,7 +8,7 @@ import time
 import uuid
 
 from . import logger, reader
-from .chip import Chip
+from .chip import Chip, ChipCondition, CorruptedChip
 from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
@@ -106,16 +106,23 @@ class Host:
         except Exception:
           logger.warn(f"Chip '{path.name}' is corrupted and will be ignored. The exception is printed below.")
           log_exception(logger)
-        else:
-          self.chips[chip.id] = chip
+
+          chip = CorruptedChip(dir=path)
+
+        self.chips[chip.id] = chip
+
+    keywords = ["okay", "unsuitable", "unsupported", "obsolete", "corrupted"]
+    counts = [sum(chip.condition == condition for chip in self.chips.values()) for condition in ChipCondition]
 
     logger.debug(f"Loaded {len(self.chips)} existing chips")
-    logger.debug(f"  including {sum(chip.archived for chip in self.chips.values())} archived chips")
-    logger.debug(f"  including {sum(not chip.supported for chip in self.chips.values())} unsupported chips")
+
+    for keyword, count in zip(keywords, counts):
+      if count > 0:
+        logger.debug(f"  including {count} {keyword} chip{'s' if count > 1 else str()}")
 
     # debug
-    if not any(chip.supported and (not chip.archived) for chip in self.chips.values()):
-      self.create_chip(name="Default chip")
+    if not any(chip.condition == ChipCondition.Ok for chip in self.chips.values()):
+      self.create_chip(name="Default experiment")
 
   async def start(self):
     try:
@@ -264,7 +271,7 @@ class Host:
         }
       },
       "chips": {
-        chip.id: chip.export() for chip in self.chips.values() if (not chip.archived) and chip.supported
+        chip.id: chip.export() for chip in self.chips.values()
       },
       "devices": {
         device.id: device.export() for executor in self.executors.values() for device in executor.get_devices()
@@ -307,7 +314,7 @@ class Host:
       await chip.runners[request["namespace"]].command(request["command"])
 
     if request["type"] == "createChip":
-      chip = self.create_chip(name="Untitled chip")
+      chip = self.create_chip(name="Untitled experiment")
       self.update_callback()
 
       return {

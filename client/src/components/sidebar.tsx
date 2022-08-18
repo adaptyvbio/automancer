@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import type { Host, HostSettingsRecord } from '../host';
 import type { Route } from '../application';
-import type { HostId } from '../backends/common';
+import { ChipCondition, Chip, HostId } from '../backends/common';
 import type { Draft, DraftId } from '../draft';
 import * as util from '../util';
 
@@ -60,12 +60,16 @@ export class Sidebar extends React.Component<SidebarProps> {
             label: 'Experiments',
             icon: 'science',
             route: ['chip'],
-            children: Object.values(this.props.host.state.chips).map((chip) => ({
+            children: (
+              Object.values(this.props.host.state.chips)
+                .filter((chip) => (chip.condition === ChipCondition.Ok)) as Chip[]
+            ).map((chip) => ({
               id: chip.id,
               label: chip.name,
               route: ['chip', chip.id, 'settings'],
               routeRef: ['chip', chip.id]
-            })) },
+            }))
+          },
           { id: 'protocol',
             label: 'Protocols',
             icon: 'receipt_long',

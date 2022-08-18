@@ -4,10 +4,11 @@ import mimetypes
 from collections import namedtuple
 from pathlib import Path
 
-from pr1.reader import LocatedValue, parse
+from pr1.reader import parse
 from pr1.util import schema as sc
 from pr1.util.blob import Blob
-from pr1.util.parser import Identifier, check_identifier
+from pr1.util.misc import fast_hash
+from pr1.util.parser import Identifier
 
 
 repr_data = json.load((Path(__file__).parent / "data/repr.json").open())
@@ -51,12 +52,12 @@ class Model:
 
   @functools.cached_property
   def hash(self):
-    return str(hash(json.dumps((
+    return fast_hash(json.dumps((
       self.id,
       self.name,
       self.channels,
       self.groups
-    ))))
+    )))
 
   @functools.cache
   def export(self):

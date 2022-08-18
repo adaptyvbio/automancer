@@ -5,6 +5,8 @@ import pickle
 import struct
 import time
 import uuid
+from collections import namedtuple
+from enum import IntEnum
 
 # flags (4)
 #  0 - reserved
@@ -16,22 +18,83 @@ import uuid
 message_header_format = "IQI"
 
 
-class UnsupportedChip:
-  def __init__(self, *, archived, dir, id, metadata):
-    self.archived = archived
+class ChipCondition(IntEnum):
+  # The chip is fine.
+  Ok = 0
+
+  # The chip's corresponding setup is older than the current setup.
+  Unsuitable = 1
+
+  # The chip depends on older or missing units.
+  Unsupported = 2
+
+  # The chip's definition is too old.
+  Obsolete = 3
+
+  # The chip's file is missing or unreadable.
+  Corrupted = 4
+
+
+UnitSpec = namedtuple("UnitSpec", ["hash", "version"])
+
+
+class BaseChip:
+  condition = None
+
+class CorruptedChip(BaseChip):
+  condition = ChipCondition.Corrupted
+
+  def __init__(self, *, dir):
+    self.dir = dir
+    self.id = str(uuid.uuid4())
+
+  def export(self):
+    return {
+      "id": self.id,
+      "condition": self.condition
+    }
+
+class ObsoleteChip(BaseChip):
+  condition = ChipCondition.Obsolete
+
+  def __init__(self, *, dir, id):
     self.dir = dir
     self.id = id
+
+  def export(self):
+    return {
+      "id": self.id,
+      "condition": self.condition
+    }
+
+class PartialChip(BaseChip):
+  def __init__(self, *, dir, id, issues, metadata):
+    self.dir = dir
+    self.id = id
+    self.issues = issues
     self.metadata = metadata
 
   @property
-  def supported(self):
-    return False
+  def condition(self):
+    for issue in self.issues:
+      if (issue['type'] == 'missing') or (issue['type'] == 'version'):
+        return ChipCondition.Unsupported
+
+    return ChipCondition.Unsuitable
+
+  def export(self):
+    return {
+      "id": self.id,
+      "condition": self.condition,
+      "metadata": self.metadata
+    }
 
 
-class Chip:
+class Chip(BaseChip):
+  condition = ChipCondition.Ok
   version = 1
 
-  def __init__(self, *, archived, dir, id, metadata, unit_list, unit_versions):
+  def __init__(self, *, archived, dir, id, metadata, unit_list, unit_spec):
     self.archived = archived
     self.dir = dir
     self.id = id
@@ -39,7 +102,7 @@ class Chip:
     self.runners = None
     self.metadata = metadata
     self.unit_list = unit_list
-    self.unit_versions = unit_versions
+    self.unit_spec = unit_spec
 
     self._header_path = (dir / ".header.json")
 
@@ -64,13 +127,14 @@ class Chip:
       },
       'metadata': self.metadata,
       'unit_list': self.unit_list,
-      'unit_versions': self.unit_versions,
+      'unit_spec': {
+        namespace: {
+          'hash': unit_spec.hash,
+          'version': unit_spec.version
+        } for namespace, unit_spec in self.unit_spec.items()
+      },
       'version': self.version
     }, self._header_path.open("w"))
-
-  @property
-  def supported(self):
-    return True
 
   def push_process(self, namespace, data):
     unit_index = self.unit_list.index(namespace)
@@ -98,6 +162,7 @@ class Chip:
   def export(self):
     return {
       "id": self.id,
+      "condition": self.condition,
       "archived": self.archived,
       "master": self.master and self.master.export(),
       "name": self.metadata['name'],
@@ -115,18 +180,26 @@ class Chip:
 
     metadata = {
       'created_time': time.time(),
+      'description': None,
       'name': name
     }
 
-    unit_versions = { namespace: unit.version for namespace, unit in host.units.items() }
+    unit_spec = dict()
+
+    for namespace, unit in host.units.items():
+      executor = host.executors.get(namespace)
+      unit_spec[namespace] = UnitSpec(
+        hash=(executor.hash if executor else None),
+        version=unit.version
+      )
 
     chip = Chip(
       archived=False,
       id=chip_id,
       dir=chip_dir,
       metadata=metadata,
-      unit_list=list(unit_versions.keys()),
-      unit_versions=unit_versions
+      unit_list=list(unit_spec.keys()),
+      unit_spec=unit_spec
     )
 
     chip.runners = { namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner') }
@@ -144,22 +217,40 @@ class Chip:
     header_path = chip_dir / ".header.json"
     header = json.load(header_path.open())
 
-    if (header['version'] != Chip.version) or any((not namespace in host.units) or (host.units[namespace].version != unit_version) for namespace, unit_version in header['unit_versions'].items()):
-      return UnsupportedChip(
-        archived=header['archived'],
+    if header['version'] != Chip.version:
+      return ObsoleteChip(
+        dir=chip_dir,
+        id=header['id']
+      )
+
+    issues = list()
+
+    for namespace, unit_spec in header['unit_spec'].items():
+      unit = host.units.get(namespace)
+
+      if not unit:
+        issues.append({ 'type': 'missing', 'namespace': namespace })
+      elif unit.version != unit_spec['version']:
+        issues.append({
+          'type': 'version',
+          'namespace': namespace,
+          'current_version': unit.version,
+          'target_version': unit_spec['version']
+        })
+      elif unit_spec['hash'] is not None:
+        executor = host.executors[namespace]
+
+        if executor.hash != unit_spec['hash']:
+          issues.append({ 'type': 'hash', 'namespace': namespace })
+
+    if issues:
+      return PartialChip(
         dir=chip_dir,
         id=header['id'],
+        issues=issues,
         metadata=header['metadata']
       )
 
-    # for namespace, version in header['unit_versions'].items():
-    #   if not (namespace in host.units) or (host.units[namespace].version != version):
-    #     return UnsupportedChip(
-    #       archived=header['archived'],
-    #       dir=chip_dir,
-    #       id=header['id'],
-    #       metadata=header['metadata']
-    #     )
 
     # history_path = chip_dir / ".history.dat"
     # history_file = history_path.open("rb")
@@ -187,7 +278,12 @@ class Chip:
       id=header['id'],
       metadata=header['metadata'],
       unit_list=header['unit_list'],
-      unit_versions=header['unit_versions']
+      unit_spec={
+        namespace: UnitSpec(
+          hash=unit_spec['hash'],
+          version=unit_spec['version']
+        ) for namespace, unit_spec in header['unit_spec'].items()
+      }
     )
 
     chip.runners = {

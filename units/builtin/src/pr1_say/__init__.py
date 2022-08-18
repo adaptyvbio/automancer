@@ -17,7 +17,7 @@ metadata = Metadata(
   icon=MetadataIcon(kind='icon', value="mic"),
   # icon=MetadataIcon(kind='bitmap', value=logo.to_url()),
   title="Voice reports",
-  version="v1.0"
+  version="1.0"
 )
 
 client_path = Path(files(__name__ + '.client'))

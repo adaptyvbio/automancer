@@ -36,7 +36,6 @@ export abstract class BackendCommon implements BaseBackend {
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract reloadUnits(): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
-  abstract setChipMetadata(chipId: ChipId, value: Partial<ChipMetadata>): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startPlan(options: {
@@ -70,8 +69,6 @@ export interface Chip {
   id: ChipId;
   condition: ChipCondition.Ok;
   master: Master | null;
-  metadata: ChipMetadata;
-  name: string;
   runners: Record<UnitNamespace, unknown>;
 }
 
@@ -80,7 +77,6 @@ export type GeneralChip = Chip | PartialChip | ObsoleteChip | CorruptedChip;
 export interface PartialChip {
   id: ChipId;
   condition: ChipCondition.Unsuitable | ChipCondition.Unsupported;
-  metadata: ChipMetadata;
 }
 
 export interface CorruptedChip {
@@ -100,12 +96,6 @@ export enum ChipCondition {
   Unsupported = 2,
   Obsolete = 3,
   Corrupted = 4
-}
-
-export interface ChipMetadata {
-  created_time: number;
-  description: string | null;
-  name: string;
 }
 
 

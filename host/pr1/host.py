@@ -345,10 +345,6 @@ class Host:
       chip = self.chips[request["chipId"]]
       chip.master.resume()
 
-    if request["type"] == "setChipMetadata":
-      chip = self.chips[request["chipId"]]
-      chip.metadata.update(request["value"])
-
     if request["type"] == "setLocation":
       chip = self.chips[request["chipId"]]
       chip.master.set_location(chip.master.import_location(request["location"]))

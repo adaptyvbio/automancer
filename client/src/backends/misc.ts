@@ -1,9 +1,7 @@
 import type { BaseBackend } from './base';
 import { HostBackendOptions } from '../host';
-import type { Draft as AppDraft } from '../draft';
-import type { Codes, ExecutorStates, Matrices, OperatorLocationData, ProtocolData, SegmentData } from '../units';
 import WebsocketBackend from './websocket';
-import { AppBackend } from '../app-backends/base';
+import { Chip } from './common';
 
 
 export async function createBackend(options: HostBackendOptions): Promise<BaseBackend> {
@@ -12,4 +10,18 @@ export async function createBackend(options: HostBackendOptions): Promise<BaseBa
       return new WebsocketBackend(options);
     }
   }
+}
+
+export function getChipMetadata(chip: Chip) {
+  let runner = chip.runners.metadata as {
+    creationDate: number;
+    description: string;
+    title: string;
+  };
+
+  return {
+    creationDate: runner.creationDate,
+    description: runner.description,
+    title: runner.title
+  };
 }

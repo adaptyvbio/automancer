@@ -16,8 +16,7 @@ export interface ChipSettingsProps {
 }
 
 export interface ChipSettingsState {
-  description: string;
-  name: string;
+
 }
 
 export class ChipSettings extends React.Component<ChipSettingsProps, ChipSettingsState> {
@@ -25,69 +24,16 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
 
   constructor(props: ChipSettingsProps) {
     super(props);
-
-    this.state = {
-      description: this.chip.metadata.description ?? '',
-      name: this.chip.name
-    };
   }
 
   get chip(): Chip {
-    return this.props.host.state.chips[this.props.chipId];
-  }
-
-  componentDidUpdate(prevProps: ChipSettingsProps) {
-    if ((prevProps !== this.props)) {
-      if (this.state.description !== (this.chip.metadata.description ?? '')) {
-        this.setState({ description: this.chip.metadata.description ?? '' });
-      }
-
-      if (this.state.name !== this.chip.name) {
-        this.setState({ name: this.chip.name });
-      }
-    }
+    return this.props.host.state.chips[this.props.chipId] as Chip;
   }
 
   render() {
     return (
-      <div className="blayout-contents">
+      <div className="blayout-contents" style={{ overflow: 'auto', padding: '0 3px' }}>
         <div>
-          <div className="header header--2">
-            <h2>General</h2>
-          </div>
-
-          <Form.Form>
-            <Form.TextField
-              label="Name"
-              onInput={(name) => {
-                this.setState({ name });
-              }}
-              onBlur={() => {
-                this.pool.add(async () => {
-                  if (this.state.name) {
-                    await this.props.host.backend.setChipMetadata(this.chip.id, { name: this.state.name });
-                  }
-                });
-              }}
-              placeholder="e.g. Alpha"
-              value={this.state.name} />
-
-            <Form.TextArea
-              label="Description"
-              onInput={(description) => {
-                this.setState({ description });
-              }}
-              onBlur={() => {
-                this.pool.add(async () => {
-                  if (this.state.description) {
-                    await this.props.host.backend.setChipMetadata(this.chip.id, { description: this.state.description });
-                  }
-                });
-              }}
-              placeholder="e.g. Produced on March 23rd"
-              value={this.state.description} />
-          </Form.Form>
-
           {Object.values(this.props.host.units).map((unit) => {
             if (!unit.MatrixEditor) {
               return null;

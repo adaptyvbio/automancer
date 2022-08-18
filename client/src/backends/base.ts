@@ -1,5 +1,5 @@
 import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
-import type { ChipId, ChipMetadata, HostState, ProtocolLocation, RunnerCommand } from './common';
+import type { ChipId, HostState, ProtocolLocation, RunnerCommand } from './common';
 import type { Draft as AppDraft } from '../draft';
 
 
@@ -22,7 +22,6 @@ export interface BaseBackend {
   pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   reloadUnits(): Promise<void>;
   resume(chipId: ChipId): Promise<void>;
-  setChipMetadata(chipId: ChipId, value: Partial<ChipMetadata>): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   startPlan(options: {

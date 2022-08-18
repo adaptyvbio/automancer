@@ -9,10 +9,12 @@ setup(
 
   entry_points={
     'pr1.units': [
+      "metadata = pr1_metadata",
       "say = pr1_say",
     ]
   },
   package_data={
-    "pr1_builtin.say.client": ["*.js"]
+    "pr1_metadata": ["*"],
+    "pr1_say.client": ["*"]
   }
 )

@@ -11,8 +11,7 @@ from enum import IntEnum
 # flags (4)
 #  0 - reserved
 #  1 - runner update
-#  2 - metadata update (deprecated)
-#  3 - process
+#  2 - process
 # time (8)
 # payload size (4)
 message_header_format = "IQI"
@@ -85,8 +84,7 @@ class PartialChip(BaseChip):
   def export(self):
     return {
       "id": self.id,
-      "condition": self.condition,
-      "metadata": self.metadata
+      "condition": self.condition
     }
 
 
@@ -94,13 +92,12 @@ class Chip(BaseChip):
   condition = ChipCondition.Ok
   version = 1
 
-  def __init__(self, *, archived, dir, id, metadata, unit_list, unit_spec):
+  def __init__(self, *, archived, dir, id, unit_list, unit_spec):
     self.archived = archived
     self.dir = dir
     self.id = id
     self.master = None
     self.runners = None
-    self.metadata = metadata
     self.unit_list = unit_list
     self.unit_spec = unit_spec
 
@@ -125,7 +122,6 @@ class Chip(BaseChip):
       'runners': {
         namespace: base64.b85encode(runner.serialize_raw()).decode("utf-8") for namespace, runner in self.runners.items()
       },
-      'metadata': self.metadata,
       'unit_list': self.unit_list,
       'unit_spec': {
         namespace: {
@@ -138,7 +134,7 @@ class Chip(BaseChip):
 
   def push_process(self, namespace, data):
     unit_index = self.unit_list.index(namespace)
-    self._push_history(flags=3, payload=(struct.pack("H", unit_index) + data))
+    self._push_history(flags=2, payload=(struct.pack("H", unit_index) + data))
 
   def update_runners(self, *namespaces):
     payload = bytearray()
@@ -154,19 +150,12 @@ class Chip(BaseChip):
     self._push_history(flags=1, payload=payload)
     self._save_header()
 
-  def update_metadata(self, update = dict()):
-    self.metadata = { **self.metadata, **update }
-    self._push_history(flags=2, payload=pickle.dumps(self.metadata))
-    self._save_header()
-
   def export(self):
     return {
       "id": self.id,
       "condition": self.condition,
       "archived": self.archived,
       "master": self.master and self.master.export(),
-      "name": self.metadata['name'],
-      "metadata": self.metadata,
       "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
       }
@@ -177,12 +166,6 @@ class Chip(BaseChip):
     chip_id = str(uuid.uuid4())
     chip_dir = chips_dir / chip_id
     chip_dir.mkdir(exist_ok=True)
-
-    metadata = {
-      'created_time': time.time(),
-      'description': None,
-      'name': name
-    }
 
     unit_spec = dict()
 
@@ -197,7 +180,6 @@ class Chip(BaseChip):
       archived=False,
       id=chip_id,
       dir=chip_dir,
-      metadata=metadata,
       unit_list=list(unit_spec.keys()),
       unit_spec=unit_spec
     )
@@ -209,7 +191,6 @@ class Chip(BaseChip):
 
     chip._save_header()
     chip.update_runners()
-    chip.update_metadata()
 
     return chip
 
@@ -247,8 +228,7 @@ class Chip(BaseChip):
       return PartialChip(
         dir=chip_dir,
         id=header['id'],
-        issues=issues,
-        metadata=header['metadata']
+        issues=issues
       )
 
 
@@ -276,7 +256,6 @@ class Chip(BaseChip):
       archived=header['archived'],
       dir=chip_dir,
       id=header['id'],
-      metadata=header['metadata'],
       unit_list=header['unit_list'],
       unit_spec={
         namespace: UnitSpec(

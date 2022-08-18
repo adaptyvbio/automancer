@@ -9,6 +9,7 @@ import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
+import { getChipMetadata } from '../backends/misc';
 
 
 export interface ViewChipsProps {
@@ -29,7 +30,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
   render() {
     let chips = Object.values(this.props.host.state.chips);
     let activeChips = (chips.filter(chip => (chip.condition === ChipCondition.Ok)) as Chip[])
-      .sort((a, b) => b.metadata.created_time - a.metadata.created_time);
+      .sort((a, b) => getChipMetadata(b).creationDate - getChipMetadata(a).creationDate);
 
     let pastChips = chips
       .filter(chip => (chip.condition !== ChipCondition.Ok))
@@ -37,7 +38,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
         yield rules.numeric(a.condition, b.condition);
 
         if (('metadata' in a) && ('metadata' in b)) {
-          yield rules.numeric(b.metadata.created_time, a.metadata.created_time);
+          yield rules.numeric(getChipMetadata(b).creationDate, getChipMetadata(a).creationDate);
         }
       }));
 
@@ -63,6 +64,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
           ? (
             <div className="clist-root">
               {activeChips.map((chip) => {
+                let metadata = getChipMetadata(chip);
                 let previewUrl: string | null = null;
 
                 for (let unit of Object.values(this.props.host.units)) {
@@ -88,11 +90,11 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                       this.props.setRoute(['chip', chip.id, 'settings']);
                     }}>
                       <div className="clist-header">
-                        <div className="clist-title">{chip.metadata.name}</div>
+                        <div className="clist-title">{metadata.title}</div>
                       </div>
                       <dl className="clist-data">
                         <dt>Created</dt>
-                        <dd>{formatRelativeDate(chip.metadata.created_time * 1000)}</dd>
+                        <dd>{formatRelativeDate(metadata.creationDate)}</dd>
                         <dt>Owner</dt>
                         <dd>Bob</dd>
                         <dt>Chip model</dt>
@@ -126,15 +128,15 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                 {pastChips.map((chip) => {
                   switch (chip.condition) {
                     case ChipCondition.Unsuitable:
-                    case ChipCondition.Unsupported: return (
+                    case ChipCondition.Unsupported: (
                       <DraftEntry
                         createMenu={() => []}
                         disabled={true}
-                        name={chip.metadata.name}
+                        name="[Unsupported experiment]"
                         onSelect={() => { }}
                         properties={[
-                          { id: 'issues', label: 'Unsupported', icon: 'error' },
-                          { id: 'created', label: formatRelativeDate(chip.metadata.created_time * 1000), icon: 'schedule' }
+                          { id: 'issues', label: 'Unsupported', icon: 'error' }
+                          // { id: 'created', label: formatRelativeDate(metadata.creationDate), icon: 'schedule' }
                         ]}
                         key={chip.id} />
                     );

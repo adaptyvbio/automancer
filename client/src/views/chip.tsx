@@ -10,6 +10,7 @@ import { ChipSettings } from '../components/chip-settings';
 import { ErrorBoundary } from '../components/error-boundary';
 import { Pool } from '../util';
 import * as util from '../util';
+import { getChipMetadata } from '../backends/misc';
 
 
 export interface ViewChipProps {
@@ -35,7 +36,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   get chip(): Chip {
-    return this.props.host.state.chips[this.props.chipId];
+    return this.props.host.state.chips[this.props.chipId] as Chip;
   }
 
   componentDidUpdate() {
@@ -53,6 +54,8 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   render() {
+    let metadata = getChipMetadata(this.chip);
+
     let unitEntries = Object.values(this.props.host.units)
       .flatMap((unit) => (unit.getChipTabs?.(this.chip) ?? []).map((entry) => ({
         ...entry,
@@ -101,7 +104,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     return (
       <main className="blayout-container">
         <div className="blayout-header">
-          <h1>{this.chip.name}</h1>
+          <h1>{metadata.title}</h1>
           <BarNav
             entries={[
               { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },

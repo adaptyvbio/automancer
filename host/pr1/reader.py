@@ -6,6 +6,19 @@ import sys
 Position = namedtuple("Position", ["line", "column"])
 
 class Location:
+  def __init__(self, source, offset):
+    self.source = source
+    self.offset = offset
+
+  @property
+  def start_position(self):
+    return self.source.offset_position(self.offset)
+
+  @property
+  def end_position(self):
+    return self.source.offset_position(self.offset)
+
+class LocationRange:
   def __init__(self, source, start, end):
     self.end = end
     self.source = source
@@ -14,14 +27,14 @@ class Location:
   def __mod__(self, offset):
     start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
 
-    return Location(
+    return LocationRange(
       source=self.source,
       start=(self.start + start),
       end=(self.start + end)
     )
 
   def __add__(self, other):
-    return Location(
+    return LocationRange(
       source=self.source,
       start=min(self.start, other.start),
       end=max(self.end, other.end)
@@ -38,8 +51,12 @@ class Location:
   def end_position(self):
     return self.source.offset_position(self.end)
 
+  def location(self):
+    assert self.start == self.end
+    return Location(self.source, offset=self.start)
+
   def full_string(source, value):
-    return Location(source, 0, len(value))
+    return LocationRange(source, 0, len(value))
 
 
 class LocatedError(Exception):
@@ -97,12 +114,12 @@ class LocatedError(Exception):
 
 
 class LocatedValue:
-  def __init__(self, value, location):
-    self.location = location
+  def __init__(self, value, locrange):
+    self.locrange = locrange
     self.value = value
 
   def error(self, message):
-    return LocatedError(message, self.location)
+    return LocatedError(message, self.locrange)
 
   def create_error(message, object):
     if isinstance(object, LocatedValue):
@@ -116,19 +133,19 @@ class LocatedValue:
     else:
       return object
 
-  def locate(object, location):
+  def locate(object, locrange):
     if isinstance(object, dict):
-      return LocatedDict(object, location)
+      return LocatedDict(object, locrange)
     elif isinstance(object, list):
-      return LocatedList(object, location)
+      return LocatedList(object, locrange)
     elif isinstance(object, str):
-      return LocatedString(object, location)
+      return LocatedString(object, locrange)
     else:
       return object
 
   def transfer(dest, source):
     if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
-      return LocatedValue.locate(dest, source.location)
+      return LocatedValue.locate(dest, source.locrange)
 
     return dest
 
@@ -137,15 +154,15 @@ class LocatedString(str, LocatedValue):
   def __new__(cls, value, *args, **kwargs):
     return super(LocatedString, cls).__new__(cls, value)
 
-  def __init__(self, value, location, *, symbolic = False):
-    LocatedValue.__init__(self, value, location)
+  def __init__(self, value, locrange, *, symbolic = False):
+    LocatedValue.__init__(self, value, locrange)
     self.symbolic = symbolic
     # str.__init__(self)
 
   def __getitem__(self, key):
     if isinstance(key, slice):
       start, stop, step = key.indices(len(self))
-      return LocatedString(self.value[key], (self.location % (start, stop)) if not self.symbolic else self.location)
+      return LocatedString(self.value[key], (self.locrange % (start, stop)) if not self.symbolic else self.locrange)
     else:
       return self[key:(key + 1)]
 
@@ -185,8 +202,8 @@ class LocatedDict(dict, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedDict, cls).__new__(cls)
 
-  def __init__(self, value, location):
-    LocatedValue.__init__(self, value, location)
+  def __init__(self, value, locrange):
+    LocatedValue.__init__(self, value, locrange)
     self.update(value)
 
 
@@ -194,8 +211,8 @@ class LocatedList(list, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
-  def __init__(self, value, location):
-    LocatedValue.__init__(self, value, location)
+  def __init__(self, value, locrange):
+    LocatedValue.__init__(self, value, locrange)
     self += value
 
 
@@ -204,7 +221,7 @@ class Source(LocatedString):
   #   return super(Source, cls).__new__(cls, value)
 
   def __init__(self, value):
-    super().__init__(value, Location.full_string(self, value))
+    super().__init__(value, LocationRange.full_string(self, value))
     # print(">>", self.range)
 
   def offset_position(self, offset):
@@ -222,22 +239,40 @@ class Source(LocatedString):
 # - b       key: None,  value: 'b',   list: True
 
 
+class ReaderException(Exception):
+  pass
+
+class InvalidIndentationException(ReaderException):
+  def __init__(self, target):
+    self.target = target
+
+class MissingKeyException(ReaderException):
+  def __init__(self, location):
+    self.location = location
+
+class InvalidLineException(ReaderException):
+  def __init__(self, target):
+    self.target = target
+
+
 def tokenize(raw_source):
+  errors = list()
+
   source = Source(raw_source)
   tokens = list()
 
-  for line_index, line in enumerate(source.splitlines()):
+  for line in source.splitlines():
     comment_offset = line.find("#")
 
     if comment_offset >= 0:
       line = line[0:comment_offset]
 
     line = line.rstrip()
-    end_offset = len(line)
     indent_offset = len(line) - len(line.lstrip())
 
     if indent_offset % 2 > 0:
-      raise line.error("Invalid indentation")
+      errors.append(InvalidIndentationException(line[indent_offset:]))
+      continue
 
     if len(line) == indent_offset:
       continue
@@ -251,21 +286,21 @@ def tokenize(raw_source):
       'data': line[offset:]
     }
 
-    tokens.append(token)
-
     if line[offset] == "-":
       offset = get_offset(line, offset)
       token['list'] = True
 
 
     colon_offset = line.find(":", offset)
+
     if colon_offset >= 0:
       key = line[offset:colon_offset].rstrip()
       value_offset = get_offset(line, colon_offset)
       value = line[value_offset:]
 
       if len(key) < 1:
-        raise Exception()
+        errors.append(MissingKeyException(location=key.locrange.location()))
+        continue
 
       token.update({
         'key': key,
@@ -274,9 +309,11 @@ def tokenize(raw_source):
     elif token['list']:
       token['value'] = line[offset:]
     else:
-      raise token['data'].error("Invalid token")
+      errors.append(InvalidLineException(token['data']))
 
-  return tokens
+    tokens.append(token)
+
+  return tokens, errors
 
 
 def analyze(tokens):
@@ -351,14 +388,14 @@ def analyze(tokens):
         if token['value']:
           stack.append({
             'mode': 'dict',
-            'location': token['key'].location + token['value'].location,
+            'location': token['key'].locrange + token['value'].locrange,
             'key': None,
             'value': { token['key']: token['value'] }
           })
         else:
           stack.append({
             'mode': 'dict',
-            'location': token['key'].location,
+            'location': token['key'].locrange,
             'key': None,
             'value': dict()
           })
@@ -373,9 +410,9 @@ def analyze(tokens):
         head['value'].append(token['value'])
 
     if not head['location']:
-      head['location'] = token['data'].location
+      head['location'] = token['data'].locrange
     else:
-      head['location'] += token['data'].location
+      head['location'] += token['data'].locrange
 
   descend(0)
 
@@ -388,7 +425,12 @@ def get_offset(line, origin):
 
 
 def parse(raw_source):
-  return analyze(tokenize(raw_source))
+  tokens, errors = tokenize(raw_source)
+
+  if errors:
+    raise errors[0]
+
+  return analyze(tokens)
 
 
 def dumps(obj, depth = 0, cont = True):
@@ -421,26 +463,78 @@ def loads(raw_source):
 
 # create_error = LocatedValue.create_error
 
+def format_source(
+  locrange,
+  *,
+  context_after = 2,
+  context_before = 4,
+  target_space = False
+):
+  output = str()
+
+  start = locrange.start_position
+  end = locrange.end_position
+
+  if (start.line == end.line) and (start.column == end.column):
+    end = Position(end.line, end.column + 1)
+
+  lines = locrange.source.splitlines()
+  width_line = math.ceil(math.log(end.line + 1 + context_after + 1, 10))
+  end_line = end.line - (1 if end.column == 0 else 0)
+
+  for line_index, line in enumerate(lines):
+    if (line_index < start.line - context_before) or (line_index > end_line + context_after):
+      continue
+
+    output += f" {str(line_index + 1).rjust(width_line, ' ')} | {line}\n"
+
+    if (line_index >= start.line) and (line_index <= end_line):
+      target_offset = start.column if line_index == start.line else 0
+      target_width = (end.column if line_index == end.line else len(line))\
+        - (start.column if line_index == start.line else 0)
+
+      if not target_space:
+        target_line = line[target_offset:(target_offset + target_width)]
+        target_space_width = len(target_line) - len(target_line.lstrip())
+
+        if target_space_width < target_width:
+          target_offset += target_space_width
+          target_width -= target_space_width
+
+      output += " " + " " * width_line + " | " "\033[31m" + " " * target_offset + "^" * target_width + "\033[39m" + "\n"
+
+  return output
+
 
 if __name__ == "__main__":
-  x = parse("""
+  tokens, errors = tokenize(f"""
 foo:
-  - bar
-  - baz:
+  - bar: 34
+    pp:
       - foo
       - p: x
         s: a
     s: n
   - f
-""")
+  """)
+  # except LocatedError as e:
+  #   e.display()
 
-  print(x)
+  from pprint import pprint
 
-  LocatedError("Error", x.location).display()
-  LocatedError("Error", x['foo'].location).display()
-  LocatedError("Error", x['foo'][1].location).display()
-  LocatedError("Error", x['foo'][1]['baz'].location).display()
-  LocatedError("Error", x['foo'][1]['baz'][1].location).display()
+  pprint(tokens)
+  print()
+  pprint(errors)
+
+  # print(errors[0].target.locrange)
+  # print(format_source(errors[0].target.locrange))
+  # print(format_source(errors[0].location))
+
+  # LocatedError("Error", x.location).display()
+  # LocatedError("Error", x['foo'].location).display()
+  # LocatedError("Error", x['foo'][1].location).display()
+  # LocatedError("Error", x['foo'][1]['baz'].location).display()
+  # LocatedError("Error", x['foo'][1]['baz'][1].location).display()
 
   # print(dumps({
   #   'foo': 'bar',

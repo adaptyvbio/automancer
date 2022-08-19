@@ -1,6 +1,7 @@
 from collections import namedtuple
 import math
 import sys
+from enum import Enum
 
 
 Position = namedtuple("Position", ["line", "column"])
@@ -95,7 +96,7 @@ class LocatedError(Exception):
 
         if not target_space:
           target_line = line[target_offset:(target_offset + target_width)]
-          target_space_width = len(target_line) - len(target_line.lstrip())
+          target_space_width = len(target_line) - len(target_line.lstrip(Whitespace))
 
           if target_space_width < target_width:
             target_offset += target_space_width
@@ -186,15 +187,15 @@ class LocatedString(str, LocatedValue):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]
     return [self[((a + 1) if a is not None else a):b] for a, b in zip([None, *indices], [*indices, None])]
 
-  def strip(self):
-    return self.lstrip().rstrip()
+  def strip(self, chars = None):
+    return self.lstrip(chars).rstrip(chars)
 
-  def lstrip(self):
-    stripped = self.value.lstrip()
+  def lstrip(self, chars = None):
+    stripped = self.value.lstrip(chars)
     return self[(len(self) - len(stripped)):]
 
-  def rstrip(self):
-    stripped = self.value.rstrip()
+  def rstrip(self, chars = None):
+    stripped = self.value.rstrip(chars)
     return self[0:len(stripped)]
 
 
@@ -231,206 +232,299 @@ class Source(LocatedString):
     return Position(line, column)
 
 
+## Tokenization
 
-# a: b      key: 'a',   value: 'b',   list: False
-# a:        key: 'a',   value: None,  list: False
-# - a:      key: 'a',   value: None,  list: True
-# - a: b    key: 'a',   value: 'b',   list: True
-# - b       key: None,  value: 'b',   list: True
+# a: b      key: 'a',   value: 'b',   kind: Default
+# a:        key: 'a',   value: None,  kind: Default
+# - a:      key: 'a',   value: None,  kind: List
+# - a: b    key: 'a',   value: 'b',   kind: List
+# - b       key: None,  value: 'b',   kind: List
+# | a       key: None, value: 'a',    kind: Block
+
+Whitespace = " "
+
+class Token:
+  def __init__(self, *, data, depth, key, kind, value):
+    self.data = data
+    self.depth = depth
+    self.key = key
+    self.kind = kind
+    self.value = value
+
+  def __repr__(self):
+    return f"Token(depth={repr(self.depth)}, kind={repr(self.kind)}, key={repr(self.key)}, value={repr(self.value)})"
+
+class TokenKind(Enum):
+  Default = 0
+  List = 1
+  Block = 2
 
 
-class ReaderException(Exception):
+class ReaderError(Exception):
   pass
 
-class InvalidIndentationException(ReaderException):
+class UnreadableIndentationError(ReaderError):
   def __init__(self, target):
     self.target = target
 
-class MissingKeyException(ReaderException):
+class MissingKeyError(ReaderError):
   def __init__(self, location):
     self.location = location
 
-class InvalidLineException(ReaderException):
+class InvalidLineError(ReaderError):
+  def __init__(self, target):
+    self.target = target
+
+class InvalidCharacterError(ReaderError):
   def __init__(self, target):
     self.target = target
 
 
 def tokenize(raw_source):
   errors = list()
+  warnings = list()
 
   source = Source(raw_source)
   tokens = list()
 
+
+  # Check if all characters are ASCII
+
+  if not source.isascii():
+    for line in source.splitlines():
+      if not line.isascii():
+        start_index = None
+
+        for index, ch in enumerate(line):
+          if ch.isascii():
+            if start_index is not None:
+              warnings.append(InvalidCharacterError(line[start_index:index]))
+              start_index = None
+          else:
+            if start_index is None:
+              start_index = index
+
+        if start_index is not None:
+          warnings.append(InvalidCharacterError(line[start_index:]))
+
+
+  # Iterate over all lines
   for line in source.splitlines():
+    # Remove the comment on the line, if any
     comment_offset = line.find("#")
 
     if comment_offset >= 0:
       line = line[0:comment_offset]
 
-    line = line.rstrip()
-    indent_offset = len(line) - len(line.lstrip())
+    # Remove whitespace on the right of the line
+    line = line.rstrip(Whitespace)
+
+    # Add an error if there is an odd number of whitespace on the left of the line
+    indent_offset = len(line) - len(line.lstrip(Whitespace))
 
     if indent_offset % 2 > 0:
-      errors.append(InvalidIndentationException(line[indent_offset:]))
+      errors.append(UnreadableIndentationError(line[indent_offset:]))
       continue
 
+    # Go to the next line if this one is empty
     if len(line) == indent_offset:
       continue
 
+    # Initialize a token instance
     offset = indent_offset
-    token = {
-      'depth': indent_offset // 2,
-      'key': None,
-      'value': None,
-      'list': False,
-      'data': line[offset:]
-    }
+    token = Token(
+      data=line[offset:],
+      depth=(indent_offset // 2),
+      key=None,
+      kind=TokenKind.Default,
+      value=None
+    )
 
-    if line[offset] == "-":
-      offset = get_offset(line, offset)
-      token['list'] = True
+    # If the line starts with a '|', then the token is a block and this iteration ends
+    if line[offset] == "|":
+      token.kind = TokenKind.Block
+      token.value = token.data
 
-
-    colon_offset = line.find(":", offset)
-
-    if colon_offset >= 0:
-      key = line[offset:colon_offset].rstrip()
-      value_offset = get_offset(line, colon_offset)
-      value = line[value_offset:]
-
-      if len(key) < 1:
-        errors.append(MissingKeyException(location=key.locrange.location()))
-        continue
-
-      token.update({
-        'key': key,
-        'value': value if value else None
-      })
-    elif token['list']:
-      token['value'] = line[offset:]
+    # Otherwise, continue
     else:
-      errors.append(InvalidLineException(token['data']))
+      # If the line starts with a '-', then the token is a list
+      if line[offset] == "-":
+        offset = get_offset(line, offset)
+        token.kind = TokenKind.List
+
+      colon_offset = line.find(":", offset)
+
+      # If there is a ':', the token is a key or key-value pair, possibly also a list
+      if colon_offset >= 0:
+        key = line[offset:colon_offset].rstrip(Whitespace)
+        value_offset = get_offset(line, colon_offset)
+        value = line[value_offset:]
+
+        if len(key) < 1:
+          errors.append(MissingKeyError(location=key.locrange.location()))
+          continue
+
+        token.key = key
+        token.value = value if value else None
+
+      # If the token is a list, then it is just a value
+      elif token.kind == TokenKind.List:
+        token.value = line[offset:]
+
+      # Otherwise the line is invalid
+      else:
+        errors.append(InvalidLineError(token.data))
 
     tokens.append(token)
 
-  return tokens, errors
+  return tokens, errors, warnings
+
+
+def get_offset(line, origin):
+  return origin + len(line[(origin + 1):]) - len(line[(origin + 1):].lstrip(Whitespace)) + 1
+
+
+## Static analysis
+
+class StackEntry:
+  def __init__(self, *, key = None, location = None, mode = None, value = None):
+    self.key = key
+    self.location = location
+    self.mode = mode
+    self.value = value
+
+class StackEntryMode(Enum):
+  Dict = 0
+  List = 1
+  String = 2
+
+
+class DuplicateKeyError(ReaderError):
+  def __init__(self, original, duplicate):
+    self.original = original
+    self.duplicate = duplicate
+
+class InvalidIndentationError(ReaderError):
+  def __init__(self, target):
+    self.target = target
+
+class InvalidTokenError(ReaderError):
+  def __init__(self, target):
+    self.target = target
 
 
 def analyze(tokens):
-  stack = [
-    { 'mode': 'dict', 'location': None, 'value': dict() }
-  ]
+  errors = list()
+  warnings = list()
 
-  def add_location(item):
-    if item['location']:
-      if item['mode'] == 'dict':
-        return LocatedDict(item['value'], item['location'])
-      if item['mode'] == 'list':
-        return LocatedList(item['value'], item['location'])
-
-    return item['value']
-
+  stack = [StackEntry()]
 
   def descend(new_depth):
     while len(stack) - 1 > new_depth:
-      add = stack.pop()
-      add_value = add_location(add)
+      entry = stack.pop()
+      entry_value = add_location(entry)
       head = stack[-1]
 
-      if head['mode'] == 'dict':
-        head['value'][add['key']] = add_value
-      elif head['mode'] == 'list':
-        head['value'].append(add_value)
+      if head.mode == StackEntryMode.Dict:
+        head.value[entry.key] = entry_value
+      elif head.mode == StackEntryMode.List:
+        head.value.append(entry_value)
 
-      if add['location']:
-        if not head['location']:
-          head['location'] = add['location']
+      if entry.location:
+        if not head.location:
+          head.location = entry.location
         else:
-          head['location'] += add['location']
+          head.location += entry.location
 
   for token in tokens:
     depth = len(stack) - 1
 
-    if token['depth'] > depth:
-      raise token['data'].error("Invalid indentation")
-    if token['depth'] < depth:
-      descend(token['depth'])
+    if token.depth > depth:
+      errors.append(InvalidIndentationError(token.data))
+      continue
+    if token.depth < depth:
+      descend(token.depth)
 
     head = stack[-1]
 
-    if not head['mode']:
-      if token['list']:
-        head.update({ 'mode': 'list', 'value': list() })
+    if not head.mode:
+      if token.kind == TokenKind.List:
+        head.mode = StackEntryMode.List
+        head.value = list()
       else:
-        head.update({ 'mode': 'dict', 'value': dict() })
+        head.mode = StackEntryMode.Dict
+        head.value = dict()
 
-    if head['mode'] == 'dict':
-      if token['list']:
-        raise token['data'].error("Invalid token")
-      if token['key'] in head['value']:
-        raise token['key'].error(f"Duplicate key '{token['key']}'")
+    if head.mode == StackEntryMode.Dict:
+      if token.kind != TokenKind.Default:
+        errors.append(InvalidTokenError(token.data))
+        continue
 
-      if token['value']:
-        head['value'][token['key']] = token['value']
+      if token.key in head.value:
+        errors.append(DuplicateKeyError(next(key for key in head.value if key == token.key), token.key))
+        continue
+
+      if token.value is not None:
+        head.value[token.key] = token.value
       else:
-        stack.append({
-          'mode': None,
-          'location': None,
-          'key': token['key'],
-          'value': None
-        })
+        stack.append(StackEntry(key=token.key))
 
-    elif head['mode'] == 'list':
-      if not token['list']:
-        raise token['data'].error("Invalid token")
+    elif head.mode == StackEntryMode.List:
+      if token.kind != TokenKind.List:
+        errors.append(InvalidTokenError(token.data))
+        continue
 
-      if token['key']:
-        if token['value']:
-          stack.append({
-            'mode': 'dict',
-            'location': token['key'].locrange + token['value'].locrange,
-            'key': None,
-            'value': { token['key']: token['value'] }
-          })
+      if token.key:
+        if token.value is not None:
+          stack.append(StackEntry(
+            mode=StackEntryMode.Dict,
+            location=(token.key.locrange + token.value.locrange),
+            value={ token.key: token.value }
+          ))
         else:
-          stack.append({
-            'mode': 'dict',
-            'location': token['key'].locrange,
-            'key': None,
-            'value': dict()
-          })
+          stack.append(StackEntry(
+            mode=StackEntryMode.Dict,
+            location=token.key.locrange,
+            value=dict()
+          ))
 
-          stack.append({
-            'mode': None,
-            'location': None,
-            'key': token['key'],
-            'value': None
-          })
+          stack.append(StackEntry(key=token.key))
       else:
-        head['value'].append(token['value'])
+        head.value.append(token.value)
 
-    if not head['location']:
-      head['location'] = token['data'].locrange
+    if not head.location:
+      head.location = token.data.locrange
     else:
-      head['location'] += token['data'].locrange
+      head.location += token.data.locrange
 
   descend(0)
 
-  return add_location(stack[0])
+  return add_location(stack[0]), errors, warnings
 
 
-def get_offset(line, origin):
-  return origin + len(line[(origin + 1):]) - len(line[(origin + 1):].lstrip()) + 1
+def add_location(entry):
+  if entry.location:
+    if entry.mode == StackEntryMode.Dict:
+      return LocatedDict(entry.value, entry.location)
+    if entry.mode == StackEntryMode.List:
+      return LocatedList(entry.value, entry.location)
+
+  return entry.value
 
 
 
 def parse(raw_source):
-  tokens, errors = tokenize(raw_source)
+  tokens, errors, _ = tokenize(raw_source)
 
   if errors:
     raise errors[0]
 
-  return analyze(tokens)
+  result, errors, _ = analyze(tokens)
+
+  if errors:
+    raise errors[0]
+
+  return result
 
 
 def dumps(obj, depth = 0, cont = True):
@@ -495,7 +589,7 @@ def format_source(
 
       if not target_space:
         target_line = line[target_offset:(target_offset + target_width)]
-        target_space_width = len(target_line) - len(target_line.lstrip())
+        target_space_width = len(target_line) - len(target_line.lstrip(Whitespace))
 
         if target_space_width < target_width:
           target_offset += target_space_width
@@ -507,15 +601,13 @@ def format_source(
 
 
 if __name__ == "__main__":
-  tokens, errors = tokenize(f"""
-foo:
-  - bar: 34
-    pp:
-      - foo
-      - p: x
-        s: a
-    s: n
-  - f
+  # | yy😀🤶🏻
+  #   - bar: é34
+
+  tokens, errors, warnings = tokenize(f"""
+a: b
+  c: d
+a: f
   """)
   # except LocatedError as e:
   #   e.display()
@@ -523,8 +615,18 @@ foo:
   from pprint import pprint
 
   pprint(tokens)
-  print()
-  pprint(errors)
+  # print()
+  if errors: pprint(errors)
+  if warnings: pprint(warnings)
+
+  value, errors, warnings = analyze(tokens)
+
+  print(">>", value)
+  # print(errors[1].original.locrange)
+  # print(errors[1].duplicate.locrange)
+
+  if errors: pprint(errors)
+  if warnings: pprint(warnings)
 
   # print(errors[0].target.locrange)
   # print(format_source(errors[0].target.locrange))

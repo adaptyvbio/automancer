@@ -96,7 +96,7 @@ class LocatedError(Exception):
 
         if not target_space:
           target_line = line[target_offset:(target_offset + target_width)]
-          target_space_width = len(target_line) - len(target_line.lstrip(Whitespace))
+          target_space_width = len(target_line) - len(target_line.lstrip())
 
           if target_space_width < target_width:
             target_offset += target_space_width
@@ -239,7 +239,7 @@ class Source(LocatedString):
 # - a:      key: 'a',   value: None,  kind: List
 # - a: b    key: 'a',   value: 'b',   kind: List
 # - b       key: None,  value: 'b',   kind: List
-# | a       key: None, value: 'a',    kind: Block
+# | a       key: None, value: 'a',    kind: String
 
 Whitespace = " "
 
@@ -257,7 +257,7 @@ class Token:
 class TokenKind(Enum):
   Default = 0
   List = 1
-  Block = 2
+  String = 2
 
 
 class ReaderError(Exception):
@@ -290,22 +290,21 @@ def tokenize(raw_source):
 
   # Check if all characters are ASCII
 
-  if not source.isascii():
-    for line in source.splitlines():
-      if not line.isascii():
-        start_index = None
+  for line in source.splitlines():
+    if not is_basic_ascii(line):
+      start_index = None
 
-        for index, ch in enumerate(line):
-          if ch.isascii():
-            if start_index is not None:
-              warnings.append(InvalidCharacterError(line[start_index:index]))
-              start_index = None
-          else:
-            if start_index is None:
-              start_index = index
+      for index, ch in enumerate(line):
+        if is_basic_ascii(ch):
+          if start_index is not None:
+            warnings.append(InvalidCharacterError(line[start_index:index]))
+            start_index = None
+        else:
+          if start_index is None:
+            start_index = index
 
-        if start_index is not None:
-          warnings.append(InvalidCharacterError(line[start_index:]))
+      if start_index is not None:
+        warnings.append(InvalidCharacterError(line[start_index:]))
 
 
   # Iterate over all lines
@@ -340,10 +339,11 @@ def tokenize(raw_source):
       value=None
     )
 
-    # If the line starts with a '|', then the token is a block and this iteration ends
+    # If the line starts with a '|', then the token is a string and this iteration ends
     if line[offset] == "|":
-      token.kind = TokenKind.Block
-      token.value = token.data
+      offset = get_offset(line, offset)
+      token.kind = TokenKind.String
+      token.value = line[offset:]
 
     # Otherwise, continue
     else:
@@ -374,6 +374,7 @@ def tokenize(raw_source):
       # Otherwise the line is invalid
       else:
         errors.append(InvalidLineError(token.data))
+        continue
 
     tokens.append(token)
 
@@ -382,6 +383,9 @@ def tokenize(raw_source):
 
 def get_offset(line, origin):
   return origin + len(line[(origin + 1):]) - len(line[(origin + 1):].lstrip(Whitespace)) + 1
+
+def is_basic_ascii(text):
+  return text.isascii() and text.isprintable()
 
 
 ## Static analysis
@@ -451,6 +455,9 @@ def analyze(tokens):
       if token.kind == TokenKind.List:
         head.mode = StackEntryMode.List
         head.value = list()
+      elif token.kind == TokenKind.String:
+        head.mode = StackEntryMode.String
+        head.value = str()
       else:
         head.mode = StackEntryMode.Dict
         head.value = dict()
@@ -492,6 +499,16 @@ def analyze(tokens):
       else:
         head.value.append(token.value)
 
+    elif head.mode == StackEntryMode.String:
+      if token.kind != TokenKind.String:
+        errors.append(InvalidTokenError(token.data))
+        continue
+
+      if head.value:
+        head.value += "\n"
+
+      head.value += token.value
+
     if not head.location:
       head.location = token.data.locrange
     else:
@@ -512,6 +529,43 @@ def add_location(entry):
   return entry.value
 
 
+## Exported functions
+
+# cont=True -> forced continue as for list items
+def dumps(obj, depth = 0, cont = False):
+  if isinstance(obj, dict):
+    output = "\n" if (not cont) and (depth > 0) else str()
+
+    for index, (key, value) in enumerate(obj.items()):
+      value_dumped = dumps(value, depth + 1, False)
+      value_space = " " if value_dumped[0] != "\n" else str()
+      output += f"{str() if cont and (index < 1) else '  ' * depth}{key}:{value_space}{value_dumped}"
+
+    return output
+
+  if isinstance(obj, list):
+    output = "\n" if (not cont) and (depth > 0) else str()
+
+    for item in obj:
+      output += f"{'  ' * depth}- {dumps(item, depth + 1, True)}"
+
+    return output
+
+  if isinstance(obj, bool):
+    return "true" if obj else "false"
+
+  if isinstance(obj, str):
+    if ("\n" in obj):
+      if not cont:
+        return ("\n" if depth > 0 else str()) + "\n".join(f"{'  ' * depth}| {line}" for line in obj.splitlines()) + "\n"
+    else:
+      return obj + "\n"
+
+  if (obj is None) and (not cont):
+    return "\n"
+
+  raise Exception("Invalid input")
+
 
 def parse(raw_source):
   tokens, errors, _ = tokenize(raw_source)
@@ -527,90 +581,24 @@ def parse(raw_source):
   return result
 
 
-def dumps(obj, depth = 0, cont = True):
-  if isinstance(obj, dict):
-    output = str()
-
-    for index, (key, value) in enumerate(obj.items()):
-      output += (str() if cont and (index < 1) else f"\n{'  ' * depth}") + f"{key}: {dumps(value, depth + 1, False)}"
-
-    return output
-
-  if isinstance(obj, list):
-    output = str()
-
-    for item in obj:
-      output += f"\n{'  ' * depth}- {dumps(item, depth + 1, True)}"
-
-    return output
-
-  if isinstance(obj, bool):
-    return "true" if obj else "false"
-
-
-  return str(obj)
-
-
 def loads(raw_source):
-  return analyze(tokenize(raw_source))
+  tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
+  result, analysis_errors, analysis_warnings = analyze(tokens)
+
+  return result, tokenization_errors + analysis_errors, tokenization_warnings + analysis_warnings
 
 
-# create_error = LocatedValue.create_error
-
-def format_source(
-  locrange,
-  *,
-  context_after = 2,
-  context_before = 4,
-  target_space = False
-):
-  output = str()
-
-  start = locrange.start_position
-  end = locrange.end_position
-
-  if (start.line == end.line) and (start.column == end.column):
-    end = Position(end.line, end.column + 1)
-
-  lines = locrange.source.splitlines()
-  width_line = math.ceil(math.log(end.line + 1 + context_after + 1, 10))
-  end_line = end.line - (1 if end.column == 0 else 0)
-
-  for line_index, line in enumerate(lines):
-    if (line_index < start.line - context_before) or (line_index > end_line + context_after):
-      continue
-
-    output += f" {str(line_index + 1).rjust(width_line, ' ')} | {line}\n"
-
-    if (line_index >= start.line) and (line_index <= end_line):
-      target_offset = start.column if line_index == start.line else 0
-      target_width = (end.column if line_index == end.line else len(line))\
-        - (start.column if line_index == start.line else 0)
-
-      if not target_space:
-        target_line = line[target_offset:(target_offset + target_width)]
-        target_space_width = len(target_line) - len(target_line.lstrip(Whitespace))
-
-        if target_space_width < target_width:
-          target_offset += target_space_width
-          target_width -= target_space_width
-
-      output += " " + " " * width_line + " | " "\033[31m" + " " * target_offset + "^" * target_width + "\033[39m" + "\n"
-
-  return output
-
+## Tests
 
 if __name__ == "__main__":
   # | yy😀🤶🏻
   #   - bar: é34
 
   tokens, errors, warnings = tokenize(f"""
-a: b
-  c: d
-a: f
+foo:
+  | x
+  | y
   """)
-  # except LocatedError as e:
-  #   e.display()
 
   from pprint import pprint
 
@@ -621,7 +609,16 @@ a: f
 
   value, errors, warnings = analyze(tokens)
 
-  print(">>", value)
+  value = ([
+    "foo",
+    { "baz": "34", "a": "b" },
+    "plouf",
+    { "baz": "34", "a": { "x": ["a", "b"], "p": None, "y": "5" } }
+  ])
+
+  print(">>", repr(value))
+  print("\n".join(f"`{line}`" for line in dumps(value).split("\n")))
+
   # print(errors[1].original.locrange)
   # print(errors[1].duplicate.locrange)
 

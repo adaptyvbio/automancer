@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "build": "npm run build:css && npm run build:js && npm run build:python",
+    "build:css": "sass styles:dist --no-source-map",
+    "build:js": "esbuild --bundle src/*/index.tsx --external:*.css --external:pr1 --external:react --format=esm --outbase=src --outdir=dist",
+    "build:python": "find dist -maxdepth 1 -mindepth 1 -exec touch {}/__init__.py \\;"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.16",
+    "esbuild": "^0.14.53",
+    "pr1": "file:../../../client",
+    "sass": "^1.54.4"
+  }
+}

@@ -1,5 +1,6 @@
 import asyncio
 
+from pr1.device import SelectNode, SelectNodeOption
 import serial
 import serial_asyncio
 
@@ -23,14 +24,49 @@ class Protocol(asyncio.Protocol):
     self._device._lost(exc)
 
 
+class RotaryValveNode(SelectNode):
+  id = "position"
+  label = "Position"
+
+  def __init__(self, device):
+    self._device = device
+
+  @property
+  def connected(self):
+    return self._device.connected
+
+  @property
+  def options(self):
+    valve_count = self._device._valve_count or 6
+
+    return [SelectNodeOption(
+      label=f"Valve {index + 1}",
+      value=(index + 1)
+    ) for index in range(valve_count)]
+
+  @property
+  def target_value(self):
+    return self._device._valve_target
+
+  @property
+  def value(self):
+    return self._device._valve_value
+
+  async def write(self, valve):
+    await self._device.try_rotate(valve)
+
+
 class RotaryValveDevice:
   model = "LSP rotary valve"
   owner = namespace
 
   def __init__(self, *, address, id, label, update_callback):
+    self.connected = False
     self.id = id
     self.label = label
-    self.nodes = list()
+    self.nodes = [
+      RotaryValveNode(device=self)
+    ]
 
     self._address = address
     self._update_callback = update_callback
@@ -39,6 +75,7 @@ class RotaryValveDevice:
     self._busy_future = None
     self._query_futures = list()
     self._reconnect_task = None
+    self._valve_count = None
 
     self._valve_target = None
     self._valve_value = None
@@ -47,7 +84,7 @@ class RotaryValveDevice:
     self._transport = None
 
   @property
-  def connected(self):
+  def _connected(self):
     return self._protocol is not None
 
   async def _connect(self):
@@ -70,15 +107,18 @@ class RotaryValveDevice:
     if self._busy:
       self._busy_future = asyncio.Future()
 
+    self._valve_count = await self.get_valve_count()
     self._valve_value = await self.get_valve()
+    print(">", self._valve_value)
+
+    self.connected = True
+    logger.info(f"Connected to '{self._address}'")
 
     if self._valve_target is None:
       self._valve_target = self._valve_value
 
     if self._valve_value != self._valve_target:
       await self.rotate(self._valve_target)
-
-    logger.info(f"Connected to '{self._address}'")
 
   def _reconnect(self, interval = 1):
     async def reconnect():
@@ -99,7 +139,7 @@ class RotaryValveDevice:
     self._reconnect_task = asyncio.create_task(reconnect())
 
   async def _query(self, command, dtype = None):
-    if not self.connected:
+    if not self._connected:
       raise Exception("Not connected")
 
     future = asyncio.Future()
@@ -109,10 +149,10 @@ class RotaryValveDevice:
     return self._parse(await future, dtype=dtype)
 
   def _lost(self, exc):
+    self.connected = False
+
     self._protocol = None
     self._transport = None
-
-    self._valve_value = None
 
     if exc is not None:
       logger.error(f"Lost connection to '{self._address}'")
@@ -124,13 +164,14 @@ class RotaryValveDevice:
         future.set_exception(exc)
 
       self._reconnect()
+      self._update_callback()
 
     self._busy_future = None
     self._query_futures.clear()
 
   def _parse(self, data, dtype = None):
     response = data[3:-1].decode("utf-8")
-    print(f"Status: {data[2]:08b}")
+    # print(f"Status: {data[2]:08b}")
 
     if dtype == bool:
       return (response == "1")
@@ -140,8 +181,6 @@ class RotaryValveDevice:
     return response
 
   def _receive(self, data):
-    print(">>", data)
-
     was_busy = self._busy
     self._busy = (data[2] & (1 << 5)) < 1
 
@@ -197,6 +236,12 @@ class RotaryValveDevice:
     self._valve_target = valve
     await self._run(f"b{valve}R")
     self._valve_value = await self.get_valve()
+
+  async def try_rotate(self, valve):
+    if self.connected:
+      await self.rotate(valve)
+    else:
+      self._valve_target = valve
 
   async def wait(self, delay):
     await self._run(f"M{round(delay * 1000)}R")

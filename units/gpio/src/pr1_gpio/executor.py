@@ -1,3 +1,5 @@
+import asyncio
+
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
 
@@ -10,10 +12,13 @@ class Executor(BaseExecutor):
 
   async def instruct(self, instruction):
     device = self._host.devices[instruction["deviceId"]]
+    node = device.nodes[instruction["nodeIndex"]]
 
-    if device.connected:
-      node = device.nodes[instruction["nodeIndex"]]
-      await node.write(instruction["value"])
+    async def write():
+      await node.write_import(instruction["value"])
+      self._host.update_callback()
+
+    asyncio.create_task(write())
 
   def export(self):
     return {
@@ -28,10 +33,8 @@ class Executor(BaseExecutor):
             {
               "id": node.id,
               "connected": node.connected,
-              "data": {
-                "type": node.type,
-                "value": node.value
-              }
+              "data": node.export(),
+              "label": node.label
             } for node in device.nodes
           ]
         } for device_name, device in self._host.devices.items()

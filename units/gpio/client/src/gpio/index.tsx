@@ -5,6 +5,33 @@ import { React } from 'pr1';
 export const namespace = 'gpio';
 
 
+export interface ExecutorState {
+  devices: Record<string, {
+    id: string;
+    connected: boolean;
+    label: string | null;
+    model: string;
+    owner: string;
+
+    nodes: {
+      id: string;
+      connected: boolean;
+      label: string;
+      data: {
+        type: 'bool';
+        targetValue: boolean | null;
+        value: boolean;
+      } | {
+        type: 'select';
+        options: { label: string; }[];
+        targetValue: number | null;
+        value: number;
+      };
+    }[];
+  }>;
+}
+
+
 export function getGeneralTabs() {
   return [
     {
@@ -18,25 +45,7 @@ export function getGeneralTabs() {
 
 
 function DevicesTab(props: ChipTabComponentProps) {
-  let executor = props.host.state.executors[namespace] as {
-    devices: Record<string, {
-      id: string;
-      connected: boolean;
-      label: string | null;
-      model: string;
-      owner: string;
-
-      nodes: {
-        id: string;
-        connected: boolean;
-        label: string;
-        data: {
-          type: 'bool';
-          value: boolean;
-        };
-      }[];
-    }>;
-  };
+  let executor = props.host.state.executors[namespace] as ExecutorState;
 
   return (
     <main>
@@ -57,8 +66,7 @@ function DevicesTab(props: ChipTabComponentProps) {
               switch (node.data.type) {
                 case 'bool': return (
                   <Form.Select
-                    disabled={!node.connected}
-                    label={node.id}
+                    label={node.label + (node.connected ? '' : ' (disconnected)')}
                     onInput={(value) => {
                       props.host.backend.instruct({
                         [namespace]: {
@@ -76,6 +84,40 @@ function DevicesTab(props: ChipTabComponentProps) {
                     value={node.data.value ? 'true' : 'false'}
                     key={node.id} />
                 );
+
+                case 'select': {
+                  let busy = (node.data.value !== node.data.targetValue);
+                  let unknown = (node.data.value === null);
+
+                  return (
+                    <Form.Select
+                      label={node.label + (node.connected ? '' : ' (disconnected)')}
+                      onInput={(value) => {
+                        props.host.backend.instruct({
+                          [namespace]: {
+                            type: 'setValue',
+                            deviceId: device.id,
+                            nodeIndex: nodeIndex,
+                            value
+                          }
+                        });
+                      }}
+                      options={[
+                        ...(busy
+                          ? [{ id: -1, label: `${!unknown ? (node.data.options[node.data.value].label + ' ') : ''}→ ${node.data.options[node.data.targetValue!].label}`, disabled: true }]
+                          : []),
+                        ...((unknown && !busy)
+                          ? [{ id: -1, label: '–', disabled: true }]
+                          : []),
+                        ...node.data.options.map((option, index) => ({
+                          id: index,
+                          label: option.label
+                        }))
+                      ]}
+                      value={(busy || unknown) ? -1 : node.data.value}
+                      key={node.id} />
+                  );
+                }
               }
             })}
           </Form.Form>

@@ -6,8 +6,6 @@ from pr1.units.base import BaseRunner
 from . import logger, namespace
 
 
-Voice = namedtuple("Voice", ["locale", "name"])
-
 class Runner(BaseRunner):
   def __init__(self, *, chip, host):
     self._chip = chip

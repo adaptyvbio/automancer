@@ -11,10 +11,12 @@ setup(
     'pr1.units': [
       "metadata = pr1_metadata",
       "say = pr1_say",
+      "timer = pr1_timer"
     ]
   },
   package_data={
     "pr1_metadata": ["*"],
-    "pr1_say.client": ["*"]
+    "pr1_say.client": ["*"],
+    "pr1_timer.client": ["*"]
   }
 )

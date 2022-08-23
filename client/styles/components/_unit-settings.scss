@@ -81,6 +81,9 @@
     height: 100%;
 
     background-color: #fff;
+
+    -webkit-mask-position: center;
+    -webkit-mask-repeat: no-repeat;
     -webkit-mask-size: contain;
   }
 

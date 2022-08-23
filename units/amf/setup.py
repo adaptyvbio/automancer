@@ -13,6 +13,7 @@ setup(
     ]
   },
   package_data={
-    "pr1_amf.client": ["*"]
+    "pr1_amf.client": ["*"],
+    "pr1_amf.data": ["*"]
   }
 )

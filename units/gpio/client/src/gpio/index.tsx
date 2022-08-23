@@ -103,18 +103,15 @@ function DevicesTab(props: ChipTabComponentProps) {
                         });
                       }}
                       options={[
-                        ...(busy
-                          ? [{ id: -1, label: `${!unknown ? (node.data.options[node.data.value].label + ' ') : ''}→ ${node.data.options[node.data.targetValue!].label}`, disabled: true }]
-                          : []),
                         ...((unknown && !busy)
                           ? [{ id: -1, label: '–', disabled: true }]
                           : []),
                         ...node.data.options.map((option, index) => ({
                           id: index,
-                          label: option.label
+                          label: (busy && (node.data.targetValue === index) ? ((!unknown ? (node.data.options[node.data.value].label + ' ') : '') + '→ ') : '') + option.label
                         }))
                       ]}
-                      value={(busy || unknown) ? -1 : node.data.value}
+                      value={busy ? node.data.targetValue : (unknown ? -1 : node.data.value)}
                       key={node.id} />
                   );
                 }

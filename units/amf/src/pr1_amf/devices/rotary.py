@@ -108,17 +108,22 @@ class RotaryValveDevice:
       self._busy_future = asyncio.Future()
 
     self._valve_count = await self.get_valve_count()
-    self._valve_value = await self.get_valve()
-    print(">", self._valve_value)
+    valve_value = await self.get_valve()
 
+    if valve_value == 0:
+      await self.home()
+      valve_value = await self.get_valve()
+
+    self._valve_value = valve_value
     self.connected = True
-    logger.info(f"Connected to '{self._address}'")
 
     if self._valve_target is None:
       self._valve_target = self._valve_value
 
     if self._valve_value != self._valve_target:
       await self.rotate(self._valve_target)
+
+    logger.info(f"Connected to '{self._address}'")
 
   def _reconnect(self, interval = 1):
     async def reconnect():
@@ -171,7 +176,6 @@ class RotaryValveDevice:
 
   def _parse(self, data, dtype = None):
     response = data[3:-1].decode("utf-8")
-    # print(f"Status: {data[2]:08b}")
 
     if dtype == bool:
       return (response == "1")

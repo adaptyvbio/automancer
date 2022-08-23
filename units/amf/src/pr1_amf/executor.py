@@ -2,6 +2,7 @@ from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
 
 from .devices.rotary import RotaryValveDevice
+from .devices.rotary_mock import MockRotaryValveDevice
 
 
 conf_schema = sc.Schema({
@@ -21,18 +22,26 @@ class Executor(BaseExecutor):
     self._host = host
 
     for device_conf in conf['devices']:
+      device_addr = device_conf['address']
       device_id = device_conf['id']
 
       if device_id in self._host.devices:
         raise device_id.error(f"Duplicate device id '{device_id}'")
 
       if device_conf['kind'] == 'rotary':
-        device = RotaryValveDevice(
-          address=device_conf['address'],
-          id=device_id,
-          label=device_conf.get('label'),
-          update_callback=self._host.update_callback
-        )
+        if device_addr == ':mock:':
+          device = MockRotaryValveDevice(
+            id=device_id,
+            label=device_conf['label'],
+            update_callback=self._host.update_callback
+          )
+        else:
+          device = RotaryValveDevice(
+            address=device_addr,
+            id=device_id,
+            label=device_conf.get('label'),
+            update_callback=self._host.update_callback
+          )
 
       self._devices[device_id] = device
       self._host.devices[device_id] = device
@@ -43,4 +52,11 @@ class Executor(BaseExecutor):
 
   async def destroy(self):
     for device in self._devices.values():
+      del self._host.devices[device.id]
       await device.destroy()
+
+  # @property
+  # def hash(self):
+  #   return fast_hash(json.dumps({
+  #     device.id: device.hash
+  #   }))

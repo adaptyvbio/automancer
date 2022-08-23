@@ -16,16 +16,15 @@ class DeviceInformation:
     }
 
 
-# class BooleanNode:
-#   def export(self):
-#     return {
-#       "type": "value",
-#       "kind": "boolean",
-#       "value": self.value
-#     }
+class BooleanNode:
+  def export(self):
+    return {
+      "type": "boolean",
+      "value": self.value
+    }
 
-#   async def write_import(self, value):
-#     await self.write(value)
+  async def write_import(self, value):
+    await self.write(value)
 
 
 SelectNodeOption = namedtuple('SelectNodeOption', ['label', 'value'])

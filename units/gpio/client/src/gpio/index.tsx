@@ -16,16 +16,16 @@ export interface ExecutorState {
     nodes: {
       id: string;
       connected: boolean;
-      label: string;
+      label: string | null;
       data: {
-        type: 'bool';
+        type: 'boolean';
         targetValue: boolean | null;
-        value: boolean;
+        value: boolean | null;
       } | {
         type: 'select';
         options: { label: string; }[];
         targetValue: number | null;
-        value: number;
+        value: number | null;
       };
     }[];
   }>;
@@ -63,27 +63,36 @@ function DevicesTab(props: ChipTabComponentProps) {
 
           <Form.Form>
             {device.nodes.map((node, nodeIndex) => {
+              let label = (node.label ?? node.id);
+
               switch (node.data.type) {
-                case 'bool': return (
-                  <Form.Select
-                    label={node.label + (node.connected ? '' : ' (disconnected)')}
-                    onInput={(value) => {
-                      props.host.backend.instruct({
-                        [namespace]: {
-                          type: 'setValue',
-                          deviceId: device.id,
-                          nodeIndex: nodeIndex,
-                          value: (value == 'true')
-                        }
-                      });
-                    }}
-                    options={[
-                      { id: 'false', label: 'False' },
-                      { id: 'true', label: 'True' }
-                    ]}
-                    value={node.data.value ? 'true' : 'false'}
-                    key={node.id} />
-                );
+                case 'boolean': {
+                  let unknown = (node.data.value === null);
+
+                  return (
+                    <Form.Select
+                      label={label + (node.connected ? '' : ' (disconnected)')}
+                      onInput={(value) => {
+                        props.host.backend.instruct({
+                          [namespace]: {
+                            type: 'setValue',
+                            deviceId: device.id,
+                            nodeIndex: nodeIndex,
+                            value: (value == 'true')
+                          }
+                        });
+                      }}
+                      options={[
+                        ...(unknown
+                          ? [{ id: '_', label: '–', disabled: true }]
+                          : []),
+                        { id: 'false', label: 'False' },
+                        { id: 'true', label: 'True' }
+                      ]}
+                      value={!unknown ? (node.data.value ? 'true' : 'false') : '_'}
+                      key={node.id} />
+                  );
+                }
 
                 case 'select': {
                   let busy = (node.data.value !== node.data.targetValue);
@@ -91,7 +100,7 @@ function DevicesTab(props: ChipTabComponentProps) {
 
                   return (
                     <Form.Select
-                      label={node.label + (node.connected ? '' : ' (disconnected)')}
+                      label={label + (node.connected ? '' : ' (disconnected)')}
                       onInput={(value) => {
                         props.host.backend.instruct({
                           [namespace]: {
@@ -108,7 +117,7 @@ function DevicesTab(props: ChipTabComponentProps) {
                           : []),
                         ...node.data.options.map((option, index) => ({
                           id: index,
-                          label: (busy && (node.data.targetValue === index) ? ((!unknown ? (node.data.options[node.data.value].label + ' ') : '') + '→ ') : '') + option.label
+                          label: (busy && (node.data.targetValue === index) ? ((!unknown ? (node.data.options[node.data.value!].label + ' ') : '') + '→ ') : '') + option.label
                         }))
                       ]}
                       value={busy ? node.data.targetValue : (unknown ? -1 : node.data.value)}

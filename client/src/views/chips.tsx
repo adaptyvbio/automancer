@@ -36,10 +36,6 @@ export class ViewChips extends React.Component<ViewChipsProps> {
       .filter(chip => (chip.condition !== ChipCondition.Ok))
       .sort(seqOrd(function* (a, b, rules) {
         yield rules.numeric(a.condition, b.condition);
-
-        if (('metadata' in a) && ('metadata' in b)) {
-          yield rules.numeric(getChipMetadata(b).creationDate, getChipMetadata(a).creationDate);
-        }
       }));
 
     return (

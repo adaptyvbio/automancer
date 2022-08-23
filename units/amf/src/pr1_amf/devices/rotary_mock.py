@@ -39,7 +39,7 @@ class MockRotaryValveDevice:
   model = "LSP rotary valve (mock)"
   owner = namespace
 
-  def __init__(self, *, id, label, update_callback, valve_count = 6):
+  def __init__(self, *, id, label, update_callback, valve_count):
     self.connected = False
     self.id = id
     self.label = label
@@ -59,6 +59,10 @@ class MockRotaryValveDevice:
 
   async def destroy(self):
     pass
+
+  @property
+  def hash(self):
+    return ("rotary_valve", self._valve_count)
 
   async def rotate(self, valve):
     self._valve_target = valve

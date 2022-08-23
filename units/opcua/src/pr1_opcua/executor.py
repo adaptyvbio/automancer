@@ -1,8 +1,10 @@
 import asyncio
-from asyncua import Client, ua
-from pr1.util import schema as sc
-from pr1.units.base import BaseExecutor
 import logging
+
+from asyncua import Client, ua
+from pr1.device import BooleanNode
+from pr1.units.base import BaseExecutor
+from pr1.util import schema as sc
 
 from . import logger, namespace
 
@@ -11,9 +13,9 @@ logging.getLogger("asyncua.client.client").setLevel(logging.WARNING)
 
 variants_map = {
   'bool': ua.VariantType.Boolean,
-  'i32': ua.VariantType.Int32,
-  'f32': ua.VariantType.Float,
-  'f64': ua.VariantType.Double
+  # 'i32': ua.VariantType.Int32,
+  # 'f32': ua.VariantType.Float,
+  # 'f64': ua.VariantType.Double
 }
 
 conf_schema = sc.Schema({
@@ -23,6 +25,7 @@ conf_schema = sc.Schema({
     'id': str,
     'nodes': sc.Noneable(sc.List({
       'id': str,
+      'label': sc.Optional(str),
       'location': str,
       'type': sc.Or(*variants_map.keys())
     }))
@@ -30,9 +33,10 @@ conf_schema = sc.Schema({
 })
 
 
-class DeviceNode:
-  def __init__(self, id, node, type):
+class DeviceNode(BooleanNode):
+  def __init__(self, *, id, label, node, type):
     self.id = id
+    self.label = label
     self.type = type
     self.value = None
 
@@ -59,10 +63,10 @@ class DeviceNode:
     return await self._node.read_value() if self.connected else self.value
 
   async def write(self, value):
+    self.value = value
+
     if self.connected:
       await self._node.write_value(ua.DataValue(value))
-
-    self.value = value
 
 
 class Device:
@@ -84,10 +88,11 @@ class Device:
     self._node_ids = { node['id']: node_index for node_index, node in enumerate(nodes_conf) }
     self.nodes = [
       DeviceNode(
-        id=node['id'],
-        node=self._client.get_node(node['location'].value),
-        type=node['type']
-      ) for node in nodes_conf
+        id=node_conf['id'],
+        label=node_conf.get('label'),
+        node=self._client.get_node(node_conf['location'].value),
+        type=node_conf['type']
+      ) for node_conf in nodes_conf
     ]
 
 
@@ -146,7 +151,6 @@ class Device:
 
         for node in self.nodes:
           node.connected = False
-          node.value = None
 
         self._reconnect()
         self._update_callback()

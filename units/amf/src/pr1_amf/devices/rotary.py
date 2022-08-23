@@ -37,12 +37,10 @@ class RotaryValveNode(SelectNode):
 
   @property
   def options(self):
-    valve_count = self._device._valve_count or 6
-
     return [SelectNodeOption(
       label=f"Valve {index + 1}",
       value=(index + 1)
-    ) for index in range(valve_count)]
+    ) for index in range(self._device._valve_count)]
 
   @property
   def target_value(self):
@@ -60,7 +58,7 @@ class RotaryValveDevice:
   model = "LSP rotary valve"
   owner = namespace
 
-  def __init__(self, *, address, id, label, update_callback):
+  def __init__(self, *, address, id, label, update_callback, valve_count):
     self.connected = False
     self.id = id
     self.label = label
@@ -75,7 +73,7 @@ class RotaryValveDevice:
     self._busy_future = None
     self._query_futures = list()
     self._reconnect_task = None
-    self._valve_count = None
+    self._valve_count = valve_count
 
     self._valve_target = None
     self._valve_value = None
@@ -107,7 +105,9 @@ class RotaryValveDevice:
     if self._busy:
       self._busy_future = asyncio.Future()
 
-    self._valve_count = await self.get_valve_count()
+    if (await self.get_valve_count()) != self._valve_count:
+      raise Exception("Invalid valve count")
+
     valve_value = await self.get_valve()
 
     if valve_value == 0:
@@ -222,6 +222,10 @@ class RotaryValveDevice:
 
     if self._reconnect_task:
       self._reconnect_task.cancel()
+
+  @property
+  def hash(self):
+    return ("rotary_valve", self._valve_count)
 
 
   async def get_unique_id(self):

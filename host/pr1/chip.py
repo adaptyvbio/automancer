@@ -217,7 +217,7 @@ class Chip(BaseChip):
           'current_version': unit.version,
           'target_version': unit_spec['version']
         })
-      elif unit_spec['hash'] is not None:
+      elif hasattr(unit, 'Executor'):
         executor = host.executors[namespace]
 
         if executor.hash != unit_spec['hash']:

@@ -2,8 +2,8 @@ import * as React from 'react';
 import seqOrd from 'seq-ord';
 
 import { analyzeProtocol } from '../analysis';
-import { Host } from '../application';
-import { ChipId } from '../backends/common';
+import { Host } from '../host';
+import { Chip, ChipId } from '../backends/common';
 import { formatAbsoluteTime } from '../format';
 import { Units } from '../units';
 import { Pool } from '../util';
@@ -21,7 +21,7 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
   pool = new Pool();
 
   get chip() {
-    return this.props.host.state.chips[this.props.chipId];
+    return this.props.host.state.chips[this.props.chipId] as Chip;
   }
 
   render() {
@@ -53,15 +53,15 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
         : 0
     );
 
-    let features = Units
-      .sort(seqOrd(function* ([aNamespace, _aUnit], [bNamespace, _bUnit], rules) {
+    let features = Object.values(this.props.host.units)
+      .sort(seqOrd(function* (a, b, rules) {
         yield rules.binary(
-          bNamespace === currentSegment.processNamespace,
-          aNamespace === currentSegment.processNamespace
+          b.namespace === currentSegment.processNamespace,
+          a.namespace === currentSegment.processNamespace
         );
       }))
-      .flatMap(([_namespace, Unit]) => {
-        return Unit.createFeatures?.({
+      .flatMap((unit) => {
+        return unit.createFeatures?.({
           protocol,
           segment: currentSegment,
           segmentIndex: currentSegmentIndex
@@ -131,6 +131,7 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
 
         <ProtocolOverview
           analysis={analysis}
+          host={this.props.host}
           master={master}
           protocol={master.protocol}
           setLocation={(location) => {

@@ -362,7 +362,7 @@ class Host:
       protocol = Protocol(
         request["source"],
         host=self,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() }
+        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
       )
 
       location = {

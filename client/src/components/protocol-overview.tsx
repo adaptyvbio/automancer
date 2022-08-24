@@ -9,11 +9,12 @@ import { type Analysis, analyzeProtocol } from '../analysis';
 import type { Master, MasterEntry, Protocol, ProtocolLocation } from '../backends/common';
 // import { ContextMenuArea } from '../components/context-menu-area';
 import * as util from '../util';
-import { Units } from '../units';
+import { Host } from '../host';
 
 
 export function ProtocolOverview(props: {
   analysis?: Analysis;
+  host: Host;
   location?: Plan['location'];
   master?: Master;
   protocol: Protocol;
@@ -80,14 +81,14 @@ export function ProtocolOverview(props: {
                           {new Array(step.seq[1] - step.seq[0]).fill(0).map((_, segmentRelIndex) => {
                             let segmentIndex = step.seq[0] + segmentRelIndex;
                             let segment = props.protocol.segments[segmentIndex];
-                            let operatorNamespace = segment.processNamespace;
+                            let processNamespace = segment.processNamespace;
 
-                            let features = Units
-                              .sort(seqOrd(function* ([aNamespace, _aUnit], [bNamespace, _bUnit], rules) {
-                                yield rules.binary(bNamespace === operatorNamespace, aNamespace === operatorNamespace);
+                            let features = Object.values(props.host.units)
+                              .sort(seqOrd(function* (a, b, rules) {
+                                yield rules.binary(b.namespace === processNamespace, a.namespace === processNamespace);
                               }))
-                              .flatMap(([_namespace, Unit]) => {
-                                return Unit.createFeatures?.({
+                              .flatMap((unit) => {
+                                return unit.createFeatures?.({
                                   location: props.location,
                                   protocol: props.protocol,
                                   segment,

@@ -1,16 +1,18 @@
 import { setIn } from 'immutable';
 import * as React from 'react';
 
-import type { Host, Route } from '../application';
+import type { Route } from '../application';
 import type { Draft } from '../draft';
-import { ChipId, ProtocolLocation } from '../backends/common';
+import { Chip, ChipCondition, ChipId, ProtocolLocation } from '../backends/common';
 import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
+import { Host } from '../host';
 import { Codes, Units } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
+import { getChipMetadata } from '../backends/misc';
 
 
 export interface Plan {
@@ -56,11 +58,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
   }
 
   render() {
-    let chips = Object.values(this.props.host.state.chips);
+    let chips = (
+      Object.values(this.props.host.state.chips)
+        .filter((chip) => chip.condition === ChipCondition.Ok)
+    ) as Chip[];
     let protocol = this.props.draft.compiled?.protocol;
 
     let plan = this.state.plan;
-    let chip = plan.context && this.props.host.state.chips[plan.context.chipId];
+    let chip = plan.context && (this.props.host.state.chips[plan.context.chipId] as Chip);
 
     return (
       <div className="blayout-contents">
@@ -78,6 +83,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
               </div>
 
               <ProtocolOverview
+                host={this.props.host}
                 location={plan.location}
                 protocol={protocol}
                 setLocation={(location) => {
@@ -94,7 +100,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                 <div className="superimposed-root">
                   <select className="superimposed-target" onInput={(event) => {
                     let chipId = event.currentTarget.value;
-                    let chip = this.props.host.state.chips[chipId];
+                    let _chip = this.props.host.state.chips[chipId] as Chip;
 
                     this.setState((state) => ({
                       plan: {
@@ -102,9 +108,9 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                         context: {
                           chipId,
                           data: Object.fromEntries(
-                            Units
-                              .filter(([_namespace, Unit]) => Unit.createCode)
-                              .map(([namespace, Unit]) => [namespace, Unit.createCode!(protocol!)])
+                            Object.values(this.props.host.units)
+                              .filter((unit) => unit.createCode)
+                              .map((unit) => [unit.namespace, unit.createCode!(protocol!)])
                           ) as unknown as Codes
                         }
                       }
@@ -115,13 +121,13 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                       <option
                         value={chip.id}
                         key={chip.id}
-                        disabled={(Units.some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
-                        {chip.name}
+                        disabled={(Object.values(this.props.host.units).some((unit) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
+                        {getChipMetadata(chip).title}
                       </option>
                     ))}
                   </select>
                   <div className="btn illustrated-root superimposed-visible">
-                    <div>{chip ? `Chip: ${chip.name}` : 'Select chip'}</div>
+                    <div>{chip ? `Chip: ${getChipMetadata(chip).title}` : 'Select experiment'}</div>
                     <div className="btn-icon"><Icon name="expand_more" /></div>
                   </div>
                 </div>
@@ -130,8 +136,8 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
               {plan.context && (
                 <>
                   <div className="pconfig-root">
-                    {Units.map(([namespace, unit]) => {
-                      if (!unit.CodeEditor || !(namespace in plan.context!.data)) {
+                    {Object.values(this.props.host.units).map((unit) => {
+                      if (!unit.CodeEditor || !(unit.namespace in plan.context!.data)) {
                         return null;
                       }
 
@@ -139,14 +145,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                         <unit.CodeEditor
                           chip={chip!}
                           draft={this.props.draft}
-                          code={plan.context!.data[namespace as keyof Codes]}
+                          code={plan.context!.data[unit.namespace as keyof Codes]}
                           host={this.props.host}
                           setCode={(code: Codes[keyof Codes]) => {
                             this.setState((state) => ({
-                              plan: setIn(state.plan, ['context', 'data', namespace], code)
+                              plan: setIn(state.plan, ['context', 'data', unit.namespace], code)
                             }));
                           }}
-                          key={namespace} />
+                          key={unit.namespace} />
                       );
                     })}
                   </div>

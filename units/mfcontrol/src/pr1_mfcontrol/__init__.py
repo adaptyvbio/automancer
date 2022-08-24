@@ -17,4 +17,5 @@ client_path = Path(files(__name__ + '.client'))
 logger = parent_logger.getChild(namespace)
 
 from .executor import Executor
+from .parser import Parser
 from .runner import Runner

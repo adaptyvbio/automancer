@@ -2,13 +2,13 @@
 
 import type { Chip, CreateFeaturesOptions, Features, Host, Protocol } from 'pr1';
 
-// import { CodeEditor } from './code-editor';
 import { ManualControl } from './manual-control';
 import * as util from './util';
 import ReprData from '../../../src/pr1_mfcontrol/data/repr.json';
 import mainStyles from './index.css' assert { type: 'css' };
 
 
+export { CodeEditor } from './code-editor';
 export { MatrixEditor } from './matrix-editor';
 
 export const namespace = 'mfcontrol';
@@ -30,7 +30,7 @@ export interface Model {
     diagramRef: [number, number] | null;
     inverse: boolean;
     label: string | null;
-    repr: 'barrier' | 'flow' | 'isolate' | 'move' | 'push';
+    repr: keyof typeof ReprData['icons'];
   }[];
   groups: {
     channelIndices: number[];
@@ -97,12 +97,13 @@ export interface SegmentData {
 }
 
 
-// export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
-//   let matrix = chip.matrices[namespace];
-//   let protocolData = protocol.data[namespace];
+export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
+  let runner = chip.runners[namespace] as Runner;
+  let protocolData = protocol.data[namespace] as ProtocolData;
 
-//   return (matrix.modelId !== null) && (!protocolData.modelId || (matrix.modelId === protocolData.modelId));
-// }
+  // TODO: check model hash instead of id
+  return (runner.settings.model !== null) && (!protocolData.modelId || (runner.settings.model.id === protocolData.modelId));
+}
 
 export function createCode(protocol: Protocol): Code {
   let protocolData = protocol.data[namespace];

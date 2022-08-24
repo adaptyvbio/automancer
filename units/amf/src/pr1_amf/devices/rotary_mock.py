@@ -2,7 +2,7 @@ import asyncio
 
 from pr1.device import SelectNode, SelectNodeOption
 
-from .. import namespace
+from .. import logger, namespace
 
 
 class MockRotaryValveNode(SelectNode):
@@ -71,10 +71,15 @@ class MockRotaryValveDevice:
       await self._rotation_future
 
     async def run():
+      logger.debug(f"Mock valve rotating to {valve}")
       await asyncio.sleep(1)
+      logger.debug(f"Mock valve rotated to {valve}")
 
       self._rotation_future = None
       self._valve_value = valve
 
     self._rotation_future = asyncio.ensure_future(run())
     await self._rotation_future
+
+  async def try_rotate(self, valve):
+    await self.rotate(valve)

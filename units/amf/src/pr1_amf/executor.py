@@ -9,13 +9,13 @@ from .devices.rotary_mock import MockRotaryValveDevice
 
 
 conf_schema = sc.Schema({
-  'devices': sc.List({
+  'devices': sc.Optional(sc.List({
     'address': str,
     'kind': sc.Or('rotary'),
     'id': str,
     'label': sc.Optional(str),
     'valve_count': sc.ParseType(int)
-  })
+  }))
 })
 
 
@@ -25,7 +25,7 @@ class Executor(BaseExecutor):
     self._devices = dict()
     self._host = host
 
-    for device_conf in self._conf['devices']:
+    for device_conf in self._conf.get('devices', dict()):
       device_addr = device_conf['address']
       device_id = device_conf['id']
 
@@ -51,6 +51,8 @@ class Executor(BaseExecutor):
 
       self._devices[device_id] = device
       self._host.devices[device_id] = device
+
+    self._main_device = next(iter(self._devices.values()), None)
 
   async def initialize(self):
     for device in self._devices.values():

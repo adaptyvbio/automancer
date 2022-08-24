@@ -171,7 +171,8 @@ class EvaluatedCompositeValue(LocatedValue):
 
 def create_utils(globals):
   def expr(unclassified_expr):
-    return LocatedValue.extract(unclassified_expr.to_python().evaluate(globals))
+    expr = unclassified_expr.interpolate().get_single_expr()
+    return LocatedValue.extract(expr.evaluate(globals)) if expr else unclassified_expr.to_str()
 
   return {
     'expr': expr

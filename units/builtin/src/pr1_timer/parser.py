@@ -30,25 +30,18 @@ def parse_duration(raw_expr, context):
   python_expr = interpolate(raw_expr, context).get_single_expr()
 
   if python_expr:
-    def dur(input):
-      if isinstance(input, UnclassifiedExpr):
-        return parse_duration(input.value, input.context)
+    evaluated = python_expr.evaluate()
+    value = evaluated.value
 
-      try:
-        return parse_duration_expr(input)
-      except LocatedError:
-        raise
-      except Exception as e:
-        raise raw_expr.error(e.args[0])
+    if isinstance(value, UnclassifiedExpr):
+      value = value.to_str()
 
-    evaluated = python_expr.evaluate({
-      'dur': dur
-    })
-
-    duration = evaluated.value
-
-    if (not isinstance(duration, float)) and (not isinstance(duration, int)):
-      raise evaluated.error(f"Unexpected value {repr(duration)}, expected scalar")
+    if isinstance(value, float) or isinstance(value, int):
+      duration = value
+    elif isinstance(value, str):
+      duration = parse_duration_expr(value)
+    else:
+      raise evaluated.error(f"Unexpected value {repr(value)} for duration")
   else:
     duration = parse_duration_expr(raw_expr)
 

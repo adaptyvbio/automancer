@@ -44,10 +44,12 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
     if (!this.props.paused && this.props.targetEndTime) {
       let duration = this.props.targetEndTime - Date.now();
 
-      this.animation = this.ref.current!.animate([
-        { width: `${this.props.value * 100}%` },
-        { width: '100%' }
-      ], { duration, fill: 'forwards' });
+      if (duration > 0) {
+        this.animation = this.ref.current!.animate([
+          { width: `${this.props.value * 100}%` },
+          { width: '100%' }
+        ], { duration, fill: 'forwards' });
+      }
     }
   }
 

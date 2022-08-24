@@ -163,7 +163,7 @@ class Master:
         {
           "error": entry['error'],
           "paused": entry['pause_options'] is not None,
-          "processState": self._process_runner.export_state(entry['process_state']),
+          "processState": self.chip.runners[self.protocol.segments[entry['segment_index']].process_namespace].export_state(entry['process_state']),
           "segmentIndex": entry['segment_index'],
           "time": round(entry['time'] * 1000)
         } for entry in self._log_data

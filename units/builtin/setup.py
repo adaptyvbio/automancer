@@ -9,12 +9,16 @@ setup(
 
   entry_points={
     'pr1.units': [
+      "builtin_constructs = pr1_builtin_constructs",
+      "idle = pr1_idle",
       "metadata = pr1_metadata",
       "say = pr1_say",
       "timer = pr1_timer"
     ]
   },
   package_data={
+    "pr1_builtin_constructs": ["*"],
+    "pr1_idle": ["*"],
     "pr1_metadata": ["*"],
     "pr1_say.client": ["*"],
     "pr1_timer.client": ["*"]

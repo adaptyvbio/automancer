@@ -70,7 +70,7 @@ class App:
 
     if conf_path.exists():
       try:
-        conf = reader.loads((self.data_dir / "app.yml").open().read())
+        conf = reader.parse((self.data_dir / "app.yml").open().read())
         conf = conf_schema.transform(conf)
       except reader.LocatedError as e:
         e.display()

@@ -57,7 +57,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
-    let protocol = this.props.draft.compiled?.protocol;
+    let protocol = this.props.draft.compilation?.protocol;
 
     let plan = this.state.plan;
     let chip = plan.context && this.props.host.state.chips[plan.context.chipId];

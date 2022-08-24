@@ -170,44 +170,79 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       }
     }, { signal: this.controller.signal });
 
-    this.props.appBackend.onDraftsUpdate(({ options, update }) => {
-      this.setState((state) => {
-        let drafts = { ...state.drafts };
-        let openDraftIds = state.openDraftIds;
+    // this.props.appBackend.onDraftsUpdate(({ options, update }) => {
+    //   this.setState((state) => {
+    //     let drafts = { ...state.drafts };
+    //     let openDraftIds = state.openDraftIds;
 
-        for (let [draftId, draftItem] of Object.entries(update)) {
-          if (!draftItem) {
-            delete drafts[draftId];
-            openDraftIds = openDraftIds.remove(draftId);
+    //     for (let [draftId, draftItem] of Object.entries(update)) {
+    //       if (!draftItem) {
+    //         delete drafts[draftId];
+    //         openDraftIds = openDraftIds.remove(draftId);
 
-            continue;
-          }
+    //         continue;
+    //       }
 
-          drafts[draftId] = {
-            id: draftId,
-            ...(drafts[draftId] as Draft | undefined),
-            compiled: null,
-            item: draftItem
-          };
+    //       drafts[draftId] = {
+    //         id: draftId,
+    //         ...(drafts[draftId] as Draft | undefined),
+    //         compiled: null,
+    //         item: draftItem
+    //       };
 
-          if (this.state.host && !options?.skipCompilation) {
-            this.pool.add(async () => {
-              await this.compileDraft(draftItem!);
-            });
-          }
-        }
+    //       if (this.state.host && !options?.skipCompilation) {
+    //         this.pool.add(async () => {
+    //           await this.compileDraft(draftItem!);
+    //         });
+    //       }
+    //     }
 
-        return { drafts, openDraftIds };
-      });
-    });
+    //     return { drafts, openDraftIds };
+    //   });
+    // });
 
     this.pool.add(async () => {
-      await this.props.appBackend.initialize();
+      // Initialize the app backend
+
+      await this.appBackend.initialize();
+
+
+      // Initialize the host communication
+
       let state = await this.initializeHost();
 
       if (!state) {
         return;
       }
+
+
+      // List and compile known drafts if available
+
+      let draftItems = await this.appBackend.listDrafts();
+      let drafts = Object.fromEntries(
+        draftItems.map((draftItem): [DraftId, Draft] => {
+          return [draftItem.id, {
+            id: draftItem.id,
+            compilation: null,
+            name: draftItem.name,
+            item: draftItem,
+            revision: draftItem.revision,
+            readable: draftItem.readable,
+            writable: draftItem.writable
+          }];
+        })
+      );
+
+      this.setState({ drafts });
+
+      for (let draft of Object.values(drafts)) {
+        if (draft.item.readable) {
+          this.setDraft(draft, { skipAnalysis: true });
+        }
+      }
+
+
+      // Initialize the route
 
       let route!: Route;
 
@@ -225,43 +260,106 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     });
   }
 
-  componentDidUpdate(_prevProps: ApplicationProps, prevState: ApplicationState) {
-    if (!prevState.host && this.state.host) {
-      this.pool.add(async () => {
-        for (let draft of Object.values(this.state.drafts)) {
-          await this.compileDraft(draft.item);
-        }
-      });
-    }
-  }
-
   componentWillUnmount() {
     this.controller.abort();
   }
 
 
-  async compileDraft(draftItem: DraftItem) {
-    let blob = await draftItem.getMainFile();
+  async deleteDraft(draftId: DraftId) {
+    this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
 
-    if (blob) {
-      let source = await blob.text();
-      let compiled = await this.state.host!.backend.compileDraft(draftItem.id, source);
+    this.setState((state) => {
+      let { [draftId]: _, ...drafts } = state.drafts;
+      return { drafts };
+    });
 
-      await this.props.appBackend.setDraft(draftItem.id, {
-        name: compiled.protocol?.name ?? draftItem.name
-      }, { skipCompilation: true });
+    await this.appBackend.deleteDraft(draftId);
+  }
 
+  async loadDraft(options: { directory: boolean; }) {
+    let draftItem = await this.appBackend.loadDraft(options);
+
+    if (draftItem) {
       this.setState((state) => ({
         drafts: {
           ...state.drafts,
-          [draftItem.id]: {
-            ...state.drafts[draftItem.id],
-            compiled
+          [draftItem!.id]: {
+            id: draftItem!.id,
+            compilation: null,
+            name: draftItem!.name,
+            item: draftItem!,
+            revision: draftItem!.revision,
+            readable: draftItem!.readable,
+            writable: draftItem!.writable
           }
         }
       }));
     }
+
+    return draftItem?.id;
   }
+
+  setDraft(draft: Draft, options: { skipAnalysis: boolean; source?: string; }) {
+    // let draft = this.state.drafts[draftId];
+
+    this.pool.add(async () => {
+      if (options.source) {
+        await this.appBackend.setDraft(draft.id, { source: options.source });
+      }
+
+      let compilation = await this.state.host!.backend.compileDraft({
+        draftItem: draft.item,
+        skipAnalysis: options.skipAnalysis
+      });
+
+      this.setState((state) => {
+        let stateDraft = state.drafts[draft.id];
+
+        if (stateDraft && (!options.skipAnalysis || !stateDraft.compilation)) {
+          return {
+            drafts: {
+              ...state.drafts,
+              [draft.id]: {
+                ...stateDraft,
+                compilation,
+                name: compilation.protocol?.name ?? draft.item.name
+              }
+            }
+          };
+        }
+
+        return null;
+      });
+
+      if (compilation?.protocol?.name) {
+        await this.appBackend.setDraft(draft.id, {
+          name: compilation.protocol.name
+        });
+      }
+    });
+  }
+
+  watchDraft(draftId: DraftId, options: { signal: AbortSignal; }) {
+    this.state.drafts[draftId].item.watch(() => {
+      this.setState((state) => {
+        let draft = state.drafts[draftId];
+        let draftItem = draft.item;
+
+        return {
+          drafts: {
+            ...state.drafts,
+            [draftId]: {
+              ...draft,
+              revision: draftItem.revision,
+              readable: draftItem.readable,
+              writable: draftItem.writable
+            }
+          }
+        };
+      });
+    }, { signal: options.signal });
+  }
+
 
   setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
     this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
@@ -335,7 +433,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             }
 
             // TODO: Improve
-            if (!draft.compiled) {
+            if (!draft.compilation) {
               // this.pool.add(async () => {
               //   await this.compileDraft(draft.entry);
               // });

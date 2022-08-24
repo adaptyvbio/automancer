@@ -45,20 +45,8 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
   componentDidMount() {
     this.pool.add(async () => {
-      let blob = await this.props.draft.item.getMainFile();
-
-      if (!blob) {
-        return;
-      }
-
-      let source = await blob.text();
-
-      if (source === null) {
-        return;
-      }
-
       this.editor = monaco.editor.create(this.ref.current!, {
-        value: source,
+        value: await this.getSource(),
         automaticLayout: true,
         // contextmenu: false,
         language: 'yaml',
@@ -69,8 +57,8 @@ export class TextEditor extends React.Component<TextEditorProps> {
         selectionHighlight: false,
         tabSize: 2,
         overflowWidgetsDomNode: this.refWidgetContainer.current!,
-        fixedOverflowWidgets: true
-        // readOnly: true
+        fixedOverflowWidgets: true,
+        readOnly: false // !this.props.draft.writable
       });
 
       this.model = this.editor.getModel()!;
@@ -84,25 +72,38 @@ export class TextEditor extends React.Component<TextEditorProps> {
     });
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(prevProps: TextEditorProps) {
     this.updateErrors({ reveal: true });
+
+    if (this.props.draft.revision !== prevProps.draft.revision) {
+      this.pool.add(async () => {
+        this.model.setValue(await this.getSource());
+      });
+    }
   }
 
   componentWillUnmount() {
     this.controller.abort();
   }
 
-  updateErrors(options?: { reveal?: boolean; }) {
-    let compiled = this.props.draft.compiled;
+  async getSource() {
+    let draftItem = this.props.draft.item;
+    let files = (await draftItem.getFiles())!;
+    let blob = files[draftItem.mainFilePath];
 
-    if (compiled) {
-      monaco.editor.setModelMarkers(this.model, 'main', compiled.errors.map((error) => {
-        // TODO: show error somewhere else
+    return await blob.text();
+  }
+
+  updateErrors(options?: { reveal?: boolean; }) {
+    let compilation = this.props.draft.compilation;
+
+    if (compilation) {
+      monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {
         let [startIndex, endIndex] = error.range ?? [0, this.model.getValueLength()];
         let start = this.model.getPositionAt(startIndex);
         let end = this.model.getPositionAt(endIndex);
 
-        if (options?.reveal && (compiled!.errors.length === 1)) {
+        if (options?.reveal && (compilation!.errors.length === 1)) {
           this.editor.revealLines(start.lineNumber, end.lineNumber);
         }
 
@@ -139,16 +140,16 @@ export class TextEditor extends React.Component<TextEditorProps> {
           }}/>
           {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         </div>
-        {((this.props.draft.compiled?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
+        {((this.props.draft.compilation?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
           <div className="teditor-views-nav-root">
             <nav className="teditor-views-nav-list">
               <button className="teditor-views-nav-entry _selected">Problems</button>
             </nav>
           </div>
           <div className="teditor-views-problem-list">
-            {this.props.draft.compiled?.errors.map((error, index) => (
+            {this.props.draft.compilation?.errors.map((error, index) => (
               <button type="button" className="teditor-views-problem-entry" key={index} onClick={() => {
-                if (this.props.draft.compiled?.errors.length === 1) {
+                if (this.props.draft.compilation?.errors.length === 1) {
                   this.editor.trigger('anystring', 'editor.action.marker.next', {});
                 }
               }}>

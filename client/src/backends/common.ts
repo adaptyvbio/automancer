@@ -1,5 +1,6 @@
 import type { BaseBackend } from './base';
-import type { Draft as AppDraft } from '../draft';
+import type { DraftItem } from '../app-backends/base';
+import type { Draft as AppDraft, DraftCompilation } from '../draft';
 import type { Codes, ExecutorStates, OperatorLocationData, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 
@@ -28,7 +29,10 @@ export abstract class BackendCommon implements BaseBackend {
   }
 
   abstract command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
-  abstract compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
+  abstract compileDraft(options: {
+    draftItem: DraftItem;
+    skipAnalysis: boolean;
+  }): Promise<DraftCompilation>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract deleteChip(chipId: ChipId): Promise<void>;
   abstract createDraftSample(): Promise<string>;

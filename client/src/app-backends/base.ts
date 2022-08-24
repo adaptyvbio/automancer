@@ -8,13 +8,24 @@ export interface DraftItem {
   name: string | null;
   kind: 'own' | 'ref';
   lastModified: number | null;
-  getFiles(): Promise<Record<string, Blob> | null>;
-  getMainFile(): Promise<Blob | null>;
-  mainFilePath: string;
   locationInfo: {
     type: 'directory' | 'file';
     name: string;
   } | null;
+  mainFilePath: string;
+  revision: number;
+  volumeInfo: {
+    type: 'disk' | 'network';
+    name: string;
+  } | null;
+
+  readable: boolean;
+  readonly: boolean;
+  writable: boolean;
+
+  getFiles(): Promise<Record<string, Blob> | null>;
+  request(): Promise<boolean>;
+  watchMainFile?(handler: () => void, options?: { signal?: AbortSignal; }): void;
 }
 
 export type DraftsUpdateRecord = Record<DraftId, DraftItem | undefined>;
@@ -32,9 +43,12 @@ export interface AppBackend {
 
   createDraft(source: string): Promise<DraftId | null>;
   deleteDraft(draftId: DraftId): Promise<void>;
-  loadDraft(): Promise<DraftId | null>;
-  setDraft(draftId: DraftId, primitive: DraftPrimitive, options?: { skipCompilation?: unknown; }): Promise<void>;
-  onDraftsUpdate(listener: DraftsUpdateListener, options?: { signal?: AbortSignal; }): void;
+  listDrafts(): Promise<DraftItem[]>;
+  loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;
+  openDraftFile?(draftId: DraftId, filePath: string): Promise<void>;
+  revealDraft?(draftId: DraftId): Promise<void>;
+  setDraft(draftId: DraftId, primitive: DraftPrimitive): Promise<void>;
+  requestDraft?(draftId: DraftId): Promise<void>;
 
   notify(message: string): Promise<void>;
 

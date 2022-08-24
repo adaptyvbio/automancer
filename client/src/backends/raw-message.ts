@@ -1,6 +1,7 @@
 import { BackendCommon, Chip, ChipId, ControlNamespace, HostState, ProtocolLocation } from './common';
-import type { Draft } from '../draft';
+import type { Draft, DraftCompilation } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
+import { DraftItem } from '../app-backends/base';
 
 
 export abstract class RawMessageBackend extends BackendCommon {
@@ -16,12 +17,20 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
-  async compileDraft(draftId: string, source: string) {
+  async compileDraft(options: {
+    draftItem: DraftItem;
+    skipAnalysis: boolean;
+  }) {
+    let files = (await options.draftItem.getFiles())!;
+    let mainFile = files[options.draftItem.mainFilePath];
+    let source = await mainFile.text();
+    await new Promise(r=>setTimeout(r,500))
+
     return await this._request({
       type: 'compileDraft',
-      draftId,
+      draftId: options.draftItem.id,
       source
-    }) as NonNullable<Draft['compiled']>;
+    }) as DraftCompilation;
   }
 
   async createChip() {

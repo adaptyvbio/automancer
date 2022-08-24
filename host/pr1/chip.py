@@ -67,11 +67,10 @@ class ObsoleteChip(BaseChip):
     }
 
 class PartialChip(BaseChip):
-  def __init__(self, *, dir, id, issues, metadata):
+  def __init__(self, *, dir, id, issues):
     self.dir = dir
     self.id = id
     self.issues = issues
-    self.metadata = metadata
 
   @property
   def condition(self):

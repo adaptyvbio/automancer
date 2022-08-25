@@ -242,38 +242,61 @@ export class BrowserAppBackend implements AppBackend {
     return draftItem;
   }
 
-  async setDraft(draftId: DraftId, primitive: DraftPrimitive) {
-    let draftEntry = (await idb.get<DraftEntry>(draftId, this.#store))!;
+  async setDraft(draftEntry: DraftEntry, primitive: DraftPrimitive) {
+    console.log('[FS] Set', primitive);
 
-    let updatedDraftEntry = {
-      ...draftEntry,
-      lastModified: Date.now()
-    };
+    let draftEntryUpdate: Partial<DraftEntry> | null = null;
+    let revision: number | null = null;
 
     if (primitive.name !== void 0) {
-      updatedDraftEntry.name = primitive.name;
+      draftEntryUpdate = { ...(draftEntryUpdate ?? {}), name: primitive.name };
     }
 
     if (primitive.source !== void 0) {
-      switch (updatedDraftEntry.location.type) {
+      switch (draftEntry.location.type) {
         case 'app': {
-          updatedDraftEntry.location.source = primitive.source;
+          draftEntryUpdate = {
+            ...(draftEntryUpdate ?? {}),
+            location: {
+              ...draftEntry.location,
+              lastModified: Date.now(),
+              source: primitive.source
+            }
+          }
+
           break;
         }
 
+        // case 'private-filesystem':
         case 'user-filesystem': {
-          let handle = await updatedDraftEntry.location.handle.getFileHandle('main.yml');
+          let location = draftEntry.location;
+
+          let handle = await (() => {
+            switch (location.handle.kind) {
+              case 'directory': return location.handle.getFileHandle(location.mainFilePath);
+              case 'file': return location.handle;
+            }
+          })();
+
           let writable = await handle.createWritable();
 
           await writable.write(primitive.source);
           await writable.close();
+
+          let file = await handle.getFile();
+          revision = file.lastModified;
 
           break;
         }
       }
     }
 
-    await idb.set(draftId, updatedDraftEntry, this.#store);
+    if (draftEntryUpdate) {
+      await idb.update<DraftEntry>(draftEntry.id, (draftEntry) => ({ ...draftEntry!, ...draftEntryUpdate! }), this.#store);
+      if (draftEntryUpdate.name) console.log('[FS] Set name:', draftEntryUpdate.name);
+    }
+
+    return revision;
   }
 }
 
@@ -286,12 +309,13 @@ export class BrowserAppBackendDraftItem implements DraftItem {
   volumeInfo = null;
   writable!: boolean;
 
-  _backend: AppBackend;
-  _entry: DraftEntry;
+  _backend: BrowserAppBackend;
+  _entry: DraftEntry; // Not kept up to date
   _watchHandler: (() => void) | null = null;
   _watchRevision = 0;
+  _writingCounter = 0;
 
-  constructor(draftEntry: DraftEntry, backend: AppBackend) {
+  constructor(draftEntry: DraftEntry, backend: BrowserAppBackend) {
     this._backend = backend;
     this._entry = draftEntry;
   }
@@ -301,6 +325,8 @@ export class BrowserAppBackendDraftItem implements DraftItem {
       || ((await this._entry.location.handle.queryPermission({ mode: 'read' })) === 'granted');
     this.writable = (this._entry.location.type !== 'user-filesystem')
       || ((await this._entry.location.handle.queryPermission({ mode: 'readwrite' })) === 'granted');
+
+    console.log(`[FS] Initialize, readable: ${this.readable}, writable: ${this.writable}`);
 
     // this.lastModified = (() => {
     //   switch (this._entry.location.type) {
@@ -312,6 +338,18 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     //   }
     // })();
   }
+
+  // async _toDraft() {
+  //   return {
+  //     id: this.id,
+  //     item: this,
+  //     lastModified: this.lastModified,
+  //     name: this._entry.name,
+  //     readable: this.readable,
+  //     revision: this.revision,
+  //     writable: this.writable
+  //   };
+  // }
 
   get id() {
     return this._entry.id;
@@ -348,7 +386,7 @@ export class BrowserAppBackendDraftItem implements DraftItem {
   }
 
   get name() {
-    return this._entry.name;
+    return this._entry.name; // Not kept up to date
   }
 
   async getFiles() {
@@ -370,7 +408,6 @@ export class BrowserAppBackendDraftItem implements DraftItem {
             for await (let entry of location.handle.values()) {
               if (entry.kind === 'file') {
                 let file = await entry.getFile();
-
                 files[entry.name] = file;
               }
             }
@@ -403,20 +440,14 @@ export class BrowserAppBackendDraftItem implements DraftItem {
         throw err;
       }
 
+      console.log('[FS] Possible permission change');
       this._watchHandler?.();
-
-      // try {
-      //   this.writable = ((await this._entry.location.handle.requestPermission({ mode: 'readwrite' })) === 'granted');
-      //   this.readable = this.writable;
-      // } catch (err) {
-      //   if ((err as { name: string; }).name !== 'SecurityError') {
-      //     throw err;
-      //   }
-      // }
     }
   }
 
   watch(handler: () => void, options: { signal: AbortSignal; }) {
+    console.log('[FS] Watch request');
+
     let intervalId: number | null = null;
     let updateWatchListener = () => {
       let location = this._entry.location;
@@ -427,18 +458,26 @@ export class BrowserAppBackendDraftItem implements DraftItem {
         if (this.readable && (intervalId === null)) {
           handle.getFile().then((file) => {
             this._watchRevision = file.lastModified;
+
+            if (!options.signal.aborted) {
+              console.log('[FS] Watching starting at ' + this._watchRevision);
+
+              intervalId = setInterval(() => {
+                if (this._writingCounter < 1) {
+                  handle.getFile().then((file) => {
+                    if (file.lastModified !== this._watchRevision) {
+                      console.log(`[FS] File change: ${this._watchRevision} -> ${file.lastModified}`);
+
+                      this._watchRevision = file.lastModified;
+                      this.revision = file.lastModified;
+
+                      handler();
+                    }
+                  });
+                }
+              }, 1000);
+            }
           });
-
-          intervalId = setInterval(() => {
-            handle.getFile().then((file) => {
-              if (file.lastModified !== this._watchRevision) {
-                this._watchRevision = file.lastModified;
-                this.revision = file.lastModified;
-
-                handler();
-              }
-            });
-          }, 1000);
         }
       }
     };
@@ -451,11 +490,26 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     updateWatchListener();
 
     options?.signal.addEventListener('abort', () => {
+      console.log('[FS] Done watch request');
+
       this._watchHandler = null;
 
       if (intervalId !== null) {
         clearInterval(intervalId);
       }
     });
+  }
+
+  async write(primitive: DraftPrimitive) {
+    console.log('[FS] Writing', primitive);
+    this._writingCounter += 1;
+
+    let revision = await this._backend.setDraft(this._entry, primitive);
+    this._writingCounter -= 1;
+
+    if (revision !== null) {
+      console.log(`[FS] New revision: ${this._watchRevision} -> ${revision}`);
+      this._watchRevision = revision;
+    }
   }
 }

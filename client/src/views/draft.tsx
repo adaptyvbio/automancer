@@ -50,9 +50,19 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       }
 
       if (this.props.draft.item.readable) {
+        // Trigger an initial compilation with analysis.
         this.props.app.setDraft(this.props.draft, { skipAnalysis: false });
       }
     });
+  }
+
+  componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
+    // Trigger a compilation if the external revision changed.
+    if (this.props.draft.revision !== prevProps.draft.revision) {
+      this.pool.add(async () => {
+        this.props.app.setDraft(this.props.draft, { skipAnalysis: false });
+      });
+    }
   }
 
   componentWillUnmount() {
@@ -100,9 +110,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           <TextEditor
             draft={this.props.draft}
             onSave={(source) => {
-              this.pool.add(async () => {
-                await this.props.app.appBackend.setDraft(this.props.draft.id, { source });
-              });
+              this.props.app.setDraft(this.props.draft, { skipAnalysis: false, source });
             }} />
         );
 
@@ -116,7 +124,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return (
       <main className="blayout-container">
         <header className="blayout-header">
-          <h1>{this.props.draft.item.name ?? '[Untitled]'}</h1>
+          <h1>{this.props.draft.name ?? '[Untitled]'}</h1>
           <BarNav
             entries={[
               { id: 'overview',

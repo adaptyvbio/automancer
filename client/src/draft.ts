@@ -32,13 +32,12 @@ export interface DraftCompilation {
 
 export interface Draft {
   id: DraftId;
-  item: DraftItem;
   compilation: DraftCompilation | null;
+  item: DraftItem;
   lastModified: number | null;
   name: string | null;
-  revision: number;
-
   readable: boolean;
+  revision: number;
   writable: boolean;
 }
 

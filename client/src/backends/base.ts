@@ -1,6 +1,6 @@
 import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { ChipId, HostState, ProtocolLocation, RunnerCommand } from './common';
-import type { Draft as AppDraft, DraftCompilation } from '../draft';
+import type { DraftCompilation, DraftId } from '../draft';
 import { DraftItem } from '../app-backends/base';
 
 
@@ -16,8 +16,9 @@ export interface BaseBackend {
 
   command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   compileDraft(options: {
-    draftItem: DraftItem;
+    draftId: DraftId;
     skipAnalysis: boolean;
+    source: string;
   }): Promise<DraftCompilation>;
   createChip(): Promise<{ chipId: ChipId; }>;
   deleteChip(chipId: ChipId): Promise<void>;

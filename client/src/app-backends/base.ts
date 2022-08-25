@@ -24,8 +24,9 @@ export interface DraftItem {
   writable: boolean;
 
   getFiles(): Promise<Record<string, Blob> | null>;
-  request(): Promise<boolean>;
-  watchMainFile?(handler: () => void, options?: { signal?: AbortSignal; }): void;
+  request(): Promise<void>;
+  watch(handler: () => void, options: { signal: AbortSignal; }): void;
+  write(primitive: DraftPrimitive): Promise<void>;
 }
 
 export type DraftsUpdateRecord = Record<DraftId, DraftItem | undefined>;
@@ -47,7 +48,7 @@ export interface AppBackend {
   loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;
   openDraftFile?(draftId: DraftId, filePath: string): Promise<void>;
   revealDraft?(draftId: DraftId): Promise<void>;
-  setDraft(draftId: DraftId, primitive: DraftPrimitive): Promise<void>;
+  // setDraft(draftId: DraftId, primitive: DraftPrimitive): Promise<void>;
   requestDraft?(draftId: DraftId): Promise<void>;
 
   notify(message: string): Promise<void>;

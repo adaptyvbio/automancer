@@ -224,10 +224,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           return [draftItem.id, {
             id: draftItem.id,
             compilation: null,
-            name: draftItem.name,
             item: draftItem,
-            revision: draftItem.revision,
+            lastModified: draftItem.lastModified,
+            name: draftItem.name,
             readable: draftItem.readable,
+            revision: draftItem.revision,
             writable: draftItem.writable
           }];
         })
@@ -237,7 +238,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       for (let draft of Object.values(drafts)) {
         if (draft.item.readable) {
-          this.setDraft(draft, { skipAnalysis: true });
+          this.setDraft(draft, { skipAnalysis: true, skipWrite: true });
         }
       }
 
@@ -286,10 +287,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           [draftItem!.id]: {
             id: draftItem!.id,
             compilation: null,
-            name: draftItem!.name,
             item: draftItem!,
-            revision: draftItem!.revision,
+            lastModified: draftItem!.lastModified,
+            name: draftItem!.name,
             readable: draftItem!.readable,
+            revision: draftItem!.revision,
             writable: draftItem!.writable
           }
         }
@@ -299,22 +301,37 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     return draftItem?.id;
   }
 
-  setDraft(draft: Draft, options: { skipAnalysis: boolean; source?: string; }) {
+  setDraft(draft: Draft, options: { skipAnalysis: boolean; skipWrite?: boolean; source?: string; }) {
     // let draft = this.state.drafts[draftId];
 
+    if (options.source) {
+      this.pool.add(async () => {
+        await draft.item.write({ source: options.source });
+      });
+    }
+
     this.pool.add(async () => {
+      let source;
+
       if (options.source) {
-        await this.appBackend.setDraft(draft.id, { source: options.source });
+        source = options.source;
+      } else {
+        let files = (await draft.item.getFiles())!;
+        let mainFile = files[draft.item.mainFilePath];
+
+        source = await mainFile.text();
       }
 
       let compilation = await this.state.host!.backend.compileDraft({
-        draftItem: draft.item,
-        skipAnalysis: options.skipAnalysis
+        draftId: draft.id,
+        skipAnalysis: options.skipAnalysis,
+        source
       });
 
       this.setState((state) => {
         let stateDraft = state.drafts[draft.id];
 
+        // TODO: check revision
         if (stateDraft && (!options.skipAnalysis || !stateDraft.compilation)) {
           return {
             drafts: {
@@ -322,7 +339,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               [draft.id]: {
                 ...stateDraft,
                 compilation,
-                name: compilation.protocol?.name ?? draft.item.name
+                name: compilation.protocol?.name ?? stateDraft.name ?? draft.item.name
               }
             }
           };
@@ -331,8 +348,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         return null;
       });
 
-      if (compilation?.protocol?.name) {
-        await this.appBackend.setDraft(draft.id, {
+      if (!options.skipWrite && compilation?.protocol?.name) {
+        await draft.item.write({
           name: compilation.protocol.name
         });
       }

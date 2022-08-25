@@ -1,5 +1,5 @@
 import { BackendCommon, Chip, ChipId, ControlNamespace, HostState, ProtocolLocation } from './common';
-import type { Draft, DraftCompilation } from '../draft';
+import type { Draft, DraftCompilation, DraftId } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
 import { DraftItem } from '../app-backends/base';
 
@@ -18,18 +18,18 @@ export abstract class RawMessageBackend extends BackendCommon {
   }
 
   async compileDraft(options: {
-    draftItem: DraftItem;
+    draftId: DraftId;
     skipAnalysis: boolean;
+    source: string;
   }) {
-    let files = (await options.draftItem.getFiles())!;
-    let mainFile = files[options.draftItem.mainFilePath];
-    let source = await mainFile.text();
-    await new Promise(r=>setTimeout(r,500))
+    console.log('[FS] Compile');
+
+    // await new Promise(r=>setTimeout(r,500))
 
     return await this._request({
       type: 'compileDraft',
-      draftId: options.draftItem.id,
-      source
+      draftId: options.draftId,
+      source: options.source
     }) as DraftCompilation;
   }
 

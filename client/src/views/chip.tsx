@@ -4,7 +4,6 @@ import type { Route } from '../application';
 import type { Host } from '../host';
 import { Chip, ChipId } from '../backends/common';
 import { BarNav } from '../components/bar-nav';
-import { ChipControl } from '../components/chip-control';
 import { ChipProtocol } from '../components/chip-protocol';
 import { ChipSettings } from '../components/chip-settings';
 import { ErrorBoundary } from '../components/error-boundary';
@@ -66,11 +65,6 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
     let component = (() => {
       switch (this.props.tab) {
-        case 'control': return (
-          <ChipControl
-            chipId={this.props.chipId}
-            host={this.props.host} />
-        );
         case 'protocol': return (
           <ChipProtocol
             chipId={this.props.chipId}

@@ -4,17 +4,6 @@ import type { Chip, ChipId, Protocol, ProtocolLocation, ProtocolSegment } from '
 import type { Host } from '../host';
 import type { Draft } from '../draft';
 
-import ControlUnit from './control';
-import * as Control from './control';
-
-import InputUnit from './input';
-import * as Input from './input';
-
-import LocalNotificationUnit from './local-notification';
-import * as LocalNotification from './local-notification';
-
-import TimerUnit from './timer';
-import * as Timer from './timer';
 import { Route } from '../application';
 
 
@@ -52,7 +41,7 @@ export interface CodeEditorProps<Code> {
 }
 
 export interface Codes {
-  [Control.namespace]: Control.Code;
+
 }
 
 
@@ -69,37 +58,22 @@ export interface MatrixEditorProps {
   host: Host;
 }
 
-export interface Matrices {
-  [Control.namespace]: Control.Matrix;
-}
-
 
 //> ExecutorState
 
 export interface ExecutorStates {
-  [Control.namespace]: Control.ExecutorState;
+
 }
 
 
 //> ProtocolData & SegmentData
 
 export interface ProtocolData {
-  [Control.namespace]: Control.ProtocolData;
+
 }
 
 export interface SegmentData {
-  [Control.namespace]: Control.SegmentData;
-  [Input.namespace]?: Input.SegmentData;
-  [LocalNotification.namespace]?: LocalNotification.SegmentData;
-  [Timer.namespace]?: Timer.SegmentData;
-}
 
-
-//> OperatorLocationData
-
-export interface OperatorLocationData {
-  [Input.namespace]: Timer.OperatorLocationData;
-  [Timer.namespace]: Timer.OperatorLocationData;
 }
 
 

@@ -1,6 +1,6 @@
 import type { BaseBackend } from './base';
 import type { Draft as AppDraft } from '../draft';
-import type { Codes, ExecutorStates, OperatorLocationData, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
+import type { Codes, ExecutorStates, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -152,7 +152,7 @@ export type ProtocolSeq = [number, number];
 
 export interface ProtocolLocation {
   segmentIndex: number;
-  state: OperatorLocationData[keyof OperatorLocationData] | null;
+  state: any;
 }
 
 
@@ -172,90 +172,3 @@ export interface HostState {
 }
 
 export type Namespace = 'control' | 'input' | 'timer';
-export type RunnerCommand = ControlNamespace.RunnerCommand;
-
-
-// -- Deprecated ------------------------------------------
-
-export namespace ControlNamespace {
-  export type Signal = string;
-
-  export interface Code {
-    arguments: (number | null)[];
-  }
-
-  export interface ExecutorState {
-    valves: Record<string, number>;
-  }
-
-  export interface Matrix {
-    valves: {
-      aliases: string[];
-      hostValveIndex: number;
-    }[];
-  }
-
-  export interface Runner {
-    signal: Signal;
-    valves: {
-      error: RunnerValveError | null;
-    }[];
-  }
-
-  export interface Sheet {
-    diagram: string | null;
-
-    groups: {
-      name: string;
-    }[];
-
-    valves: {
-      diagramRef: [number, number] | null;
-      group: number;
-      id: string;
-      idLabel: string;
-      inverse: true;
-      name: string;
-      repr: 'barrier' | 'flow' | 'isolate' | 'move' | 'push';
-    }[];
-  }
-
-  export enum RunnerValveError {
-    Unbound = 0,
-    Unresponsive = 1
-  }
-
-  export interface RunnerCommand {
-    control: {
-      type: 'signal';
-      signal: Signal;
-    };
-  }
-
-  export interface ProtocolData {
-    parameters: {
-      defaultValveIndices: Record<ChipId, number> | null;
-      display: ('delta' | 'hidden' | 'visible') | null;
-      label: string;
-      repr: ('flow' | 'push' | 'unpush' | 'waves') | null;
-    }[];
-  }
-
-  export interface SegmentData {
-    valves: number[];
-  }
-}
-
-
-export namespace InputNamespace {
-  export interface SegmentData {
-    message: string;
-  }
-}
-
-
-export namespace TimerNamespace {
-  export interface SegmentData {
-    duration: number;
-  }
-}

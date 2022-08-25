@@ -20,7 +20,7 @@ export class ManualControl extends React.Component<ChipTabComponentProps, Manual
   }
 
   get chip(): Chip {
-    return this.props.host.state.chips[this.props.chipId];
+    return this.props.host.state.chips[this.props.chipId] as Chip;
   }
 
   render() {

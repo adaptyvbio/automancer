@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-import type { Application, Host, Route } from '../application';
+import type { Application, Route } from '../application';
+import type { Host } from '../host';
 import { Icon } from '../components/icon';
 import { DraftOverview } from '../components/draft-overview';
 import { TextEditor } from '../components/text-editor';

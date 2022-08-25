@@ -10,7 +10,6 @@ import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
-import { ViewTerminalSession } from './views/terminal-session';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
 import { Pool } from './util';
@@ -306,12 +305,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           case 'settings': return (
             <ViewSettings
               app={this}
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
-
-          case 'terminal': return (
-            <ViewTerminalSession
               host={this.state.host}
               setRoute={setRoute} />
           );

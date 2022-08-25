@@ -1,5 +1,5 @@
 import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
-import type { ChipId, HostState, ProtocolLocation, RunnerCommand } from './common';
+import type { ChipId, HostState, ProtocolLocation } from './common';
 import type { Draft as AppDraft } from '../draft';
 
 

@@ -1,4 +1,4 @@
-import { BackendCommon, Chip, ChipId, ControlNamespace, HostState, ProtocolLocation } from './common';
+import { BackendCommon, ChipId, ProtocolLocation } from './common';
 import type { Draft } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
 

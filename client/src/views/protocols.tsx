@@ -1,7 +1,8 @@
 import * as React from 'react';
 
 import type { DraftEntry as DraftDatabaseEntry } from '../app-backend';
-import type { Application, Host, Route } from '../application';
+import type { Application, Route } from '../application';
+import type { Host } from '../host';
 import type { Draft, DraftId, DraftPrimitive } from '../draft';
 import { ContextMenuArea, ContextMenuAreaProps } from '../components/context-menu-area';
 import { Icon } from '../components/icon';

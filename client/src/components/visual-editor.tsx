@@ -1,7 +1,7 @@
 import { List, Range, Set as ImSet } from 'immutable';
 import * as React from 'react';
 
-import type { Draft } from '../application';
+import type { Draft } from '../draft';
 import { ProtocolSeq } from '../backends/common';
 import { ContextMenuArea } from './context-menu-area';
 import * as util from '../util';

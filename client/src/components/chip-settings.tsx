@@ -3,11 +3,8 @@ import * as React from 'react';
 
 import type { Host } from '../host';
 import { ErrorBoundary } from './error-boundary';
-import { Chip, ChipId, ControlNamespace, HostId } from '../backends/common';
+import { Chip, ChipId, HostId } from '../backends/common';
 import { Pool } from '../util';
-import * as util from '../util';
-import { Icon } from '../components/icon';
-import * as Form from './standard-form';
 
 
 export interface ChipSettingsProps {

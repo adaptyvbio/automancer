@@ -82,11 +82,7 @@ export class Sidebar extends React.Component<SidebarProps> {
                 label: draft.item.name ?? '[Untitled]',
                 route: ['protocol', draft.id, 'overview'],
                 routeRef: ['protocol', draft.id]
-              })) },
-          { id: 'terminal',
-            label: 'Terminal',
-            icon: 'terminal',
-            route: ['terminal'] }
+              })) }
         ] },
         ...(unitEntries && (unitEntries?.length > 0)
           ? [{ id: 'unit', entries: unitEntries }]

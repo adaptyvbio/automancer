@@ -25,7 +25,7 @@ export interface DraftItem {
 
   getFiles(): Promise<Record<string, Blob> | null>;
   request(): Promise<void>;
-  watch(handler: () => void, options: { signal: AbortSignal; }): void;
+  watch(handler: () => void, options: { signal: AbortSignal; }): Promise<void>;
   write(primitive: DraftPrimitive): Promise<void>;
 }
 

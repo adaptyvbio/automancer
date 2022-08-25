@@ -38,9 +38,12 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
   componentDidMount() {
-    this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
-
     this.pool.add(async () => {
+      // This immediately updates item.readable, item.writable and item.lastModified
+      // and calls setState() to update the analoguous properties on draft.
+      // await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
+      await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
+
       if (!this.props.draft.item.readable) {
         await this.props.draft.item.request();
       }
@@ -49,8 +52,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         this.setState({ requesting: false });
       }
 
-      if (this.props.draft.item.readable) {
-        // Trigger an initial compilation with analysis.
+      // Trigger a compilation if the last compilation is outdated.
+      if (this.props.draft.item.readable && (this.props.draft.meta.compilationSourceLastModified !== this.props.draft.item.lastModified)) {
         this.props.app.setDraft(this.props.draft, { skipAnalysis: false });
       }
     });
@@ -58,7 +61,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
     // Trigger a compilation if the external revision changed.
-    if (this.props.draft.revision !== prevProps.draft.revision) {
+    if (prevProps.draft.revision && (this.props.draft.revision !== prevProps.draft.revision)) {
       this.pool.add(async () => {
         this.props.app.setDraft(this.props.draft, { skipAnalysis: false });
       });
@@ -82,7 +85,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                   this.pool.add(async () => {
                     await this.props.draft.item.request();
 
-                    if (this.props.draft.item.readable) {
+                    if (this.props.draft.item.readable && (this.props.draft.meta.compilationSourceLastModified !== this.props.draft.item.lastModified)) {
                       this.props.app.setDraft(this.props.draft, { skipAnalysis: false });
                     }
                   });
@@ -108,6 +111,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
         case 'text': return (
           <TextEditor
+            autoSave={false}
             draft={this.props.draft}
             onSave={(source) => {
               this.props.app.setDraft(this.props.draft, { skipAnalysis: false, source });

@@ -27,6 +27,7 @@ window.MonacoEnvironment = {
 
 
 export interface TextEditorProps {
+  autoSave: boolean;
   draft: Draft;
   onSave(source: string): void;
 }
@@ -34,12 +35,15 @@ export interface TextEditorProps {
 export class TextEditor extends React.Component<TextEditorProps> {
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
+  externalChange = false;
   model!: monaco.editor.IModel;
+  outdatedCompilation = false;
   pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
   triggerCompilation = util.debounce(400, () => {
     // TODO: compile without saving
+    this.outdatedCompilation = true;
     this.props.onSave(this.model.getValue());
   }, { signal: this.controller.signal });
 
@@ -65,7 +69,12 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
       this.model.onDidChangeContent(() => {
         monaco.editor.setModelMarkers(this.model, 'main', []);
-        this.triggerCompilation();
+
+        if (!this.externalChange) {
+          this.triggerCompilation();
+        }
+
+        this.externalChange = false;
       });
 
       this.updateErrors();
@@ -77,8 +86,20 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
     if (this.props.draft.revision !== prevProps.draft.revision) {
       this.pool.add(async () => {
+        let position = this.editor.getPosition();
+
+        this.externalChange = true;
         this.model.setValue(await this.getSource());
+
+        if (position) {
+          this.editor.setPosition(position);
+        }
       });
+    }
+
+    if (this.props.draft.compilation !== prevProps.draft.compilation) {
+      this.outdatedCompilation = false;
+      this.updateErrors();
     }
   }
 
@@ -97,7 +118,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
   updateErrors(options?: { reveal?: boolean; }) {
     let compilation = this.props.draft.compilation;
 
-    if (compilation) {
+    if (compilation && !this.outdatedCompilation) {
       monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {
         let [startIndex, endIndex] = error.range ?? [0, this.model.getValueLength()];
         let start = this.model.getPositionAt(startIndex);
@@ -159,6 +180,17 @@ export class TextEditor extends React.Component<TextEditorProps> {
             ))}
           </div>
         </div>}
+        <div className="teditor-infobar-root">
+          <div className="teditor-infobar-list">
+            <div className="teditor-infobar-item">Topology: LRRP</div>
+            <div className="teditor-infobar-item">Not saved</div>
+          </div>
+          <div className="teditor-infobar-list">
+            {this.props.draft.lastModified && (
+              <div className="teditor-infobar-item">Last saved: {new Date(this.props.draft.lastModified).toLocaleTimeString()}</div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

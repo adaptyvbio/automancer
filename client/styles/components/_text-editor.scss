@@ -4,9 +4,9 @@
 .teditor {
   &-outer {
     display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
 
-    padding: 1.4rem 0;
+    padding-top: 1.4rem;
 
     // Avoid the views-root shadow from being visible outside.
     overflow: hidden;
@@ -57,7 +57,7 @@
 
     &-problem {
       &-list {
-        margin-top: 0.4rem;
+        margin: 0.4rem 0;
       }
 
       &-entry {
@@ -76,6 +76,28 @@
           transform: scale(0.8);
         }
       }
+    }
+  }
+
+  &-infobar {
+    &-root {
+      display: flex;
+      justify-content: space-between;
+
+      padding: 0 0.8rem;
+      border-top: 1px solid #ddd;
+
+      font-size: 0.9rem;
+    }
+
+    &-list {
+      display: flex;
+      column-gap: 1.6rem;
+    }
+
+    &-item {
+      padding: 0.2rem 0;
+      color: #666;
     }
   }
 }

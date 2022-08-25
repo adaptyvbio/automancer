@@ -28,17 +28,24 @@ export interface DraftCompilation {
   // } | null;
   invalid: boolean;
   protocol: Protocol | null;
+  revision: number; // Modification time of the source file this compilation corresponds to.
 }
 
 export interface Draft {
   id: DraftId;
   compilation: DraftCompilation | null;
+  compilationId: number | null;
   item: DraftItem;
-  lastModified: number | null;
+  lastModified: number | null; // Last modification time.
   name: string | null;
   readable: boolean;
-  revision: number;
+  revision: number; // Last modification time through another editor.
   writable: boolean;
+
+  meta: {
+    compilationId: number | null; // Time when the last compilation started.
+    compilationSourceLastModified: number | null; // Modification time of the last compilation started.
+  };
 }
 
 export interface DraftPrimitive {

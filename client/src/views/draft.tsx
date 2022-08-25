@@ -5,7 +5,7 @@ import { Icon } from '../components/icon';
 import { DraftOverview } from '../components/draft-overview';
 import { TextEditor } from '../components/text-editor';
 import { VisualEditor } from '../components/visual-editor';
-import { Draft, DraftId, DraftPrimitive } from '../draft';
+import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
 import { Host } from '../host';
 import { Pool } from '../util';
 import { BarNav } from '../components/bar-nav';
@@ -22,10 +22,12 @@ export interface ViewDraftProps {
 }
 
 export interface ViewDraftState {
+  compilation: DraftCompilation | null;
   requesting: boolean;
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
+  compilationId: number | null = null;
   controller = new AbortController();
   pool = new Pool();
 
@@ -33,6 +35,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     super(props);
 
     this.state = {
+      compilation: null,
       requesting: !props.draft.readable
     };
   }
@@ -112,9 +115,33 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         case 'text': return (
           <TextEditor
             autoSave={false}
+            compilation={this.state.compilation ?? this.props.draft.compilation}
             draft={this.props.draft}
-            onSave={(source) => {
+            onChange={(source) => {
+              console.log('[TX] Change');
+
+              this.pool.add(async () => {
+                let compilationId = Date.now();
+                this.compilationId = compilationId;
+
+                let compilation = await this.props.host.backend.compileDraft({
+                  draftId: this.props.draft.id,
+                  skipAnalysis: false,
+                  source
+                });
+
+                if (this.compilationId === compilationId) {
+                  this.setState({ compilation });
+                }
+              });
+            }}
+            onChangeSave={(source) => {
+              console.log('[TX] Change+save');
               this.props.app.setDraft(this.props.draft, { skipAnalysis: false, source });
+            }}
+            onSave={(source) => {
+              console.log('[TX] Save');
+              this.props.app.setDraft(this.props.draft, { compilation: this.state.compilation, skipAnalysis: false, source });
             }} />
         );
 
@@ -128,7 +155,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return (
       <main className="blayout-container">
         <header className="blayout-header">
-          <h1>{this.props.draft.name ?? '[Untitled]'}</h1>
+          <h1>{this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}</h1>
           <BarNav
             entries={[
               { id: 'overview',

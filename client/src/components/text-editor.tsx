@@ -3,7 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
 import { Icon } from './icon';
-import { Draft } from '../draft';
+import { Draft, DraftCompilation } from '../draft';
 import * as util from '../util';
 
 
@@ -28,11 +28,18 @@ window.MonacoEnvironment = {
 
 export interface TextEditorProps {
   autoSave: boolean;
+  compilation: DraftCompilation;
   draft: Draft;
+  onChange(source: string): void;
+  onChangeSave(source: string): void;
   onSave(source: string): void;
 }
 
-export class TextEditor extends React.Component<TextEditorProps> {
+export interface TextEditorState {
+  changeTime: number | null;
+}
+
+export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   externalChange = false;
@@ -42,10 +49,22 @@ export class TextEditor extends React.Component<TextEditorProps> {
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
   triggerCompilation = util.debounce(400, () => {
-    // TODO: compile without saving
-    this.outdatedCompilation = true;
-    this.props.onSave(this.model.getValue());
+    let source = this.model.getValue();
+
+    if (this.props.autoSave) {
+      this.props.onChangeSave(source);
+    } else {
+      this.props.onChange(source);
+    }
   }, { signal: this.controller.signal });
+
+  constructor(props: TextEditorProps) {
+    super(props);
+
+    this.state = {
+      changeTime: null
+    };
+  }
 
   componentDidMount() {
     this.pool.add(async () => {
@@ -72,8 +91,13 @@ export class TextEditor extends React.Component<TextEditorProps> {
 
         if (!this.externalChange) {
           this.triggerCompilation();
+
+          if (!this.props.autoSave) {
+            this.setState({ changeTime: Date.now() });
+          }
         }
 
+        this.outdatedCompilation = true;
         this.externalChange = false;
       });
 
@@ -97,9 +121,13 @@ export class TextEditor extends React.Component<TextEditorProps> {
       });
     }
 
-    if (this.props.draft.compilation !== prevProps.draft.compilation) {
+    if (this.props.compilation !== prevProps.compilation) {
       this.outdatedCompilation = false;
       this.updateErrors();
+    }
+
+    if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {
+      this.setState({ changeTime: null });
     }
   }
 
@@ -116,7 +144,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
   }
 
   updateErrors(options?: { reveal?: boolean; }) {
-    let compilation = this.props.draft.compilation;
+    let compilation = this.props.compilation;
 
     if (compilation && !this.outdatedCompilation) {
       monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {
@@ -139,9 +167,6 @@ export class TextEditor extends React.Component<TextEditorProps> {
           severity: monaco.MarkerSeverity.Error
         };
       }));
-
-      // console.log(monaco.editor.getModelMarkers(this.model));
-      // console.log(this.editor.getSupportedActions());
     }
   }
 
@@ -153,24 +178,32 @@ export class TextEditor extends React.Component<TextEditorProps> {
     return (
       <div className="teditor-outer">
         <div className="teditor-inner">
-          <div ref={this.ref} onKeyDown={(event) => {
-            if (event.metaKey && (event.key === 's')) {
-              event.preventDefault();
-              this.props.onSave(this.model.getValue());
-            }
-          }}/>
+          <div ref={this.ref} onKeyDown={!this.props.autoSave
+            ? ((event) => {
+              if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+
+                if (this.triggerCompilation.isActive()) {
+                  this.triggerCompilation.cancel();
+                  this.props.onChangeSave(this.model.getValue());
+                } else {
+                  this.props.onSave(this.model.getValue());
+                }
+              }
+            })
+            : undefined} />
           {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         </div>
-        {((this.props.draft.compilation?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
+        {((this.props.compilation?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
           <div className="teditor-views-nav-root">
             <nav className="teditor-views-nav-list">
               <button className="teditor-views-nav-entry _selected">Problems</button>
             </nav>
           </div>
           <div className="teditor-views-problem-list">
-            {this.props.draft.compilation?.errors.map((error, index) => (
+            {this.props.compilation?.errors.map((error, index) => (
               <button type="button" className="teditor-views-problem-entry" key={index} onClick={() => {
-                if (this.props.draft.compilation?.errors.length === 1) {
+                if (this.props.compilation?.errors.length === 1) {
                   this.editor.trigger('anystring', 'editor.action.marker.next', {});
                 }
               }}>
@@ -182,8 +215,7 @@ export class TextEditor extends React.Component<TextEditorProps> {
         </div>}
         <div className="teditor-infobar-root">
           <div className="teditor-infobar-list">
-            <div className="teditor-infobar-item">Topology: LRRP</div>
-            <div className="teditor-infobar-item">Not saved</div>
+            <div className="teditor-infobar-item">{this.state.changeTime ? 'Not saved' : 'Saved'}</div>
           </div>
           <div className="teditor-infobar-list">
             {this.props.draft.lastModified && (

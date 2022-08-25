@@ -5,7 +5,7 @@ import type { AppBackend, DraftItem } from './app-backends/base';
 import type { ChipId } from './backends/common';
 import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
-import type { Draft, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import type { Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
 import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
@@ -313,7 +313,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     return draftItem?.id;
   }
 
-  setDraft(draft: Draft, options: { skipAnalysis: boolean; skipWrite?: boolean; source?: string; }) {
+  setDraft(draft: Draft, options: { compilation?: DraftCompilation | null; skipAnalysis: boolean; skipWrite?: boolean; source?: string; }) {
     // Update the revision this draft is based on.
     let compilationId = Date.now();
 
@@ -347,49 +347,57 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }
 
     this.pool.add(async () => {
-      let source;
+      let compilation: DraftCompilation | null;
 
-      if (options.source) {
-        source = options.source;
+      if (options.compilation) {
+        compilation = options.compilation;
       } else {
-        // TODO: lastModified could have been updated since.
-        let files = (await draft.item.getFiles())!;
-        let mainFile = files[draft.item.mainFilePath];
+        let source;
 
-        source = await mainFile.text();
+        if (options.source) {
+          source = options.source;
+        } else {
+          // TODO: lastModified could have been updated since.
+          let files = (await draft.item.getFiles())!;
+          let mainFile = files[draft.item.mainFilePath];
+
+          source = await mainFile.text();
+        }
+
+        // Run the compilation
+        compilation = await this.state.host!.backend.compileDraft({
+          draftId: draft.id, // Used for caching on the host
+          skipAnalysis: options.skipAnalysis,
+          source
+        });
       }
 
-      // Run the compilation
-      let compilation = await this.state.host!.backend.compileDraft({
-        draftId: draft.id, // Used for caching on the host
-        skipAnalysis: options.skipAnalysis,
-        source
-      });
+      if (compilation) {
+        // Only save the compilation if the draft hasn't changed since.
+        if ((draft.meta.compilationId === compilationId)
+          /* && (!draft.meta.compilationSourceLastModified || (draft.meta.compilationSourceLastModified === draft.item.lastModified)) */) {
+          this.setState((state) => {
+            let stateDraft = state.drafts[draft.id];
 
-      // Only save the compilation if the draft hasn't changed since.
-      if ((draft.meta.compilationId === compilationId)
-        /* && (!draft.meta.compilationSourceLastModified || (draft.meta.compilationSourceLastModified === draft.item.lastModified)) */) {
-        this.setState((state) => {
-          let stateDraft = state.drafts[draft.id];
+            if (!stateDraft) {
+              return null;
+            }
 
-          if (!stateDraft) {
-            return null;
-          }
-
-          return {
-            drafts: {
-              ...state.drafts,
-              [draft.id]: {
-                ...stateDraft,
-                compilation,
-                compilationId,
-                name: compilation.protocol?.name ?? stateDraft.name ?? draft.item.name
+            return {
+              drafts: {
+                ...state.drafts,
+                [draft.id]: {
+                  ...stateDraft,
+                  compilation,
+                  compilationId,
+                  name: compilation!.protocol?.name ?? stateDraft.name ?? draft.item.name
+                }
               }
             }
-          }
-        });
+          });
+        }
 
-        if (!options.skipWrite && compilation?.protocol?.name) {
+        if (!options.skipWrite && compilation.protocol?.name) {
           await draft.item.write({
             name: compilation.protocol.name
           });

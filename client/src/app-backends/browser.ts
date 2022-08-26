@@ -1,10 +1,10 @@
 import * as idb from 'idb-keyval';
 
-import { Draft, DraftId, DraftPrimitive } from '../draft';
-import { AppBackend, DraftItem, DraftsUpdateEvent, DraftsUpdateListener } from './base';
+import { DraftId, DraftPrimitive } from '../draft';
+import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
 import { HostId } from '../backends/common';
-import type { Host, HostSettings, HostSettingsRecord } from '../host';
+import type { HostSettings } from '../host';
 
 
 interface MainEntry {
@@ -21,12 +21,12 @@ interface DraftEntry {
     lastModified: number;
     source: string;
   } | {
+    type: 'private-filesystem';
+    handle: FileSystemDirectoryHandle;
+  } | {
     type: 'user-filesystem';
-    handle: FileSystemDirectoryHandle; // | FileSystemFileHandle;
+    handle: FileSystemDirectoryHandle | FileSystemFileHandle;
     mainFilePath: string;
-  // } | {
-  //   type: 'private-filesystem';
-  //   handle: FileSystemDirectoryHandle;
   };
 }
 
@@ -39,8 +39,7 @@ interface HostSettingsEntry {
 export class BrowserAppBackend implements AppBackend {
   static version = 1;
 
-  #draftIds = new Set<DraftId>();
-  #draftListeners = new Set<DraftsUpdateListener>();
+  #draftIds!: Set<DraftId>;
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
@@ -101,24 +100,16 @@ export class BrowserAppBackend implements AppBackend {
 
     let mainEntry = await idb.get<MainEntry>('main', this.#store);
 
-    if (mainEntry && (mainEntry.version === BrowserAppBackend.version)) {
-      let draftEntries = await idb.getMany<DraftEntry>(mainEntry.draftIds, this.#store);
-      let draftItems = Object.fromEntries(
-        draftEntries.map((draftEntry) => {
-          return [draftEntry.id, createDraftItem(draftEntry)];
-        })
-      );
-
-      this.#draftIds = new Set(mainEntry.draftIds);
-      this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: draftItems });
-    } else {
-      let entry: MainEntry = {
+    if (!mainEntry || (mainEntry.version !== BrowserAppBackend.version)) {
+      mainEntry = {
         draftIds: [],
         version: BrowserAppBackend.version
       };
 
-      await idb.set('main', entry, this.#store);
+      await idb.set('main', mainEntry, this.#store);
     }
+
+    this.#draftIds = new Set(mainEntry.draftIds);
   }
 
   async notify(message: string) {
@@ -127,39 +118,53 @@ export class BrowserAppBackend implements AppBackend {
     }
   }
 
-  async createDraft(source: string) {
-    let handle = await util.wrapAbortable(window.showDirectoryPicker());
+  async createDraft(options: { directory: boolean; source: string; }) {
+    let fileNameInDirectory = 'main.yml';
+
+    let handle = await util.wrapAbortable<FileSystemDirectoryHandle | FileSystemFileHandle>(
+      options.directory
+        ? window.showDirectoryPicker()
+        : window.showSaveFilePicker({
+          suggestedName: 'main.yml'
+        })
+    );
 
     if (!handle) {
       return null;
     }
 
-    let newDraftEntry = {
+    let draftEntry: DraftEntry = {
       id: crypto.randomUUID(),
       name: null,
 
       location: {
-        type: ('user-filesystem' as 'user-filesystem'),
+        type: 'user-filesystem',
         handle,
-        mainFilePath: 'protocol.yml'
+        mainFilePath: (handle.kind === 'directory') ? fileNameInDirectory : handle.name
       }
     };
 
-    let fileHandle = await handle.getFileHandle(newDraftEntry.location.mainFilePath, { create: true });
+    let fileHandle = (handle.kind === 'directory')
+      ? await handle.getFileHandle(fileNameInDirectory, { create: true })
+      : handle;
     let writable = await fileHandle.createWritable();
 
-    await writable.write(source);
+    await writable.write(options.source);
     await writable.close();
+
+    this.#draftIds.add(draftEntry.id);
 
     await idb.update<MainEntry>('main', (mainEntry) => ({
       ...mainEntry!,
-      draftIds: [...this.#draftIds, newDraftEntry.id]
+      draftIds: [...this.#draftIds]
     }), this.#store);
 
-    await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-    this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: { [newDraftEntry.id]: createDraftItem(newDraftEntry) } });
+    await idb.set(draftEntry.id, draftEntry, this.#store);
 
-    return newDraftEntry.id;
+    let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
+    await draftItem._initialize();
+
+    return draftItem;
   }
 
   async deleteDraft(draftId: string): Promise<void> {
@@ -180,28 +185,48 @@ export class BrowserAppBackend implements AppBackend {
     }), this.#store);
 
     await idb.del(draftId, this.#store);
-
-    this._triggerDraftsUpdate({ options: { skipCompilation: false }, update: { [draftId]: undefined } });
   }
 
-  async loadDraft(): Promise<DraftId | null> {
-    let handle = await util.wrapAbortable(window.showDirectoryPicker());
+  async listDrafts() {
+    let mainEntry = (await idb.get<MainEntry>('main', this.#store))!;
+    let draftEntries = await idb.getMany<DraftEntry>(mainEntry.draftIds, this.#store);
+
+    return await Promise.all(
+      draftEntries.map(async (draftEntry) => {
+        let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
+        await draftItem._initialize();
+
+        return draftItem;
+      })
+    );
+  }
+
+  async loadDraft(options: { directory: boolean; }): Promise<DraftItem | null> {
+    let handle = options.directory
+      ? await util.wrapAbortable(window.showDirectoryPicker())
+      : (await util.wrapAbortable(window.showOpenFilePicker()))?.[0];
 
     if (!handle) {
       return null;
     }
 
-    let files: Record<string, Blob> = {};
 
-    for await (let entry of handle.values()) {
-      if (entry.kind === 'file') {
-        let file = await entry.getFile();
+    let mainFilePath: string | null = null;
 
-        files[entry.name] = file;
+    switch (handle.kind) {
+      case 'directory': {
+        for await (let childHandle of handle.values()) {
+          if ((childHandle.kind === 'file') && childHandle.name.endsWith('.yml')) {
+            mainFilePath = childHandle.name;
+            break;
+          }
+        }
+      }
+
+      case 'file': {
+        mainFilePath = handle.name;
       }
     }
-
-    let mainFilePath = Object.keys(files).find((path) => path.endsWith('.yml')) ?? null;
 
     if (!mainFilePath) {
       return null;
@@ -218,141 +243,289 @@ export class BrowserAppBackend implements AppBackend {
       }
     };
 
+    this.#draftIds.add(newDraftEntry.id);
+
     await idb.update<MainEntry>('main', (mainEntry) => ({
       ...mainEntry!,
-      draftIds: [...this.#draftIds, newDraftEntry.id]
+      draftIds: Array.from(this.#draftIds)
     }), this.#store);
 
     await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-    this._triggerDraftsUpdate({ options: { skipCompilation: true }, update: { [newDraftEntry.id]: createDraftItem(newDraftEntry) } });
 
-    return newDraftEntry.id;
+    let draftItem = new BrowserAppBackendDraftItem(newDraftEntry, this);
+    await draftItem._initialize();
+
+    return draftItem;
   }
 
-  async setDraft(draftId: DraftId, primitive: DraftPrimitive, options?: { skipCompilation?: unknown; }) {
-    let draftEntry = (await idb.get<DraftEntry>(draftId, this.#store))!;
-
-    let updatedDraftEntry = {
-      ...draftEntry,
-      lastModified: Date.now()
-    };
+  async setDraft(draftEntry: DraftEntry, primitive: DraftPrimitive) {
+    let draftEntryUpdate: Partial<DraftEntry> | null = null;
+    let revision: number | null = null;
 
     if (primitive.name !== void 0) {
-      updatedDraftEntry.name = primitive.name;
+      draftEntryUpdate = { ...(draftEntryUpdate ?? {}), name: primitive.name };
     }
 
     if (primitive.source !== void 0) {
-      switch (updatedDraftEntry.location.type) {
+      switch (draftEntry.location.type) {
         case 'app': {
-          updatedDraftEntry.location.source = primitive.source;
+          revision = Date.now();
+
+          draftEntryUpdate = {
+            ...(draftEntryUpdate ?? {}),
+            location: {
+              ...draftEntry.location,
+              lastModified: revision,
+              source: primitive.source
+            }
+          }
+
           break;
         }
 
         case 'user-filesystem': {
-          let handle = await updatedDraftEntry.location.handle.getFileHandle('protocol.yml');
+          let location = draftEntry.location;
+
+          let handle = await (() => {
+            switch (location.handle.kind) {
+              case 'directory': return location.handle.getFileHandle(location.mainFilePath);
+              case 'file': return location.handle;
+            }
+          })();
+
           let writable = await handle.createWritable();
 
           await writable.write(primitive.source);
           await writable.close();
 
+          let file = await handle.getFile();
+          revision = file.lastModified;
+
           break;
         }
       }
     }
 
-    await idb.set(draftId, updatedDraftEntry, this.#store);
-
-    this._triggerDraftsUpdate({
-      options: { skipCompilation: !!options?.skipCompilation },
-      update: { [draftId]: createDraftItem(updatedDraftEntry) }
-    });
-  }
-
-  onDraftsUpdate(listener: DraftsUpdateListener, options?: { signal?: AbortSignal | undefined; }) {
-    this.#draftListeners.add(listener);
-
-    options?.signal?.addEventListener('abort', () => {
-      this.#draftListeners.delete(listener);
-    });
-  }
-
-  private _triggerDraftsUpdate(event: DraftsUpdateEvent) {
-    for (let listener of this.#draftListeners) {
-      listener(event);
+    if (draftEntryUpdate) {
+      await idb.update<DraftEntry>(draftEntry.id, (draftEntry) => ({ ...draftEntry!, ...draftEntryUpdate! }), this.#store);
     }
+
+    return revision;
   }
 }
 
 
-function createDraftItem(draftEntry: DraftEntry): DraftItem {
-  return {
-    id: draftEntry.id,
-    name: draftEntry.name,
-    kind: (draftEntry.location.type === 'user-filesystem') ? 'ref' : 'own',
-    lastModified: null,
-    getFiles: async () => {
-      switch (draftEntry.location.type) {
-        case 'app': {
-          return {
-            '/main.yml': new Blob([draftEntry.location.source], { type: 'text/yaml' })
-          };
+export class BrowserAppBackendDraftItem implements DraftItem {
+  lastModified!: number | null;
+  pool = new util.Pool();
+  readable!: boolean;
+  readonly = false;
+  revision = 0;
+  source!: string | null;
+  volumeInfo = null;
+  writable!: boolean;
+
+  _backend: BrowserAppBackend;
+  _entry: DraftEntry; // Not kept up to date
+  _watchHandler: (() => Promise<void>) | null = null;
+  _writingCounter = 0;
+
+  constructor(draftEntry: DraftEntry, backend: BrowserAppBackend) {
+    this._backend = backend;
+    this._entry = draftEntry;
+  }
+
+  async _initialize() {
+    let location = this._entry.location;
+
+    this.readable = (location.type !== 'user-filesystem')
+      || ((await location.handle.queryPermission({ mode: 'read' })) === 'granted');
+    this.writable = (location.type !== 'user-filesystem')
+      || ((await location.handle.queryPermission({ mode: 'readwrite' })) === 'granted');
+
+    this.source = null;
+
+    if (this.readable) {
+      this.lastModified = await (async () => {
+        switch (location.type) {
+          case 'app': return location.lastModified;
+          case 'private-filesystem': return (await (await location.handle.getFileHandle('/index')).getFile()).lastModified;
+          case 'user-filesystem': {
+            let handle: FileSystemFileHandle;
+
+            switch (location.handle.kind) {
+              case 'directory':
+                handle = await location.handle.getFileHandle(location.mainFilePath);
+                break;
+              case 'file':
+                handle = location.handle;
+                break;
+            }
+
+            return (await handle.getFile()).lastModified;
+          }
         }
+      })();
+    } else {
+      this.lastModified = null;
+    }
+  }
 
-        case 'user-filesystem': {
-          let files: Record<string, Blob> = {};
-          let handle = draftEntry.location.handle;
+  get id() {
+    return this._entry.id;
+  }
 
-          if ((await handle.queryPermission()) !== 'granted') {
-            try {
-              if ((await handle.requestPermission()) !== 'granted') {
-                return null;
-              };
-            } catch (err) {
-              if ((err as { name: string; }).name === 'SecurityError') {
-                return null;
+  get kind() {
+    return (this._entry.location.type === 'user-filesystem')
+      ? 'ref'
+      : 'own';
+  }
+
+  get locationInfo() {
+    let location = this._entry.location;
+
+    switch (location.type) {
+      case 'app': return null;
+      case 'private-filesystem': return {
+        type: ('directory' as 'directory'),
+        name: location.handle.name + ' (internal)'
+      };
+      case 'user-filesystem': return {
+        type: location.handle.kind,
+        name: location.handle.name
+      };
+    }
+  }
+
+  get mainFilePath() {
+    switch (this._entry.location.type) {
+      case 'app': return '/';
+      case 'private-filesystem': return '/index';
+      case 'user-filesystem': return this._entry.location.mainFilePath;
+    }
+  }
+
+  get name() {
+    return this._entry.name; // Not kept up to date
+  }
+
+  async getFiles() {
+    let location = this._entry.location;
+
+    switch (location.type) {
+      case 'app': {
+        return {
+          '/': new Blob([location.source], { type: 'text/yaml' })
+        };
+      }
+
+      case 'private-filesystem':
+      case 'user-filesystem': {
+        switch (location.handle.kind) {
+          case 'directory': {
+            let files: Record<string, Blob> = {};
+
+            for await (let entry of location.handle.values()) {
+              if (entry.kind === 'file') {
+                let file = await entry.getFile();
+                files[entry.name] = file;
               }
-
-              throw err;
             }
+
+            return files;
           }
 
-          for await (let entry of draftEntry.location.handle.values()) {
-            if (entry.kind === 'file') {
-              let file = await entry.getFile();
-
-              files[entry.name] = file;
-            }
+          case 'file': {
+            return { [this.mainFilePath]: await location.handle.getFile() };
           }
-
-          return files;
-        }
-      }
-    },
-    async getMainFile() {
-      let files = await this.getFiles();
-
-      if (!files) {
-        return null;
-      }
-
-      return files[this.mainFilePath];
-    },
-    get mainFilePath() {
-      switch (draftEntry.location.type) {
-        case 'app': return '';
-        case 'user-filesystem': return draftEntry.location.mainFilePath;
-      }
-    },
-    get locationInfo() {
-      switch (draftEntry.location.type) {
-        case 'app': return null;
-        case 'user-filesystem': {
-          return {
-            type: ('directory' as 'directory'),
-            name: draftEntry.location.handle.name
-          };
         }
       }
     }
-  };
+  }
+
+  async request() {
+    if (this._entry.location.type === 'user-filesystem') {
+      try {
+        if (this.readonly) {
+          this.readable = ((await this._entry.location.handle.requestPermission({ mode: 'read' })) === 'granted');
+        } else {
+          this.writable = ((await this._entry.location.handle.requestPermission({ mode: 'readwrite' })) === 'granted');
+          this.readable = this.writable;
+        }
+      } catch (err) {
+        if ((err as { name: string; }).name === 'SecurityError') {
+          return;
+        }
+
+        throw err;
+      }
+
+      await this._watchHandler?.();
+    }
+  }
+
+  async watch(handler: () => void, options: { signal: AbortSignal; }) {
+    let intervalId: number | null = null;
+    let updateWatchListener = async () => {
+      let location = this._entry.location;
+
+      if ((location.type === 'user-filesystem') && (location.handle.kind === 'file')) {
+        let handle = location.handle;
+
+        if (this.readable && (intervalId === null)) {
+          let file = await handle.getFile();
+
+          this.lastModified = file.lastModified;
+          this.revision = file.lastModified;
+          this.source = await file.text();
+
+          if (!options.signal.aborted) {
+            intervalId = setInterval(() => {
+              if (this._writingCounter < 1) {
+                this.pool.add(async () => {
+                  let file = await handle.getFile();
+
+                  if (file.lastModified !== this.lastModified) {
+                    this.lastModified = file.lastModified;
+                    this.revision = file.lastModified;
+                    this.source = await file.text();
+
+                    handler();
+                  }
+                });
+              }
+            }, 1000);
+          }
+        }
+      }
+    };
+
+    this._watchHandler = async () => {
+      await updateWatchListener();
+      handler();
+    };
+
+    options?.signal.addEventListener('abort', () => {
+      this._watchHandler = null;
+
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
+    });
+
+    await updateWatchListener();
+    handler();
+  }
+
+  async write(primitive: DraftPrimitive) {
+    this._writingCounter += 1;
+
+    let revision = await this._backend.setDraft(this._entry, primitive);
+    this._writingCounter -= 1;
+
+    if (revision !== null) {
+      this.lastModified = revision;
+      this.source = primitive.source!;
+    }
+  }
 }

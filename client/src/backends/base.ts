@@ -1,6 +1,6 @@
 import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { ChipId, HostState, ProtocolLocation } from './common';
-import type { Draft as AppDraft } from '../draft';
+import type { DraftCompilation, DraftId } from '../draft';
 
 
 export interface BaseBackend {
@@ -14,7 +14,10 @@ export interface BaseBackend {
   onUpdate(listener: () => void, options?: { signal?: AbortSignal; }): void;
 
   command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
-  compileDraft(draftId: string, source: string): Promise<NonNullable<AppDraft['compiled']>>;
+  compileDraft(options: {
+    draftId: DraftId;
+    source: string;
+  }): Promise<DraftCompilation>;
   createChip(): Promise<{ chipId: ChipId; }>;
   deleteChip(chipId: ChipId): Promise<void>;
   createDraftSample(): Promise<string>;

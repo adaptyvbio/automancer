@@ -1,7 +1,4 @@
-from collections import namedtuple
-from pathlib import Path
 import asyncio
-import logging
 import platform
 import sys
 import time
@@ -9,15 +6,13 @@ import uuid
 
 from . import logger, reader
 from .chip import Chip, ChipCondition, CorruptedChip
+from .draft import Draft
 from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
 from .util.misc import log_exception
 
-
-Draft = namedtuple("Draft", ['id', 'errors', 'protocol', 'source'])
-DraftError = namedtuple("DraftError", ['message', 'range'])
 
 class Host:
   def __init__(self, backend, update_callback):
@@ -55,7 +50,7 @@ class Host:
 
     if conf_path.exists():
       try:
-        conf = reader.loads((self.data_dir / "setup.yml").open().read())
+        conf = reader.parse((self.data_dir / "setup.yml").open().read())
         conf = conf_schema.transform(conf)
       except reader.LocatedError as e:
         e.display()
@@ -156,29 +151,23 @@ class Host:
 
 
   def compile_draft(self, draft_id, source):
-    errors = list()
     protocol = None
 
-    try:
-      protocol = Protocol(
-        source,
-        host=self,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
-      )
-    except reader.LocatedError as e:
-      errors.append(DraftError(message=e.args[0], range=(e.location.start, e.location.end)))
-    except Exception as e: # TODO: filter between unexpected errors and compilation errors
-      errors.append(DraftError(message=str(e), range=None))
+    errors = list()
+    warnings = list()
 
-      import traceback
-      tb = traceback.format_exc()
-      print(tb)
+    protocol = Protocol(
+      source,
+      host=self,
+      parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
+    )
 
     draft = Draft(
       id=draft_id,
-      errors=errors,
+      errors=protocol.errors,
       protocol=protocol,
-      source=source
+      source=source,
+      warnings=protocol.warnings
     )
 
     return draft
@@ -300,14 +289,7 @@ class Host:
   async def process_request(self, request):
     if request["type"] == "compileDraft":
       draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
-
-      return {
-        "errors": [{
-          "message": error.message,
-          "range": error.range
-        } for error in draft.errors],
-        "protocol": draft.protocol and draft.protocol.export()
-      }
+      return draft.export()
 
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]

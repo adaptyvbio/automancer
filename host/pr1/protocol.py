@@ -1,8 +1,8 @@
+import traceback
 from collections import namedtuple
-import math
-import re
 
 from . import reader
+from .draft import DraftGenericError
 from .reader import LocatedValue
 from .units.base import BaseParser
 from .util import schema as sc
@@ -88,6 +88,26 @@ class Protocol:
     self.parser_classes = parsers
     self.parser = Parsers(self, parsers)
 
+    self.errors = list()
+    self.warnings = list()
+    self.valid = False
+
+    data, reader_errors, reader_warnings = reader.loads(text)
+
+    self.errors += reader_errors
+    self.warnings += reader_warnings
+
+    try:
+      self._parse(data)
+    except reader.LocatedError as e:
+      self.errors.append(DraftGenericError(e.args[0], ranges=[e.location]))
+    except Exception as e:
+      self.errors.append(DraftGenericError(message=str(e)))
+      traceback.print_exc()
+    else:
+      self.valid = True
+
+  def _parse(self, data):
     protocol_schema = sc.Dict({
       'name': sc.Optional(str),
       'stages': sc.Optional(sc.List(sc.Dict({
@@ -99,7 +119,6 @@ class Protocol:
       **({ key: sc.Optional(sc.Any()) for key in self.parser.protocol_keys }),
     })
 
-    data = reader.parse(text)
     data = protocol_schema.transform(data)
 
     self.segments = list()
@@ -160,6 +179,9 @@ class Protocol:
     # pprint(self.segments)
 
   def export(self):
+    if not self.valid:
+      return None
+
     return {
       "name": self.name,
       "data": {

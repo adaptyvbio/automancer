@@ -230,17 +230,18 @@ export namespace renumber {
 }
 
 
-export function debounce(delay: number, callback: () => void, options?: { signal?: AbortSignal; }): (() => void) {
+export function debounce(delay: number, callback: () => void, options?: { signal?: AbortSignal; }): {
+  (): void;
+  cancel(): void;
+  isActive(): boolean;
+} {
   let timeout: number | null = null;
 
   options?.signal?.addEventListener('abort', () => {
-    if (timeout !== null) {
-      clearTimeout(timeout);
-      timeout = null;
-    }
+    fn.cancel();
   });
 
-  return () => {
+  let fn = Object.assign(() => {
     if (timeout !== null) {
       clearTimeout(timeout);
     }
@@ -249,7 +250,19 @@ export function debounce(delay: number, callback: () => void, options?: { signal
       timeout = null;
       callback();
     }, delay);
-  };
+  }, {
+    cancel() {
+      if (timeout !== null) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+    },
+    isActive() {
+      return (timeout !== null);
+    }
+  });
+
+  return fn;
 }
 
 

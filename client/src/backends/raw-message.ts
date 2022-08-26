@@ -1,5 +1,5 @@
 import { BackendCommon, ChipId, ProtocolLocation } from './common';
-import type { Draft } from '../draft';
+import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
 
 
@@ -16,12 +16,17 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
-  async compileDraft(draftId: string, source: string) {
+  async compileDraft(options: {
+    draftId: DraftId;
+    source: string;
+  }) {
+    console.log('[FS] Compile');
+
     return await this._request({
       type: 'compileDraft',
-      draftId,
-      source
-    }) as NonNullable<Draft['compiled']>;
+      draftId: options.draftId,
+      source: options.source
+    }) as DraftCompilation;
   }
 
   async createChip() {

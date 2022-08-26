@@ -107,7 +107,7 @@ def interpolate(expr, context):
 
   result.append(expr[index:])
 
-  return CompositeValue(result, location=expr.location)
+  return CompositeValue(result, location=expr.locrange)
 
 
 class CompositeValue(LocatedValue):
@@ -129,7 +129,7 @@ class CompositeValue(LocatedValue):
       else:
         frags.append(frag)
 
-    return EvaluatedCompositeValue(frags, location=self.location)
+    return EvaluatedCompositeValue(frags, location=self.locrange)
 
   def get_single_expr(self):
     if (len(self.fragments) == 3) and (not self.fragments[0]) and (not self.fragments[-1]):
@@ -193,11 +193,11 @@ class PythonExpr:
       raise self.value.error(f"Invalid Python expression '{self.value}'; {f'{type(e).__name__}: {e.args[0]}' if hasattr(e, 'args') else repr(e)}")
 
     if type(result) == str:
-      return LocatedString(result, self.value.location, symbolic=True)
+      return LocatedString(result, self.value.locrange, symbolic=True)
     if type(result) == CompositeValue:
       return result
     else:
-      return LocatedValue(result, self.value.location)
+      return LocatedValue(result, self.value.locrange)
 
   def __repr__(self):
     return f"{{{self.value}}}"

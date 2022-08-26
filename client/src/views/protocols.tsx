@@ -44,8 +44,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
             <div className="actions">
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {
-                  let sample = await this.props.host.backend.createDraftSample();
-                  let draftId = await this.props.app.appBackend.createDraft(sample);
+                  let draftId = await this.props.app.createDraft({ directory: false });
 
                   if (draftId) {
                     this.props.setRoute(['protocol', draftId, 'overview']);
@@ -54,7 +53,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
               }}>New file</button>
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {
-                  let draftId = await this.props.app.appBackend.loadDraft();
+                  let draftId = await this.props.app.loadDraft({ directory: false });
 
                   if (draftId) {
                     this.props.setRoute(['protocol', draftId, 'overview']);
@@ -66,11 +65,11 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
           <div className="lproto-list">
             {drafts.map((draft) => {
-              let analysis = draft.compiled?.protocol && analyzeProtocol(draft.compiled.protocol);
+              let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
 
               return (
                 <DraftEntry
-                  name={draft.item.name ?? '[Untitled]'}
+                  name={draft.name ?? '[Untitled]'}
                   properties={[
                     ...(draft.item.locationInfo
                       ? [{ id: 'location', label: draft.item.locationInfo.name, icon: { directory: 'folder', file: 'description' }[draft.item.locationInfo.type] }]
@@ -78,7 +77,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     ...(draft.item.lastModified
                       ? [{ id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.item.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' }]
                       : []),
-                    ...(draft.compiled
+                    ...(draft.compilation
                       ? [analysis
                         ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }
                         : { id: 'status', label: 'Error', icon: 'error' }]
@@ -89,6 +88,14 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     // { id: 'duplicate', name: 'Duplicate', icon: 'file_copy' },
                     // { id: '_divider', type: 'divider' },
                     // { id: 'archive', name: 'Archive', icon: 'archive' },
+                    { id: 'open-readonly', name: 'Open in read-only mode' },
+                    { id: '_divider1', type: 'divider' },
+                    { id: 'reveal', name: 'Reveal in Finder', icon: 'folder_open' },
+                    { id: 'open', name: 'Open in external editor', icon: 'code' },
+                    { id: '_divider2', type: 'divider' },
+                    { id: 'download', name: 'Download', icon: 'download', disabled: true },
+                    { id: 'save', name: 'Save as...', icon: 'save' },
+                    { id: '_divider3', type: 'divider' },
                     ...((draft.item.kind === 'ref')
                       ? [{ id: 'remove', name: 'Remove from list', icon: 'highlight_off' }]
                       : [{ id: 'delete', name: 'Delete', icon: 'delete' }])
@@ -101,7 +108,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                       case 'delete':
                       case 'remove': {
                         this.pool.add(async () => {
-                          await this.props.app.appBackend.deleteDraft(draft.id);
+                          await this.props.app.deleteDraft(draft.id);
                         });
 
                         break;

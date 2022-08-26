@@ -2,14 +2,14 @@ import { setIn } from 'immutable';
 import * as React from 'react';
 
 import type { Route } from '../application';
-import type { Draft } from '../draft';
+import type { Draft, DraftCompilation } from '../draft';
 import { Chip, ChipCondition, ChipId, ProtocolLocation } from '../backends/common';
 import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
 import { TextEditor } from '../components/text-editor';
 import { Host } from '../host';
-import { Codes, Units } from '../units';
+import { Codes } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
 import { getChipMetadata } from '../backends/misc';
@@ -30,6 +30,7 @@ export interface PlanData {
 
 
 export interface DraftOverviewProps {
+  compilation: DraftCompilation | null;
   draft: Draft;
   host: Host;
   setRoute(route: Route): void;
@@ -62,7 +63,15 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
       Object.values(this.props.host.state.chips)
         .filter((chip) => chip.condition === ChipCondition.Ok)
     ) as Chip[];
-    let protocol = this.props.draft.compiled?.protocol;
+
+    if (!this.props.compilation) {
+      // The initial compilation is loading.
+      return (
+        <div className="blayout-contents" />
+      );
+    }
+
+    let protocol = this.props.compilation.protocol;
 
     let plan = this.state.plan;
     let chip = plan.context && (this.props.host.state.chips[plan.context.chipId] as Chip);
@@ -159,14 +168,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                   <div className="pconfig-submit">
                     <button type="button" className="btn" onClick={() => {
                       this.pool.add(async () => {
-                        let blob = await this.props.draft.item.getMainFile();
+                        let source = await this.props.draft.item.source;
 
-                        if (blob !== null) {
+                        if (source !== null) {
                           await this.props.host.backend.startPlan({
                             chipId: plan.context!.chipId,
                             data: plan.context!.data,
                             location: plan.location,
-                            source: await blob.text()
+                            source
                           });
 
                           this.props.setRoute(['chip', plan.context!.chipId, 'protocol']);

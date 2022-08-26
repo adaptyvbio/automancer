@@ -58,19 +58,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       // Trigger a compilation if the last compilation is outdated.
       if (this.props.draft.item.readable) {
         await this.compile({ global: true });
-
-        // let compilationTime = Date.now();
-        // this.compilationTime = compilationTime;
-
-        // let compilation = await this.props.host.backend.compileDraft({
-        //   draftId: this.props.draft.id,
-        //   source: await this.getSource()
-        // });
-
-        // if (compilationTime === this.compilationTime) {
-        //   this.setState({ compilation });
-        //   await this.props.app.saveDraftCompilation(this.props.draft, compilation);
-        // }
       }
     });
   }
@@ -89,22 +76,13 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  // tmp
-  async getSource() {
-    let draftItem = this.props.draft.item;
-    let files = (await draftItem.getFiles())!;
-    let blob = files[draftItem.mainFilePath];
-
-    return await blob.text();
-  }
-
   async compile(options: { global: boolean; source?: string; }) {
     let compilationTime = Date.now();
     this.compilationTime = compilationTime;
 
     let compilation = await this.props.host.backend.compileDraft({
       draftId: this.props.draft.id,
-      source: options.source ?? (await this.getSource())
+      source: options.source ?? this.props.draft.item.source!
     });
 
     if (compilationTime === this.compilationTime) {
@@ -173,8 +151,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
               this.pool.add(async () => {
                 await Promise.all([
-                  await this.compile({ global: true, source }),
                   await this.props.app.saveDraftSource(this.props.draft, source),
+                  await this.compile({ global: true, source })
                 ]);
               });
             }}

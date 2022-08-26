@@ -52,3 +52,21 @@ export interface DraftPrimitive {
 }
 
 export type DraftsRecord = Record<DraftId, Draft>;
+
+
+export function createDraftFromItem(draftItem: DraftItem): Draft {
+  return {
+    id: draftItem!.id,
+    compilation: null,
+    item: draftItem!,
+    lastModified: draftItem!.lastModified,
+    name: draftItem!.name,
+    readable: draftItem!.readable,
+    revision: draftItem!.revision,
+    writable: draftItem!.writable,
+
+    meta: {
+      compilationTime: null
+    }
+  };
+}

@@ -43,8 +43,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
             <div className="actions">
               <button type="button" className="btn" onClick={() => {
                 this.pool.add(async () => {
-                  let sample = await this.props.host.backend.createDraftSample();
-                  let draftId = await this.props.app.appBackend.createDraft(sample);
+                  let draftId = await this.props.app.createDraft({ directory: false });
 
                   if (draftId) {
                     this.props.setRoute(['protocol', draftId, 'overview']);

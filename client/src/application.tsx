@@ -5,7 +5,7 @@ import type { AppBackend, DraftItem } from './app-backends/base';
 import type { ChipId } from './backends/common';
 import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
-import type { Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
 import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
@@ -220,21 +220,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       let draftItems = await this.appBackend.listDrafts();
       let drafts = Object.fromEntries(
-        draftItems.map((draftItem): [DraftId, Draft] => {
-          return [draftItem.id, {
-            id: draftItem.id,
-            compilation: null,
-            item: draftItem,
-            lastModified: draftItem.lastModified,
-            name: draftItem.name,
-            readable: draftItem.readable,
-            revision: draftItem.revision,
-            writable: draftItem.writable,
-
-            meta: {
-              compilationTime: null
-            }
-          }];
+        draftItems.map((draftItem) => {
+          return [draftItem.id, createDraftFromItem(draftItem)];
         })
       );
 
@@ -270,6 +257,22 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
 
+  async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
+    let sample = await this.state.host!.backend.createDraftSample();
+    let draftItem = await this.appBackend.createDraft({ directory: options.directory, source: sample });
+
+    if (draftItem) {
+      this.setState((state) => ({
+        drafts: {
+          ...state.drafts,
+          [draftItem!.id]: createDraftFromItem(draftItem!)
+        }
+      }));
+    }
+
+    return (draftItem?.id ?? null);
+  }
+
   async deleteDraft(draftId: DraftId) {
     this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
 
@@ -281,32 +284,19 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     await this.appBackend.deleteDraft(draftId);
   }
 
-  async loadDraft(options: { directory: boolean; }) {
+  async loadDraft(options: { directory: boolean; }): Promise<DraftId | null> {
     let draftItem = await this.appBackend.loadDraft(options);
 
     if (draftItem) {
       this.setState((state) => ({
         drafts: {
           ...state.drafts,
-          [draftItem!.id]: {
-            id: draftItem!.id,
-            compilation: null,
-            item: draftItem!,
-            lastModified: draftItem!.lastModified,
-            name: draftItem!.name,
-            readable: draftItem!.readable,
-            revision: draftItem!.revision,
-            writable: draftItem!.writable,
-
-            meta: {
-              compilationTime: null
-            }
-          }
+          [draftItem!.id]: createDraftFromItem(draftItem!)
         }
       }));
     }
 
-    return draftItem?.id;
+    return (draftItem?.id ?? null);
   }
 
   async saveDraftSource(draft: Draft, source: string) {

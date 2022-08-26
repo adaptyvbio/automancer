@@ -69,7 +69,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   componentDidMount() {
     this.pool.add(async () => {
       this.editor = monaco.editor.create(this.ref.current!, {
-        value: await this.getSource(),
+        value: this.props.draft.item.source!,
         automaticLayout: true,
         // contextmenu: false,
         language: 'yaml',
@@ -107,16 +107,14 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   componentDidUpdate(prevProps: TextEditorProps) {
     if (this.props.draft.revision !== prevProps.draft.revision) {
-      this.pool.add(async () => {
-        let position = this.editor.getPosition();
+      let position = this.editor.getPosition();
 
-        this.externalChange = true;
-        this.model.setValue(await this.getSource());
+      this.externalChange = true;
+      this.model.setValue(this.props.draft.item.source!);
 
-        if (position) {
-          this.editor.setPosition(position);
-        }
-      });
+      if (position) {
+        this.editor.setPosition(position);
+      }
     }
 
     if (this.props.compilation !== prevProps.compilation) {
@@ -143,7 +141,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   updateMarkers(options?: { reveal?: boolean; }) {
     let compilation = this.props.compilation;
-    console.log('[TX] Update', compilation, this.outdatedCompilation)
 
     if (compilation && !this.outdatedCompilation) {
       monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {

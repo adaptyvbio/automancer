@@ -1,10 +1,10 @@
 import * as idb from 'idb-keyval';
 
-import { Draft, DraftId, DraftPrimitive } from '../draft';
-import { AppBackend, DraftItem, DraftsUpdateEvent, DraftsUpdateListener } from './base';
+import { DraftId, DraftPrimitive } from '../draft';
+import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
 import { HostId } from '../backends/common';
-import type { Host, HostSettings, HostSettingsRecord } from '../host';
+import type { HostSettings } from '../host';
 
 
 interface MainEntry {
@@ -118,38 +118,53 @@ export class BrowserAppBackend implements AppBackend {
     }
   }
 
-  async createDraft(source: string) {
-    let handle = await util.wrapAbortable(window.showDirectoryPicker());
+  async createDraft(options: { directory: boolean; source: string; }) {
+    let fileNameInDirectory = 'main.yml';
+
+    let handle = await util.wrapAbortable<FileSystemDirectoryHandle | FileSystemFileHandle>(
+      options.directory
+        ? window.showDirectoryPicker()
+        : window.showSaveFilePicker({
+          suggestedName: 'main.yml'
+        })
+    );
 
     if (!handle) {
       return null;
     }
 
-    let newDraftEntry = {
+    let draftEntry: DraftEntry = {
       id: crypto.randomUUID(),
       name: null,
 
       location: {
-        type: ('user-filesystem' as 'user-filesystem'),
+        type: 'user-filesystem',
         handle,
-        mainFilePath: 'protocol.yml'
+        mainFilePath: (handle.kind === 'directory') ? fileNameInDirectory : handle.name
       }
     };
 
-    let fileHandle = await handle.getFileHandle(newDraftEntry.location.mainFilePath, { create: true });
+    let fileHandle = (handle.kind === 'directory')
+      ? await handle.getFileHandle(fileNameInDirectory, { create: true })
+      : handle;
     let writable = await fileHandle.createWritable();
 
-    await writable.write(source);
+    await writable.write(options.source);
     await writable.close();
+
+    this.#draftIds.add(draftEntry.id);
 
     await idb.update<MainEntry>('main', (mainEntry) => ({
       ...mainEntry!,
-      draftIds: [...this.#draftIds, newDraftEntry.id]
+      draftIds: [...this.#draftIds]
     }), this.#store);
 
-    await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
+    await idb.set(draftEntry.id, draftEntry, this.#store);
 
-    return newDraftEntry.id;
+    let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
+    await draftItem._initialize();
+
+    return draftItem;
   }
 
   async deleteDraft(draftId: string): Promise<void> {
@@ -180,6 +195,7 @@ export class BrowserAppBackend implements AppBackend {
       draftEntries.map(async (draftEntry) => {
         let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
         await draftItem._initialize();
+
         return draftItem;
       })
     );
@@ -243,8 +259,6 @@ export class BrowserAppBackend implements AppBackend {
   }
 
   async setDraft(draftEntry: DraftEntry, primitive: DraftPrimitive) {
-    // console.log('[FS] Set', primitive);
-
     let draftEntryUpdate: Partial<DraftEntry> | null = null;
     let revision: number | null = null;
 
@@ -293,7 +307,6 @@ export class BrowserAppBackend implements AppBackend {
 
     if (draftEntryUpdate) {
       await idb.update<DraftEntry>(draftEntry.id, (draftEntry) => ({ ...draftEntry!, ...draftEntryUpdate! }), this.#store);
-      // if (draftEntryUpdate.name) console.log('[FS] Set name:', draftEntryUpdate.name);
     }
 
     return revision;
@@ -303,16 +316,17 @@ export class BrowserAppBackend implements AppBackend {
 
 export class BrowserAppBackendDraftItem implements DraftItem {
   lastModified!: number | null;
+  pool = new util.Pool();
   readable!: boolean;
   readonly = false;
   revision = 0;
+  source!: string | null;
   volumeInfo = null;
   writable!: boolean;
 
   _backend: BrowserAppBackend;
   _entry: DraftEntry; // Not kept up to date
   _watchHandler: (() => Promise<void>) | null = null;
-  _watchRevision = 0;
   _writingCounter = 0;
 
   constructor(draftEntry: DraftEntry, backend: BrowserAppBackend) {
@@ -328,7 +342,7 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     this.writable = (location.type !== 'user-filesystem')
       || ((await location.handle.queryPermission({ mode: 'readwrite' })) === 'granted');
 
-    console.log(`[FS] Initialize, readable: ${this.readable}, writable: ${this.writable}`);
+    this.source = null;
 
     if (this.readable) {
       this.lastModified = await (async () => {
@@ -355,18 +369,6 @@ export class BrowserAppBackendDraftItem implements DraftItem {
       this.lastModified = null;
     }
   }
-
-  // async _toDraft() {
-  //   return {
-  //     id: this.id,
-  //     item: this,
-  //     lastModified: this.lastModified,
-  //     name: this._entry.name,
-  //     readable: this.readable,
-  //     revision: this.revision,
-  //     writable: this.writable
-  //   };
-  // }
 
   get id() {
     return this._entry.id;
@@ -457,14 +459,11 @@ export class BrowserAppBackendDraftItem implements DraftItem {
         throw err;
       }
 
-      console.log('[FS] Possible permission change');
       await this._watchHandler?.();
     }
   }
 
   async watch(handler: () => void, options: { signal: AbortSignal; }) {
-    console.log('[FS] Watch request');
-
     let intervalId: number | null = null;
     let updateWatchListener = async () => {
       let location = this._entry.location;
@@ -475,22 +474,20 @@ export class BrowserAppBackendDraftItem implements DraftItem {
         if (this.readable && (intervalId === null)) {
           let file = await handle.getFile();
 
-          this._watchRevision = file.lastModified;
           this.lastModified = file.lastModified;
           this.revision = file.lastModified;
+          this.source = await file.text();
 
           if (!options.signal.aborted) {
-            console.log('[FS] Watching starting at ' + this._watchRevision);
-
             intervalId = setInterval(() => {
               if (this._writingCounter < 1) {
-                handle.getFile().then((file) => {
-                  if (file.lastModified !== this._watchRevision) {
-                    console.log(`[OS] Observed file change: ${this._watchRevision} -> ${file.lastModified}`);
+                this.pool.add(async () => {
+                  let file = await handle.getFile();
 
-                    this._watchRevision = file.lastModified;
+                  if (file.lastModified !== this.lastModified) {
                     this.lastModified = file.lastModified;
                     this.revision = file.lastModified;
+                    this.source = await file.text();
 
                     handler();
                   }
@@ -508,8 +505,6 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     };
 
     options?.signal.addEventListener('abort', () => {
-      console.log('[FS] Done watch request');
-
       this._watchHandler = null;
 
       if (intervalId !== null) {
@@ -522,16 +517,13 @@ export class BrowserAppBackendDraftItem implements DraftItem {
   }
 
   async write(primitive: DraftPrimitive) {
-    // console.log('[FS] Writing', primitive);
     this._writingCounter += 1;
 
     let revision = await this._backend.setDraft(this._entry, primitive);
     this._writingCounter -= 1;
 
     if (revision !== null) {
-      console.log(`[FS] New revision: ${this._watchRevision} -> ${revision}`);
       this.lastModified = revision;
-      this._watchRevision = revision;
     }
   }
 }

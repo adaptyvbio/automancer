@@ -13,14 +13,14 @@ export interface DraftItem {
     name: string;
   } | null;
   mainFilePath: string;
+  readable: boolean;
+  readonly: boolean;
   revision: number;
+  source: string | null;
   volumeInfo: {
     type: 'disk' | 'network';
     name: string;
   } | null;
-
-  readable: boolean;
-  readonly: boolean;
   writable: boolean;
 
   getFiles(): Promise<Record<string, Blob> | null>;
@@ -28,11 +28,6 @@ export interface DraftItem {
   watch(handler: () => void, options: { signal: AbortSignal; }): Promise<void>;
   write(primitive: DraftPrimitive): Promise<void>;
 }
-
-export type DraftsUpdateRecord = Record<DraftId, DraftItem | undefined>;
-export type DraftsUpdateEvent = { update: DraftsUpdateRecord; options: { skipCompilation: boolean; } };
-export type DraftsUpdateListener = (event: DraftsUpdateEvent) => void;
-
 
 export interface AppBackend {
   initialize(): Promise<void>;
@@ -42,7 +37,7 @@ export interface AppBackend {
   setDefaultHostSettings(settingsId: string | null): Promise<void>;
   setHostSettings(settings: HostSettings): Promise<void>;
 
-  createDraft(source: string): Promise<DraftId | null>;
+  createDraft(options: { directory: boolean; source: string; }): Promise<DraftItem | null>;
   deleteDraft(draftId: DraftId): Promise<void>;
   listDrafts(): Promise<DraftItem[]>;
   loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;

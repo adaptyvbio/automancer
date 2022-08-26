@@ -23,8 +23,6 @@ export abstract class RawMessageBackend extends BackendCommon {
   }) {
     console.log('[FS] Compile');
 
-    // await new Promise(r=>setTimeout(r,500))
-
     return await this._request({
       type: 'compileDraft',
       draftId: options.draftId,

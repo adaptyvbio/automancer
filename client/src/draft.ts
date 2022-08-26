@@ -34,7 +34,6 @@ export interface DraftCompilation {
 export interface Draft {
   id: DraftId;
   compilation: DraftCompilation | null;
-  compilationId: number | null;
   item: DraftItem;
   lastModified: number | null; // Last modification time.
   name: string | null;
@@ -43,8 +42,7 @@ export interface Draft {
   writable: boolean;
 
   meta: {
-    compilationId: number | null; // Time when the last compilation started.
-    compilationSourceLastModified: number | null; // Modification time of the last compilation started.
+    compilationTime: number | null; // Time when the last compilation started.
   };
 }
 

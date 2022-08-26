@@ -31,7 +31,6 @@ export abstract class BackendCommon implements BaseBackend {
   abstract command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   abstract compileDraft(options: {
     draftId: DraftId;
-    skipAnalysis: boolean;
     source: string;
   }): Promise<DraftCompilation>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;

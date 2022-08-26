@@ -28,7 +28,7 @@ window.MonacoEnvironment = {
 
 export interface TextEditorProps {
   autoSave: boolean;
-  compilation: DraftCompilation;
+  compilation: DraftCompilation | null;
   draft: Draft;
   onChange(source: string): void;
   onChangeSave(source: string): void;
@@ -87,8 +87,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() => {
-        monaco.editor.setModelMarkers(this.model, 'main', []);
-
         if (!this.externalChange) {
           this.triggerCompilation();
 
@@ -99,15 +97,15 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
         this.outdatedCompilation = true;
         this.externalChange = false;
+
+        this.updateMarkers();
       });
 
-      this.updateErrors();
+      this.updateMarkers();
     });
   }
 
   componentDidUpdate(prevProps: TextEditorProps) {
-    this.updateErrors({ reveal: true });
-
     if (this.props.draft.revision !== prevProps.draft.revision) {
       this.pool.add(async () => {
         let position = this.editor.getPosition();
@@ -123,7 +121,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
     if (this.props.compilation !== prevProps.compilation) {
       this.outdatedCompilation = false;
-      this.updateErrors();
+      this.updateMarkers();
     }
 
     if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {
@@ -143,8 +141,9 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     return await blob.text();
   }
 
-  updateErrors(options?: { reveal?: boolean; }) {
+  updateMarkers(options?: { reveal?: boolean; }) {
     let compilation = this.props.compilation;
+    console.log('[TX] Update', compilation, this.outdatedCompilation)
 
     if (compilation && !this.outdatedCompilation) {
       monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {
@@ -167,6 +166,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           severity: monaco.MarkerSeverity.Error
         };
       }));
+    } else {
+      monaco.editor.setModelMarkers(this.model, 'main', []);
     }
   }
 

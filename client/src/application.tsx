@@ -224,7 +224,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           return [draftItem.id, {
             id: draftItem.id,
             compilation: null,
-            compilationId: null,
             item: draftItem,
             lastModified: draftItem.lastModified,
             name: draftItem.name,
@@ -233,8 +232,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             writable: draftItem.writable,
 
             meta: {
-              compilationId: null,
-              compilationSourceLastModified: null
+              compilationTime: null
             }
           }];
         })
@@ -293,7 +291,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           [draftItem!.id]: {
             id: draftItem!.id,
             compilation: null,
-            compilationId: null,
             item: draftItem!,
             lastModified: draftItem!.lastModified,
             name: draftItem!.name,
@@ -302,8 +299,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
             writable: draftItem!.writable,
 
             meta: {
-              compilationId: null,
-              compilationSourceLastModified: null
+              compilationTime: null
             }
           }
         }
@@ -313,97 +309,50 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     return draftItem?.id;
   }
 
-  setDraft(draft: Draft, options: { compilation?: DraftCompilation | null; skipAnalysis: boolean; skipWrite?: boolean; source?: string; }) {
-    // Update the revision this draft is based on.
-    let compilationId = Date.now();
+  async saveDraftSource(draft: Draft, source: string) {
+    let compilationTime = Date.now();
+    draft.meta.compilationTime = compilationTime;
 
-    Object.assign(draft.meta, {
-      compilationId,
-      compilationSourceLastModified: (options.source ? null : draft.item.lastModified)
+    await draft.item.write({ source });
+
+    this.setState((state) => {
+      return {
+        drafts: {
+          ...state.drafts,
+          [draft.id]: {
+            ...state.drafts[draft.id],
+            lastModified: draft.item.lastModified
+          }
+        }
+      }
+    });
+  }
+
+  async saveDraftCompilation(draft: Draft, compilation: DraftCompilation) {
+    this.setState((state) => {
+      let stateDraft = state.drafts[draft.id];
+
+      if (!stateDraft) {
+        return null;
+      }
+
+      return {
+        drafts: {
+          ...state.drafts,
+          [draft.id]: {
+            ...stateDraft,
+            compilation,
+            name: compilation!.protocol?.name ?? stateDraft.name // ?? draft.item.name
+          }
+        }
+      }
     });
 
-    // If the draft's source has been updated from the internal editor, save it
-    // and then update 'draft.lastModified'.
-    if (options.source) {
-      this.pool.add(async () => {
-        await draft.item.write({ source: options.source });
-
-        if (draft.meta.compilationId === compilationId) {
-          draft.meta.compilationSourceLastModified = draft.item.lastModified;
-        }
-
-        this.setState((state) => {
-          return {
-            drafts: {
-              ...state.drafts,
-              [draft.id]: {
-                ...state.drafts[draft.id],
-                lastModified: draft.item.lastModified
-              }
-            }
-          }
-        });
+    if (compilation.protocol?.name) {
+      await draft.item.write({
+        name: compilation.protocol.name
       });
     }
-
-    this.pool.add(async () => {
-      let compilation: DraftCompilation | null;
-
-      if (options.compilation) {
-        compilation = options.compilation;
-      } else {
-        let source;
-
-        if (options.source) {
-          source = options.source;
-        } else {
-          // TODO: lastModified could have been updated since.
-          let files = (await draft.item.getFiles())!;
-          let mainFile = files[draft.item.mainFilePath];
-
-          source = await mainFile.text();
-        }
-
-        // Run the compilation
-        compilation = await this.state.host!.backend.compileDraft({
-          draftId: draft.id, // Used for caching on the host
-          skipAnalysis: options.skipAnalysis,
-          source
-        });
-      }
-
-      if (compilation) {
-        // Only save the compilation if the draft hasn't changed since.
-        if ((draft.meta.compilationId === compilationId)
-          /* && (!draft.meta.compilationSourceLastModified || (draft.meta.compilationSourceLastModified === draft.item.lastModified)) */) {
-          this.setState((state) => {
-            let stateDraft = state.drafts[draft.id];
-
-            if (!stateDraft) {
-              return null;
-            }
-
-            return {
-              drafts: {
-                ...state.drafts,
-                [draft.id]: {
-                  ...stateDraft,
-                  compilation,
-                  compilationId,
-                  name: compilation!.protocol?.name ?? stateDraft.name ?? draft.item.name
-                }
-              }
-            }
-          });
-        }
-
-        if (!options.skipWrite && compilation.protocol?.name) {
-          await draft.item.write({
-            name: compilation.protocol.name
-          });
-        }
-      }
-    });
   }
 
   async watchDraft(draftId: DraftId, options: { signal: AbortSignal; }) {

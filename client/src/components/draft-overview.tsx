@@ -2,7 +2,7 @@ import { setIn } from 'immutable';
 import * as React from 'react';
 
 import type { Host, Route } from '../application';
-import type { Draft } from '../draft';
+import type { Draft, DraftCompilation } from '../draft';
 import { ChipId, ProtocolLocation } from '../backends/common';
 import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
@@ -28,6 +28,7 @@ export interface PlanData {
 
 
 export interface DraftOverviewProps {
+  compilation: DraftCompilation | null;
   draft: Draft;
   host: Host;
   setRoute(route: Route): void;
@@ -57,7 +58,15 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
 
   render() {
     let chips = Object.values(this.props.host.state.chips);
-    let protocol = this.props.draft.compilation?.protocol;
+
+    if (!this.props.compilation) {
+      // The initial compilation is loading.
+      return (
+        <div className="blayout-contents" />
+      );
+    }
+
+    let protocol = this.props.compilation.protocol;
 
     let plan = this.state.plan;
     let chip = plan.context && this.props.host.state.chips[plan.context.chipId];

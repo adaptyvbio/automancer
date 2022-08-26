@@ -17,7 +17,6 @@ export interface BaseBackend {
   command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   compileDraft(options: {
     draftId: DraftId;
-    skipAnalysis: boolean;
     source: string;
   }): Promise<DraftCompilation>;
   createChip(): Promise<{ chipId: ChipId; }>;

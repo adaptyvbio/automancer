@@ -19,7 +19,6 @@ export abstract class RawMessageBackend extends BackendCommon {
 
   async compileDraft(options: {
     draftId: DraftId;
-    skipAnalysis: boolean;
     source: string;
   }) {
     console.log('[FS] Compile');

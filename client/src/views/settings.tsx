@@ -138,15 +138,16 @@ function UnitInfoEntry(props: {
 
 
 function getAngle(input: number): string {
-  return `${Math.round(input * 6) / 6 * 360}deg`;
+  return `${Math.round((Math.abs(input) % 360) / 360 * 6) / 6 * 360}deg`;
 }
 
 function hash(input: string): number {
-  let output = 0;
+  let hash = 0;
 
-  for (let i = 0; i < input.length; i += 1) {
-    output ^= input.charCodeAt(i);
+  for (let index = 0; index < input.length; index++) {
+    let ch = input.charCodeAt(index);
+    hash = (((hash << 5) - hash) + ch) | 0;
   }
 
-  return output / 0xff;
+  return hash;
 }

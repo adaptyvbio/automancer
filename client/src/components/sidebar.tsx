@@ -94,8 +94,8 @@ export class Sidebar extends React.Component<SidebarProps> {
         { id: 'last',
           entries: [
             { id: 'settings',
-              label: 'Settings',
-              icon: 'settings',
+              label: 'Modules',
+              icon: 'extension',
               route: ['settings'] },
             { id: 'startup',
               label: 'Start menu',

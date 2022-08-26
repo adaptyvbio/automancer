@@ -76,7 +76,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         minimap: { enabled: false },
         occurrencesHighlight: false,
         renderWhitespace: 'trailing',
-        scrollBeyondLastLine: false,
+        scrollBeyondLastLine: true,
         selectionHighlight: false,
         tabSize: 2,
         overflowWidgetsDomNode: this.refWidgetContainer.current!,
@@ -139,29 +139,29 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     return await blob.text();
   }
 
-  updateMarkers(options?: { reveal?: boolean; }) {
+  updateMarkers() {
     let compilation = this.props.compilation;
 
     if (compilation && !this.outdatedCompilation) {
-      monaco.editor.setModelMarkers(this.model, 'main', compilation.errors.map((error) => {
-        let [startIndex, endIndex] = error.range ?? [0, this.model.getValueLength()];
-        let start = this.model.getPositionAt(startIndex);
-        let end = this.model.getPositionAt(endIndex);
+      monaco.editor.setModelMarkers(this.model, 'main', compilation.diagnostics.flatMap((diagnostic) => {
+        return diagnostic.ranges.map(([startIndex, endIndex]) => {
+          let start = this.model.getPositionAt(startIndex);
+          let end = this.model.getPositionAt(endIndex);
 
-        if (options?.reveal && (compilation!.errors.length === 1)) {
-          this.editor.revealLines(start.lineNumber, end.lineNumber);
-        }
+          return {
+            startColumn: start.column,
+            startLineNumber: start.lineNumber,
 
-        return {
-          startColumn: start.column,
-          startLineNumber: start.lineNumber,
+            endColumn: end.column,
+            endLineNumber: end.lineNumber,
 
-          endColumn: end.column,
-          endLineNumber: end.lineNumber,
-
-          message: error.message,
-          severity: monaco.MarkerSeverity.Error
-        };
+            message: diagnostic.message,
+            severity: {
+              'error': monaco.MarkerSeverity.Error,
+              'warning': monaco.MarkerSeverity.Warning
+            }[diagnostic.kind]
+          };
+        });
       }));
     } else {
       monaco.editor.setModelMarkers(this.model, 'main', []);
@@ -192,21 +192,21 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             : undefined} />
           {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         </div>
-        {((this.props.compilation?.errors.length ?? 0) > 0) && <div className="teditor-views-root">
+        {((this.props.compilation?.diagnostics.length ?? 0) > 0) && <div className="teditor-views-root">
           <div className="teditor-views-nav-root">
             <nav className="teditor-views-nav-list">
               <button className="teditor-views-nav-entry _selected">Problems</button>
             </nav>
           </div>
           <div className="teditor-views-problem-list">
-            {this.props.compilation?.errors.map((error, index) => (
+            {this.props.compilation?.diagnostics.map((diagnostic, index) => (
               <button type="button" className="teditor-views-problem-entry" key={index} onClick={() => {
-                if (this.props.compilation?.errors.length === 1) {
+                if (this.props.compilation?.diagnostics.length === 1) {
                   this.editor.trigger('anystring', 'editor.action.marker.next', {});
                 }
               }}>
-                <Icon name="error" />
-                <div className="teditor-views-problem-label">{error.message}</div>
+                <Icon name={{ 'error': 'error', 'warning': 'warning' }[diagnostic.kind]} />
+                <div className="teditor-views-problem-label">{diagnostic.message}</div>
               </button>
             ))}
           </div>

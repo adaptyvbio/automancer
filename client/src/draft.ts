@@ -7,9 +7,10 @@ export type DraftId = string;
 export type DraftLocation = DraftRange[];
 export type DraftRange = [number, number];
 
-export interface DraftError {
+export interface DraftDiagnostic {
+  kind: 'error' | 'warning';
   message: string;
-  range: DraftRange | null; // DraftLocation | null;
+  ranges: DraftRange[];
 }
 
 export interface DraftHover {
@@ -17,18 +18,11 @@ export interface DraftHover {
   range: DraftRange;
 }
 
-export type DraftWarning = DraftError;
-
 export interface DraftCompilation {
-  errors: DraftError[];
-  // diagnostics: {
-  //   errors: DraftError[];
-  //   hovers: DraftHover[];
-  //   warnings: DraftWarning[];
-  // } | null;
-  invalid: boolean;
+  // hovers: DraftHover[];
+  diagnostics: DraftDiagnostic[];
   protocol: Protocol | null;
-  revision: number; // Modification time of the source file this compilation corresponds to.
+  valid: boolean;
 }
 
 export interface Draft {

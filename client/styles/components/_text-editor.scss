@@ -4,7 +4,7 @@
 .teditor {
   &-outer {
     display: grid;
-    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-rows: minmax(0, 1fr) minmax(auto, 240px) auto;
 
     padding-top: 1.4rem;
 
@@ -13,6 +13,10 @@
   }
 
   &-inner {
+    &:nth-last-child(2) {
+      grid-row-end: span 2;
+    }
+
     > * {
       height: 100%;
     }
@@ -20,6 +24,9 @@
 
   &-views {
     &-root {
+      display: flex;
+      flex-direction: column;
+
       box-shadow: 0 -2px 6px #0001;
       z-index: 1;
     }
@@ -57,7 +64,8 @@
 
     &-problem {
       &-list {
-        margin: 0.4rem 0;
+        padding: 0.4rem 0;
+        overflow-y: auto;
       }
 
       &-entry {

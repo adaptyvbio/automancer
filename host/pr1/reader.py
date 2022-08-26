@@ -3,6 +3,8 @@ import math
 import sys
 from enum import Enum
 
+from .draft import DraftDiagnostic
+
 
 Position = namedtuple("Position", ["line", "column"])
 
@@ -10,6 +12,14 @@ class Location:
   def __init__(self, source, offset):
     self.source = source
     self.offset = offset
+
+  @property
+  def start(self):
+    return self.offset
+
+  @property
+  def end(self):
+    return self.offset + 1
 
   @property
   def start_position(self):
@@ -261,23 +271,36 @@ class TokenKind(Enum):
 
 
 class ReaderError(Exception):
-  pass
+  def diagnostic(self):
+    return DraftDiagnostic("Unknown error")
 
 class UnreadableIndentationError(ReaderError):
   def __init__(self, target):
     self.target = target
 
+  def diagnostic(self):
+    return DraftDiagnostic("Unreadable indentation", ranges=[self.target.locrange])
+
 class MissingKeyError(ReaderError):
   def __init__(self, location):
     self.location = location
+
+  def diagnostic(self):
+    return DraftDiagnostic("Missing key", ranges=[self.location])
 
 class InvalidLineError(ReaderError):
   def __init__(self, target):
     self.target = target
 
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid line", ranges=[self.target.locrange])
+
 class InvalidCharacterError(ReaderError):
   def __init__(self, target):
     self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid character", ranges=[self.target.locrange])
 
 
 def tokenize(raw_source):
@@ -408,13 +431,22 @@ class DuplicateKeyError(ReaderError):
     self.original = original
     self.duplicate = duplicate
 
+  def diagnostic(self):
+    return DraftDiagnostic("Duplicate key", ranges=[self.original.locrange, self.duplicate.locrange])
+
 class InvalidIndentationError(ReaderError):
   def __init__(self, target):
     self.target = target
 
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid indentation", ranges=[self.target.locrange])
+
 class InvalidTokenError(ReaderError):
   def __init__(self, target):
     self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid token", ranges=[self.target.locrange])
 
 
 def analyze(tokens):

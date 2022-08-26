@@ -269,11 +269,13 @@ export class BrowserAppBackend implements AppBackend {
     if (primitive.source !== void 0) {
       switch (draftEntry.location.type) {
         case 'app': {
+          revision = Date.now();
+
           draftEntryUpdate = {
             ...(draftEntryUpdate ?? {}),
             location: {
               ...draftEntry.location,
-              lastModified: Date.now(),
+              lastModified: revision,
               source: primitive.source
             }
           }
@@ -281,7 +283,6 @@ export class BrowserAppBackend implements AppBackend {
           break;
         }
 
-        // case 'private-filesystem':
         case 'user-filesystem': {
           let location = draftEntry.location;
 
@@ -524,6 +525,7 @@ export class BrowserAppBackendDraftItem implements DraftItem {
 
     if (revision !== null) {
       this.lastModified = revision;
+      this.source = primitive.source!;
     }
   }
 }

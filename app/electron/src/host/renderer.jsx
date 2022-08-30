@@ -1,5 +1,4 @@
-import { Application, MessageBackend, React, ReactDOM, Startup } from 'pr1-client';
-import 'pr1-client/dist/index.css';
+import { Application, MessageBackend, React, ReactDOM, Startup } from 'pr1';
 
 
 let root = ReactDOM.createRoot(document.getElementById('root'));
@@ -166,5 +165,10 @@ class InternalBackend extends MessageBackend {
 
   async _send(message) {
     window.api.internalHost.sendMessage(message);
+  }
+
+  async loadUnit(unitInfo) {
+    let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, 'http://localhost:4568');
+    return await import(url.href);
   }
 }

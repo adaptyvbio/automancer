@@ -41,6 +41,7 @@ esbuild.build({
 	sourcemap: argv.watch,
   watch: argv.watch,
 	loader: {
+		'.jpeg': 'file',
 		'.ttf': 'file',
 		'.woff': 'file',
 		'.woff2': 'file'

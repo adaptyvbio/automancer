@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import signal
 import sys
 import uuid
 
@@ -58,6 +60,9 @@ class App:
   version = 1
 
   def __init__(self, *, local):
+    logger.info(f"Running process with id {os.getpid()}")
+
+
     # Create data directory if missing
 
     self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
@@ -290,24 +295,25 @@ class App:
       task = loop.create_task(bridge.start(handle_client))
       tasks.add(task)
 
-    task = loop.create_task(self.host.start())
-    tasks.add(task)
+    async def start():
+      try:
+        await asyncio.gather(*tasks)
+      except asyncio.CancelledError:
+        logger.debug(f"Canceled {len(tasks)} tasks")
+
+    tasks.add(asyncio.ensure_future(self.host.start()))
+    main_task = asyncio.ensure_future(start())
+
+    def handle_sigint():
+      print("\r", end="", file=sys.stderr)
+      logger.info("Stopping after receiving a SIGINT signal")
+
+      main_task.cancel()
+
+    loop.add_signal_handler(signal.SIGINT, handle_sigint)
 
     try:
-      loop.run_forever()
-    except KeyboardInterrupt:
-      logger.info("Stopping due to a keyboard interrupt")
-      logger.debug(f"Cancelling {len(tasks)} tasks")
-
-      all_tasks = asyncio.gather(*tasks)
-      all_tasks.cancel()
-
-      try:
-        loop.run_until_complete(all_tasks)
-      except asyncio.CancelledError:
-        pass
-
-      logger.debug("Cancelled tasks")
+      loop.run_until_complete(main_task)
     finally:
       loop.close()
 

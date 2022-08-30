@@ -40,20 +40,31 @@ $color-right: #e7e3e6;
 
   &-left {
     &-root {
+      display: grid;
+      grid-template-rows: 3rem 1fr auto;
+
+      background-color: $color-left;
+      color: #fff;
+    }
+
+    &-dragregion {
+      -webkit-app-region: drag;
+    }
+
+    &-contents {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
 
-      padding: 6rem 4rem 3rem 4rem;
-
-      background-color: $color-left;
-      color: #fff;
+      padding: 3rem 4rem;
     }
 
     &-header {
       display: flex;
       align-items: center;
       column-gap: 1.6rem;
+
+      align-self: start;
     }
 
     &-logo {

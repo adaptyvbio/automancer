@@ -1,9 +1,12 @@
 const crypto = require('crypto');
-const { BrowserWindow, app, dialog, ipcMain } = require('electron');
+const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
 const readline = require('readline');
 const path = require('path');
 const childProcess = require('child_process');
 const fs = require('fs/promises');
+
+const { HostWindow } = require('./host');
+const { StartupWindow } = require('./startup');
 
 
 class CoreApplication {
@@ -13,8 +16,10 @@ class CoreApplication {
     this.app = app;
 
     this.data = null;
-    this.dataDirPath = path.join(app.getPath('userData'), 'App Data');
+    this.dataDirPath = path.join(this.app.getPath('userData'), 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
+
+    this.logsDirPath = this.app.getPath('logs');
 
     this.internalHost = null;
     this.startupWindow = null;
@@ -176,11 +181,13 @@ class CoreApplication {
       //   throw new Error('App version mismatch');
       // }
     } else {
-      this.setData({
+      await this.setData({
         drafts: {},
         version: CoreApplication.version
       });
     }
+
+    console.log(this.data);
   }
 
   async setData(data) {
@@ -201,137 +208,6 @@ main().catch((err) => {
 });
 
 
-class HostWindow {
-  constructor(app, hostSettings) {
-    this.app = app;
-    this.spec = { type: 'local' };
-
-    this.window = new BrowserWindow({
-      webPreferences: {
-        // additionalArguments: [hostSettings.id],
-        preload: path.join(__dirname, 'host/preload.js')
-      }
-    });
-
-    this.window.maximize();
-
-    setTimeout(() => {
-      this.window.loadFile(__dirname + '/host/index.html', { query: { hostSettingsId: hostSettings.id } });
-    }, 500);
-
-    if ((hostSettings.backendOptions.type === 'internal') && !this.app.internalHost) {
-      this.app.internalHost = new InternalHost();
-    }
-
-    this.app.internalHost.addClient(this.window);
-  }
-}
-
-class StartupWindow {
-  constructor(app) {
-    this.app = app;
-
-    this.window = new BrowserWindow({
-      width: 800,
-      height: 450,
-      backgroundColor: '#262528',
-      fullscreenable: false,
-      resizable: false,
-      show: 1,//false,
-      titleBarStyle: 'hiddenInset',
-      webPreferences: {
-        // contextIsolation: false,
-        // nodeIntegration: true,
-        preload: path.join(__dirname, 'startup/preload.js')
-      }
-    });
-
-    this.window.once('close', () => {
-      this.app.startupWindow = null;
-    });
-
-    this.window.loadFile(__dirname + '/startup/index.html');
-
-    // this.window.webContents.once('ready', () => {
-    //   this.window.show();
-    // });
-
-    ipcMain.on('ready', (event) => {
-      if (!this.window.isDestroyed() && event.sender === this.window.webContents) {
-        this.window.show();
-      }
-    });
-  }
-}
-
-
-
-class InternalHost {
-  constructor() {
-    this.clients = [];
-
-    this.process = childProcess.spawn(
-      app.isPackaged
-        ? path.join(process.resourcesPath, 'host/main')
-        : path.join(__dirname, '../tmp/host/main'),
-      ['--local']
-    );
-
-    this.process.stderr.pipe(process.stderr);
-
-    let rl = readline.createInterface({
-      input: this.process.stdout,
-      crlfDelay: Infinity
-    });
-
-    let stateMessage = null;
-
-    (async () => {
-      for await (const msg of rl) {
-        let message = JSON.parse(msg);
-
-        for (let client of this.clients) {
-          if (client.ready) {
-            client.window.webContents.send('host:message', message);
-          }
-        }
-
-        if (message.type === 'state') {
-          stateMessage = message;
-        }
-      }
-    })();
-
-    ipcMain.handle('host:ready', async (event) => {
-      let client = this.clients.find((client) => client.window.webContents === event.sender);
-      client.ready = true;
-
-      if (stateMessage !== null) {
-        event.sender.send('host:message', stateMessage);
-      }
-    });
-
-    ipcMain.on('host:message', (event, message) => {
-      this.process.stdin.write(JSON.stringify(message) + '\n');
-    });
-
-    this.closed = new Promise((resolve) => {
-      this.process.on('close', (code) => {
-        resolve();
-        // console.log(`child process exited with code ${code}`);
-        app.exit(0);
-      });
-    });
-  }
-
-  addClient(win) {
-    this.clients.push({ ready: false, window: win });
-  }
-
-  close() {
-    this.process.kill(2);
-  }
-}
 
 
 async function fsExists(path) {

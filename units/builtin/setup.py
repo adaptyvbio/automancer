@@ -17,9 +17,9 @@ setup(
     ]
   },
   package_data={
-    "pr1_builtin_constructs": ["*"],
-    "pr1_idle": ["*"],
-    "pr1_metadata": ["*"],
+    "pr1_builtin_constructs.client": ["*"],
+    "pr1_idle.client": ["*"],
+    "pr1_metadata.client": ["*"],
     "pr1_say.client": ["*"],
     "pr1_timer.client": ["*"]
   }

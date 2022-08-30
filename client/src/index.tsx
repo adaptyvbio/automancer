@@ -1,4 +1,5 @@
 /// <reference path="global-interfaces.d.ts" />
+/// <reference path="types.d.ts" />
 
 import * as React from 'react';
 import * as ReactDOM from 'react-dom/client';

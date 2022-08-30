@@ -1,9 +1,5 @@
 // import { ipcRenderer } from 'electron';
-import { React, ReactDOM, Startup } from 'pr1-client';
-// import * as React from '../../../client/node_modules/react';
-// import { createRoot } from '../../../client/node_modules/react-dom/client';
-
-import 'pr1-client/dist/index.css';
+import { React, ReactDOM, Startup } from 'pr1';
 
 
 let root = ReactDOM.createRoot(document.getElementById('root'));

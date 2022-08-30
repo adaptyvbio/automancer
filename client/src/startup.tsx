@@ -1,4 +1,6 @@
-import '@fontsource/space-mono';
+/// <reference path="types.d.ts" />
+
+import '@fontsource/space-mono/latin-400.css';
 import * as React from 'react';
 
 import { HostCreator } from './startup/host-creator';
@@ -7,6 +9,8 @@ import * as util from './util';
 import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
 import { ContextMenuArea } from './components/context-menu-area';
 import { MenuDef } from './components/context-menu';
+
+import logoUrl from '../static/logo.jpeg';
 
 
 interface StartupProps {
@@ -102,16 +106,19 @@ export class Startup extends React.Component<StartupProps, StartupState> {
 
           <div className="startup-home">
             <div className="startup-left-root">
-              <div className="startup-left-header">
-                <img src="static/logo.jpeg" width="330" height="300" className="startup-left-logo" />
-                <div className="startup-left-title">PR–1</div>
-                {/* <div className="startup-left-title">Universal Lab Experience</div> */}
-              </div>
-              <div className="startup-left-bar">
-                <div>Version 1.0</div>
-                {this.state.fullDisplay && (
-                  <div>License no. <code>CF 59 AF 6E</code></div>
-                )}
+              <div className="startup-left-dragregion" />
+              <div className="startup-left-contents">
+                <div className="startup-left-header">
+                  <img src={new URL(logoUrl, import.meta.url).href} width="330" height="300" className="startup-left-logo" />
+                  <div className="startup-left-title">PR–1</div>
+                  {/* <div className="startup-left-title">Universal Lab Experience</div> */}
+                </div>
+                <div className="startup-left-bar">
+                  <div>Version 1.0</div>
+                  {this.state.fullDisplay && (
+                    <div>License no. <code>CF 59 AF 6E</code></div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="startup-right-root">

@@ -2,13 +2,11 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <link href="dist/index.css" rel="stylesheet">
+    <link href="./dist/index.css" rel="stylesheet">
     <script type="importmap">
       {
         "imports": {
-          "pr1": "./dist/index.js",
-          "react": "./dist/libraries/react.js",
-          "react-dom": "./dist/libraries/react-dom.js"
+          "pr1": "./dist/index.js"
         }
       }
     </script>
@@ -17,8 +15,6 @@
     <div id="root"></div>
     <script type="module">
       import { createBrowserApp } from 'pr1';
-
-      // navigator.serviceWorker.register('./service-worker.js');
       createBrowserApp(document.getElementById('root'));
     </script>
   </body>

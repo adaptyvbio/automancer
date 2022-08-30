@@ -68,7 +68,7 @@ class UnitManager:
     # TODO: use entry_points() filtering when moving to Python 3.10
     # See https://docs.python.org/3/library/importlib.metadata.html
 
-    relevant_entry_points = list(importlib.metadata.entry_points().get("pr1.units"))
+    relevant_entry_points = list(importlib.metadata.entry_points().get("pr1.units", ()))
 
     for entry_point in relevant_entry_points:
       unit = entry_point.load()

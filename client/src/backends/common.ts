@@ -73,6 +73,7 @@ export interface Chip {
   condition: ChipCondition.Ok;
   master: Master | null;
   runners: Record<UnitNamespace, unknown>;
+  unitList: UnitNamespace[];
 }
 
 export type GeneralChip = Chip | PartialChip | ObsoleteChip | CorruptedChip;
@@ -162,6 +163,7 @@ export interface ProtocolLocation {
 export interface HostState {
   info: {
     id: HostId;
+    instanceRevision: number;
     name: string;
     startTime: number;
     units: Record<string, UnitInfo>;
@@ -170,7 +172,6 @@ export interface HostState {
   chips: Record<ChipId, GeneralChip>;
   drafts: Record<DraftId, Draft>;
   devices: Record<DeviceId, Device>;
-
   executors: ExecutorStates;
 }
 

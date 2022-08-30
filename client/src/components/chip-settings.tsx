@@ -1,9 +1,9 @@
-import { setIn } from 'immutable';
 import * as React from 'react';
 
 import type { Host } from '../host';
 import { ErrorBoundary } from './error-boundary';
-import { Chip, ChipId, HostId } from '../backends/common';
+import { Chip, ChipId } from '../backends/common';
+import { sortUnits } from '../sort';
 import { Pool } from '../util';
 
 
@@ -31,21 +31,22 @@ export class ChipSettings extends React.Component<ChipSettingsProps, ChipSetting
     return (
       <div className="blayout-contents" style={{ overflow: 'auto', padding: '0 3px' }}>
         <div>
-          {Object.values(this.props.host.units).map((unit) => {
-            if (!unit.MatrixEditor) {
-              return null;
-            }
+          {Object.values(this.props.host.units)
+            .filter((unit) => this.chip.unitList.includes(unit.namespace) && unit.MatrixEditor)
+            .sort(sortUnits)
+            .map((unit) => {
+              let Component = unit.MatrixEditor!;
 
-            return (
-              <ErrorBoundary
-                getErrorMessage={() => <>Failed to render the settings editor of unit <strong>{unit.namespace}</strong>.</>}
-                key={unit.namespace}>
-                <unit.MatrixEditor
-                  chip={this.chip}
-                  host={this.props.host} />
-              </ErrorBoundary>
-            );
-          })}
+              return (
+                <ErrorBoundary
+                  getErrorMessage={() => <>Failed to render the settings editor of unit <strong>{unit.namespace}</strong>.</>}
+                  key={unit.namespace}>
+                  <Component
+                    chip={this.chip}
+                    host={this.props.host} />
+                </ErrorBoundary>
+              );
+            })}
         </div>
       </div>
     );

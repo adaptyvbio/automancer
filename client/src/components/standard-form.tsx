@@ -14,10 +14,11 @@ export function Actions(props: React.PropsWithChildren<{}>) {
 
 export function Action(props: {
   label: string;
+  onClick?(): void;
   type?: 'button' | 'submit';
 }) {
   return (
-    <button type={props.type ?? 'button'} className="sform-action">
+    <button type={props.type ?? 'button'} onClick={props.onClick} className="sform-action">
       {props.label}
     </button>
   );

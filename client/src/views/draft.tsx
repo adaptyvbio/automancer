@@ -69,6 +69,13 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         await this.compile({ global: true });
       });
     }
+
+    // TODO: Handle unsaved drafts
+    if (this.props.host.state.info.instanceRevision !== prevProps.host.state.info.instanceRevision) {
+      this.pool.add(async () => {
+        await this.compile({ global: true });
+      });
+    }
   }
 
   componentWillUnmount() {

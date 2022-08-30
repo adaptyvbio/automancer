@@ -56,6 +56,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     let metadata = getChipMetadata(this.chip);
 
     let unitEntries = Object.values(this.props.host.units)
+      .filter((unit) => this.chip.unitList.includes(unit.namespace))
       .flatMap((unit) => (unit.getChipTabs?.(this.chip) ?? []).map((entry) => ({
         ...entry,
         id: 'unit.' + entry.id,

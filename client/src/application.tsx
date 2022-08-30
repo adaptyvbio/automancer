@@ -162,6 +162,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     document.addEventListener('keydown', (event) => {
       if (event.code === 'KeyR' && (event.altKey || event.ctrlKey)) {
+        event.preventDefault();
+
         this.pool.add(async () => {
           if (event.ctrlKey && this.state.host) {
             await this.state.host.backend.reloadUnits();

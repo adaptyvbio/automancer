@@ -236,6 +236,7 @@ class Host:
     return {
       "info": {
         "id": self.id,
+        "instanceRevision": self.manager.revision,
         "name": self.name,
         "startTime": self.start_time,
         "units": {

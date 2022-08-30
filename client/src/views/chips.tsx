@@ -64,10 +64,12 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                 let previewUrl: string | null = null;
 
                 for (let unit of Object.values(this.props.host.units)) {
-                  previewUrl ??= unit.providePreview?.({ chip, host: this.props.host }) ?? null;
+                  if (chip.unitList.includes(unit.namespace)) {
+                    previewUrl ??= unit.providePreview?.({ chip, host: this.props.host }) ?? null;
 
-                  if (previewUrl) {
-                    break;
+                    if (previewUrl) {
+                      break;
+                    }
                   }
                 }
 
@@ -91,10 +93,8 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                       <dl className="clist-data">
                         <dt>Created</dt>
                         <dd>{formatRelativeDate(metadata.creationDate)}</dd>
-                        <dt>Owner</dt>
-                        <dd>Bob</dd>
-                        <dt>Chip model</dt>
-                        <dd>Mitomi 768</dd>
+                        <dt>Protocol</dt>
+                        <dd>{chip.master?.protocol.name ?? 'Idle'}</dd>
                       </dl>
                       {previewUrl && (
                         <div className="clist-preview">

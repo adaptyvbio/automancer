@@ -157,7 +157,8 @@ class Chip(BaseChip):
       "master": self.master and self.master.export(),
       "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
-      }
+      },
+      "unitList": self.unit_list
     }
 
 

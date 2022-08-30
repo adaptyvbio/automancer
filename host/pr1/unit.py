@@ -42,6 +42,7 @@ class UnitInfo:
 class UnitManager:
   def __init__(self, conf):
     self.load(conf)
+    self.revision = 0
 
   def load(self, conf):
     units_info = list()
@@ -131,3 +132,5 @@ class UnitManager:
         self.units[unit_info.namespace] = unit_info.unit
 
         logger.debug(f"Reloaded unit '{unit_info.namespace}' by reloading {reload_count} modules")
+
+    self.revision += 1

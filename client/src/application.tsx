@@ -124,19 +124,21 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     let units: Record<UnitNamespace, Unit<unknown, unknown>> = Object.fromEntries(
       (await Promise.all(
-        targetUnitsInfo.map(async (unitInfo) => {
-          console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+        targetUnitsInfo
+          .filter((unitInfo) => unitInfo.hasClient)
+          .map(async (unitInfo) => {
+            console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
 
-          try {
-            let unit = await host.backend.loadUnit(unitInfo);
-            return [unitInfo.namespace, unit];
-          } catch (err) {
-            console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
-            console.error(err);
+            try {
+              let unit = await host.backend.loadUnit(unitInfo);
+              return [unitInfo.namespace, unit];
+            } catch (err) {
+              console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+              console.error(err);
 
-            return [unitInfo.namespace, null];
-          }
-        })
+              return [unitInfo.namespace, null];
+            }
+          })
       )).filter(([_namespace, unit]) => unit)
     );
 

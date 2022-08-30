@@ -242,6 +242,7 @@ class Host:
           unit_info.namespace: {
             "development": unit_info.development,
             "enabled": unit_info.enabled,
+            "hasClient": hasattr(unit_info.unit, 'client_path'),
             "metadata": {
               "author": unit_info.metadata.author,
               "description": unit_info.metadata.description,

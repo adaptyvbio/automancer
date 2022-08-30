@@ -119,6 +119,7 @@ export interface Unit<Code, Matrix> {
 export interface UnitInfo {
   development: boolean;
   enabled: boolean;
+  hasClient: boolean;
   namespace: string;
   version: number;
 

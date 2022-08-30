@@ -24,7 +24,8 @@ export interface ApplicationProps {
   hostSettings: HostSettings;
   hostSettingsRecord: HostSettingsRecord;
 
-  setStartup(): void;
+  onHostStarted?(): void;
+  setStartup?(): void;
 }
 
 export interface ApplicationState {
@@ -90,7 +91,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       units: (null as unknown as Host['units'])
     };
 
-    this.setState({ host });
+    this.setState({ host }, () => {
+      this.props.onHostStarted?.();
+    });
 
     this.pool.add(async () => void await this.loadUnitClients(host));
 

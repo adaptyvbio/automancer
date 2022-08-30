@@ -12,7 +12,7 @@ import { getChipMetadata } from '../backends/misc';
 export interface SidebarProps {
   currentRoute: Route | null;
   setRoute(route: Route): void;
-  setStartup(): void;
+  setStartup?(): void;
 
   host: Host | null;
   hostSettingsRecord: HostSettingsRecord;
@@ -93,11 +93,15 @@ export class Sidebar extends React.Component<SidebarProps> {
               label: 'Modules',
               icon: 'extension',
               route: ['settings'] },
-            { id: 'startup',
-              label: 'Start menu',
-              icon: 'home',
-              route: null,
-              onClick: () => void this.props.setStartup() }
+            ...(this.props.setStartup
+                ? [{
+                  id: 'startup',
+                  label: 'Start menu',
+                  icon: 'home',
+                  route: null,
+                  onClick: () => void this.props.setStartup?.()
+                }]
+                : [])
           ] },
       ]
       : [];

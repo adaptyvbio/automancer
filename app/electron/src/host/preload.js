@@ -2,9 +2,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 
 contextBridge.exposeInMainWorld('api', {
-  getHostSettings: async () => {
-    return await ipcRenderer.invoke('get-host-settings');
-  },
   ready: () => {
     ipcRenderer.send('ready');
   },
@@ -34,16 +31,19 @@ contextBridge.exposeInMainWorld('api', {
     // }
   },
   internalHost: {
-    ready: async () => {
-      await ipcRenderer.invoke('host:ready');
+    ready: async (hostSettingsId) => {
+      await ipcRenderer.invoke('internalHost.ready', hostSettingsId);
     },
     onMessage: (callback) => {
-      ipcRenderer.on('host:message', (_event, message) => {
+      ipcRenderer.on('internalHost.message', (_event, message) => {
         callback(message);
       });
     },
-    sendMessage: (message) => {
-      ipcRenderer.send('host:message', message);
+    sendMessage: (hostSettingsId, message) => {
+      ipcRenderer.send('internalHost.message', hostSettingsId, message);
     }
+  },
+  hostSettings: {
+    query: async () => await ipcRenderer.invoke('hostSettings.query')
   }
 });

@@ -12,7 +12,7 @@ exports.StartupWindow = class StartupWindow {
       backgroundColor: '#000000',
       fullscreenable: false,
       resizable: false,
-      // show: false,
+      show: false,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, 'preload.js')
@@ -24,16 +24,6 @@ exports.StartupWindow = class StartupWindow {
     });
 
     this.window.loadFile(__dirname + '/index.html');
-
-    ipcMain.on('ready', (event) => {
-      if (!this.window.isDestroyed() && event.sender === this.window.webContents) {
-        this.window.show();
-      }
-    });
-
-    // app.dock.setMenu(Menu.buildFromTemplate([
-    //   { type: 'checkbox', label: 'Foo', checked: true }
-    // ]));
 
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { role: 'appMenu' },

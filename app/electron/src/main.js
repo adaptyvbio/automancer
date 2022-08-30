@@ -7,13 +7,17 @@ const fs = require('fs/promises');
 
 const { HostWindow } = require('./host');
 const { StartupWindow } = require('./startup');
+const util = require('./util');
 
 
 class CoreApplication {
   static version = 1;
 
+  pool = new util.Pool();
+
   constructor(app) {
     this.app = app;
+    this.quitting = false;
 
     this.data = null;
     this.dataDirPath = path.join(this.app.getPath('userData'), 'App Data');
@@ -21,20 +25,48 @@ class CoreApplication {
 
     this.logsDirPath = this.app.getPath('logs');
 
-    this.internalHost = null;
     this.startupWindow = null;
     this.hostWindows = {};
 
+    this.internalHostSettings = {
+      id: 'local',
+      builtin: true,
+      hostId: null,
+      label: 'Local host',
+      locked: false,
+
+      backendOptions: {
+        type: 'internal',
+        id: 'local'
+      }
+    };
+
+    this.app.on('before-quit', () => {
+      this.quitting = true;
+    });
+
     this.app.on('will-quit', (event) => {
-      if (this.internalHost) {
+      if (!this.pool.empty) {
         event.preventDefault();
-        this.internalHost.close();
+
+        this.pool.wait().then(() => {
+          this.app.quit();
+        });
       }
     });
   }
 
+  get hostSettings() {
+    return {
+      ...this.data.hostSettings,
+      [this.internalHostSettings.id]: this.internalHostSettings
+    };
+  }
+
   async createStartupWindow() {
-    if (!this.startupWindow) {
+    if (this.startupWindow) {
+      this.startupWindow.focus();
+    } else {
       this.startupWindow = new StartupWindow(this);
     }
   }
@@ -48,38 +80,46 @@ class CoreApplication {
     await app.whenReady();
     await this.loadData();
 
-    let id = 'local';
 
-    this.hostSettings = {
-      [id]: {
-        id,
-        builtin: true,
-        hostId: null,
-        label: 'Local host',
-        locked: false,
+    // Window management
 
-        backendOptions: {
-          type: 'internal'
-        }
-      }
-    };
-
-    ipcMain.handle('get-host-settings', async (_event) => {
-      return this.hostSettings;
+    ipcMain.on('ready', (event) => {
+      BrowserWindow.fromWebContents(event.sender).show();
     });
 
-    ipcMain.on('launch-host', async (_event, settingsId) => {
-      let hostSettings = this.hostSettings[settingsId];
 
-      this.startupWindow?.window.close();
+    // Host settings management
 
-      let existingWindow = this.hostWindows[hostSettings.id];
+    ipcMain.handle('hostSettings.create', async (_event, { hostSettings }) => {
+      await this.setData({
+        hostSettings: {
+          ...this.data.hostSettings,
+          [hostSettings.id]: hostSettings
+        }
+      });
+    });
 
-      if (existingWindow) {
-        existingWindow.window.focus();
-      } else {
-        this.createHostWindow(hostSettings);
-      }
+    ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
+      let { [hostSettingsId]: _, ...hostSettings } = this.data.hostSettings;
+      await this.setData({ hostSettings });
+    });
+
+    ipcMain.handle('hostSettings.query', async (_event) => {
+      return {
+        defaultHostSettingsId: this.data.defaultHostSettingsId,
+        hostSettings: this.hostSettings
+      };
+    });
+
+    ipcMain.handle('hostSettings.setDefault', async (_event, { hostSettingsId }) => {
+      await this.setData({ defaultHostSettingsId: hostSettingsId });
+    });
+
+
+    // Other
+
+    ipcMain.on('launch-host', async (_event, hostSettingsId) => {
+      this.launchHost(hostSettingsId);
     });
 
     ipcMain.handle('drafts:create', async (_event, source) => {
@@ -167,8 +207,60 @@ class CoreApplication {
       return updatedDraftEntry;
     });
 
-    this.createStartupWindow();
+
+    // Internal host
+
+    ipcMain.handle('internalHost.ready', async (_event, hostSettingsId) => {
+      await this.hostWindows[hostSettingsId].internalHost.ready();
+    });
+
+    ipcMain.on('internalHost.message', async (_event, hostSettingsId, message) => {
+      this.hostWindows[hostSettingsId].internalHost.sendMessage(message);
+    });
+
+
+    if (this.data.defaultHostSettingsId) {
+      this.launchHost(this.data.defaultHostSettingsId);
+    } else {
+      this.createStartupWindow();
+    }
   }
+
+
+  launchHost(hostSettingsId) {
+    let existingWindow = this.hostWindows[hostSettingsId];
+
+    if (existingWindow) {
+      if (!existingWindow.window.isDestroyed()) {
+        this.startupWindow?.window.close();
+        existingWindow.window.focus();
+      }
+    } else {
+      let hostSettings = this.hostSettings[hostSettingsId];
+
+      this.startupWindow?.window.close();
+      this.createHostWindow(hostSettings);
+    }
+  }
+
+  releaseHostWindow(hostSettingsId, donePromise) {
+    let hostWindow = this.hostWindows[hostSettingsId];
+
+    Promise.resolve(donePromise).then(() => {
+      delete this.hostWindows[hostSettingsId];
+    });
+
+    if (donePromise) {
+      this.pool.add(donePromise);
+    }
+
+    if (!this.quitting) {
+      hostWindow.window.once('closed', () => {
+        this.createStartupWindow();
+      });
+    }
+  }
+
 
   async loadData() {
     await fs.mkdir(this.dataDirPath, { recursive: true });
@@ -182,12 +274,13 @@ class CoreApplication {
       // }
     } else {
       await this.setData({
+        defaultHostSettingsId: null,
         drafts: {},
+        hostSettings: {},
+        preferences: {},
         version: CoreApplication.version
       });
     }
-
-    console.log(this.data);
   }
 
   async setData(data) {

@@ -1,4 +1,4 @@
-import { Application, MessageBackend, React, ReactDOM, Startup } from 'pr1';
+import { Application, MessageBackend, Pool, React, ReactDOM } from 'pr1';
 
 
 let root = ReactDOM.createRoot(document.getElementById('root'));
@@ -86,7 +86,7 @@ class ElectronAppBackend {
 
   async createBackend(options) {
     if (options.type === 'internal') {
-      return new InternalBackend();
+      return new InternalBackend({ hostSettingsId: options.id });
     }
 
     return null;
@@ -111,6 +111,8 @@ function createDraftItem(draftEntry) {
 
 
 class App extends React.Component {
+  pool = new Pool();
+
   constructor(props) {
     super(props);
 
@@ -123,9 +125,11 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    window.api.getHostSettings().then((hostSettings) => {
-      this.setState({ hostSettings }, () => {
-        window.api.ready();
+    this.pool.add(async () => {
+      let { hostSettings } = await window.api.hostSettings.query();
+
+      this.setState({
+        hostSettings
       });
     });
   }
@@ -134,13 +138,15 @@ class App extends React.Component {
     if (!this.state.hostSettings) {
       return <div />;
     }
-    console.log('ok')
 
     return (
       <Application
         appBackend={this.appBackend}
         hostSettings={this.state.hostSettings[this.hostSettingsId]}
-        hostSettingsRecord={this.state.hostSettings} />
+        hostSettingsRecord={this.state.hostSettings}
+        onHostStarted={() => {
+          window.api.ready();
+        }} />
     );
   }
 }
@@ -149,10 +155,11 @@ root.render(<App />);
 
 
 class InternalBackend extends MessageBackend {
-  constructor() {
+  constructor(options) {
     super();
 
     this.closed = new Promise(() => {});
+    this.hostSettingsId = options.hostSettingsId;
   }
 
   async _start(listener) {
@@ -160,11 +167,11 @@ class InternalBackend extends MessageBackend {
       listener(message);
     });
 
-    await window.api.internalHost.ready();
+    await window.api.internalHost.ready(this.hostSettingsId);
   }
 
   async _send(message) {
-    window.api.internalHost.sendMessage(message);
+    window.api.internalHost.sendMessage(this.hostSettingsId, message);
   }
 
   async loadUnit(unitInfo) {

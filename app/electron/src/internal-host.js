@@ -7,9 +7,15 @@ const readline = require('readline');
 
 
 exports.InternalHost = class InternalHost {
-  constructor(coreApp) {
+  constructor(coreApp, hostWindow) {
     this.app = coreApp;
-    this.clients = [];
+    this.hostWindow = hostWindow;
+    this.hostWindowReady = false;
+
+    this.stateMessage = null;
+
+
+    // Start the host
 
     let logFilePath = path.join(this.app.logsDirPath, Date.now().toString() + '.log');
 
@@ -26,53 +32,46 @@ exports.InternalHost = class InternalHost {
 
     this.process.stderr.pipe(fs.createWriteStream(logFilePath));
 
+
+    // Listen to stdout
+
     let rl = readline.createInterface({
       input: this.process.stdout,
       crlfDelay: Infinity
     });
 
-    let stateMessage = null;
 
     (async () => {
       for await (const msg of rl) {
         let message = JSON.parse(msg);
 
-        for (let client of this.clients) {
-          if (client.ready) {
-            client.window.webContents.send('host:message', message);
-          }
+        if (this.hostWindowReady) {
+          this.hostWindow.window.webContents.send('internalHost.message', message);
         }
 
         if (message.type === 'state') {
-          stateMessage = message;
+          this.stateMessage = message;
         }
       }
     })();
 
-    ipcMain.handle('host:ready', async (event) => {
-      let client = this.clients.find((client) => client.window.webContents === event.sender);
-      client.ready = true;
 
-      if (stateMessage !== null) {
-        event.sender.send('host:message', stateMessage);
-      }
-    });
-
-    ipcMain.on('host:message', (event, message) => {
-      this.process.stdin.write(JSON.stringify(message) + '\n');
-    });
+    // Wait for the process to close
 
     this.closed = new Promise((resolve) => {
       this.process.on('close', (code) => {
-        resolve();
-        // console.log(`child process exited with code ${code}`);
-        app.exit(0);
+        resolve(code);
       });
     });
   }
 
-  addClient(win) {
-    this.clients.push({ ready: false, window: win });
+  async ready() {
+    this.hostWindowReady = true;
+    this.hostWindow.window.webContents.send('internalHost.message', this.stateMessage);
+  }
+
+  sendMessage(message) {
+    this.process.stdin.write(JSON.stringify(message) + '\n');
   }
 
   close() {

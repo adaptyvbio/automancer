@@ -1,5 +1,6 @@
+const chokidar = require('chokidar');
 const crypto = require('crypto');
-const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
+const { BrowserWindow, Menu, app, dialog, ipcMain, shell, ipcRenderer } = require('electron');
 const readline = require('readline');
 const path = require('path');
 const childProcess = require('child_process');
@@ -122,6 +123,21 @@ class CoreApplication {
       this.launchHost(hostSettingsId);
     });
 
+
+    // Draft management
+
+    let createClientDraftEntry = async (draftEntry) => {
+      let stats = await fs.stat(draftEntry.path);
+
+      return {
+        id: draftEntry.id,
+        lastOpened: draftEntry.lastOpened,
+        lastModified: stats.mtimeMs,
+        name: draftEntry.name,
+        path: path.basename(draftEntry.path)
+      };
+    };
+
     ipcMain.handle('drafts:create', async (_event, source) => {
       let result = await dialog.showSaveDialog();
 
@@ -145,7 +161,7 @@ class CoreApplication {
       return draftEntry;
     });
 
-    ipcMain.handle('drafts:delete', async (_event, draftId) => {
+    ipcMain.handle('drafts.delete', async (_event, draftId) => {
       let { [draftId]: _, ...drafts } = this.data.drafts;
       await this.setData({ drafts });
     });
@@ -156,14 +172,16 @@ class CoreApplication {
       return (await fs.readFile(draftEntry.path)).toString();
     });
 
-    ipcMain.handle('drafts:list', async () => {
-      return this.data.drafts;
+    ipcMain.handle('drafts.list', async () => {
+      return await Promise.all(
+        Object.values(this.data.drafts).map(createClientDraftEntry)
+      );
     });
 
-    ipcMain.handle('drafts:load', async (_event) => {
+    ipcMain.handle('drafts.load', async (_event) => {
       let result = await dialog.showOpenDialog({
         filters: [
-          { name: 'Protocols', extensions: ['.yml', '.yaml'] }
+          { name: 'Protocols', extensions: ['yml', 'yaml'] }
         ],
         properties: ['openFile']
       });
@@ -172,39 +190,91 @@ class CoreApplication {
         return null;
       }
 
-      let draftPath = result.filePaths[0];
       let id = crypto.randomUUID();
 
       let draftEntry = {
         id,
-        name: path.basename(draftPath),
-        path: draftPath
+        lastOpened: Date.now(),
+        name: null,
+        path: result.filePaths[0]
       };
 
       await this.setData({
         drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
       });
 
-      return draftEntry;
+      return createClientDraftEntry(draftEntry);
     });
 
-    ipcMain.handle('drafts:update', async (_event, draftId, primitive) => {
+    ipcMain.handle('drafts.openFile', async (_event, draftId, filePath) => {
       let draftEntry = this.data.drafts[draftId];
-      let updatedDraftEntry = draftEntry;
+      shell.openPath(draftEntry.path);
+    });
 
-      if (primitive.name !== void 0) {
-        updatedDraftEntry = { ...draftEntry, name: primitive.name };
+    ipcMain.handle('drafts.revealFile', async (_event, draftId, filePath) => {
+      let draftEntry = this.data.drafts[draftId];
+      shell.showItemInFolder(draftEntry.path);
+    });
 
+    let nextWatcherIndex = 0;
+    let watchers = {};
+
+    ipcMain.handle('drafts.watch', async (event, draftId) => {
+      let draftEntry = this.data.drafts[draftId];
+
+      let getChange = async () => {
+        let stats = await fs.stat(draftEntry.path);
+        let source = (await fs.readFile(draftEntry.path)).toString();
+
+        return {
+          lastModified: stats.mtimeMs,
+          source
+        };
+      };
+
+      let change = await getChange();
+
+      let watcherIndex = nextWatcherIndex++;
+      let watcher = chokidar.watch(draftEntry.path);
+
+      watcher.on('change', () => {
+        this.pool.add(async () => {
+          let change = await getChange();
+          event.sender.send('drafts.change', change);
+        });
+      });
+
+
+      watchers[watcherIndex] = watcher;
+
+      return {
+        ...change,
+        watcherIndex
+      };
+    });
+
+    ipcMain.handle('drafts.watchStop', async (_event, watcherIndex) => {
+      await watchers[watcherIndex].close();
+      delete watchers[watcherIndex];
+    });
+
+    ipcMain.handle('drafts.write', async (_event, draftId, primitive) => {
+      let draftEntry = this.data.drafts[draftId];
+
+      if (primitive.name) {
         await this.setData({
-          drafts: { ...this.data.drafts, [draftId]: updatedDraftEntry }
+          drafts: { ...this.data.drafts, [draftEntry.id]: { ...draftEntry, name: primitive.name } }
         });
       }
 
-      if (primitive.source !== void 0) {
+      if (primitive.source) {
         await fs.writeFile(draftEntry.path, primitive.source);
+
+        let stats = await fs.stat(draftEntry.path);
+        return stats.mtimeMs;
       }
 
-      return updatedDraftEntry;
+      return null;
     });
 
 
@@ -251,7 +321,7 @@ class CoreApplication {
     });
 
     if (donePromise) {
-      this.pool.add(donePromise);
+      this.pool.add(() => donePromise);
     }
 
     if (!this.quitting) {

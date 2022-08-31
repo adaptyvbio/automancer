@@ -12,14 +12,7 @@ class ElectronAppBackend {
   }
 
   async initialize() {
-    let draftEntries = await window.api.drafts.list();
 
-    this._triggerDraftsUpdate({
-      options: { skipCompilation: false },
-      update: Object.fromEntries(
-        Object.values(draftEntries).map((draftEntry) => [draftEntry.id, createDraftItem(draftEntry)])
-      )
-    });
   }
 
   async createDraft(source) {
@@ -39,50 +32,22 @@ class ElectronAppBackend {
 
   async deleteDraft(draftId) {
     await window.api.drafts.delete(draftId);
-
-    this._triggerDraftsUpdate({
-      options: { skipCompilation: false },
-      update: { [draftId]: null }
-    });
   }
 
-  async loadDraft() {
+  async listDrafts() {
+    return (await window.api.drafts.list()).map((draftEntry) => new DraftItem(draftEntry));
+  }
+
+  async loadDraft(options) {
     let draftEntry = await window.api.drafts.load();
 
     if (!draftEntry) {
       return null;
     }
 
-    this._triggerDraftsUpdate({
-      options: { skipCompilation: true },
-      update: { [draftEntry.id]: createDraftItem(draftEntry) }
-    });
-
-    return draftEntry.id;
+    return new DraftItem(draftEntry);
   }
 
-  async setDraft(draftId, primitive, options) {
-    let draftEntry = await window.api.drafts.update(draftId, primitive);
-
-    this._triggerDraftsUpdate({
-      options,
-      update: { [draftId]: createDraftItem(draftEntry) }
-    });
-  }
-
-  onDraftsUpdate(listener, options) {
-    this.#draftListeners.add(listener);
-
-    options?.signal?.addEventListener('abort', () => {
-      this.#draftListeners.delete(listener);
-    });
-  }
-
-  _triggerDraftsUpdate(event) {
-    for (let listener of this.#draftListeners) {
-      listener(event);
-    }
-  }
 
   async createBackend(options) {
     if (options.type === 'internal') {
@@ -93,20 +58,70 @@ class ElectronAppBackend {
   }
 }
 
-function createDraftItem(draftEntry) {
-  return {
-    id: draftEntry.id,
-    name: draftEntry.name,
-    kind: 'ref',
-    lastModified: null,
-    getMainFile: async () => {
-      return await window.api.drafts.getSource(draftEntry.id);
-    },
-    locationInfo: {
+
+class DraftItem {
+  kind = 'own';
+  readable = true;
+  readonly = false;
+  revision = 0;
+  source = null;
+  volumeInfo = null;
+  writable = true;
+
+  constructor(draftEntry) {
+    this._entry = draftEntry;
+
+    this.lastModified = draftEntry.lastModified;
+  }
+
+  get id() {
+    return this._entry.id;
+  }
+
+  get locationInfo() {
+    return {
       type: 'file',
-      name: draftEntry.path
+      name: this.mainFilePath
+    };
+  }
+
+  get mainFilePath() {
+    return this._entry.path;
+  }
+
+  get name() {
+    return this._entry.name;
+  }
+
+
+  async openFile(filePath) {
+    await window.api.drafts.openFile(this._entry.id, filePath);
+  }
+
+  async revealFile(filePath) {
+    await window.api.drafts.revealFile(this._entry.id, filePath);
+  }
+
+  async watch(handler, options) {
+    await window.api.drafts.watch(this._entry.id, (change) => {
+      this.lastModified = change.lastModified;
+      this.revision = change.lastModified;
+      this.source = change.source;
+
+      handler();
+    }, (listener) => {
+      options.signal.addEventListener('abort', listener);
+    });
+  }
+
+  async write(primitive) {
+    let lastModified = await window.api.drafts.write(this._entry.id, primitive);
+
+    if (lastModified !== null) {
+      this.lastModified = lastModified;
+      this.source = primitive.source;
     }
-  };
+  }
 }
 
 

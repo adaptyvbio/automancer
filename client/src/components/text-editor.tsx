@@ -131,14 +131,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.abort();
   }
 
-  async getSource() {
-    let draftItem = this.props.draft.item;
-    let files = (await draftItem.getFiles())!;
-    let blob = files[draftItem.mainFilePath];
-
-    return await blob.text();
-  }
-
   updateMarkers() {
     let compilation = this.props.compilation;
 

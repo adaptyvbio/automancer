@@ -48,7 +48,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
 
       if (!this.props.draft.item.readable) {
-        await this.props.draft.item.request();
+        await this.props.draft.item.request!();
       }
 
       if (this.state.requesting) {
@@ -112,7 +112,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               <div className="blayout-blank-inner">
                 <button type="button" className="btn" onClick={() => {
                   this.pool.add(async () => {
-                    await this.props.draft.item.request();
+                    await this.props.draft.item.request!();
 
                     if (this.props.draft.item.readable) {
                       this.pool.add(async () => {

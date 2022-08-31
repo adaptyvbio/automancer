@@ -3,7 +3,9 @@ exports.Pool = class Pool {
     this._promises = new Set();
   }
 
-  add(promise) {
+  add(generator) {
+    let promise = generator();
+
     promise.finally(() => {
       this._promises.delete(promise);
     });

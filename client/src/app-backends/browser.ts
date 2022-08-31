@@ -409,6 +409,7 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     return this._entry.name; // Not kept up to date
   }
 
+  // Deprecated
   async getFiles() {
     let location = this._entry.location;
 

@@ -23,8 +23,9 @@ export interface DraftItem {
   } | null;
   writable: boolean;
 
-  getFiles(): Promise<Record<string, Blob> | null>;
-  request(): Promise<void>;
+  openFile?(filePath?: string): Promise<void>;
+  request?(): Promise<void>;
+  revealFile?(filePath?: string): Promise<void>;
   watch(handler: () => void, options: { signal: AbortSignal; }): Promise<void>;
   write(primitive: DraftPrimitive): Promise<void>;
 }
@@ -41,9 +42,6 @@ export interface AppBackend {
   deleteDraft(draftId: DraftId): Promise<void>;
   listDrafts(): Promise<DraftItem[]>;
   loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;
-  openDraftFile?(draftId: DraftId, filePath: string): Promise<void>;
-  revealDraft?(draftId: DraftId): Promise<void>;
-  // setDraft(draftId: DraftId, primitive: DraftPrimitive): Promise<void>;
   requestDraft?(draftId: DraftId): Promise<void>;
 
   notify(message: string): Promise<void>;

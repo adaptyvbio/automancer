@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import type { DraftEntry as DraftDatabaseEntry } from '../app-backend';
 import type { Application, Route } from '../application';
 import type { Host } from '../host';
 import type { Draft, DraftId, DraftPrimitive } from '../draft';
@@ -88,27 +87,40 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     // { id: 'duplicate', name: 'Duplicate', icon: 'file_copy' },
                     // { id: '_divider', type: 'divider' },
                     // { id: 'archive', name: 'Archive', icon: 'archive' },
-                    { id: 'open-readonly', name: 'Open in read-only mode' },
-                    { id: '_divider1', type: 'divider' },
-                    { id: 'reveal', name: 'Reveal in Finder', icon: 'folder_open' },
-                    { id: 'open', name: 'Open in external editor', icon: 'code' },
+                    // { id: 'open-readonly', name: 'Open in read-only mode' },
+                    // { id: '_divider1', type: 'divider' },
+                    { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !draft.item.revealFile },
+                    { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !draft.item.openFile },
                     { id: '_divider2', type: 'divider' },
-                    { id: 'download', name: 'Download', icon: 'download', disabled: true },
+                    // { id: 'download', name: 'Download', icon: 'download', disabled: true },
                     { id: 'save', name: 'Save as...', icon: 'save' },
                     { id: '_divider3', type: 'divider' },
-                    ...((draft.item.kind === 'ref')
-                      ? [{ id: 'remove', name: 'Remove from list', icon: 'highlight_off' }]
-                      : [{ id: 'delete', name: 'Delete', icon: 'delete' }])
+                    { id: 'remove', name: 'Remove from list', icon: 'highlight_off' }
                   ]}
                   onClick={() => {
                     this.props.setRoute(['protocol', draft.id, 'overview']);
                   }}
                   onSelect={(path) => {
                     switch (path.first()) {
-                      case 'delete':
                       case 'remove': {
                         this.pool.add(async () => {
                           await this.props.app.deleteDraft(draft.id);
+                        });
+
+                        break;
+                      }
+
+                      case 'open': {
+                        this.pool.add(async () => {
+                          await draft.item.openFile!();
+                        });
+
+                        break;
+                      }
+
+                      case 'reveal': {
+                        this.pool.add(async () => {
+                          await draft.item.revealFile!();
                         });
 
                         break;

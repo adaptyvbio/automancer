@@ -10,25 +10,37 @@ contextBridge.exposeInMainWorld('api', {
       return await ipcRenderer.invoke('drafts:create', source);
     },
     delete: async (draftId) => {
-      await ipcRenderer.invoke('drafts:delete', draftId);
-    },
-    getSource: async (draftId) => {
-      return new Blob([await ipcRenderer.invoke('drafts:get-source', draftId)], { type: 'text/xml' });
+      await ipcRenderer.invoke('drafts.delete', draftId);
     },
     list: async () => {
-      return await ipcRenderer.invoke('drafts:list');
+      return await ipcRenderer.invoke('drafts.list');
     },
     load: async () => {
-      return await ipcRenderer.invoke('drafts:load');
+      return await ipcRenderer.invoke('drafts.load');
     },
+    openFile: async (draftId, filePath) => await ipcRenderer.invoke('drafts.openFile', draftId, filePath),
+    revealFile: async (draftId, filePath) => await ipcRenderer.invoke('drafts.revealFile', draftId, filePath),
     update: async (draftId, primitive) => {
       return await ipcRenderer.invoke('drafts:update', draftId, primitive);
+    },
+    watch: async (draftId, callback, onSignalAbort) => {
+      let changeListener = (_event, change) => {
+        callback(change);
+      };
+
+      ipcRenderer.on('drafts.change', changeListener);
+
+      let { watcherIndex, ...change } = await ipcRenderer.invoke('drafts.watch', draftId);
+      callback(change);
+
+      onSignalAbort(() => {
+        ipcRenderer.invoke('drafts.watchStop', watcherIndex);
+        ipcRenderer.off('drafts.change', changeListener);
+      });
+    },
+    write: async (draftId, primitive) => {
+      return await ipcRenderer.invoke('drafts.write', draftId, primitive);
     }
-    // onUpdate: (callback) => {
-    //   ipcRenderer.on('drafts:update', (_event, update) => {
-    //     callback(message);
-    //   });
-    // }
   },
   internalHost: {
     ready: async (hostSettingsId) => {

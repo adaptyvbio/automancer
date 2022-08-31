@@ -304,7 +304,7 @@ class Tuple(SchemaType):
     if len(test) != len(self._tuple):
       raise create_error(test, f"Invalid number of items, found {len(test)}, expected {len(self._tuple)}")
 
-    return [item.transform(test_item) for test_item, item in zip(test, self._tuple)]
+    return tuple([item.transform(test_item) for test_item, item in zip(test, self._tuple)])
 
   def validate(self, test):
     super().validate(test)
@@ -326,6 +326,11 @@ class ParseType(SchemaType):
     if self._type == bool:
       if (test == "true") or (test == "false"):
         return test == "true"
+    elif self._type == float:
+      try:
+        return float(test)
+      except:
+        pass
     elif self._type == int:
       try:
         return int(test)
@@ -334,6 +339,29 @@ class ParseType(SchemaType):
 
     super().validate(test)
     return test
+
+
+# ParseTuple
+
+class ParseTuple(SchemaType):
+  def __init__(self, items):
+    super().__init__(str)
+    self._tuple = [Schema(item) for item in items]
+
+  def transform(self, test):
+    super().validate(test)
+
+    segments = test.split(",")
+
+    if len(segments) != len(self._tuple):
+      raise create_error(test, f"Invalid number of items, found {len(segments)}, expected {len(self._tuple)}")
+
+    return tuple([item.transform(test_item) for test_item, item in zip(segments, self._tuple)])
+
+  def __repr__(self):
+    return "[" + ", ".join([str(item) for item in self._tuple]) + "]"
+
+
 
 
 ## Tests ####

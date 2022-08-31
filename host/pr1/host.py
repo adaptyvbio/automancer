@@ -153,9 +153,6 @@ class Host:
   def compile_draft(self, draft_id, source):
     protocol = None
 
-    errors = list()
-    warnings = list()
-
     protocol = Protocol(
       source,
       host=self,

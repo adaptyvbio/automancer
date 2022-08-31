@@ -38,6 +38,8 @@ class DeviceNode(BooleanNode):
     self.id = id
     self.label = label
     self.type = type
+
+    self.target_value = None
     self.value = None
 
     self.connected = False
@@ -48,25 +50,24 @@ class DeviceNode(BooleanNode):
 
   async def _connect(self):
     try:
-      value = await self._node.get_value()
+      self.value = await self._node.get_value()
     except ua.uaerrors._auto.BadNodeIdUnknown:
       logger.error(f"Missing node '{self._node.nodeid}'")
     else:
       self.connected = True
 
-      if self.value is None:
-        self.value = value
-      else:
-        await self.write(self.value)
+      if self.target_value is None:
+        self.target_value = self.value
 
-  async def read(self):
-    return await self._node.read_value() if self.connected else self.value
+      if self.target_value != self.value:
+        await self.write(self.target_value)
 
   async def write(self, value):
-    self.value = value
+    self.target_value = value
 
     if self.connected:
       await self._node.write_value(ua.DataValue(value))
+      self.value = value
 
 
 class Device:

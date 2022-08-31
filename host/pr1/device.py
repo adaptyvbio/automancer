@@ -20,8 +20,12 @@ class BooleanNode:
   def export(self):
     return {
       "type": "boolean",
+      "targetValue": self.target_value,
       "value": self.value
     }
+
+  async def write(self, value):
+    raise NotImplementedError()
 
   async def write_import(self, value):
     await self.write(value)

@@ -65,38 +65,24 @@ function DevicesTab(props: ChipTabComponentProps) {
             {device.nodes.map((node, nodeIndex) => {
               let label = (node.label ?? node.id);
 
-              switch (node.data.type) {
-                case 'boolean': {
-                  let unknown = (node.data.value === null);
+              let data = node.data;
 
-                  return (
-                    <Form.Select
-                      label={label + (node.connected ? '' : ' (disconnected)')}
-                      onInput={(value) => {
-                        props.host.backend.instruct({
-                          [namespace]: {
-                            type: 'setValue',
-                            deviceId: device.id,
-                            nodeIndex: nodeIndex,
-                            value: (value == 'true')
-                          }
-                        });
-                      }}
-                      options={[
-                        ...(unknown
-                          ? [{ id: '_', label: '–', disabled: true }]
-                          : []),
-                        { id: 'false', label: 'False' },
-                        { id: 'true', label: 'True' }
-                      ]}
-                      value={!unknown ? (node.data.value ? 'true' : 'false') : '_'}
-                      key={node.id} />
-                  );
-                }
+              if (data.type === 'boolean') {
+                data = {
+                  type: 'select',
+                  options: [
+                    { label: 'Off' },
+                    { label: 'On' }
+                  ],
+                  targetValue: (data.targetValue !== null) ? (data.targetValue ? 1 : 0) : null,
+                  value: (data.value !== null) ? (data.value ? 1 : 0) : null
+                };
+              }
 
+              switch (data.type) {
                 case 'select': {
-                  let busy = (node.data.value !== node.data.targetValue);
-                  let unknown = (node.data.value === null);
+                  let busy = (data.value !== data.targetValue);
+                  let unknown = (data.value === null);
 
                   return (
                     <Form.Select
@@ -107,7 +93,7 @@ function DevicesTab(props: ChipTabComponentProps) {
                             type: 'setValue',
                             deviceId: device.id,
                             nodeIndex: nodeIndex,
-                            value
+                            value: (node.data.type === 'boolean') ? (value === 1) : value
                           }
                         });
                       }}
@@ -115,12 +101,12 @@ function DevicesTab(props: ChipTabComponentProps) {
                         ...((unknown && !busy)
                           ? [{ id: -1, label: '–', disabled: true }]
                           : []),
-                        ...node.data.options.map((option, index) => ({
+                        ...data.options.map((option, index) => ({
                           id: index,
-                          label: (busy && (node.data.targetValue === index) ? ((!unknown ? (node.data.options[node.data.value!].label + ' ') : '') + '→ ') : '') + option.label
+                          label: (busy && (data.targetValue === index) ? ((!unknown ? (data.options[data.value!].label + ' ') : '') + '→ ') : '') + option.label
                         }))
                       ]}
-                      value={busy ? node.data.targetValue : (unknown ? -1 : node.data.value)}
+                      value={busy ? data.targetValue : (unknown ? -1 : data.value)}
                       key={node.id} />
                   );
                 }

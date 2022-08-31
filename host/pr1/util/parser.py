@@ -33,18 +33,19 @@ class Identifier(SchemaType):
 class IdentifierPath(SchemaType):
   def __init__(self, *, length = None):
     super().__init__(str)
-
-    self._identifier = Identifier()
     self._length = length
 
   def transform(self, test):
     segments = test.split("/")
 
-    for segment in segments:
-      self._identifier.validate(segment)
-
-    if (self._length is not None) and len(segments) != self._length:
+    if ((self._length is not None) and len(segments) != self._length) or (not segments):
       raise test.error(f"Invalid identifier path, expected {self._length} segments")
+
+    Identifier().validate(segments[0])
+    identifier = Identifier(allow_leading_digit=True)
+
+    for segment in segments[1:]:
+      identifier.validate(segment)
 
     return segments
 

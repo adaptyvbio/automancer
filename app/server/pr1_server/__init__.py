@@ -57,16 +57,18 @@ conf_schema = sc.Schema({
 })
 
 class App:
-  version = 1
+  version = 2
 
-  def __init__(self, *, local):
+  def __init__(self, *, data_dir = None, local = False):
     logger.info(f"Running process with id {os.getpid()}")
 
 
     # Create data directory if missing
 
-    self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
+    self.data_dir = Path(data_dir or appdirs.user_data_dir("PR-1", "Hsn"))
     self.data_dir.mkdir(exist_ok=True, parents=True)
+
+    logger.debug(f"Storing data in '{self.data_dir}'")
 
 
     # Load or create configuration
@@ -81,8 +83,9 @@ class App:
         e.display()
         sys.exit(1)
 
-      if conf['version'] > self.version:
-        raise Exception("Incompatible version")
+      if conf['version'] != self.version:
+        logger.error("Configuration version mismatch")
+        sys.exit(1)
 
       conf_updated = False
     else:
@@ -94,10 +97,10 @@ class App:
           'terminal': False,
           'write_config': False
         },
-        **({ 'remote': {
-          'hostname': "127.0.0.1",
+        'remote': {
+          'hostname': "localhost",
           'port': 4567
-        } } if not local else dict())
+        }
       }
 
       conf_updated = True
@@ -320,9 +323,10 @@ class App:
 
 def main():
   parser = argparse.ArgumentParser(description="PR–1 server")
+  parser.add_argument("--data-dir")
   parser.add_argument("--local", action='store_true')
 
   args = parser.parse_args()
 
-  app = App(local=args.local)
+  app = App(data_dir=args.data_dir, local=args.local)
   app.start()

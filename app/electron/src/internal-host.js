@@ -23,7 +23,7 @@ exports.InternalHost = class InternalHost {
       app.isPackaged
         ? path.join(process.resourcesPath, 'host/main')
         : path.join(__dirname, '../tmp/host/main'),
-      ['--local']
+      ['--data-dir', this.app.hostDirPath, '--local']
     );
 
     if (!app.isPackaged) {

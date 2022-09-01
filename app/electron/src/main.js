@@ -16,14 +16,17 @@ class CoreApplication {
 
   pool = new util.Pool();
 
-  constructor(app) {
-    this.app = app;
+  constructor(coreApp) {
+    this.app = coreApp;
     this.quitting = false;
 
+    let userData = this.app.getPath('userData');
+
     this.data = null;
-    this.dataDirPath = path.join(this.app.getPath('userData'), 'App Data');
+    this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
 
+    this.hostDirPath = path.join(userData, 'Host');
     this.logsDirPath = this.app.getPath('logs');
 
     this.startupWindow = null;

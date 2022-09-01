@@ -4,21 +4,24 @@
   "main": "src/main.js",
   "productName": "PR–1",
   "scripts": {
-    "build": "npm run build-js && npm run build-other && npm run build-host && npm run make",
+    "build": "npm run build-client && npm run build-js && npm run build-other && npm run build-host && npm run make && npm install",
+    "build-client": "rm -rf node_modules/pr1 && npm i ../../client --install-links",
     "build-host": "rm -rf tmp && mkdir tmp && cp -r ../server/dist/main tmp/host",
     "build-js": "esbuild src/host/renderer.jsx src/startup/renderer.jsx --bundle --external:electron --external:pr1 --outdir=lib --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --external:vm --external:path --external:fs/promises",
-    "build-other": "cp -r node_modules/pr1-client/dist/vs lib/vs",
+    "build-other": "cp -r node_modules/pr1/dist/vs lib/vs",
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron .",
     "start-forge": "electron-forge start"
   },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "pr1": "file:../../client"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.64",
     "@electron-forge/maker-zip": "^6.0.0-beta.64",
-    "chokidar": "^3.5.3",
     "electron": "^20.0.0",
-    "esbuild": "^0.14.48",
-    "pr1-client": "file:../../client"
+    "esbuild": "^0.14.48"
   }
 }

@@ -584,7 +584,10 @@ def dumps(obj, depth = 0, cont = False):
     return output
 
   if isinstance(obj, bool):
-    return "true" if obj else "false"
+    return ("true" if obj else "false") + "\n"
+
+  if isinstance(obj, float) or isinstance(obj, int):
+    return str(obj) + "\n"
 
   if isinstance(obj, str):
     if ("\n" in obj):

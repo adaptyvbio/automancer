@@ -13,11 +13,10 @@ setup(
     ]
   },
   package_data={
-    "pr1_opcua.pr1_opcua.client": ["*.js"]
+    "pr1_opcua.client": ["*"]
   },
 
   install_requires=[
-    # "opcua==0.98.13",
     "asyncua==0.9.94"
   ]
 )

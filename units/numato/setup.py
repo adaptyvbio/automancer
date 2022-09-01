@@ -14,5 +14,10 @@ setup(
   },
   package_data={
     "pr1_numato.data": ["*"]
-  }
+  },
+
+  install_requires=[
+    "pyserial==3.5",
+    "pyserial-asyncio==0.5"
+  ]
 )

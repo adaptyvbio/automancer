@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   drafts: {
     create: async (source) => {
-      return await ipcRenderer.invoke('drafts:create', source);
+      return await ipcRenderer.invoke('drafts.create', source);
     },
     delete: async (draftId) => {
       await ipcRenderer.invoke('drafts.delete', draftId);

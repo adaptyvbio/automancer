@@ -19,7 +19,7 @@ variants_map = {
 }
 
 conf_schema = sc.Schema({
-  'devices': sc.List({
+  'devices': sc.Optional(sc.List({
     'address': str,
     'label': sc.Optional(str),
     'id': str,
@@ -29,7 +29,7 @@ conf_schema = sc.Schema({
       'location': str,
       'type': sc.Or(*variants_map.keys())
     }))
-  })
+  }))
 })
 
 
@@ -189,7 +189,7 @@ class Executor(BaseExecutor):
     self._devices = dict()
     self._host = host
 
-    for device_conf in conf['devices']:
+    for device_conf in conf.get('devices', list()):
       device_id = device_conf['id']
 
       if device_id in self._host.devices:

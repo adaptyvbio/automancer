@@ -15,5 +15,10 @@ setup(
   package_data={
     "pr1_amf.client": ["*"],
     "pr1_amf.data": ["*"]
-  }
+  },
+
+  install_requires=[
+    "pyserial==3.5",
+    "pyserial-asyncio==0.5"
+  ]
 )

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import time
 
 
@@ -40,7 +41,7 @@ class Master:
       'time': time.time()
     })
 
-    print(self._log_data[-1])
+    print(self._log_data[-1], file=sys.stderr)
     self._update_callback()
 
   def _enter_segment(self):

@@ -9,13 +9,13 @@ from .devices.relay_board import RelayBoardDevice
 
 
 conf_schema = sc.Schema({
-  'devices': sc.List({
+  'devices': sc.Optional(sc.List({
     'address': str,
     'id': Identifier(),
     'kind': sc.Or('relayboard'),
     'label': sc.Optional(str),
     'relay_count': sc.ParseType(int)
-  })
+  }))
 })
 
 

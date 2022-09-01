@@ -93,7 +93,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !draft.item.openFile },
                     { id: '_divider2', type: 'divider' },
                     // { id: 'download', name: 'Download', icon: 'download', disabled: true },
-                    { id: 'save', name: 'Save as...', icon: 'save' },
+                    { id: 'save', name: 'Save as...', icon: 'save', disabled: true },
                     { id: '_divider3', type: 'divider' },
                     { id: 'remove', name: 'Remove from list', icon: 'highlight_off' }
                   ]}

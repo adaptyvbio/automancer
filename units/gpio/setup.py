@@ -13,6 +13,6 @@ setup(
     ]
   },
   package_data={
-    "pr1_gpio.pr1_gpio.client": ["*.js"]
+    "pr1_gpio.client": ["*"]
   }
 )

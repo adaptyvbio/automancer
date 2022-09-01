@@ -15,19 +15,14 @@ class ElectronAppBackend {
 
   }
 
-  async createDraft(source) {
-    let draftEntry = await window.api.drafts.create(source);
+  async createDraft(options) {
+    let draftEntry = await window.api.drafts.create(options.source);
 
     if (!draftEntry) {
       return null;
     }
 
-    this._triggerDraftsUpdate({
-      options: { skipCompilation: false },
-      update: { [draftEntry.id]: createDraftItem(draftEntry) }
-    });
-
-    return draftEntry.id;
+    return new DraftItem(draftEntry);
   }
 
   async deleteDraft(draftId) {

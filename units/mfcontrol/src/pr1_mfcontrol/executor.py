@@ -14,10 +14,10 @@ from .model import Model
 Valve = namedtuple("Valve", ['label', 'node'])
 
 schema = sc.Schema({
-  'valves': sc.List({
+  'valves': sc.Optional(sc.List({
     'label': sc.Optional(Identifier()),
     'location': IdentifierPath(length=2)
-  })
+  }))
 })
 
 class Executor(BaseExecutor):
@@ -33,7 +33,7 @@ class Executor(BaseExecutor):
   async def initialize(self):
     self.valves = list()
 
-    for valve_conf in self._conf['valves']:
+    for valve_conf in self._conf.get('valves', list()):
       valve_location = valve_conf['location']
 
       device = self._host.devices.get(valve_location[0])

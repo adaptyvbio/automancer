@@ -141,7 +141,7 @@ class CoreApplication {
       };
     };
 
-    ipcMain.handle('drafts:create', async (_event, source) => {
+    ipcMain.handle('drafts.create', async (_event, source) => {
       let result = await dialog.showSaveDialog();
 
       if (result.canceled) {
@@ -151,6 +151,7 @@ class CoreApplication {
       let id = crypto.randomUUID();
       let draftEntry = {
         id,
+        lastOpened: Date.now(),
         name: path.basename(result.filePath),
         path: result.filePath
       };
@@ -161,7 +162,7 @@ class CoreApplication {
         drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
       });
 
-      return draftEntry;
+      return createClientDraftEntry(draftEntry);
     });
 
     ipcMain.handle('drafts.delete', async (_event, draftId) => {
@@ -194,7 +195,6 @@ class CoreApplication {
       }
 
       let id = crypto.randomUUID();
-
       let draftEntry = {
         id,
         lastOpened: Date.now(),

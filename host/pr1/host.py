@@ -36,13 +36,13 @@ class Host:
     conf_schema = sc.Schema({
       'id': str,
       'name': str,
-      'units': sc.SimpleDict(str, {
+      'units': sc.Noneable(sc.SimpleDict(str, {
         'development': sc.Optional(sc.ParseType(bool)),
         'enabled': sc.Optional(sc.ParseType(bool)),
         'module': sc.Optional(str),
         'options': sc.Optional(dict),
         'path': sc.Optional(str)
-      }),
+      })),
       'version': sc.ParseType(int)
     })
 
@@ -59,7 +59,7 @@ class Host:
       conf = {
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
-        'units': dict(),
+        'units': None,
         'version': 1
       }
 
@@ -72,7 +72,7 @@ class Host:
 
     # -- Load units ---------------------------------------
 
-    self.manager = UnitManager(conf['units'])
+    self.manager = UnitManager(conf['units'] or dict())
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 

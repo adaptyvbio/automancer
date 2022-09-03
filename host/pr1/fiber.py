@@ -4,6 +4,14 @@ import regex
 from . import reader
 
 
+# Challenges to be solved
+#  - isolate the stack in functions with context-specific stack -> call stack vs closure stack
+#  - handle context in shorthands
+#  - support branches
+#  - detect topologies
+#  - detect infinite loops (?)
+
+
 def create(name):
   class A:
     def __init__(self, **kwargs):
@@ -138,6 +146,50 @@ class ConditionParser:
     ))
 
 
+class BranchParser:
+  name = 'branch'
+
+  def __init__(self, protocol):
+    self._protocol = protocol
+
+  def parse_block(self, data_block, state):
+    if 'parallel' in data_block:
+      children = list()
+
+      segment = self._protocol.register_segment(self.name, dict(), list())
+
+      for data_action in data_block['parallel']:
+        child_block = self._protocol.parse_block(data_action, state)
+        children.append(child_block)
+
+      return Block(
+        children=children,
+        entry_indices=[segment.index],
+        last_index=segment.index,
+        # entry_indices=[entry_index for child in children for entry_index in child.entry_indices],
+        # last_index=children[0].last_index,
+        parser=self
+      )
+
+  def postfix_block(self, block):
+    id = self._protocol.generate_id()
+    segment = self._protocol._segments[block.entry_indices[0]]
+
+    for child in block.children:
+      child.parser.postfix_block(child)
+
+      self._protocol._segments[child.entry_indices[0]].postfix_nodes.append(Postfix(
+        kind='branch_end',
+        id=id,
+        return_target=(segment.index, segment.postfix_nodes.head)
+      ))
+
+    segment.prefix_nodes.append(Postfix(
+      kind='branch_start',
+      targets=[child.entry_indices[0] for child in block.children]
+    ))
+
+
 class SequenceParser:
   name = 'sequence'
 
@@ -224,13 +276,18 @@ class PumpParser:
 
 
 
-Parsers = [ConditionParser, SequenceParser, PumpParser, FunctionsParser]
+Parsers = [ConditionParser, BranchParser, SequenceParser, PumpParser, FunctionsParser]
 
 
 class FiberProtocol:
   def __init__(self):
+    self._counter = -1
     self._parsers = { Parser.name: Parser(self) for Parser in Parsers }
     self._segments = list()
+
+  def generate_id(self):
+    self._counter += 1
+    return self._counter
 
   def parse(self, text):
     data = reader.parse(text)
@@ -271,6 +328,8 @@ class FiberProtocol:
           elif prefix.kind == 'call':
             prefix_result = ('prefix', prefix.target, None)
             current_stack.append({ '_return': prefix.return_target })
+          elif prefix.kind == 'branch_start':
+            prefix_result = ('prefix', prefix.targets[0], None)
           else:
             raise Exception(f"Unknown prefix '{prefix.kind}'")
 
@@ -293,7 +352,7 @@ class FiberProtocol:
           postfix_result = None
 
           if postfix.kind == 'sequence':
-            postfix_result = ('prefix', postfix.target[0], 0)
+            postfix_result = ('prefix', postfix.target[0], None)
           elif postfix.kind == 'repeat_end':
             if current_stack[-1]['index'] == postfix.count - 1:
               current_stack.pop()
@@ -302,6 +361,8 @@ class FiberProtocol:
           elif postfix.kind == 'post_call':
             popped = current_stack.pop()
             postfix_result = ('postfix', *popped['_return'])
+          elif postfix.kind == 'branch_end':
+            postfix_result = ('postfix', *postfix.return_target)
           else:
             raise Exception(f"Unknown postfix '{postfix.kind}'")
 
@@ -355,32 +416,19 @@ if __name__ == "__main__":
   p.parse("""
 name: Fiber
 
-functions:
-  foo:
-    actions:
-      - pump: 0
-      - pump: 1
-      - pump: 2
+# functions:
+#   foo:
+#     actions:
+#       - pump: 0
+#       - pump: 1
+#       - pump: 2
 
 actions:
-  # - pump: 3
-  # - actions:
-  #     - pump: 4
-  #     - pump: 5
-  #   repeat: 2
-  # - pump: 6
-
-  - actions:
-      - call: foo
-      - pump: 12
-    repeat: 2
-
-  # - pump: 3
-  # - actions:
-  #     - pump: 4
-  #     - pump: 5
-  #   if: something
-  # - pump: 6
+  - pump: 4
+  - parallel:
+      - pump: 5
+      - pump: 6
+  - pump: 7
 """)
 
   pprint(p._segments)

@@ -20,6 +20,7 @@ export interface HostRemoteBackendOptions {
 
 export type HostBackendOptions = HostRemoteBackendOptions | {
   type: 'internal';
+  model: string;
   Backend: { new(): BaseBackend; };
 } | {
   type: 'local';
@@ -65,7 +66,10 @@ export interface HostSettingsData {
 
 export function formatHostSettings(hostSettings: HostSettings): string | null {
   switch (hostSettings.backendOptions.type) {
-    case 'internal': return 'This computer';
+    case 'internal': return {
+      'alpha': 'Embedded',
+      'beta': 'Local Python'
+    }[hostSettings.backendOptions.model] ?? null;
     case 'remote': return `${hostSettings.backendOptions.address}:${hostSettings.backendOptions.port}`;
     default: return null;
   }

@@ -1,10 +1,11 @@
 module.exports = {
   packagerConfig: {
     extraResource: [
-      'tmp/host'
+      'tmp/resources/alpha',
+      'tmp/resources/beta'
     ],
     ignore: [
-      /^renderer\.js$/,
+      /^build$/,
       /^tmp$/
     ],
     name: 'PR–1'

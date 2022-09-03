@@ -26,24 +26,14 @@ class CoreApplication {
     this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
 
-    this.hostDirPath = path.join(userData, 'Host');
+    this.hostsDirPath = path.join(userData, 'App Hosts');
     this.logsDirPath = this.app.getPath('logs');
 
     this.startupWindow = null;
     this.hostWindows = {};
 
-    this.internalHostSettings = {
-      id: 'local',
-      builtin: true,
-      hostId: null,
-      label: 'Local host',
-      locked: false,
-
-      backendOptions: {
-        type: 'internal',
-        id: 'local'
-      }
-    };
+    this.localHostModels = null;
+    this.pythonInstallations = null;
 
     this.app.on('before-quit', () => {
       this.quitting = true;
@@ -58,13 +48,10 @@ class CoreApplication {
         });
       }
     });
-  }
 
-  get hostSettings() {
-    return {
-      ...this.data.hostSettings,
-      [this.internalHostSettings.id]: this.internalHostSettings
-    };
+    this.app.on('window-all-closed', () => {
+
+    });
   }
 
   async createStartupWindow() {
@@ -81,6 +68,9 @@ class CoreApplication {
   }
 
   async initialize() {
+    this.localHostModels = await util.getLocalHostModels();
+    this.pythonInstallations = await util.findPythonInstallations();
+
     await app.whenReady();
     await this.loadData();
 
@@ -111,7 +101,22 @@ class CoreApplication {
     ipcMain.handle('hostSettings.query', async (_event) => {
       return {
         defaultHostSettingsId: this.data.defaultHostSettingsId,
-        hostSettings: this.hostSettings
+        hostSettings: Object.fromEntries(
+          Object.entries(this.data.hostSettings).map(([hostSettingsId, hostSettings]) => {
+            let backendOptions = (() => {
+              switch (hostSettings.backendOptions.type) {
+                case 'alpha':
+                  return { type: 'internal', id: hostSettings.id, model: 'alpha' };
+                case 'beta':
+                  return { type: 'internal', id: hostSettings.id, model: 'beta' };
+                default:
+                  return hostSettings.backendOptions;
+              }
+            })();
+
+            return [hostSettingsId, { ...hostSettings, backendOptions }];
+          })
+        )
       };
     });
 
@@ -309,7 +314,7 @@ class CoreApplication {
         existingWindow.window.focus();
       }
     } else {
-      let hostSettings = this.hostSettings[hostSettingsId];
+      let hostSettings = this.data.hostSettings[hostSettingsId];
 
       this.startupWindow?.window.close();
       this.createHostWindow(hostSettings);
@@ -338,21 +343,64 @@ class CoreApplication {
   async loadData() {
     await fs.mkdir(this.dataDirPath, { recursive: true });
 
-    if (await fsExists(this.dataPath)) {
+    if (await util.fsExists(this.dataPath)) {
       let buffer = await fs.readFile(this.dataPath);
       this.data = JSON.parse(buffer.toString());
 
-      // if (appConfData.version !== CoreApplication.version) {
-      //   throw new Error('App version mismatch');
-      // }
+      if (this.data.version !== CoreApplication.version) {
+        throw new Error('App version mismatch');
+      }
     } else {
-      await this.setData({
+      let data = {
         defaultHostSettingsId: null,
         drafts: {},
         hostSettings: {},
         preferences: {},
         version: CoreApplication.version
-      });
+      };
+
+      let alphaModel = this.localHostModels.alpha;
+      let betaModel = this.localHostModels.beta;
+
+      if (alphaModel) {
+        let hostSettingsId = crypto.randomUUID();
+        let hostDataDirPath = path.join(this.hostsDirPath, hostSettingsId);
+
+        data.hostSettings[hostSettingsId] = {
+          id: hostSettingsId,
+          builtin: true,
+          label: 'Main setup',
+          backendOptions: {
+            type: 'alpha',
+            dataDirPath: hostDataDirPath
+          }
+        };
+      }
+
+      if (betaModel) {
+        let pythonInstallation = this.pythonInstallations.find((installation) =>
+          (installation.version[0] === betaModel.version[0])
+          && (installation.version[1] >= betaModel.version[1])
+        );
+
+        if (pythonInstallation) {
+          let hostSettingsId = crypto.randomUUID();
+          let hostDataDirPath = path.join(this.hostsDirPath, hostSettingsId);
+
+          data.hostSettings[hostSettingsId] = {
+            id: hostSettingsId,
+            builtin: true,
+            label: 'Development setup',
+            backendOptions: {
+              type: 'beta',
+              dataDirPath: hostDataDirPath,
+              pythonLocation: pythonInstallation.location
+            }
+          };
+        }
+      }
+
+      await this.setData(data);
     }
   }
 
@@ -372,20 +420,3 @@ async function main() {
 main().catch((err) => {
   console.error(err);
 });
-
-
-
-
-async function fsExists(path) {
-  try {
-    await fs.stat(path)
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      return false;
-    }
-
-    throw err;
-  }
-
-  return true;
-}

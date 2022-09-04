@@ -18,9 +18,16 @@ export interface DraftHover {
   range: DraftRange;
 }
 
+export interface DraftFold {
+  kind: string;
+  range: DraftRange;
+}
+
 export interface DraftCompilation {
-  // hovers: DraftHover[];
   diagnostics: DraftDiagnostic[];
+  folds: DraftFold[];
+  hovers: DraftHover[];
+
   protocol: Protocol | null;
   valid: boolean;
 }

@@ -143,7 +143,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
         case 'text': return (
           <TextEditor
-            autoSave={true}
+            autoSave={false}
             compilation={this.state.compilation}
             draft={this.props.draft}
             onChange={(source) => {

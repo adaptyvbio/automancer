@@ -7,6 +7,7 @@ import uuid
 from . import logger, reader
 from .chip import Chip, ChipCondition, CorruptedChip
 from .draft import Draft
+from .fiber.parser import FiberParser
 from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
@@ -151,23 +152,16 @@ class Host:
 
 
   def compile_draft(self, draft_id, source):
-    protocol = None
-
-    protocol = Protocol(
+    parser = FiberParser(
       source,
       host=self,
       parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )
 
-    draft = Draft(
+    return Draft(
       id=draft_id,
-      errors=protocol.errors,
-      protocol=protocol,
-      source=source,
-      warnings=protocol.warnings
+      analysis=parser.analysis
     )
-
-    return draft
 
   def create_chip(self, name):
     chip = Chip.create(

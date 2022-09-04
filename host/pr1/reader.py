@@ -78,6 +78,17 @@ class LocationArea:
   def __init__(self, ranges = list()):
     self.ranges = ranges
 
+  def enclosing_range(self):
+    return LocationRange(
+      source=self.ranges[0].source,
+      start=self.ranges[0].start,
+      end=self.ranges[-1].end
+    )
+
+  def single_range(self):
+    assert len(self.ranges) == 1
+    return self.ranges[0]
+
   def location(self):
     assert len(self.ranges) == 1
     return self.ranges[0].location()

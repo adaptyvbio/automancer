@@ -3,7 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
 import { Icon } from './icon';
-import { Draft, DraftCompilation } from '../draft';
+import { Draft, DraftCompilation, DraftRange } from '../draft';
 import * as util from '../util';
 
 
@@ -24,6 +24,19 @@ window.MonacoEnvironment = {
 		return './dist/vs/editor/editor.worker.js';
 	}
 };
+
+
+
+type LanguageService = monaco.languages.FoldingRangeProvider & monaco.languages.HoverProvider;
+let currentLanguageService: LanguageService | null = null;
+
+monaco.languages.registerFoldingRangeProvider('yaml', {
+  provideFoldingRanges: async (model, context, token) => (await currentLanguageService?.provideFoldingRanges(model, context, token)) ?? null
+});
+
+monaco.languages.registerHoverProvider('yaml', {
+  provideHover: async (model, position, token) => (await currentLanguageService?.provideHover(model, position, token)) ?? null
+});
 
 
 export interface TextEditorProps {
@@ -48,7 +61,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
-  triggerCompilation = util.debounce(400, () => {
+  triggerCompilation = util.debounce(200, () => {
     let source = this.model.getValue();
 
     if (this.props.autoSave) {
@@ -103,6 +116,41 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
       this.updateMarkers();
     });
+
+    currentLanguageService = {
+      provideFoldingRanges: async (model, context, token) => {
+        if (!this.props.compilation) {
+          return null;
+        }
+
+        return this.props.compilation.folds.map((fold) => {
+          let range = getModelRangeFromDraftRange(model, fold.range);
+
+          return {
+            kind: monaco.languages.FoldingRangeKind.Region,
+            start: range.startLineNumber,
+            end: range.endLineNumber
+          };
+        });
+      },
+      provideHover: async (model, position, token) => {
+        if (!this.props.compilation) {
+          return null;
+        }
+
+        let result = this.props.compilation.hovers
+          .map((hover) => ({
+            hover,
+            range: getModelRangeFromDraftRange(model, hover.range)
+          }))
+          .find(({ range }) => range.containsPosition(position));
+
+        return result && {
+          contents: result.hover.contents.map((str) => ({ value: str })),
+          range: result.range
+        };
+      }
+    };
   }
 
   componentDidUpdate(prevProps: TextEditorProps) {
@@ -216,4 +264,12 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       </div>
     );
   }
+}
+
+
+export function getModelRangeFromDraftRange(model: monaco.editor.ITextModel, range: DraftRange): monaco.Range {
+  return monaco.Range.fromPositions(
+    model.getPositionAt(range[0]),
+    model.getPositionAt(range[1])
+  );
 }

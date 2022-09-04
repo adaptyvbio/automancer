@@ -4,6 +4,7 @@ import * as ReactDOM from 'react-dom';
 
 import { Icon } from './icon';
 import { Draft, DraftCompilation, DraftRange } from '../draft';
+import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
 
 
@@ -24,19 +25,6 @@ window.MonacoEnvironment = {
 		return './dist/vs/editor/editor.worker.js';
 	}
 };
-
-
-
-type LanguageService = monaco.languages.FoldingRangeProvider & monaco.languages.HoverProvider;
-let currentLanguageService: LanguageService | null = null;
-
-monaco.languages.registerFoldingRangeProvider('yaml', {
-  provideFoldingRanges: async (model, context, token) => (await currentLanguageService?.provideFoldingRanges(model, context, token)) ?? null
-});
-
-monaco.languages.registerHoverProvider('yaml', {
-  provideHover: async (model, position, token) => (await currentLanguageService?.provideHover(model, position, token)) ?? null
-});
 
 
 export interface TextEditorProps {
@@ -85,7 +73,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         value: this.props.draft.item.source!,
         automaticLayout: true,
         // contextmenu: false,
-        language: 'yaml',
+        language: LanguageName,
         minimap: { enabled: false },
         occurrencesHighlight: false,
         renderWhitespace: 'trailing',
@@ -117,7 +105,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       this.updateMarkers();
     });
 
-    currentLanguageService = {
+    setLanguageService({
       provideFoldingRanges: async (model, context, token) => {
         if (!this.props.compilation) {
           return null;
@@ -150,7 +138,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           range: result.range
         };
       }
-    };
+    }, { signal: this.controller.signal });
   }
 
   componentDidUpdate(prevProps: TextEditorProps) {

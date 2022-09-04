@@ -53,6 +53,9 @@ class LocationRange:
       end=max(self.end, other.end)
     )
 
+  def __lt__(self, other):
+    return (self.start < other.start) or ((self.start == other.start) and (self.end < other.end))
+
   def __repr__(self):
     return f"LocationRange({self.start} -> {self.end})"
 
@@ -82,21 +85,28 @@ class LocationArea:
   def format(self):
     output = str()
 
-    lines_ranges = dict()
+    if not self.ranges:
+      return output
+
     source = self.ranges[0].source
+    lines_source = source.splitlines()
+
+    lines_ranges = dict()
 
     for locrange in self.ranges:
       start = locrange.start_position
       end = locrange.end_position
 
-      for line_index in range(start.line, end.line + 1):
+      for line_index in range(start.line, end.line + (1 if end.column > 0 else 0)):
         if not (line_index in lines_ranges):
           lines_ranges[line_index] = list()
 
-        lines_ranges[line_index].append(range(start.column, end.column + 1))
+        lines_ranges[line_index].append(range(
+          start.column if line_index == start.line else 0,
+          end.column if line_index == end.line else len(lines_source[line_index]) + 1
+        ))
 
     lines_list = sorted(lines_ranges.keys())
-    lines_source = source.splitlines()
 
     width_line = math.ceil(math.log(lines_list[-1] + 2, 10))
 
@@ -112,18 +122,53 @@ class LocationArea:
         line_ranges = lines_ranges[line_index]
 
         output += f" {' ' * width_line} | " + "".join(
-          ["^" if any(
+          [("-" if column_index == len(line_source) else "^") if any(
             [column_index in line_range for line_range in line_ranges]
-          ) else " " for column_index in range(0, len(line_source))
+          ) else " " for column_index in range(0, len(line_source) + 1)
         ]) + "\n"
 
     return output
 
   def __add__(self, other):
-    if isinstance(other, LocationRange):
-      return LocationArea(ranges=self.ranges + [other])
-    else:
-      return LocationArea(self.ranges + other.ranges)
+    ranges = (self.ranges + [other]) if isinstance(other, LocationRange) else (self.ranges + other.ranges)
+    output = list()
+
+    for range in sorted(ranges):
+      if output and (output[-1].end >= range.start):
+        output[-1].end = max(output[-1].end, range.end)
+      else:
+        output.append(LocationRange(range.source, range.start, range.end))
+
+    # print(self, '+', other, '->', output)
+    return LocationArea(output)
+
+  def __mod__(self, offset):
+    start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
+
+    index = 0
+    output = list()
+
+    for range in self.ranges:
+      range_start = index
+      range_end = index + (range.end - range.start)
+
+      delta_start = 0
+      delta_end = 0
+
+      if (start > range_start) and (start <= range_end):
+        delta_start = range_start - start
+
+      if (end >= range_start) and (end < range_end):
+        delta_end = range_end - end
+
+      if not ((end <= range_start) or (start >= range_end)):
+        output.append(LocationRange(range.source, range.start - delta_start, range.end - delta_end))
+
+      index += (range.end - range.start)
+
+    # print(self.ranges, '->', output, start, end)
+
+    return LocationArea(output)
 
   def __repr__(self):
     return "LocationArea(" + ", ".join([f"{range.start} -> {range.end}" for range in self.ranges]) + ")"
@@ -234,19 +279,24 @@ class LocatedString(str, LocatedValue):
     LocatedValue.__init__(self, value, area)
     self.absolute = absolute
 
+  def __add__(self, other):
+    other_located = isinstance(other, LocatedString)
+
+    return LocatedString(
+      self.value + str(other),
+      self.area + other.area if other_located else self.area,
+      absolute=(self.absolute and (other_located or (not other)))
+    )
+
   def __getitem__(self, key):
     if isinstance(key, slice):
-      start, stop, step = key.indices(len(self))
-
       if self.absolute:
-        if len(self.area.ranges) == 1:
-          return LocatedString(self.value[key], LocationArea([(self.area.ranges[0] % (start, stop))]))
-        else:
-          raise NotImplementedError()
+        start, stop, step = key.indices(len(self))
+        return LocatedString(self.value[key], self.area % (start, stop))
       else:
         return LocatedString(self.value[key], self.area, absolute=False)
     else:
-      return self[key:(key + 1)]
+      return self[key:(key + 1)] if key >= 0 else self[key:((key - 1) if key < -1 else None)]
 
   def split(self, sep, maxsplit = -1):
     if sep is None:
@@ -264,9 +314,9 @@ class LocatedString(str, LocatedValue):
     fragments = self.value.split(sep, maxsplit)
     return [it(frag) for frag in fragments]
 
-  def splitlines(self):
+  def splitlines(self, keepends = False):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]
-    return [self[((a + 1) if a is not None else a):b] for a, b in zip([None, *indices], [*indices, None])]
+    return [self[((a + 1) if a is not None else a):((b + 1) if keepends and (b is not None) else b)] for a, b in zip([None, *indices], [*indices, None])]
 
   def strip(self, chars = None):
     return self.lstrip(chars).rstrip(chars)
@@ -287,6 +337,9 @@ class LocatedDict(dict, LocatedValue):
   def __init__(self, value, area):
     LocatedValue.__init__(self, value, area)
     self.update(value)
+
+  def get_key(self, target):
+    return next(key for key in self.keys() if key == target)
 
 
 class LocatedList(list, LocatedValue):
@@ -401,7 +454,14 @@ def tokenize(raw_source):
 
 
   # Iterate over all lines
-  for line in source.splitlines():
+  for full_line in source.splitlines(keepends=True):
+    if full_line[-1] == "\n":
+      line = full_line[:-1]
+      line_break = full_line[-1]
+    else:
+      line = full_line
+      line_break = str()
+
     # Remove the comment on the line, if any
     comment_offset = line.find("#")
 
@@ -436,7 +496,7 @@ def tokenize(raw_source):
     if line[offset] == "|":
       offset = get_offset(line, offset)
       token.kind = TokenKind.String
-      token.value = line[offset:]
+      token.value = line[offset:] + line_break
 
     # Otherwise, continue
     else:
@@ -538,10 +598,7 @@ def analyze(tokens):
         head.value.append(entry_value)
 
       if entry.area:
-        if not head.area:
-          head.area = entry.area
-        else:
-          head.area += entry.area
+        head.area += entry.area
 
   for token in tokens:
     depth = len(stack) - 1
@@ -555,6 +612,8 @@ def analyze(tokens):
     head = stack[-1]
 
     if not head.mode:
+      head.area = LocationArea()
+
       if token.kind == TokenKind.List:
         head.mode = StackEntryMode.List
         head.value = list()
@@ -579,6 +638,8 @@ def analyze(tokens):
       else:
         stack.append(StackEntry(key=token.key, token=token))
 
+      head.area += token.key.area
+
     elif head.mode == StackEntryMode.List:
       if token.kind != TokenKind.List:
         errors.append(InvalidTokenError(token.data))
@@ -602,20 +663,15 @@ def analyze(tokens):
       else:
         head.value.append(token.value)
 
+      head.area += token.data.area
+
     elif head.mode == StackEntryMode.String:
       if token.kind != TokenKind.String:
         errors.append(InvalidTokenError(token.data))
         continue
 
-      if head.value:
-        head.value += "\n"
-
+      head.area += token.value.area
       head.value += token.value
-
-    if not head.area:
-      head.area = token.data.area
-    else:
-      head.area += token.data.area
 
   descend(0)
 
@@ -629,9 +685,7 @@ def add_location(entry):
     elif entry.mode == StackEntryMode.List:
       return LocatedList(entry.value, entry.area)
     elif entry.mode == StackEntryMode.String:
-      return LocatedString(entry.value, entry.area)
-    # else:
-    #   return LocatedValueContainer(entry.value, entry.area)
+      return LocatedString(entry.value, entry.area).rstrip("\n")
   elif entry.token:
     return LocatedValueContainer(entry.value, entry.token.data.area)
 
@@ -706,21 +760,34 @@ if __name__ == "__main__":
   # | yy😀🤶🏻
   #   - bar: é34
 
-  tokens, errors, warnings = tokenize(f"""foo:
-  | x
+  tokens, errors, warnings = tokenize(f"""fooo:
+  | foo   \n
+  | aa
   | y
-bar:
+foox:
+  bar: 34
+  norf:
+    - x
+    - y
+    - z
+  xx: 35
+fooy:
+  - x
+  - y: 34
+  - z:
+      a: b
+      c: d
+  - e
 x:
 s:
+foo:
 baz:
 y:
-  """)
+  | a""")
 
   from pprint import pprint
 
 
-# if False:
-  # print()
   if errors: pprint(errors)
   if warnings: pprint(warnings)
 
@@ -730,7 +797,15 @@ y:
   if warnings: pprint(warnings)
 
   # print(value.area.ranges)
+  print(repr(value['foo']))
+  print(value['foo'].area)
   print(value['foo'].area.format())
+
+
+  # key = next(k for k in value.keys() if k == 'foo')
+  key = value.get_key('x')
+  print(key.area.format())
+
   # print(value['foo'])
   # print(value['foo'].area)
   # print(type(value['foo']))

@@ -1,6 +1,5 @@
 const childProcess = require('child_process');
-const crypto = require('crypto');
-const { app, ipcMain } = require('electron');
+const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');

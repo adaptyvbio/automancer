@@ -71,19 +71,19 @@ export class ViewSettings extends React.Component<ViewSettingsProps, ViewSetting
                 <dl className="upanel-data">
                   <dt>Namespace</dt>
                   <dd><code>{selectedUnitInfo.namespace}</code></dd>
-                  <dt>Author</dt>
+                  {/* <dt>Author</dt>
                   <dd>{selectedUnitInfo.metadata.author ?? 'Unknown'}</dd>
                   <dt>License</dt>
-                  <dd>{selectedUnitInfo.metadata.license ?? 'Unknown'}</dd>
+                  <dd>{selectedUnitInfo.metadata.license ?? 'Unknown'}</dd> */}
                   <dt>Version</dt>
                   <dd>{selectedUnitInfo.metadata.version ?? 'Unknown'}</dd>
                 </dl>
               </div>
 
-              <div className="upanel-settings">
+              {/* <div className="upanel-settings">
                 <h3>Settings</h3>
                 <div className="upanel-status">This module's settings can only be edited in the setup configuration file.</div>
-              </div>
+              </div> */}
             </div>
           )}
         </div>

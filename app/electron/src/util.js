@@ -2,6 +2,7 @@ const childProcess = require('child_process');
 const fs = require('fs/promises');
 const { app } = require('electron');
 const path = require('path');
+const which = require('which');
 
 
 class Pool {
@@ -43,36 +44,29 @@ async function findPythonInstallations() {
   let condaList = await runCommand('conda env list --json', { ignoreError: true });
 
   if (condaList) {
-    possiblePythonLocations.push(...JSON.parse(condaList).envs.map((env) => path.join(env, 'bin/python')));
+    possiblePythonLocations.push(...JSON.parse(condaList[0]).envs.map((env) => path.join(env, 'bin/python')));
   }
 
   possiblePythonLocations = (await Promise.all(
-    possiblePythonLocations.map(async (possibleLocation) => await which(possibleLocation))
+    possiblePythonLocations.map(async (possibleLocation) => await which(possibleLocation).catch(() => null))
   )).filter((possibleLocation, index, arr) => possibleLocation && (arr.indexOf(possibleLocation) === index));
 
   return (await Promise.all(possiblePythonLocations.map(async (possibleLocation) => {
-    let version = await new Promise((resolve) => {
-      childProcess.exec(`${possibleLocation} --version`, (err, stdout, stderr) => {
-        if (err) {
-          resolve(null);
-        } else {
-          let match = /^Python (\d+)\.(\d+)\.(\d+)\n$/.exec(stdout || stderr);
+    let [stdout, stderr] = await runCommand(`${possibleLocation} --version`);
+    let match = /^Python (\d+)\.(\d+)\.(\d+)\n$/.exec(stdout || stderr);
 
-          if (match) {
-            let major = parseInt(match[1]);
-            let minor = parseInt(match[2]);
-            let patch = parseInt(match[3]);
+    if (match) {
+      let major = parseInt(match[1]);
+      let minor = parseInt(match[2]);
+      let patch = parseInt(match[3]);
 
-            resolve([major, minor, patch]);
-          }
-        }
-      });
-    });
+      return {
+        location: possibleLocation,
+        version: [major, minor, patch]
+      };
+    }
 
-    return version && {
-      location: possibleLocation,
-      version
-    };
+    return null;
   }))).filter((installation) => installation);
 }
 
@@ -129,24 +123,7 @@ async function runCommand(command, options) {
           reject(err);
         }
       } else {
-        resolve(stdout);
-      }
-    });
-  });
-}
-
-async function which(command) {
-  if (command.startsWith('/')) {
-    return command;
-  }
-
-  return await new Promise((resolve, reject) => {
-    childProcess.exec(`which ${command}`, (err, stdout, stderr) => {
-      if (err) {
-        // reject(err);
-        resolve(null);
-      } else {
-        resolve(stdout.slice(0, -1));
+        resolve([stdout, stderr]);
       }
     });
   });
@@ -159,4 +136,3 @@ exports.fsExists = fsExists;
 exports.getResourcePath = getResourcePath;
 exports.getLocalHostModels = getLocalHostModels;
 exports.fsMkdir = fsMkdir;
-exports.which = which;

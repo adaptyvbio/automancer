@@ -61,6 +61,7 @@ class App:
 
   def __init__(self, *, data_dir = None, local = False):
     logger.info(f"Running process with id {os.getpid()}")
+    logger.info(f"Running Python {sys.version}")
 
 
     # Create data directory if missing

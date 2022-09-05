@@ -1,9 +1,7 @@
 const chokidar = require('chokidar');
 const crypto = require('crypto');
-const { BrowserWindow, Menu, app, dialog, ipcMain, shell, ipcRenderer } = require('electron');
-const readline = require('readline');
+const { BrowserWindow, app, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
-const childProcess = require('child_process');
 const fs = require('fs/promises');
 
 const { HostWindow } = require('./host');
@@ -411,8 +409,12 @@ class CoreApplication {
 }
 
 async function main() {
-  let core = new CoreApplication(app);
+  if (require('electron-squirrel-startup')) {
+    app.quit();
+    return;
+  }
 
+  let core = new CoreApplication(app);
   await core.initialize();
 }
 

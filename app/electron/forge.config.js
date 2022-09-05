@@ -8,7 +8,8 @@ module.exports = {
       /^build$/,
       /^tmp$/
     ],
-    name: 'PR–1'
+    name: 'PR–1',
+    icon: 'icon.icns'
   },
   makers: [
     { name: '@electron-forge/maker-zip' }

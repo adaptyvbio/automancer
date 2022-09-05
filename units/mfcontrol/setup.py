@@ -15,5 +15,9 @@ setup(
   package_data={
     "pr1_mfcontrol.client": ["*"],
     "pr1_mfcontrol.data": ["*"]
-  }
+  },
+
+  install_requires=[
+    "regex==2022.8.17"
+  ]
 )

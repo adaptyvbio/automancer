@@ -22,5 +22,9 @@ setup(
     "pr1_metadata.client": ["*"],
     "pr1_say.client": ["*"],
     "pr1_timer.client": ["*"]
-  }
+  },
+
+  install_requires=[
+    "regex==2022.8.17"
+  ]
 )

@@ -5,6 +5,9 @@ const path = require('path');
 const which = require('which');
 
 
+const isDarwin = (process.platform === 'darwin');
+
+
 class Pool {
   constructor() {
     this._promises = new Set();
@@ -144,6 +147,7 @@ exports.Pool = Pool;
 exports.defer = defer;
 exports.findPythonInstallations = findPythonInstallations;
 exports.fsExists = fsExists;
+exports.fsMkdir = fsMkdir;
 exports.getResourcePath = getResourcePath;
 exports.getLocalHostModels = getLocalHostModels;
-exports.fsMkdir = fsMkdir;
+exports.isDarwin = isDarwin;

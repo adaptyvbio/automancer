@@ -1,6 +1,6 @@
 const chokidar = require('chokidar');
 const crypto = require('crypto');
-const { BrowserWindow, app, dialog, ipcMain, shell } = require('electron');
+const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 
@@ -54,6 +54,43 @@ class CoreApplication {
     this.app.on('second-instance', () => {
       this.createStartupWindow();
     });
+
+
+    if (util.isDarwin) {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        {
+          label: 'View',
+          submenu: [
+            { label: 'Open startup menu',
+              click: () => {
+                this.createStartupWindow();
+              } },
+            { type: 'separator' },
+            { label: 'Reveal data directory',
+              click: () => {
+                shell.showItemInFolder(this.app.dataDirPath);
+              } },
+            { label: 'Reveal logs directory',
+              click: () => {
+                shell.showItemInFolder(this.app.logsDirPath);
+              } },
+            { type: 'separator' },
+            { role: 'reload' },
+            { role: 'toggleDevTools' }
+          ]
+        },
+        { role: 'windowMenu' },
+        { role: 'help' },
+        {
+          role: 'help',
+          submenu: [
+            { label: 'Documentation' }
+          ]
+        }
+      ]));
+    }
   }
 
   async createStartupWindow() {

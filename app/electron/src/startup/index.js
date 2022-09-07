@@ -1,5 +1,7 @@
-const { BrowserWindow, Menu, app, ipcMain, shell } = require('electron');
+const { BrowserWindow } = require('electron');
 const path = require('path');
+
+const util = require('../util');
 
 
 exports.StartupWindow = class StartupWindow {
@@ -13,10 +15,19 @@ exports.StartupWindow = class StartupWindow {
       fullscreenable: false,
       resizable: false,
       show: false,
-      titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, 'preload.js')
-      }
+      },
+      ...(util.isDarwin
+        ? {
+          titleBarStyle: 'hiddenInset'
+        }
+        : {
+          titleBarOverlay: {
+            color: '#e7e3e6'
+          },
+          titleBarStyle: 'hidden'
+        })
     });
 
     this.closed = new Promise((resolve) => {
@@ -26,36 +37,6 @@ exports.StartupWindow = class StartupWindow {
     });
 
     this.window.loadFile(__dirname + '/index.html');
-
-
-    Menu.setApplicationMenu(Menu.buildFromTemplate([
-      { role: 'appMenu' },
-      { role: 'editMenu' },
-      {
-        label: 'View',
-        submenu: [
-          { role: 'reload' },
-          { role: 'toggleDevTools' },
-          { type: 'separator' },
-          { label: 'Reveal data directory',
-            click: () => {
-              shell.showItemInFolder(this.app.dataDirPath);
-            } },
-          { label: 'Reveal logs directory',
-            click: () => {
-              shell.showItemInFolder(this.app.logsDirPath);
-            } }
-        ]
-      },
-      { role: 'windowMenu' },
-      { role: 'help' },
-      {
-        role: 'help',
-        submenu: [
-          { label: 'Documentation' }
-        ]
-      }
-    ]));
   }
 
   focus() {

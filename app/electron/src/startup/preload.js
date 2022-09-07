@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+
+contextBridge.exposeInMainWorld('common', {
+  isDarwin: (process.platform === 'darwin')
+});
+
 contextBridge.exposeInMainWorld('api', {
   launchHost: (settingsId) => {
     ipcRenderer.send('launch-host', settingsId);

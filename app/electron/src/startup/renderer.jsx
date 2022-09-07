@@ -2,9 +2,6 @@
 import { Pool, React, ReactDOM, Startup } from 'pr1';
 
 
-let root = ReactDOM.createRoot(document.getElementById('root'));
-
-
 class App extends React.Component {
   pool = new Pool();
 
@@ -69,4 +66,16 @@ class App extends React.Component {
 }
 
 
+if (!window.common.isDarwin) {
+  let sheet = window.document.styleSheets[0];
+
+  sheet.insertRule(`
+    .startup-right-root {
+      padding-top: 3rem;
+    }
+  `, sheet.cssRules.length);
+}
+
+
+let root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

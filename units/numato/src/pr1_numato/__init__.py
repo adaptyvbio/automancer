@@ -1,7 +1,7 @@
-from importlib.resources import files
 from pathlib import Path
 
 from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
+
 
 namespace = "numato"
 version = 0

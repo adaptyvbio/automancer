@@ -4,7 +4,7 @@ import type { Chip, CreateFeaturesOptions, Features, Host, Protocol } from 'pr1'
 
 import { ManualControl } from './manual-control';
 import * as util from './util';
-import ReprData from '../../../src/pr1_mfcontrol/data/repr.json';
+import ReprData from '../../src/pr1_mfcontrol/data/repr.json';
 import mainStyles from './index.css' assert { type: 'css' };
 
 
@@ -137,7 +137,7 @@ export function createFeatures(options: CreateFeaturesOptions): Features {
       return [];
     }
 
-    let icon = ReprData.icons[entity.repr ?? ReprData.default];
+    let icon = ReprData.icons[(entity.repr ?? ReprData.default) as (keyof typeof ReprData.icons)];
 
     return [{
       icon: (entity.display === 'inactive') || ((entity.display === 'delta') && !active)

@@ -4,6 +4,7 @@ from pathlib import Path
 from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
 from pr1.util.blob import Blob
 
+
 namespace = "amf"
 version = 0
 
@@ -19,7 +20,7 @@ metadata = Metadata(
   version="1.0"
 )
 
-client_path = Path(files(__name__ + '.client'))
+client_path = files(__name__ + '.client')
 logger = parent_logger.getChild(namespace)
 
 from .executor import Executor

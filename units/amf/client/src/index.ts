@@ -1,7 +1,6 @@
 /// <reference path="types.d.ts" />
 
 import type { CreateFeaturesOptions, Features } from 'pr1';
-import { React } from 'pr1';
 
 import mainStyles from './index.css' assert { type: 'css' };
 

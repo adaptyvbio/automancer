@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, Features, formatDuration, React } from 'pr1';
+import { CreateFeaturesOptions, Features, formatDuration } from 'pr1';
 
 
 export const namespace = 'timer';

@@ -1,5 +1,4 @@
 import type { CreateFeaturesOptions, Features } from 'pr1';
-import { React } from 'pr1';
 
 
 export const namespace = 'idle';

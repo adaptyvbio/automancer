@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "files": [
+    "src/idle/index.tsx",
+    "src/metadata/index.tsx",
+    "src/say/index.tsx",
+    "src/timer/index.tsx"
+  ]
+}

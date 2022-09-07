@@ -19,11 +19,14 @@ exports.StartupWindow = class StartupWindow {
       }
     });
 
-    this.window.once('close', () => {
-      this.app.startupWindow = null;
+    this.closed = new Promise((resolve) => {
+      this.window.on('close', () => {
+        resolve();
+      });
     });
 
     this.window.loadFile(__dirname + '/index.html');
+
 
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { role: 'appMenu' },
@@ -53,5 +56,13 @@ exports.StartupWindow = class StartupWindow {
         ]
       }
     ]));
+  }
+
+  focus() {
+    if (this.window.isMinimized()) {
+      this.window.restore();
+    }
+
+    this.window.focus();
   }
 };

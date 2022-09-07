@@ -32,6 +32,16 @@ class Pool {
 }
 
 
+function defer() {
+  let resolve, reject;
+  let promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
 async function findPythonInstallations() {
   let possiblePythonLocations = [
     'python3',
@@ -53,7 +63,7 @@ async function findPythonInstallations() {
 
   return (await Promise.all(possiblePythonLocations.map(async (possibleLocation) => {
     let [stdout, stderr] = await runCommand(`${possibleLocation} --version`);
-    let match = /^Python (\d+)\.(\d+)\.(\d+)\n$/.exec(stdout || stderr);
+    let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(stdout || stderr);
 
     if (match) {
       let major = parseInt(match[1]);
@@ -131,6 +141,7 @@ async function runCommand(command, options) {
 
 
 exports.Pool = Pool;
+exports.defer = defer;
 exports.findPythonInstallations = findPythonInstallations;
 exports.fsExists = fsExists;
 exports.getResourcePath = getResourcePath;

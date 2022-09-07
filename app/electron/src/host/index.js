@@ -1,12 +1,16 @@
 const { BrowserWindow, dialog } = require('electron');
 const path = require('path');
+const { throwDeprecation } = require('process');
 
 const { InternalHost } = require('../internal-host');
-const { Pool } = require('../util');
+const { Pool, defer } = require('../util');
 
 
 exports.HostWindow = class HostWindow {
+  closing = false;
   pool = new Pool();
+
+  _closingDeferred = defer();
 
   constructor(coreApp, hostSettings) {
     this.app = coreApp;
@@ -15,13 +19,18 @@ exports.HostWindow = class HostWindow {
     this.internalHost = null;
     this.window = null;
 
+    this.pool.add(async () => {
+      await this._closingDeferred.promise;
+      this.closing = true;
+    });
+
     this.pool.add(() => this.start());
+    this.closed = this.pool.wait();
   }
 
   async start() {
     this.internalHost = null;
 
-    let closing = false;
     let isHostInternal = ['alpha', 'beta'].includes(this.hostSettings.backendOptions.type);
 
     if (isHostInternal) {
@@ -35,8 +44,8 @@ exports.HostWindow = class HostWindow {
           dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly with code ${code}`, 'See the log file for details.');
         }
 
-        if (!closing) {
-          closing = true;
+        if (!this.closing) {
+          this._closingDeferred.resolve();
           this.window.close();
         }
       });
@@ -46,7 +55,6 @@ exports.HostWindow = class HostWindow {
     this.window = new BrowserWindow({
       show: false,
       webPreferences: {
-        // additionalArguments: [hostSettings.id],
         preload: path.join(__dirname, 'preload.js')
       }
     });
@@ -56,14 +64,20 @@ exports.HostWindow = class HostWindow {
     this.window.loadFile(__dirname + '/index.html', { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
-      closing = true;
+      this._closingDeferred.resolve();
 
       if (this.internalHost) {
-        this.app.releaseHostWindow(this.hostSettings.id, this.internalHost.closed);
+        this.pool.add(async () => await this.internalHost.closed);
         this.internalHost.close();
-      } else {
-        this.app.releaseHostWindow(this.hostSettings.id);
       }
     });
+  }
+
+  focus() {
+    if (this.window.isMinimized()) {
+      this.window.restore();
+    }
+
+    this.window.focus();
   }
 };

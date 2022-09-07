@@ -50,6 +50,10 @@ class CoreApplication {
     this.app.on('window-all-closed', () => {
 
     });
+
+    this.app.on('second-instance', () => {
+      this.createStartupWindow();
+    });
   }
 
   async createStartupWindow() {
@@ -57,15 +61,38 @@ class CoreApplication {
       this.startupWindow.focus();
     } else {
       this.startupWindow = new StartupWindow(this);
+
+      this.pool.add(async () => {
+        await this.startupWindow.closed;
+        this.startupWindow = null;
+
+        if (!this.quitting && (Object.keys(this.hostWindows).length < 1)) {
+          this.app.quit();
+        }
+      });
     }
   }
 
   async createHostWindow(hostSettings) {
-    let win = new HostWindow(this, hostSettings);
-    this.hostWindows[hostSettings.id] = win;
+    let hostWindow = new HostWindow(this, hostSettings);
+    this.hostWindows[hostSettings.id] = hostWindow;
+
+    this.pool.add(async () => {
+      await hostWindow.closed;
+      delete this.hostWindows[hostSettings.id];
+
+      if (!this.quitting) {
+        this.createStartupWindow();
+      }
+    });
   }
 
   async initialize() {
+    if (!this.app.requestSingleInstanceLock()) {
+      this.app.quit();
+      return;
+    }
+
     this.localHostModels = await util.getLocalHostModels();
     this.pythonInstallations = await util.findPythonInstallations();
 
@@ -307,33 +334,15 @@ class CoreApplication {
     let existingWindow = this.hostWindows[hostSettingsId];
 
     if (existingWindow) {
-      if (!existingWindow.window.isDestroyed()) {
+      if (!existingWindow.closing) {
         this.startupWindow?.window.close();
-        existingWindow.window.focus();
+        existingWindow.focus();
       }
     } else {
       let hostSettings = this.data.hostSettings[hostSettingsId];
 
       this.startupWindow?.window.close();
       this.createHostWindow(hostSettings);
-    }
-  }
-
-  releaseHostWindow(hostSettingsId, donePromise) {
-    let hostWindow = this.hostWindows[hostSettingsId];
-
-    Promise.resolve(donePromise).then(() => {
-      delete this.hostWindows[hostSettingsId];
-    });
-
-    if (donePromise) {
-      this.pool.add(() => donePromise);
-    }
-
-    if (!this.quitting) {
-      hostWindow.window.once('closed', () => {
-        this.createStartupWindow();
-      });
     }
   }
 

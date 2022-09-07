@@ -4,15 +4,13 @@
   "main": "src/main.js",
   "productName": "PR–1",
   "scripts": {
-    "build": "npm run build-client && npm run build-js && npm run build-other && npm run build-host && npm run make && npm install",
+    "build": "npm run build-client && npm run build-js && npm run build-other && npm run build-host && electron-forge make && npm install",
     "build-client": "rm -rf node_modules/pr1 && npm i ../../client --install-links",
     "build-host": "./build/beta/build.sh",
     "build-js": "esbuild src/host/renderer.jsx src/startup/renderer.jsx --bundle --external:electron --external:pr1 --outdir=lib --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --external:vm --external:path --external:fs/promises",
     "build-other": "cp -r node_modules/pr1/dist/vs lib/vs",
-    "make": "electron-forge make",
-    "package": "electron-forge package",
-    "start": "electron .",
-    "start-forge": "electron-forge start"
+    "build-package": "npm run build-client && electron-forge package && npm install",
+    "start": "electron ."
   },
   "dependencies": {
     "chokidar": "^3.5.3",

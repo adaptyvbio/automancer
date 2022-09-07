@@ -19,7 +19,7 @@ setup(
     "appdirs==1.4.4",
     "aiohttp==3.7.4",
     "bcrypt==3.2.2",
-    "pyOpenSSL==19.1.0",
+    "pyOpenSSL==22.0.0",
     "pyinstaller==5.1",
     "websockets==10.2"
   ]

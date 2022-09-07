@@ -1,9 +1,26 @@
+const fs = require('fs');
+
+console.log();
+
 module.exports = {
   packagerConfig: {
     extraResource: [
       'tmp/resources/alpha',
       'tmp/resources/beta'
-    ],
+    ].filter((path) => {
+      try {
+        fs.statSync(path);
+        console.log(`Packaging resource '${path}'`);
+        return true;
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          console.log(`Skipping resource '${path}'`);
+          return false;
+        }
+
+        throw err;
+      }
+    }),
     ignore: [
       /^\/build(\/|$)/,
       /^\/tmp(\/|$)/,

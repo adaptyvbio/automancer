@@ -8,6 +8,5 @@ cd ../..
 pip install ../server
 pip install ../../host
 pip install ../../units/builtin
-pip install ../../units/gpio
 pyinstaller --distpath tmp/resources/alpha --noconfirm build/alpha/main.spec --workpath build/alpha/tmp/build
 deactivate

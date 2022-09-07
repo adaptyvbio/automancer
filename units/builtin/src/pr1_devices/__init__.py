@@ -1,19 +1,19 @@
 from importlib.resources import files
-from pathlib import Path
 
 from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
 
-namespace = "gpio"
+
+namespace = "devices"
 version = 0
 
 metadata = Metadata(
-  description="GPIO utility.",
+  description="This is unit provides a list of devices.",
   icon=MetadataIcon(kind='icon', value="settings_input_hdmi"),
-  title="GPIO",
-  version="1.0"
+  title="Devices",
+  version="1.1"
 )
 
-client_path = Path(files(__name__ + '.client'))
+client_path = files(__name__ + '.client')
 logger = parent_logger.getChild(namespace)
 
 from .executor import Executor

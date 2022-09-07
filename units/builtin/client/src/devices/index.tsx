@@ -2,7 +2,7 @@ import { Chip, ChipTabComponentProps, Form } from 'pr1';
 import { React } from 'pr1';
 
 
-export const namespace = 'gpio';
+export const namespace = 'devices';
 
 
 export interface ExecutorState {
@@ -35,7 +35,7 @@ export interface ExecutorState {
 export function getGeneralTabs() {
   return [
     {
-      id: 'gpio',
+      id: 'devices',
       label: 'Devices',
       icon: 'settings_input_hdmi',
       component: DevicesTab

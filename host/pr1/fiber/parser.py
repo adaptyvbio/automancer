@@ -7,7 +7,12 @@ class AcmeParser:
   namespace = "acme"
 
   root_attributes = {
-    'value': lang.Attribute(label="Value", description=["`acme.value`", "The value for the acme device."], type=int)
+    'value': lang.Attribute(
+      label="Value",
+      description=["`acme.value`", "The value for the acme device."],
+      optional=True,
+      type=int
+    )
   }
 
 
@@ -30,7 +35,11 @@ class FiberParser:
         optional=True,
         type=str
       ),
-      'value': lang.Attribute(label="Builtin value", type=str)
+      'value': lang.Attribute(
+        label="Builtin value",
+        optional=True,
+        type=str
+      )
     }, foldable=True)
 
     for parser in self._parsers:

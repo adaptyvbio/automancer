@@ -4,7 +4,9 @@ import * as monaco from 'monaco-editor';
 export const LanguageName = 'prl';
 export const ThemeName = 'prl-theme'
 
-export type LanguageService = monaco.languages.FoldingRangeProvider & monaco.languages.HoverProvider;
+export type LanguageService = monaco.languages.CompletionItemProvider
+  & monaco.languages.FoldingRangeProvider
+  & monaco.languages.HoverProvider;
 
 
 let currentLanguageService: LanguageService | null = null;
@@ -18,6 +20,10 @@ export function setLanguageService(languageService: LanguageService | null, opti
 }
 
 monaco.languages.register({ id: LanguageName });
+
+monaco.languages.registerCompletionItemProvider(LanguageName, {
+  provideCompletionItems: async (model, position, context, token) => (await currentLanguageService?.provideCompletionItems(model, position, context, token)) ?? null
+});
 
 monaco.languages.registerFoldingRangeProvider(LanguageName, {
   provideFoldingRanges: async (model, context, token) => (await currentLanguageService?.provideFoldingRanges(model, context, token)) ?? null

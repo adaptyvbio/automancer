@@ -3,7 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
 import { Icon } from './icon';
-import { Draft, DraftCompilation, DraftRange } from '../draft';
+import { Draft, DraftCompilation, DraftCompletion, DraftRange } from '../draft';
 import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
 
@@ -41,6 +41,7 @@ export interface TextEditorState {
 }
 
 export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
+  compilationDeferred: util.Deferred<void> | null = null;
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   externalChange = false;
@@ -96,6 +97,10 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           }
         }
 
+        if (!this.compilationDeferred) {
+          this.compilationDeferred = util.defer();
+        }
+
         this.outdatedCompilation = true;
         this.externalChange = false;
 
@@ -105,9 +110,68 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       this.updateMarkers();
     });
 
+    function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) => S | null) : S | undefined {
+      for (let [index, item] of arr.entries()) {
+        let value = fn(item, index, arr);
+
+        if (value) {
+          return value;
+        }
+      }
+
+      return undefined;
+    }
+
     setLanguageService({
+      provideCompletionItems: async (model, position, context, token) => {
+        await this.compilationDeferred?.promise;
+
+        if (!this.props.compilation || token.isCancellationRequested) {
+          return null;
+        }
+
+        // let completion: DraftCompletion | undefined = this.props.compilation.completions.find((completion) => {
+        //   return completion.ranges.some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position));
+        // });
+
+        let result = findMap(this.props.compilation.completions, (completion) => {
+          let modelRange = findMap(completion.ranges, (draftRange) => {
+            let modelRange = getModelRangeFromDraftRange(model, draftRange);
+
+            return modelRange.containsPosition(position)
+              ? modelRange
+              : null;
+          });
+
+          return modelRange
+            ? { completion, range: modelRange }
+            : null;
+        });
+
+        if (!result) {
+          return null;
+        }
+
+        console.log('>', result);
+
+        return {
+          suggestions: result.completion.items.map((item) => ({
+            kind: {
+              constant: monaco.languages.CompletionItemKind.Constant,
+              property: monaco.languages.CompletionItemKind.Property
+            }[item.kind],
+            label: {
+              description: 'hello very very very long\nhelo helol hello',
+              detail: ' Built-in hello very very very long\nhelo helol hello',
+              label: item.label
+            },
+            insertText: item.text,
+            range: result!.range
+          }))
+        };
+      },
       provideFoldingRanges: async (model, context, token) => {
-        if (!this.props.compilation) {
+        if (!this.props.compilation || this.outdatedCompilation) {
           return null;
         }
 
@@ -121,8 +185,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           };
         });
       },
-      provideHover: async (model, position, token) => {
-        if (!this.props.compilation) {
+      provideHover: async (model, position, _token) => {
+        if (!this.props.compilation || this.outdatedCompilation) {
           return null;
         }
 
@@ -154,8 +218,13 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     }
 
     if (this.props.compilation !== prevProps.compilation) {
+      console.log('INFO', this.props.compilation?.completions?.[0]);
+
       this.outdatedCompilation = false;
       this.updateMarkers();
+
+      this.compilationDeferred?.resolve();
+      this.compilationDeferred = null;
     }
 
     if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {

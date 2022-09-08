@@ -5,6 +5,7 @@ class Draft:
 
   def export(self):
     return {
+      "completions": [completion.export() for completion in self.analysis.completions],
       "diagnostics": [
         *[{ "kind": "error", **error.diagnostic().export() } for error in self.analysis.errors],
         *[{ "kind": "warning", **warning.diagnostic().export() } for warning in self.analysis.warnings]

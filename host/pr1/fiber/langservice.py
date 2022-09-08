@@ -1,12 +1,15 @@
+from collections import namedtuple
+
 from ..draft import DraftDiagnostic
 from .. import reader
 
 
 class Analysis:
-  def __init__(self, *, errors = None, warnings = None, folds = None, hovers = None):
+  def __init__(self, *, errors = None, warnings = None, completions = None, folds = None, hovers = None):
     self.errors = errors or list()
     self.warnings = warnings or list()
 
+    self.completions = completions or list()
     self.folds = folds or list()
     self.hovers = hovers or list()
     # self.definitions = definitions / definition + references
@@ -18,12 +21,36 @@ class Analysis:
     return Analysis(
       errors=(self.errors + other.errors),
       warnings=(self.warnings + other.warnings),
+      completions=(self.completions + other.completions),
       folds=(self.folds + other.folds),
       hovers=(self.hovers + other.hovers)
     )
 
   def __repr__(self):
-    return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, folds={repr(self.folds)}, hovers={repr(self.hovers)})"
+    return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)})"
+
+
+CompletionItem = namedtuple("CompletionItem", ['detail', 'documentation', 'kind', 'label', 'text'])
+
+class Completion:
+  def __init__(self, *, items, ranges):
+    self.items = items
+    self.ranges = ranges
+
+  def export(self):
+    return {
+      "items": [{
+        "detail": item.detail,
+        "documentation": item.documentation,
+        "kind": item.kind,
+        "label": item.label,
+        "text": item.text
+      } for item in self.items],
+      "ranges": [[range.start, range.end] for range in self.ranges]
+    }
+
+  def __repr__(self):
+    return f"Completion(items={repr(self.items)}, ranges={repr(self.ranges)})"
 
 
 class FoldingRange:
@@ -158,9 +185,6 @@ class Dict:
     attr_values = { namespace: dict() for namespace in self._namespaces }
 
     for obj_key, obj_value in obj.items():
-      # if not obj_key in self._attributes:
-      #   warnings.append(ExtraneousKeyError(obj_key, target=obj))
-
       namespace, attr_name, attr_entries = self.get_attr(obj_key)
 
       # e.g. 'invalid.bar'
@@ -201,6 +225,17 @@ class Dict:
       for namespace, attr in attr_entries.items():
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
           analysis.errors.append(MissingKeyError(f"{namespace}.{attr_name}", obj))
+
+    analysis.completions.append(Completion(
+      items=[CompletionItem(
+        detail='foo',
+        documentation='bar',
+        kind='property',
+        label=f"{namespace}.{attr_name}",
+        text=attr_name
+      ) for attr_name, attr_entries in self._attributes.items() for namespace, attr in attr_entries.items()],
+      ranges=[obj_key.area.single_range() for obj_key in obj.keys()]
+    ))
 
     return analysis
 

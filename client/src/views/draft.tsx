@@ -44,7 +44,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     this.pool.add(async () => {
       // This immediately updates item.readable, item.writable and item.lastModified
       // and calls setState() to update the analoguous properties on draft.
-      // await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
       await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
 
       if (!this.props.draft.item.readable) {
@@ -102,7 +101,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
   render() {
-    console.log('Render', this.props.draft);
+    // console.log('Render', this.props.draft);
 
     let component = (() => {
       if (!this.props.draft.readable && !this.state.requesting) {
@@ -147,14 +146,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             compilation={this.state.compilation}
             draft={this.props.draft}
             onChange={(source) => {
-              console.log('[TX] Change');
+              // console.log('[TX] Change');
 
               this.pool.add(async () => {
                 await this.compile({ global: false, source });
               });
             }}
             onChangeSave={(source) => {
-              console.log('[TX] Change+save');
+              // console.log('[TX] Change+save');
 
               this.pool.add(async () => {
                 await Promise.all([
@@ -164,7 +163,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               });
             }}
             onSave={(source) => {
-              console.log('[TX] Save');
+              // console.log('[TX] Save');
               this.pool.add(async () => {
                 if (this.state.compilation) {
                   // TODO: Fix this

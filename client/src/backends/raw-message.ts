@@ -20,7 +20,7 @@ export abstract class RawMessageBackend extends BackendCommon {
     draftId: DraftId;
     source: string;
   }) {
-    console.log('[FS] Compile');
+    // console.log('[FS] Compile');
 
     return await this._request({
       type: 'compileDraft',

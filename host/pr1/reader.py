@@ -172,7 +172,7 @@ class LocationArea:
       if (end >= range_start) and (end < range_end):
         delta_end = range_end - end
 
-      if not ((end <= range_start) or (start >= range_end)):
+      if not ((end < range_start) or (start > range_end)):
         output.append(LocationRange(range.source, range.start - delta_start, range.end - delta_end))
 
       index += (range.end - range.start)

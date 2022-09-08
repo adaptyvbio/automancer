@@ -7,6 +7,18 @@ export type DraftId = string;
 export type DraftLocation = DraftRange[];
 export type DraftRange = [number, number];
 
+export interface DraftCompletion {
+  items: {
+    detail: string;
+    documentation: string;
+    // kind: 'class' | 'constant'| 'enum' | 'field' | 'file' | 'function' | 'interface' | 'keyword' | 'method' | 'module' | 'property' | 'snippet' | 'text' | 'type' | 'unit' | 'value';
+    kind: 'constant' | 'property';
+    label: string;
+    text: string;
+  }[];
+  ranges: DraftRange[];
+}
+
 export interface DraftDiagnostic {
   kind: 'error' | 'warning';
   message: string;
@@ -24,6 +36,7 @@ export interface DraftFold {
 }
 
 export interface DraftCompilation {
+  completions: DraftCompletion[];
   diagnostics: DraftDiagnostic[];
   folds: DraftFold[];
   hovers: DraftHover[];

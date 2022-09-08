@@ -31,6 +31,20 @@ export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]
 }
 
 
+export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) => S | null) : S | undefined {
+  for (let [index, item] of arr.entries()) {
+    let value = fn(item, index, arr);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+
+
 export function formatClass(...input: (string | Record<string, unknown>)[]): string {
   return input
     .flatMap((item) => {

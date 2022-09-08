@@ -6,6 +6,7 @@ import { Icon } from './icon';
 import { Draft, DraftCompilation, DraftCompletion, DraftRange } from '../draft';
 import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
+import { Range } from 'immutable';
 
 
 window.MonacoEnvironment = {
@@ -30,6 +31,7 @@ window.MonacoEnvironment = {
 export interface TextEditorProps {
   autoSave: boolean;
   compilation: DraftCompilation | null;
+  compile(source: string): Promise<DraftCompilation>;
   draft: Draft;
   onChange(source: string): void;
   onChangeSave(source: string): void;
@@ -41,23 +43,37 @@ export interface TextEditorState {
 }
 
 export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
-  compilationDeferred: util.Deferred<void> | null = null;
+  compilationPromise: Promise<DraftCompilation> | null = null;
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
-  externalChange = false;
+  firstCompilationDeferred: util.Deferred<void> | null = null;
+  isModelContentChangeExternal = false;
+  markersStatus: {
+    changedLineNumbers: Set<number>;
+    markers: monaco.editor.IMarkerData[];
+  } = {
+    changedLineNumbers: new Set(),
+    markers: []
+  };
   model!: monaco.editor.IModel;
   outdatedCompilation = false;
   pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
-  triggerCompilation = util.debounce(200, () => {
-    let source = this.model.getValue();
+  triggerStableChangeTimeout = util.debounce(200, () => {
+    console.log('Stable change');
 
-    if (this.props.autoSave) {
-      this.props.onChangeSave(source);
-    } else {
-      this.props.onChange(source);
-    }
+    // this.pool.add(async () => {
+    //   await this.getCompilation();
+    // });
+
+    // let source = this.model.getValue();
+
+    // if (this.props.autoSave) {
+    //   this.props.onChangeSave(source);
+    // } else {
+    //   this.props.onChange(source);
+    // }
   }, { signal: this.controller.signal });
 
   constructor(props: TextEditorProps) {
@@ -69,73 +85,138 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   }
 
   componentDidMount() {
+    // Initialize the editor
+
+    this.editor = monaco.editor.create(this.ref.current!, {
+      value: this.props.draft.item.source!,
+      automaticLayout: true,
+      // contextmenu: false,
+      language: LanguageName,
+      minimap: { enabled: false },
+      occurrencesHighlight: false,
+      renderWhitespace: 'trailing',
+      scrollBeyondLastLine: true,
+      selectionHighlight: false,
+      tabSize: 2,
+      overflowWidgetsDomNode: this.refWidgetContainer.current!,
+      fixedOverflowWidgets: true,
+      readOnly: false // !this.props.draft.writable
+    });
+
+    this.model = this.editor.getModel()!;
+
+    this.controller.signal.addEventListener('abort', () => {
+      this.editor.dispose();
+    });
+
+
+    // Wait for the first compilation
+
+    if (!this.props.compilation) {
+      this.firstCompilationDeferred = util.defer();
+      this.compilationPromise = this.firstCompilationDeferred.promise
+        .then(() => {
+          this.firstCompilationDeferred = null;
+          return this.props.compilation!;
+        });
+    }
+
+
+    // ...
+
+    this.model.onDidChangeContent(() => {
+      if (!this.isModelContentChangeExternal) {
+        this.triggerStableChangeTimeout();
+
+        // if (!this.props.autoSave) {
+        //   this.setState({ changeTime: Date.now() });
+        // }
+      }
+
+      this.outdatedCompilation = true;
+      this.isModelContentChangeExternal = false;
+    });
+
+
+    // Create the marker provider
+
+    let renderMarkers = () => {
+      monaco.editor.setModelMarkers(this.model, 'main', this.markersStatus.markers.filter((marker) => {
+        let range = Range(marker.startLineNumber, marker.endLineNumber);
+        return !Array.from(this.markersStatus.changedLineNumbers).some((lineNumber) => range.has(lineNumber));
+      }));
+    };
+
+    this.model.onDidChangeContent((event) => {
+      let lineNumbers = event.changes.flatMap((change) =>
+        Range(change.range.startLineNumber, change.range.endLineNumber + 1).toArray()
+      );
+
+      // TODO: handle NL characters
+      this.markersStatus.changedLineNumbers = new Set([...this.markersStatus.changedLineNumbers, ...lineNumbers]);
+      renderMarkers();
+    });
+
+    let provideMarkers: (token: monaco.CancellationToken) => monaco.languages.ProviderResult<monaco.editor.IMarkerData[]> = async (token) => {
+      let compilation = await this.getCompilation();
+
+      if (token.isCancellationRequested) {
+        return null;
+      }
+
+      return compilation.diagnostics.flatMap((diagnostic) => {
+        return diagnostic.ranges.map(([startIndex, endIndex]) => {
+          let start = this.model.getPositionAt(startIndex);
+          let end = this.model.getPositionAt(endIndex);
+
+          return {
+            startColumn: start.column,
+            startLineNumber: start.lineNumber,
+
+            endColumn: end.column,
+            endLineNumber: end.lineNumber,
+
+            message: diagnostic.message,
+            severity: {
+              'error': monaco.MarkerSeverity.Error,
+              'warning': monaco.MarkerSeverity.Warning
+            }[diagnostic.kind]
+          };
+        });
+      });
+    };
+
+    this.updateMarkers = async () => {
+      let tokenSource = new monaco.CancellationTokenSource();
+      let markers = (await provideMarkers(tokenSource.token)) ?? [];
+
+      if (!tokenSource.token.isCancellationRequested) {
+        this.markersStatus = {
+          changedLineNumbers: new Set(),
+          markers
+        };
+
+        renderMarkers();
+      }
+    };
+
     this.pool.add(async () => {
-      this.editor = monaco.editor.create(this.ref.current!, {
-        value: this.props.draft.item.source!,
-        automaticLayout: true,
-        // contextmenu: false,
-        language: LanguageName,
-        minimap: { enabled: false },
-        occurrencesHighlight: false,
-        renderWhitespace: 'trailing',
-        scrollBeyondLastLine: true,
-        selectionHighlight: false,
-        tabSize: 2,
-        overflowWidgetsDomNode: this.refWidgetContainer.current!,
-        fixedOverflowWidgets: true,
-        readOnly: false // !this.props.draft.writable
-      });
-
-      this.model = this.editor.getModel()!;
-
-      this.model.onDidChangeContent(() => {
-        if (!this.externalChange) {
-          this.triggerCompilation();
-
-          if (!this.props.autoSave) {
-            this.setState({ changeTime: Date.now() });
-          }
-        }
-
-        if (!this.compilationDeferred) {
-          this.compilationDeferred = util.defer();
-        }
-
-        this.outdatedCompilation = true;
-        this.externalChange = false;
-
-        this.updateMarkers();
-      });
-
       this.updateMarkers();
     });
 
-    function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) => S | null) : S | undefined {
-      for (let [index, item] of arr.entries()) {
-        let value = fn(item, index, arr);
 
-        if (value) {
-          return value;
-        }
-      }
-
-      return undefined;
-    }
+    // Create the language service
 
     setLanguageService({
       provideCompletionItems: async (model, position, context, token) => {
-        await this.compilationDeferred?.promise;
+        let compilation = await this.getCompilation();
 
-        if (!this.props.compilation || token.isCancellationRequested) {
+        if (token.isCancellationRequested) {
           return null;
         }
 
-        // let completion: DraftCompletion | undefined = this.props.compilation.completions.find((completion) => {
-        //   return completion.ranges.some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position));
-        // });
-
-        let result = findMap(this.props.compilation.completions, (completion) => {
-          let modelRange = findMap(completion.ranges, (draftRange) => {
+        let result = util.findMap(compilation.completions, (completion) => {
+          let modelRange = util.findMap(completion.ranges, (draftRange) => {
             let modelRange = getModelRangeFromDraftRange(model, draftRange);
 
             return modelRange.containsPosition(position)
@@ -209,7 +290,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     if (this.props.draft.revision !== prevProps.draft.revision) {
       let position = this.editor.getPosition();
 
-      this.externalChange = true;
+      this.isModelContentChangeExternal = true;
       this.model.setValue(this.props.draft.item.source!);
 
       if (position) {
@@ -218,13 +299,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     }
 
     if (this.props.compilation !== prevProps.compilation) {
-      console.log('INFO', this.props.compilation?.completions?.[0]);
-
       this.outdatedCompilation = false;
-      this.updateMarkers();
+    }
 
-      this.compilationDeferred?.resolve();
-      this.compilationDeferred = null;
+    if (this.props.compilation && this.firstCompilationDeferred) {
+      this.firstCompilationDeferred.resolve();
     }
 
     if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {
@@ -236,33 +315,22 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.abort();
   }
 
-  updateMarkers() {
-    let compilation = this.props.compilation;
-
-    if (compilation && !this.outdatedCompilation) {
-      monaco.editor.setModelMarkers(this.model, 'main', compilation.diagnostics.flatMap((diagnostic) => {
-        return diagnostic.ranges.map(([startIndex, endIndex]) => {
-          let start = this.model.getPositionAt(startIndex);
-          let end = this.model.getPositionAt(endIndex);
-
-          return {
-            startColumn: start.column,
-            startLineNumber: start.lineNumber,
-
-            endColumn: end.column,
-            endLineNumber: end.lineNumber,
-
-            message: diagnostic.message,
-            severity: {
-              'error': monaco.MarkerSeverity.Error,
-              'warning': monaco.MarkerSeverity.Warning
-            }[diagnostic.kind]
-          };
-        });
-      }));
-    } else {
-      monaco.editor.setModelMarkers(this.model, 'main', []);
+  async getCompilation(): Promise<DraftCompilation> {
+    if (this.props.compilation && !this.outdatedCompilation) {
+      return this.props.compilation;
     }
+
+    if (!this.compilationPromise) {
+      let promise = this.props.compile(this.model.getValue()).finally(() => {
+        if (this.compilationPromise === promise) {
+          this.compilationPromise = null;
+        }
+      });
+
+      this.compilationPromise = promise;
+    }
+
+    return await this.compilationPromise;
   }
 
   undo() {
@@ -278,8 +346,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
               if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
                 event.preventDefault();
 
-                if (this.triggerCompilation.isActive()) {
-                  this.triggerCompilation.cancel();
+                if (this.triggerStableChangeTimeout.isActive()) {
+                  this.triggerStableChangeTimeout.cancel();
                   this.props.onChangeSave(this.model.getValue());
                 } else {
                   this.props.onSave(this.model.getValue());

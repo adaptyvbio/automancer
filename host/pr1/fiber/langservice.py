@@ -30,7 +30,7 @@ class Analysis:
     return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)})"
 
 
-CompletionItem = namedtuple("CompletionItem", ['detail', 'documentation', 'kind', 'label', 'text'])
+CompletionItem = namedtuple("CompletionItem", ['description', 'detail', 'kind', 'label', 'text'])
 
 class Completion:
   def __init__(self, *, items, ranges):
@@ -40,8 +40,8 @@ class Completion:
   def export(self):
     return {
       "items": [{
+        "description": item.description,
         "detail": item.detail,
-        "documentation": item.documentation,
         "kind": item.kind,
         "label": item.label,
         "text": item.text
@@ -113,8 +113,9 @@ class MissingKeyError(LangServiceError):
 
 
 class Attribute:
-  def __init__(self, *, description = None, label = None, optional = False, type):
+  def __init__(self, *, description = None, detail = None, label = None, optional = False, type):
     self._description = description
+    self._detail = detail
     self._label = label
     self._optional = optional
     self._type = type
@@ -132,16 +133,16 @@ class Attribute:
 
 
 class Dict:
-  _main_namespace = "_"
+  _native_namespace = "_"
 
   def __init__(self, attrs = dict(), *, foldable = False):
     self._foldable = foldable
 
     self._attributes = {
-      attr_name: { self._main_namespace: attr } for attr_name, attr in attrs.items()
+      attr_name: { self._native_namespace: attr } for attr_name, attr in attrs.items()
     }
 
-    self._namespaces = {self._main_namespace}
+    self._namespaces = {self._native_namespace}
 
   def add(self, attrs, *, namespace):
     self._namespaces.add(namespace)
@@ -199,8 +200,8 @@ class Dict:
 
       if not namespace:
         # e.g. 'bar' where '_.bar' exists
-        if self._main_namespace in attr_entries:
-          namespace = self._main_namespace
+        if self._native_namespace in attr_entries:
+          namespace = self._native_namespace
         # e.g. 'bar' where only 'a.bar' exists
         elif len(attr_entries) == 1:
           namespace = next(iter(attr_entries.keys()))
@@ -226,14 +227,25 @@ class Dict:
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
           analysis.errors.append(MissingKeyError(f"{namespace}.{attr_name}", obj))
 
+
+    completion_items = list()
+
+    for attr_name, attr_entries in self._attributes.items():
+      ambiguous = (len(attr_entries) > 1)
+
+      for namespace, attr in attr_entries.items():
+        native = (namespace == self._native_namespace)
+
+        completion_items.append(CompletionItem(
+          description=(namespace if not native else None),
+          detail=attr._detail,
+          label=attr_name,
+          kind='constant',
+          text=(f"{namespace}.{attr_name}" if ambiguous and (not native) else attr_name)
+        ))
+
     analysis.completions.append(Completion(
-      items=[CompletionItem(
-        detail='foo',
-        documentation='bar',
-        kind='property',
-        label=f"{namespace}.{attr_name}",
-        text=attr_name
-      ) for attr_name, attr_entries in self._attributes.items() for namespace, attr in attr_entries.items()],
+      items=completion_items,
       ranges=[obj_key.area.single_range() for obj_key in obj.keys()]
     ))
 
@@ -263,20 +275,3 @@ class Dict:
   #     folds=folds,
   #     hovers=hovers
   #   )
-
-
-if __name__ == "__main__":
-  tree, _, _ = reader.loads("""
-
-foo: bar
-""")
-
-  schema = Dict({
-    'foo': Attribute(
-      description="Great",
-      label="Foo"
-    )
-  })
-
-  analysis = schema.analyze(tree)
-  print(analysis)

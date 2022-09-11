@@ -9,7 +9,14 @@ class AcmeParser:
   root_attributes = {
     'value': lang.Attribute(
       label="Value",
+      detail="Value of the object",
       description=["`acme.value`", "The value for the acme device."],
+      optional=True,
+      type=int
+    ),
+    'wait': lang.Attribute(
+      label="Wait for a fixed delay",
+      detail="Wait for a delay",
       optional=True,
       type=int
     )

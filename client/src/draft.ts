@@ -9,8 +9,8 @@ export type DraftRange = [number, number];
 
 export interface DraftCompletion {
   items: {
-    detail: string;
-    documentation: string;
+    description: string | null;
+    detail: string | null;
     // kind: 'class' | 'constant'| 'enum' | 'field' | 'file' | 'function' | 'interface' | 'keyword' | 'method' | 'module' | 'property' | 'snippet' | 'text' | 'type' | 'unit' | 'value';
     kind: 'constant' | 'property';
     label: string;

@@ -33,6 +33,7 @@ export interface TextEditorProps {
   compilation: DraftCompilation | null;
   compile(source: string): Promise<DraftCompilation>;
   draft: Draft;
+  getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
   onChange(source: string): void;
   onChangeSave(source: string): void;
   onSave(source: string): void;
@@ -43,21 +44,17 @@ export interface TextEditorState {
 }
 
 export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
-  awaitingCompilationDeferred: util.Deferred<void> | null = null;
-  compilation: DraftCompilation | null = null;
-  compilationPromise: Promise<DraftCompilation> | null = null;
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   isModelContentChangeExternal = false;
   markerManager!: MarkerManager;
   model!: monaco.editor.IModel;
+  modelChanged = false;
   outdatedCompilation = false;
   pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
-  triggerStableChangeTimeout = util.debounce(200, () => {
-    console.log('Stable change');
-
+  startMarkerUpdateTimeout = util.debounce(300, () => {
     this.pool.add(async () => {
       await this.markerManager.update();
     });
@@ -109,26 +106,18 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     });
 
 
-    // Wait for the first compilation
-
-    if (!this.props.compilation) {
-      this.awaitingCompilationDeferred = util.defer();
-    }
-
-
     // ...
 
     this.model.onDidChangeContent(() => {
       if (!this.isModelContentChangeExternal) {
-        this.triggerStableChangeTimeout();
+        this.modelChanged = true;
+        this.startMarkerUpdateTimeout();
 
         // if (!this.props.autoSave) {
         //   this.setState({ changeTime: Date.now() });
         // }
       }
 
-      this.compilationPromise = null;
-      this.outdatedCompilation = true;
       this.isModelContentChangeExternal = false;
     });
 
@@ -138,7 +127,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.markerManager = new MarkerManager(this.model, {
       provideMarkers: async (token) => {
         let compilation = await this.getCompilation();
-
         if (token.isCancellationRequested) {
           return null;
         }
@@ -208,8 +196,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
               property: monaco.languages.CompletionItemKind.Property
             }[item.kind],
             label: {
-              description: 'hello very very very long\nhelo helol hello',
-              detail: ' Built-in hello very very very long\nhelo helol hello',
+              description: item.description,
+              detail: ((item.detail !== null) ? ' ' + item.detail : null),
               label: item.label
             },
             insertText: item.text,
@@ -268,14 +256,14 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     //   }
     // }
 
-    if (this.props.compilation !== prevProps.compilation) {
-      this.outdatedCompilation = false;
-    }
+    // if (this.props.compilation !== prevProps.compilation) {
+    //   this.outdatedCompilation = false;
+    // }
 
-    if ((this.props.compilation !== prevProps.compilation) && this.awaitingCompilationDeferred) {
-      this.awaitingCompilationDeferred.resolve();
-      this.awaitingCompilationDeferred = null;
-    }
+    // if ((this.props.compilation !== prevProps.compilation) && this.awaitingCompilationDeferred) {
+    //   this.awaitingCompilationDeferred.resolve();
+    //   this.awaitingCompilationDeferred = null;
+    // }
 
     // if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {
     //   this.setState({ changeTime: null });
@@ -287,26 +275,15 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   }
 
   async getCompilation(): Promise<DraftCompilation> {
-    if (this.awaitingCompilationDeferred) {
-      await this.awaitingCompilationDeferred.promise;
-      return this.props.compilation!;
-    }
+    let promise = this.props.getCompilation(
+      this.modelChanged
+        ? { source: this.model.getValue() }
+        : {}
+    );
 
-    if (!this.outdatedCompilation) {
-      return this.props.compilation!;
-    }
+    this.modelChanged = false;
 
-    if (!this.compilationPromise) {
-      let promise = this.props.compile(this.model.getValue()).finally(() => {
-        if (this.compilationPromise === promise) {
-          this.compilationPromise = null;
-        }
-      });
-
-      this.compilationPromise = promise;
-    }
-
-    return await this.compilationPromise;
+    return await promise;
   }
 
   undo() {
@@ -322,8 +299,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
               if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
                 event.preventDefault();
 
-                if (this.triggerStableChangeTimeout.isActive()) {
-                  this.triggerStableChangeTimeout.cancel();
+                if (this.startMarkerUpdateTimeout.isActive()) {
+                  this.startMarkerUpdateTimeout.cancel();
                   this.props.onChangeSave(this.model.getValue());
                 } else {
                   this.props.onSave(this.model.getValue());
@@ -387,6 +364,11 @@ export class MarkerManager {
       let lineNumbers = event.changes.flatMap((change) =>
         Range(change.range.startLineNumber, change.range.endLineNumber + 1).toArray()
       );
+
+      if (this.#tokenSource) {
+        this.#tokenSource.cancel();
+        this.#tokenSource = null;
+      }
 
       // TODO: handle NL characters
       this.#changedLineNumbers = new Set([...this.#changedLineNumbers, ...lineNumbers]);

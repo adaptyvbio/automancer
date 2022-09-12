@@ -9,7 +9,7 @@ setup(
 
   entry_points={
     'pr1.units': [
-      "numato = pr1_numato",
+      "numato = pr1_numato"
     ]
   },
   package_data={
@@ -17,7 +17,7 @@ setup(
   },
 
   install_requires=[
-    "pyserial==3.5",
-    "pyserial-asyncio==0.5"
+    "aioserial==1.3.1",
+    "pyserial==3.5"
   ]
 )

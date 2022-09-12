@@ -10,7 +10,7 @@ metadata = Metadata(
   description="This unit adds support to the Numato relay modules.",
   icon=MetadataIcon(kind='svg', value=(Path(__file__).parent / "data/logo.svg").open().read()),
   title="Numato",
-  version="1.0"
+  version="2.0"
 )
 
 logger = parent_logger.getChild(namespace)

@@ -1,4 +1,4 @@
-import { Application, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+import { Application, ContextMenuContext, MessageBackend, Pool, React, ReactDOM } from 'pr1';
 
 
 let root = ReactDOM.createRoot(document.getElementById('root'));
@@ -150,13 +150,15 @@ class App extends React.Component {
     }
 
     return (
-      <Application
-        appBackend={this.appBackend}
-        hostSettings={this.state.hostSettings[this.hostSettingsId]}
-        hostSettingsRecord={this.state.hostSettings}
-        onHostStarted={() => {
-          window.api.ready();
-        }} />
+      <ContextMenuContext.Provider value={NativeContextMenu}>
+        <Application
+          appBackend={this.appBackend}
+          hostSettings={this.state.hostSettings[this.hostSettingsId]}
+          hostSettingsRecord={this.state.hostSettings}
+          onHostStarted={() => {
+            window.api.ready();
+          }} />
+      </ContextMenuContext.Provider>
     );
   }
 }
@@ -187,5 +189,29 @@ class InternalBackend extends MessageBackend {
   async loadUnit(unitInfo) {
     let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, 'http://localhost:4568');
     return await import(url.href);
+  }
+}
+
+
+class NativeContextMenu extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.props.triggerRef.current = (event) => {
+      let menu = this.props.createMenu(event);
+      let position = {
+        x: event.clientX,
+        y: event.clientY
+      };
+
+      window.common.triggerContextMenu(menu, position).then((selectedPath) => {
+        this.props.onSelect(selectedPath);
+        this.props.onClose(selectedPath !== null);
+      });
+    };
+  }
+
+  render() {
+    return null;
   }
 }

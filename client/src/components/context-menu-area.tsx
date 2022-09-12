@@ -1,7 +1,12 @@
+import { List } from 'immutable';
 import * as React from 'react';
 import { Application } from '../application';
 
-import { ContextMenu, MenuDef, MenuEntryPath } from './context-menu';
+import { ContextMenu as DefaultContextMenu, ContextMenuProps, MenuDef, MenuEntryPath } from './context-menu';
+import { ContextMenuContext } from '../contexts';
+
+
+export type ContextMenuComponent = React.ComponentType<ContextMenuProps>;
 
 
 export type ContextMenuAreaProps = React.PropsWithChildren<{
@@ -28,6 +33,26 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
 
   return (
     <>
+      <ContextMenuContext.Consumer>
+        {(ReplacedContextMenu) => {
+          let ContextMenu = ReplacedContextMenu ?? DefaultContextMenu;
+
+          return (
+            <ContextMenu
+              createMenu={props.createMenu}
+              onClose={(_selected) => {
+                childRef.current!.classList.remove('_context');
+
+                if (formerFocusRef.current instanceof HTMLElement) {
+                  formerFocusRef.current.focus();
+                }
+              }}
+              onSelect={(path) => props.onSelect(List(path))}
+              triggerRef={triggerRef} />
+          );
+        }}
+      </ContextMenuContext.Consumer>
+
       {React.cloneElement(child, {
         ref: (ref: HTMLElement) => {
           (childRef as any).current = ref;
@@ -37,60 +62,6 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
           }
         }
       })}
-      <ContextMenu
-        createMenu={props.createMenu}
-        onClose={(selected) => {
-          childRef.current!.classList.remove('_context');
-
-          if (formerFocusRef.current instanceof HTMLElement) {
-            formerFocusRef.current.focus();
-          }
-        }}
-        onSelect={props.onSelect}
-        triggerRef={triggerRef} />
     </>
   )
 }
-
-/* export function _ContextMenuArea(props: ContextMenuAreaProps) {
-  return (
-    <ApplicationContext.Consumer>
-      {(app) => (
-        <ContextMenuAreaRaw
-          children={props.children}
-          onContextMenu={async (event) => {
-            await app.showContextMenu(event, props.createMenu(), props.onSelect);
-          }} />
-      )}
-    </ApplicationContext.Consumer>
-  );
-}
-
-
-export type ContextMenuAreaRawProps = React.PropsWithChildren<{
-  onContextMenu(event: MouseEvent): Promise<void>;
-}>;
-
-export class ContextMenuAreaRaw extends React.Component<ContextMenuAreaRawProps> { // (props: React.PropsWithChildren<{}>) {
-  childRef = React.createRef<HTMLElement>();
-
-  componentDidMount() {
-    let el = this.childRef.current!;
-
-    el.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-
-      el.classList.add('_context');
-
-      this.props.onContextMenu(event).finally(() => {
-        el.classList.remove('_context');
-      });
-    });
-  }
-
-  render() {
-    return React.cloneElement(this.props.children as React.ReactElement, {
-      ref: (ref: HTMLElement) => ((this.childRef as any).current = ref)
-    });
-  }
-} */

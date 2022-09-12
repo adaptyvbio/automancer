@@ -2,7 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 
 contextBridge.exposeInMainWorld('common', {
-  isDarwin: (process.platform === 'darwin')
+  isDarwin: (process.platform === 'darwin'),
+  triggerContextMenu: async (menu, position) => {
+    return await ipcRenderer.invoke('contextMenu.trigger', { menu, position });
+  }
 });
 
 contextBridge.exposeInMainWorld('api', {

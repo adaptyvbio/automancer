@@ -9,6 +9,11 @@ const { StartupWindow } = require('./startup');
 const util = require('./util');
 
 
+const ProtocolFileFilters = [
+  { name: 'Protocols', extensions: ['yml', 'yaml'] }
+];
+
+
 class CoreApplication {
   static version = 1;
 
@@ -144,6 +149,43 @@ class CoreApplication {
     });
 
 
+    // Context menu creation
+
+    ipcMain.handle('contextMenu.trigger', async (event, { menu, position }) => {
+      let deferred = util.defer();
+
+      let createAppMenuFromMenu = (menu, ancestors = []) => Menu.buildFromTemplate(menu.flatMap((entry) => {
+        let path = [...ancestors, entry.id];
+
+        switch (entry.type) {
+          case undefined:
+          case 'option': return [{
+            enabled: !entry.disabled,
+            label: entry.name,
+            click: () => void deferred.resolve(path)
+          }];
+
+          case 'divider': return [{
+            type: 'separator'
+          }];
+
+          default: [];
+        }
+      }));
+
+      let appMenu = createAppMenuFromMenu(menu);
+
+      appMenu.popup({
+        callback: () => void deferred.resolve(null),
+        x: position.x,
+        y: position.y,
+        window: BrowserWindow.fromWebContents(event.sender)
+      });
+
+      return await deferred.promise;
+    });
+
+
     // Host settings management
 
     ipcMain.handle('hostSettings.create', async (_event, { hostSettings }) => {
@@ -219,8 +261,12 @@ class CoreApplication {
       };
     };
 
-    ipcMain.handle('drafts.create', async (_event, source) => {
-      let result = await dialog.showSaveDialog();
+    ipcMain.handle('drafts.create', async (event, source) => {
+      let result = await dialog.showSaveDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        { filters: ProtocolFileFilters,
+          buttonLabel: 'Create' }
+      );
 
       if (result.canceled) {
         return null;
@@ -257,13 +303,12 @@ class CoreApplication {
       );
     });
 
-    ipcMain.handle('drafts.load', async (_event) => {
-      let result = await dialog.showOpenDialog({
-        filters: [
-          { name: 'Protocols', extensions: ['yml', 'yaml'] }
-        ],
-        properties: ['openFile']
-      });
+    ipcMain.handle('drafts.load', async (event) => {
+      let result = await dialog.showOpenDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        { filters: ProtocolFileFilters,
+        properties: ['openFile'] }
+      );
 
       if (result.canceled) {
         return null;
@@ -280,6 +325,8 @@ class CoreApplication {
       await this.setData({
         drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
       });
+
+      draftEntryStates[draftEntry.id] = createDraftEntryState();
 
       return createClientDraftEntry(draftEntry);
     });
@@ -334,7 +381,7 @@ class CoreApplication {
         });
       });
 
-      draftEntryStates[draftId].watcher = watcher;
+      draftEntryState.watcher = watcher;
 
       let change = await getChange();
       draftEntryState.lastModified = change.lastModified;

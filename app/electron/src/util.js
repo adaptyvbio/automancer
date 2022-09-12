@@ -156,4 +156,6 @@ exports.fsExists = fsExists;
 exports.fsMkdir = fsMkdir;
 exports.getResourcePath = getResourcePath;
 exports.getLocalHostModels = getLocalHostModels;
+exports.parsePythonVersion = parsePythonVersion;
+exports.runCommand = runCommand;
 exports.isDarwin = isDarwin;

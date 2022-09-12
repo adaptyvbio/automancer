@@ -196,6 +196,17 @@ class CoreApplication {
 
     // Draft management
 
+    let createDraftEntryState = () => ({
+      lastModified: null,
+      waiting: false,
+      watcher: null,
+      writePromise: Promise.resolve()
+    })
+
+    let draftEntryStates = Object.fromEntries(
+      Object.values(this.data.drafts).map((draftEntry) => [draftEntry.id, createDraftEntryState()])
+    );
+
     let createClientDraftEntry = async (draftEntry) => {
       let stats = await fs.stat(draftEntry.path);
 
@@ -215,9 +226,8 @@ class CoreApplication {
         return null;
       }
 
-      let id = crypto.randomUUID();
       let draftEntry = {
-        id,
+        id: crypto.randomUUID(),
         lastOpened: Date.now(),
         name: path.basename(result.filePath),
         path: result.filePath
@@ -229,18 +239,16 @@ class CoreApplication {
         drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
       });
 
+      draftEntryStates[draftEntry.id] = createDraftEntryState();
+
       return createClientDraftEntry(draftEntry);
     });
 
     ipcMain.handle('drafts.delete', async (_event, draftId) => {
       let { [draftId]: _, ...drafts } = this.data.drafts;
       await this.setData({ drafts });
-    });
 
-    ipcMain.handle('drafts:get-source', async (_event, draftId) => {
-      let draftEntry = this.data.drafts[draftId];
-
-      return (await fs.readFile(draftEntry.path)).toString();
+      delete draftEntryStates[draftId];
     });
 
     ipcMain.handle('drafts.list', async () => {
@@ -286,11 +294,9 @@ class CoreApplication {
       shell.showItemInFolder(draftEntry.path);
     });
 
-    let nextWatcherIndex = 0;
-    let watchers = {};
-
     ipcMain.handle('drafts.watch', async (event, draftId) => {
       let draftEntry = this.data.drafts[draftId];
+      let draftEntryState = draftEntryStates[draftId];
 
       let getChange = async () => {
         let stats = await fs.stat(draftEntry.path);
@@ -302,34 +308,50 @@ class CoreApplication {
         };
       };
 
-      let change = await getChange();
-
-      let watcherIndex = nextWatcherIndex++;
-      let watcher = chokidar.watch(draftEntry.path);
+      let watcher = chokidar.watch(draftEntry.path, {
+        awaitWriteFinish: {
+          stabilityThreshold: 500
+        }
+      });
 
       watcher.on('change', () => {
         this.pool.add(async () => {
+          if (draftEntryState.waiting) {
+            return;
+          }
+
+          draftEntryState.waiting = true;
+          await draftEntryState.writePromise;
+
+          draftEntryState.waiting = false;
+
           let change = await getChange();
-          event.sender.send('drafts.change', change);
+
+          if (draftEntryState.lastModified && (change.lastModified > draftEntryState.lastModified)) {
+            draftEntryState.lastModified = change.lastModified;
+            event.sender.send('drafts.change', { change, draftId });
+          }
         });
       });
 
+      draftEntryStates[draftId].watcher = watcher;
 
-      watchers[watcherIndex] = watcher;
+      let change = await getChange();
+      draftEntryState.lastModified = change.lastModified;
 
-      return {
-        ...change,
-        watcherIndex
-      };
+      return change;
     });
 
-    ipcMain.handle('drafts.watchStop', async (_event, watcherIndex) => {
-      await watchers[watcherIndex].close();
-      delete watchers[watcherIndex];
+    ipcMain.handle('drafts.watchStop', async (_event, draftId) => {
+      let draftEntryState = draftEntryStates[draftId];
+
+      await draftEntryState.watcher.close();
+      draftEntryState.watcher = null;
     });
 
     ipcMain.handle('drafts.write', async (_event, draftId, primitive) => {
       let draftEntry = this.data.drafts[draftId];
+      let draftEntryState = draftEntryStates[draftId];
 
       if (primitive.name) {
         await this.setData({
@@ -338,10 +360,17 @@ class CoreApplication {
       }
 
       if (primitive.source) {
-        await fs.writeFile(draftEntry.path, primitive.source);
+        let promise = draftEntryState.writePromise.then(async () => {
+          await fs.writeFile(draftEntry.path, primitive.source);
 
-        let stats = await fs.stat(draftEntry.path);
-        return stats.mtimeMs;
+          let stats = await fs.stat(draftEntry.path);
+
+          draftEntryState.lastModified = stats.mtimeMs;
+          return stats.mtimeMs;
+        });
+
+        draftEntryState.writePromise = promise;
+        return await promise;
       }
 
       return null;

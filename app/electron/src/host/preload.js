@@ -28,17 +28,19 @@ contextBridge.exposeInMainWorld('api', {
       return await ipcRenderer.invoke('drafts:update', draftId, primitive);
     },
     watch: async (draftId, callback, onSignalAbort) => {
-      let changeListener = (_event, change) => {
-        callback(change);
+      let changeListener = (_event, { change, draftId: changeDraftId }) => {
+        if (changeDraftId === draftId) {
+          callback(change);
+        }
       };
 
       ipcRenderer.on('drafts.change', changeListener);
 
-      let { watcherIndex, ...change } = await ipcRenderer.invoke('drafts.watch', draftId);
+      let change = await ipcRenderer.invoke('drafts.watch', draftId);
       callback(change);
 
       onSignalAbort(() => {
-        ipcRenderer.invoke('drafts.watchStop', watcherIndex);
+        ipcRenderer.invoke('drafts.watchStop', draftId);
         ipcRenderer.off('drafts.change', changeListener);
       });
     },

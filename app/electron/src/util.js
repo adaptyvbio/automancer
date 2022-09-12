@@ -66,20 +66,12 @@ async function findPythonInstallations() {
 
   return (await Promise.all(possiblePythonLocations.map(async (possibleLocation) => {
     let [stdout, stderr] = await runCommand(`${possibleLocation} --version`);
-    let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(stdout || stderr);
+    let version = parsePythonVersion(stdout || stderr);
 
-    if (match) {
-      let major = parseInt(match[1]);
-      let minor = parseInt(match[2]);
-      let patch = parseInt(match[3]);
-
-      return {
-        location: possibleLocation,
-        version: [major, minor, patch]
-      };
-    }
-
-    return null;
+    return version && {
+      location: possibleLocation,
+      version
+    };
   }))).filter((installation) => installation);
 }
 
@@ -114,7 +106,7 @@ async function getLocalHostModels() {
     beta: await fsExists(betaPath)
       ? {
         packagesPath: path.join(betaPath, 'packages'),
-        version: (await fs.readFile(path.join(betaPath, 'version.txt'))).toString().split('.').map((seg) => parseInt(seg))
+        version: parsePythonVersion((await fs.readFile(path.join(betaPath, 'version.txt'))).toString())
       }
       : null
   };
@@ -124,6 +116,20 @@ function getResourcePath(relativePath) {
   return app.isPackaged
     ? path.join(process.resourcesPath, relativePath)
     : path.join(__dirname, '../tmp/resources', relativePath);
+}
+
+function parsePythonVersion(input) {
+  let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(input);
+
+  if (match) {
+    let major = parseInt(match[1]);
+    let minor = parseInt(match[2]);
+    let patch = parseInt(match[3]);
+
+    return [major, minor, patch];
+  }
+
+  return null;
 }
 
 async function runCommand(command, options) {

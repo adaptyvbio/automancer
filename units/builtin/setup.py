@@ -1,4 +1,5 @@
 from setuptools import find_packages, setup
+import sys
 
 setup(
   name="pr1_builtin",
@@ -13,7 +14,7 @@ setup(
       "devices = pr1_devices",
       "idle = pr1_idle",
       "metadata = pr1_metadata",
-      "say = pr1_say",
+      *(["say = pr1_say"] if sys.platform == "darwin" else list()),
       "timer = pr1_timer"
     ]
   },

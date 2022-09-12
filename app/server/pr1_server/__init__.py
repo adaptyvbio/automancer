@@ -155,6 +155,7 @@ class App:
     # Misc
 
     self.updating = False
+    self._main_task = None
 
 
   async def handle_client(self, client):
@@ -195,12 +196,18 @@ class App:
       })
 
       async for message in client:
-        response_data = await self.process_request(client, message["data"])
-        await client.send({
-          "type": "response",
-          "id": message["id"],
-          "data": response_data
-        })
+        match message['type']:
+          case "exit":
+            logger.info("Exiting after receiving an exit message")
+            self.stop()
+          case "request":
+            response_data = await self.process_request(client, message["data"])
+
+            await client.send({
+              "type": "response",
+              "id": message["id"],
+              "data": response_data
+            })
     except ClientClosed:
       logger.debug(f"Disconnected client '{client.id}'")
     finally:
@@ -306,20 +313,28 @@ class App:
         logger.debug(f"Canceled {len(tasks)} tasks")
 
     tasks.add(asyncio.ensure_future(self.host.start()))
-    main_task = asyncio.ensure_future(start())
+    self._main_task = asyncio.ensure_future(start())
 
     def handle_sigint():
       print("\r", end="", file=sys.stderr)
-      logger.info("Stopping after receiving a SIGINT signal")
+      logger.info("Exiting after receiving a SIGINT signal")
 
-      main_task.cancel()
-
-    loop.add_signal_handler(signal.SIGINT, handle_sigint)
+      self.stop()
 
     try:
-      loop.run_until_complete(main_task)
+      loop.add_signal_handler(signal.SIGINT, handle_sigint)
+    except NotImplementedError: # For Windows
+      pass
+
+    try:
+      loop.run_until_complete(self._main_task)
     finally:
       loop.close()
+      self._main_task = None
+
+  def stop(self):
+    logger.info("Stopping")
+    self._main_task.cancel()
 
 
 def main():

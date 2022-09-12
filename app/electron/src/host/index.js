@@ -37,11 +37,11 @@ exports.HostWindow = class HostWindow {
       this.internalHost = new InternalHost(this.app, this, this.hostSettings);
       await this.internalHost.start();
 
-      this.internalHost.closed.then((code) => {
+      this.internalHost.closed.then((err) => {
         this.internalHost = null;
 
-        if (code !== 0) {
-          dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly with code ${code}`, 'See the log file for details.');
+        if (err) {
+          dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly` + (err.code ? ` with code ${err.code}` : ''), 'See the log file for details.');
         }
 
         if (!this.closing) {

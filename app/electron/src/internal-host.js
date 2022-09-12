@@ -49,10 +49,7 @@ class InternalHost {
 
     this.process = childProcess.spawn(command, args, { env });
 
-    if (!app.isPackaged) {
-      this.process.stderr.pipe(process.stderr);
-    }
-
+    this.process.stderr.pipe(process.stderr);
     this.process.stderr.pipe(fs.createWriteStream(logFilePath));
 
 
@@ -83,8 +80,8 @@ class InternalHost {
     // Wait for the process to close
 
     this.closed = new Promise((resolve) => {
-      this.process.on('close', (code) => {
-        resolve(code);
+      this.process.on('close', (code, _signal) => {
+        resolve((code !== 0) ? { code } : null);
       });
     });
   }
@@ -98,7 +95,18 @@ class InternalHost {
   }
 
   close() {
-    this.process.kill(2);
+    this.sendMessage({ type: 'exit' });
+
+    let timeout = setTimeout(() => {
+      this.process.kill(2);
+      this.process.off('close', listener);
+    }, 1000);
+
+    let listener = () => {
+      clearTimeout(timeout);
+    };
+
+    this.process.on('close', listener);
   }
 }
 

@@ -94,7 +94,7 @@ class RelayBoardDevice:
     self.connected = True
     logger.info(f"Connected to '{self._address}'")
 
-    async def check():
+    async def check_loop():
       try:
         while True:
           await self.read()
@@ -104,10 +104,10 @@ class RelayBoardDevice:
       finally:
         self._check_task = None
 
-    self._check_task = asyncio.create_task(check())
+    self._check_task = asyncio.create_task(check_loop())
 
   def _reconnect(self, interval = 1):
-    async def reconnect():
+    async def reconnect_loop():
       try:
         while True:
           await self._connect()
@@ -122,7 +122,7 @@ class RelayBoardDevice:
       finally:
         self._reconnect_task = None
 
-    self._reconnect_task = asyncio.create_task(reconnect())
+    self._reconnect_task = asyncio.create_task(reconnect_loop())
 
   async def _query(self, command, *, get_response = False):
     await self._query_lock.acquire()
@@ -137,6 +137,9 @@ class RelayBoardDevice:
       self._serial = None
 
       logger.error(f"Lost connection to '{self._address}'")
+
+      if self._check_task:
+        self._check_task.cancel()
 
       self._reconnect()
       self._update_callback()

@@ -1,27 +1,10 @@
 import asyncio
 
+from serial.serialutil import SerialException
 from pr1.device import SelectNode, SelectNodeOption
-import serial
-import serial_asyncio
+import aioserial
 
 from .. import logger, namespace
-
-
-class Protocol(asyncio.Protocol):
-  def __init__(self, device):
-    self._buffer = bytes()
-    self._device = device
-
-  def data_received(self, data):
-    self._buffer += data
-
-    *lines, self._buffer = self._buffer.split(b"\r\n")
-
-    for line in lines:
-      self._device._receive(line)
-
-  def connection_lost(self, exc):
-    self._device._lost(exc)
 
 
 class RotaryValveNode(SelectNode):
@@ -68,35 +51,41 @@ class RotaryValveDevice:
 
     self._address = address
     self._update_callback = update_callback
-
-    self._busy = False
-    self._busy_future = None
-    self._query_futures = list()
-    self._reconnect_task = None
     self._valve_count = valve_count
 
     self._valve_target = None
     self._valve_value = None
 
-    self._protocol = None
-    self._transport = None
-
-  @property
-  def _connected(self):
-    return self._protocol is not None
+    self._busy = False
+    self._busy_future = None
+    self._query_futures = list()
+    self._read_task = None
+    self._reconnect_task = None
+    self._serial = None
 
   async def _connect(self):
     logger.debug(f"Connecting to '{self._address}'")
 
     try:
-      self._transport, self._protocol = await serial_asyncio.create_serial_connection(
-        loop=asyncio.get_running_loop(),
-        protocol_factory=lambda: Protocol(device=self),
-        url=self._address,
+      self._serial = aioserial.AioSerial(
+        port=self._address,
         baudrate=9600
       )
-    except serial.serialutil.SerialException:
+    except SerialException:
       return
+
+    async def read_loop():
+      try:
+        while True:
+          self._receive((await self._serial.read_until_async(b"\n"))[0:-2])
+      except asyncio.CancelledError:
+        pass
+      except SerialException as e:
+        self._lost(e)
+      finally:
+        self._read_task = None
+
+    self._read_task = asyncio.create_task(read_loop())
 
     # Set the output mode to 2
     # This will also set self._busy to its correct value
@@ -125,8 +114,9 @@ class RotaryValveDevice:
 
     logger.info(f"Connected to '{self._address}'")
 
+
   def _reconnect(self, interval = 1):
-    async def reconnect():
+    async def reconnect_loop():
       try:
         while True:
           await self._connect()
@@ -141,38 +131,35 @@ class RotaryValveDevice:
       finally:
         self._reconnect_task = None
 
-    self._reconnect_task = asyncio.create_task(reconnect())
+    self._reconnect_task = asyncio.create_task(reconnect_loop())
 
   async def _query(self, command, dtype = None):
-    if not self._connected:
-      raise Exception("Not connected")
-
     future = asyncio.Future()
     self._query_futures.append(future)
-    self._send(command)
 
+    await self._serial.write_async(f"/_{command}\r".encode("utf-8"))
     return self._parse(await future, dtype=dtype)
 
   def _lost(self, exc):
+    logger.error(f"Lost connection to '{self._address}'")
+
     self.connected = False
+    self._serial = None
 
-    self._protocol = None
-    self._transport = None
+    if self._read_task:
+      self._read_task.cancel()
 
-    if exc is not None:
-      logger.error(f"Lost connection to '{self._address}'")
+    if self._busy_future:
+      self._busy_future.set_exception(exc)
+      self._busy_future = None
 
-      if self._busy_future:
-        self._busy_future.set_exception(exc)
+    for future in self._query_futures:
+      future.set_exception(exc)
 
-      for future in self._query_futures:
-        future.set_exception(exc)
-
-      self._reconnect()
-      self._update_callback()
-
-    self._busy_future = None
     self._query_futures.clear()
+
+    self._reconnect()
+    self._update_callback()
 
   def _parse(self, data, dtype = None):
     response = data[3:-1].decode("utf-8")
@@ -205,9 +192,6 @@ class RotaryValveDevice:
     await self._query(command)
     await future
 
-  def _send(self, command):
-    self._transport.write(f"/_{command}\r".encode("utf-8"))
-
 
   async def initialize(self):
     await self._connect()
@@ -217,8 +201,14 @@ class RotaryValveDevice:
       self._reconnect()
 
   async def destroy(self):
-    if self.connected:
-      self._transport.close()
+    if self._serial:
+      logger.debug(f"Disconnecting from '{self._address}'")
+
+      self._serial.close()
+      self._serial = None
+
+    if self._read_task:
+      self._read_task.cancel()
 
     if self._reconnect_task:
       self._reconnect_task.cancel()

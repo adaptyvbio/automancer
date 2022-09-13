@@ -1,0 +1,23 @@
+int main() {
+  char buf[256];
+  char output[65536];
+  int i;
+
+  // List objectives
+  for (i = 0; i < Stg_GetNosepiecePositions(); i = i + 1) {
+    Stg_GetNosepieceObjectiveName(i, &buf, 256);
+    strcat(&output, &buf);
+    strcat(&output, ";");
+  }
+
+  strcat(&output, "//");
+
+  // List optical configurations
+  for (i = 0; i < GetOptConfCount(); i = i + 1) {
+    GetOptConfName(i, &buf, 256);
+    strcat(&output, &buf);
+    strcat(&output, ";");
+  }
+
+  WriteFile("%(output_path)s", &output, strlen(&output) * 2);
+}

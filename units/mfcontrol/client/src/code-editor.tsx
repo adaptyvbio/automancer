@@ -10,7 +10,7 @@ export class CodeEditor extends React.Component<CodeEditorProps<Code>> implement
     let runner = this.props.chip.runners[namespace] as Runner;
     let model = runner.settings.model!;
 
-    let protocol = this.props.draft.compiled!.protocol!;
+    let protocol = this.props.draft.compilation!.protocol!;
     let protocolData = protocol.data[namespace] as ProtocolData;
 
     let args = this.props.code.arguments;

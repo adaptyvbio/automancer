@@ -1,0 +1,36 @@
+int main() {
+  char buf[256];
+  char output[65536];
+  char outputFilePath[256];
+  int chipCount;
+  int chipIndex, chipPointIndex, pointIndex;
+  int i, j;
+  double ax, ay, az;
+  double dx[%(chip_point_count)i], dy[%(chip_point_count)i], dz[%(chip_point_count)i];
+
+  chipCount = %(chip_count)i;
+  outputFilePath = "%(output_path)s";
+
+  for (chipIndex = 0; chipIndex < chipCount; chipIndex = chipIndex + 1) {
+    for (pointIndex = 0; pointIndex < 4; pointIndex = pointIndex + 1) {
+      i = pointIndex + 1;
+      j = chipIndex + 1;
+
+      sprintf(&buf, "Go to point %%d of chip %%d", "i, j");
+      WaitText(0, &buf);
+
+      StgGetPosXY(&ax, &ay);
+      StgGetPosZ(&az, 0);
+
+      chipPointIndex = chipIndex * 4 + pointIndex;
+      dx[chipPointIndex] = ax;
+      dy[chipPointIndex] = ay;
+      dz[chipPointIndex] = az;
+
+      sprintf(&buf, "%%f;%%f;%%f;", "ax, ay, az");
+      strcat(&output, &buf);
+    }
+  }
+
+  WriteFile(&outputFilePath, &output, strlen(&output) * 2);
+}

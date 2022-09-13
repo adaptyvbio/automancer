@@ -1,0 +1,9 @@
+build
+dist
+node_modules
+package-lock.json
+*.egg-info
+__pycache__
+
+src/*/client/**
+!src/*/client/*.py

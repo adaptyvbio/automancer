@@ -7,7 +7,7 @@ namespace = "devices"
 version = 0
 
 metadata = Metadata(
-  description="This is unit provides a list of devices.",
+  description="This unit provides a list of devices.",
   icon=MetadataIcon(kind='icon', value="settings_input_hdmi"),
   title="Devices",
   version="1.1"

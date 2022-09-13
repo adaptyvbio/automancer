@@ -130,7 +130,9 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                       <option
                         value={chip.id}
                         key={chip.id}
-                        disabled={(Object.values(this.props.host.units).some((unit) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
+                        disabled={(chip.condition !== ChipCondition.Ok) || (chip.master !== null) || (Object.entries(this.props.host.units)
+                          .filter(([namespace, _unit]) => chip.unitList.includes(namespace))
+                          .some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip)))}>
                         {getChipMetadata(chip).title}
                       </option>
                     ))}
@@ -145,25 +147,27 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
               {plan.context && (
                 <>
                   <div className="pconfig-root">
-                    {Object.values(this.props.host.units).map((unit) => {
-                      if (!unit.CodeEditor || !(unit.namespace in plan.context!.data)) {
-                        return null;
-                      }
+                    {Object.entries(this.props.host.units)
+                      .filter(([namespace, _unit]) => chip!.unitList.includes(namespace))
+                      .map(([_namespace, unit]) => {
+                        if (!unit.CodeEditor || !(unit.namespace in plan.context!.data)) {
+                          return null;
+                        }
 
-                      return (
-                        <unit.CodeEditor
-                          chip={chip!}
-                          draft={this.props.draft}
-                          code={plan.context!.data[unit.namespace as keyof Codes]}
-                          host={this.props.host}
-                          setCode={(code: Codes[keyof Codes]) => {
-                            this.setState((state) => ({
-                              plan: setIn(state.plan, ['context', 'data', unit.namespace], code)
-                            }));
-                          }}
-                          key={unit.namespace} />
-                      );
-                    })}
+                        return (
+                          <unit.CodeEditor
+                            chip={chip!}
+                            draft={this.props.draft}
+                            code={plan.context!.data[unit.namespace as keyof Codes]}
+                            host={this.props.host}
+                            setCode={(code: Codes[keyof Codes]) => {
+                              this.setState((state) => ({
+                                plan: setIn(state.plan, ['context', 'data', unit.namespace], code)
+                              }));
+                            }}
+                            key={unit.namespace} />
+                        );
+                      })}
                   </div>
                   <div className="pconfig-submit">
                     <button type="button" className="btn" onClick={() => {

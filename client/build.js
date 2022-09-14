@@ -1,4 +1,5 @@
 const esbuild = require('esbuild');
+const { postcssModules, sassPlugin } = require('esbuild-sass-plugin');
 const minimist = require('minimist');
 const path = require('path');
 const fs = require('fs');
@@ -46,5 +47,13 @@ esbuild.build({
 		'.woff': 'file',
 		'.woff2': 'file'
 	},
-	external: ['vm', 'path', 'fs/promises'] // For pyodide
+	plugins: [
+		sassPlugin({
+			filter: /\.module\.scss$/,
+			transform: postcssModules({})
+		}),
+		sassPlugin({
+			filter: /\.scss/
+		})
+	]
 });

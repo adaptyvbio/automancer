@@ -33,6 +33,7 @@ export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]
 
 export function formatClass(...input: (string | Record<string, unknown>)[]): string {
   return input
+    .filter((item) => item)
     .flatMap((item) => {
       if (typeof item === 'string') {
         return item;
@@ -40,7 +41,7 @@ export function formatClass(...input: (string | Record<string, unknown>)[]): str
         return formatClass(...item);
       } if (item.constructor === Object) {
         return Object.entries(item)
-          .filter(([_key, value]) => value)
+          .filter(([key, value]) => (key && value))
           .map(([key, _value]) => key);
       }
 

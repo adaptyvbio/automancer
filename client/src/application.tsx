@@ -15,6 +15,8 @@ import { ViewSettings } from './views/settings';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 
+import styles from '../styles/components/application.module.scss';
+
 
 export type Route = (number | string)[];
 
@@ -473,7 +475,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     })();
 
     return (
-      <div className="app">
+      <div className={styles.root}>
         <Sidebar
           currentRoute={this.state.currentRoute}
           setRoute={setRoute}

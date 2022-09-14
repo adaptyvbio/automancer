@@ -8,6 +8,8 @@ import type { Draft, DraftId } from '../draft';
 import * as util from '../util';
 import { getChipMetadata } from '../backends/misc';
 
+import styles from '../../styles/components/sidebar.module.scss';
+
 
 export interface SidebarProps {
   currentRoute: Route | null;
@@ -102,46 +104,44 @@ export class Sidebar extends React.Component<SidebarProps> {
                   onClick: () => void this.props.setStartup?.()
                 }]
                 : [])
-          ] },
+          ] }
       ]
       : [];
 
     return (
-      <aside className="sidebar-root">
-        <div className="sidebar-header">
-          <div className="sidebar-host-logo">
-            <span className="material-symbols-rounded">developer_board</span>
-          </div>
-          <div className="sidebar-host-select">
+      <aside className={styles.root}>
+        <div className={styles.trafficLights} />
+        <div className={styles.headerRoot}>
+          {(hostSettingsRecord.length > 0) && (
+            <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
+              this.props.onSelectHost(event.currentTarget.value || null);
+            }}>
+              {!this.props.host && <option value="">–</option>}
+              {hostSettingsRecord.map((hostSettings) => (
+                <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
+              ))}
+            </select>
+          )}
+          <div className={styles.headerValueRoot}>
+            <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
+            <div className={styles.headerValueTitle}>Setup Alpha 1</div>
+            {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
+            <div className={styles.headerValueSubtitle}>localhost:4567</div>
             {(hostSettingsRecord.length > 0) && (
-              <select className="sidebar-host-input" value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
-                this.props.onSelectHost(event.currentTarget.value || null);
-              }}>
-                {!this.props.host && <option value="">–</option>}
-                {hostSettingsRecord.map((hostSettings) => (
-                  <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
-                ))}
-              </select>
+              <div className={styles.headerValueExpand}>
+                <span className="material-symbols-sharp">unfold_more</span>
+              </div>
             )}
-            <div className="sidebar-host-selected">
-              <div className="sidebar-host-subtitle">Host</div>
-              <div className="sidebar-host-title">{this.props.host?.state.info.name ?? '–'}</div>
-              {(hostSettingsRecord.length > 0) && (
-                <div className="sidebar-host-expand">
-                  <span className="material-symbols-rounded">unfold_more</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
-        <nav className="sidebar-nav">
+        <nav className={styles.nav}>
           {groups.map((group) => (
-            <div className="sidebar-group" key={group.id}>
+            <div className={styles.group} key={group.id}>
               {group.entries.map((entry) => {
                 let item = (
                   <button
                     type="button"
-                    className={util.formatClass('sidebar-item', {
+                    className={util.formatClass(styles.entryRoot, {
                       '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
                       '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
                     })}
@@ -149,14 +149,15 @@ export class Sidebar extends React.Component<SidebarProps> {
                     onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
                       this.props.setRoute(entry.route!);
                     }))}>
-                    <div className="sidebar-item-icon">
-                      <span className="material-symbols-rounded">{entry.icon}</span>
+                    {/* <span className={util.formatClass(styles.entryIcon, 'material-symbols-rounded')}>{entry.icon}</span> */}
+                    <div className={styles.entryIcon}>
+                      <div className="material-symbols-sharp">{entry.icon}</div>
                     </div>
-                    <div className="sidebar-item-label">{entry.label}</div>
+                    <div className={styles.entryLabel}>{entry.label}</div>
                   </button>
                 );
 
-                return ((entry.children?.length ?? 0) > 0)
+                return (0&& (entry.children?.length ?? 0) > 0)
                   ? (
                     <div className="sidebar-grouping" key={entry.id}>
                       {item}

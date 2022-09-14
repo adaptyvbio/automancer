@@ -129,10 +129,12 @@ class Attribute:
         range=key.area.single_range()
       ))
 
-    return analysis
+    value_analysis, value = self._type.analyze(obj)
+
+    return (analysis + value_analysis), value
 
 
-class Dict:
+class CompositeDict:
   _native_namespace = "_"
 
   def __init__(self, attrs = dict(), *, foldable = False):
@@ -178,7 +180,7 @@ class Dict:
 
     if not isinstance(obj, dict):
       analysis.errors.append(...)
-      return
+      return dict()
 
     if self._foldable:
       analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
@@ -218,9 +220,9 @@ class Dict:
         continue
 
       attr = attr_entries[namespace]
-      attr_values[namespace][attr_name] = obj_value
+      attr_analysis, attr_values[namespace][attr_name] = attr.analyze(obj_value, obj_key)
 
-      analysis += attr.analyze(obj_value, obj_key)
+      analysis += attr_analysis
 
     for attr_name, attr_entries in self._attributes.items():
       for namespace, attr in attr_entries.items():
@@ -249,29 +251,22 @@ class Dict:
       ranges=[obj_key.area.single_range() for obj_key in obj.keys()]
     ))
 
-    return analysis
+    return analysis, attr_values
 
 
-  #   for key, attr in self._template.items():
-  #     if not key in obj:
-  #       errors.append(MissingKeyError(key), target=obj)
-  #       continue
+class SimpleDict(CompositeDict):
+  def __init__(self, attrs, *, foldable = False):
+    super().__init__(attrs, foldable=foldable)
 
-  #     if isinstance(attr, Attribute):
-  #       hovers.append(Hover([attr.label] + ([attr.description] if attr.description else list()), obj_key.locrange))
+  def analyze(self, obj):
+    analysis, output = super().analyze(obj)
 
-  #       attr_analysis = attr.analyze(obj[key])
+    return analysis, output[self._native_namespace]
 
-  #       errors.extend(attr_analysis.errors)
-  #       warnings.extend(attr_analysis.warnings)
 
-  #       folds.extend(attr_analysis.folds)
-  #       hovers.extend(attr_analysis.hovers)
+class SimpleType:
+  def __init__(self):
+    pass
 
-  #   return Analysis(
-  #     errors=errors,
-  #     warnings=warnings,
-
-  #     folds=folds,
-  #     hovers=hovers
-  #   )
+  def analyze(self, obj):
+    return Analysis(), obj

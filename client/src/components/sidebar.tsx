@@ -9,6 +9,7 @@ import * as util from '../util';
 import { getChipMetadata } from '../backends/misc';
 
 import styles from '../../styles/components/sidebar.module.scss';
+import { ContextMenuArea } from './context-menu-area';
 
 
 export interface SidebarProps {
@@ -109,82 +110,73 @@ export class Sidebar extends React.Component<SidebarProps> {
       : [];
 
     return (
-      <aside className={styles.root}>
-        <div className={styles.trafficLights} />
-        <div className={styles.headerRoot}>
-          {(hostSettingsRecord.length > 0) && (
-            <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
-              this.props.onSelectHost(event.currentTarget.value || null);
-            }}>
-              {!this.props.host && <option value="">–</option>}
-              {hostSettingsRecord.map((hostSettings) => (
-                <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
-              ))}
-            </select>
-          )}
-          <div className={styles.headerValueRoot}>
-            <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
-            <div className={styles.headerValueTitle}>Setup Alpha 1</div>
-            {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
-            <div className={styles.headerValueSubtitle}>localhost:4567</div>
+      <ContextMenuArea
+        createMenu={(_event) => null||[
+          { id: 'devices', name: 'Devices' }
+        ]}
+        onSelect={() => {}}>
+        <aside className={util.formatClass(styles.root, styles.rootReduced)}>
+          <div className={styles.headerRoot}>
             {(hostSettingsRecord.length > 0) && (
-              <div className={styles.headerValueExpand}>
-                <span className="material-symbols-sharp">unfold_more</span>
-              </div>
+              <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
+                this.props.onSelectHost(event.currentTarget.value || null);
+              }}>
+                {!this.props.host && <option value="">–</option>}
+                {hostSettingsRecord.map((hostSettings) => (
+                  <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
+                ))}
+              </select>
             )}
-          </div>
-        </div>
-        <nav className={styles.nav}>
-          {groups.map((group) => (
-            <div className={styles.group} key={group.id}>
-              {group.entries.map((entry) => {
-                let item = (
-                  <button
-                    type="button"
-                    className={util.formatClass(styles.entryRoot, {
-                      '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
-                      '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
-                    })}
-                    key={entry.id}
-                    onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
-                      this.props.setRoute(entry.route!);
-                    }))}>
-                    {/* <span className={util.formatClass(styles.entryIcon, 'material-symbols-rounded')}>{entry.icon}</span> */}
-                    <div className={styles.entryIcon}>
-                      <div className="material-symbols-sharp">{entry.icon}</div>
-                    </div>
-                    <div className={styles.entryLabel}>{entry.label}</div>
-                  </button>
-                );
-
-                return (0&& (entry.children?.length ?? 0) > 0)
-                  ? (
-                    <div className="sidebar-grouping" key={entry.id}>
-                      {item}
-                      <div className="sidebar-children">
-                        {entry.children?.map((child) => {
-                          let routeRef = child.routeRef ?? child.route;
-
-                          return (
-                            <button type="button"
-                              className={util.formatClass('sidebar-child', { '_selected': routeRef && currentRoute && isSuperset(currentRoute, routeRef) })}
-                              key={child.id}
-                              onClick={(child.route ?? undefined) && (() => {
-                                this.props.setRoute(child.route!);
-                              })}>
-                                {child.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )
-                  : item;
-              })}
+            <div className={styles.headerValueRoot}>
+              <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
+              <div className={styles.headerValueTitle}>Setup Alpha 1</div>
+              {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
+              <div className={styles.headerValueSubtitle}>localhost:4567</div>
+              {(hostSettingsRecord.length > 0) && (
+                <div className={styles.headerValueExpand}>
+                  <span className="material-symbols-sharp">unfold_more</span>
+                </div>
+              )}
             </div>
-          ))}
-        </nav>
-      </aside>
+          </div>
+          <nav className={styles.navRoot}>
+            {groups.map((group) => (
+              <div className={styles.navGroup} key={group.id}>
+                {group.entries.map((entry) => {
+                  return (
+                    <button
+                      type="button"
+                      className={util.formatClass(styles.navEntryRoot, {
+                        '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
+                        '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
+                      })}
+                      key={entry.id}
+                      onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
+                        this.props.setRoute(entry.route!);
+                      }))}>
+                      {/* <span className={util.formatClass(styles.entryIcon, 'material-symbols-rounded')}>{entry.icon}</span> */}
+                      <div className={styles.navEntryIcon}>
+                        <div className="material-symbols-sharp">{entry.icon}</div>
+                      </div>
+                      <div className={styles.navEntryLabel}>{entry.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <div className={styles.navRoot}>
+            <div className={styles.navGroup}>
+              <button type="button" className={util.formatClass(styles.navEntryRoot)}>
+                <div className={styles.navEntryIcon}>
+                  <div className="material-symbols-sharp">keyboard_double_arrow_right</div>
+                </div>
+                {/* <div className={styles.navEntryLabel}>{entry.label}</div> */}
+              </button>
+            </div>
+          </div>
+        </aside>
+      </ContextMenuArea>
     );
   }
 }

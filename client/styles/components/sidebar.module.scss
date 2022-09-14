@@ -2,19 +2,37 @@
 
 
 .root {
+  width: var(--sidebar-width);
+
+  padding: 1rem 0;
+
   background-color: #fcfcfc;
   border-right: 1px solid #ddd;
-  box-shadow: 1px 0 1px #0001;
+
+  &:global(._context) {
+    background-color: #eee;
+  }
+
+  &Reduced {
+    display: grid;
+    justify-items: center;
+    grid-template-rows: 1fr auto 1fr;
+  }
 }
 
-.trafficLights {
-  height: 40px;
-  border-bottom: 1px solid #ddd;
-
-  background-position: center left 9px;
-  background-image: -webkit-image-set(url(http://localhost:8081/traffic.png) 2x);
-  background-repeat: no-repeat;
+.rootReduced .headerRoot {
+  display: none;
 }
+
+.rootReduced .navEntryLabel {
+  display: none;
+}
+
+.rootReduced .navGroup {
+  margin-left: unset;
+  margin-right: unset;
+}
+
 
 .header {
   &Root {
@@ -68,49 +86,65 @@
   }
 }
 
-.group {
-  display: flex;
-  flex-direction: column;
-  row-gap: 0.8rem;
 
-  margin: 0 1rem;
-
-  &:not(:last-child) {
-    margin-bottom: 1.8rem;
-    padding-bottom: 1.8rem;
-
-    border-bottom: 1px solid #eee;
-  }
-}
-
-.entry {
+.nav {
   &Root {
     display: flex;
-    align-items: center;
-    column-gap: 1rem;
+    flex-direction: column;
+    row-gap: 2.4rem;
+
+    &:nth-last-child(2) {
+      align-self: center;
+      grid-row: 2;
+    }
+
+    &:last-child {
+      align-self: end;
+      grid-row: 3;
+    }
   }
 
-  &Root:global(._selected) &Icon {
-    color: #fff;
-    background-color: #85144b;
-  }
-
-  &Label {
-    font-size: 1.1rem;
-    font-weight: 500;
-  }
-
-  &Icon {
+  &Group {
     display: flex;
-    padding: 4px;
+    flex-direction: column;
+    row-gap: 0.8rem;
 
-    background-color: #eee;
-    border-radius: 4px;
+    margin: 0 1rem;
+  }
 
-    font-variation-settings:
-      'FILL' 0,
-      'wght' 200,
-      'GRAD' 200,
-      'opsz' 24;
+  &Entry {
+    &Root {
+      display: flex;
+      align-items: center;
+      column-gap: 1rem;
+    }
+
+    &Root:hover &Icon {
+      background-color: #ddd;
+    }
+
+    &Root:global(._selected) &Icon {
+      background-color: #0074d9;
+      color: #fff;
+    }
+
+    &Label {
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    &Icon {
+      display: flex;
+      padding: 4px;
+
+      background-color: #eee;
+      border-radius: 4px;
+
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 200,
+        'GRAD' 200,
+        'opsz' 24;
+    }
   }
 }

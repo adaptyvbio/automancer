@@ -1,6 +1,7 @@
+@use "../mixins" as *;
+
 .root {
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  @include superimposed-children();
 
   height: 100%;
 }

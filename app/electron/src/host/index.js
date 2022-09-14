@@ -54,6 +54,7 @@ exports.HostWindow = class HostWindow {
 
     this.window = new BrowserWindow({
       show: false,
+      titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, 'preload.js')
       }

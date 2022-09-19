@@ -26,6 +26,7 @@ export interface MenuOption {
   disabled?: unknown;
   icon?: string;
   name: string;
+  selected?: unknown;
   shortcut?: string;
   modifiers?: MenuModifiers;
 
@@ -229,6 +230,7 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: {
                           <div className="cmenu-name">{entry.name}</div>
                           {entry.shortcut && <div className="cmenu-shortcut">{entry.shortcut}</div>}
                           {entry.children && <div className="cmenu-chevron"><Icon name="chevron_right" /></div>}
+                          {entry.selected && <div className="cmenu-chevron"><Icon name="check" /></div>}
                         </button>
                       </li>
                     );

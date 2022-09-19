@@ -12,6 +12,9 @@ import styles from '../../styles/components/sidebar.module.scss';
 import { ContextMenuArea } from './context-menu-area';
 
 
+const CollapsedStorageKey = 'sidebarCollapsed';
+
+
 export interface SidebarProps {
   currentRoute: Route | null;
   setRoute(route: Route): void;
@@ -26,7 +29,27 @@ export interface SidebarProps {
   openDraftIds: ImSet<DraftId>;
 }
 
-export class Sidebar extends React.Component<SidebarProps> {
+export interface SidebarState {
+  collapsed: boolean;
+}
+
+export class Sidebar extends React.Component<SidebarProps, SidebarState> {
+  constructor(props: SidebarProps) {
+    super(props);
+
+    let collapsed;
+
+    try {
+      collapsed = JSON.parse(window.sessionStorage[CollapsedStorageKey]);
+    } catch (_err) {
+      collapsed = false;
+    }
+
+    this.state = {
+      collapsed
+    };
+  }
+
   render() {
     let hostSettings = this.props.hostSettingsRecord[this.props.selectedHostSettingsId!];
     let hostSettingsRecord = Object.values(this.props.hostSettingsRecord);
@@ -96,6 +119,10 @@ export class Sidebar extends React.Component<SidebarProps> {
               label: 'Modules',
               icon: 'extension',
               route: ['settings'] },
+            { id: 'settings2',
+              label: 'Settings',
+              icon: 'settings',
+              route: null },
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',
@@ -111,11 +138,11 @@ export class Sidebar extends React.Component<SidebarProps> {
 
     return (
       <ContextMenuArea
-        createMenu={(_event) => null||[
-          { id: 'devices', name: 'Devices' }
+        createMenu={(_event) => [
+          { id: 'devices', name: 'Devices', selected: true }
         ]}
         onSelect={() => {}}>
-        <aside className={util.formatClass(styles.root, styles.rootReduced)}>
+        <aside className={util.formatClass(styles.root, { [styles.rootCollapsed]: this.state.collapsed })}>
           <div className={styles.headerRoot}>
             {(hostSettingsRecord.length > 0) && (
               <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
@@ -167,11 +194,15 @@ export class Sidebar extends React.Component<SidebarProps> {
           </nav>
           <div className={styles.navRoot}>
             <div className={styles.navGroup}>
-              <button type="button" className={util.formatClass(styles.navEntryRoot)}>
+              <button type="button" className={util.formatClass(styles.navEntryRoot)} onClick={() => {
+                let collapsed = !this.state.collapsed;
+                window.sessionStorage[CollapsedStorageKey] = JSON.stringify(collapsed);
+                this.setState({ collapsed });
+              }}>
                 <div className={styles.navEntryIcon}>
-                  <div className="material-symbols-sharp">keyboard_double_arrow_right</div>
+                  <div className="material-symbols-sharp">{this.state.collapsed ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left'}</div>
                 </div>
-                {/* <div className={styles.navEntryLabel}>{entry.label}</div> */}
+                {/* <div className={styles.navEntryLabel}>Collapse</div> */}
               </button>
             </div>
           </div>

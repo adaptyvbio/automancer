@@ -6,7 +6,7 @@ import type { Route } from '../application';
 import type { Host } from '../host';
 import { Chip, ChipCondition, ChipId } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
-import { Icon } from '../components/icon';
+import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
 import { getChipMetadata } from '../backends/misc';
@@ -42,23 +42,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
     return (
       <main className={viewStyles.root}>
-        <div className={viewStyles.barRoot}>
-          <div className={viewStyles.barLeft} />
-          <div className={viewStyles.barTitleRoot}>
-            <div className={viewStyles.barTitleMain}>Experiments</div>
-            <div className={viewStyles.barTitleSub}>Last saved: 2 minutes ago</div>
-          </div>
-          <div className={viewStyles.barRight}>
-            <div className={viewStyles.barToolsRoot}>
-              <button type="button" className={viewStyles.barToolsItem}>
-                <Icon name="view_list" />
-              </button>
-              <button type="button" className={viewStyles.barToolsItem}>
-                <Icon name="code" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <TitleBar title="Experiments" subtitle="Foo" />
         <div className={viewStyles.contents}>
           <header className="header header--1">
             <h1>Experiments</h1>

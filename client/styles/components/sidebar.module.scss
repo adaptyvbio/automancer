@@ -1,10 +1,12 @@
+@use "../constants" as *;
 @use "../mixins" as *;
 
 
 .root {
-  width: var(--sidebar-width);
-
   padding: 1rem 0;
+
+  grid-column: 1;
+  grid-row: 1 / -1;
 
   background-color: #fcfcfc;
   border-right: 1px solid #ddd;
@@ -13,32 +15,56 @@
     background-color: #eee;
   }
 
-  &Reduced {
+
+  &Collapsed {
     display: grid;
-    justify-items: center;
     grid-template-rows: 1fr auto 1fr;
+    justify-items: center;
+
+    width: 60px;
+
+    .headerRoot {
+      display: none;
+    }
+
+    .navRoot {
+      &:nth-last-child(2) {
+        grid-row: 2;
+      }
+
+      &:last-child {
+        align-self: end;
+        grid-row: 3;
+      }
+    }
+
+    .navEntryLabel {
+      display: none;
+    }
+  }
+
+  &:not(&Collapsed) {
+    display: flex;
+    flex-direction: column;
+    row-gap: 2rem;
+
+    .navRoot:last-child {
+      margin-top: auto;
+    }
+
+    .navGroup {
+      margin: 0 1rem;
+    }
   }
 }
 
-.rootReduced .headerRoot {
-  display: none;
-}
-
-.rootReduced .navEntryLabel {
-  display: none;
-}
-
-.rootReduced .navGroup {
-  margin-left: unset;
-  margin-right: unset;
-}
 
 
 .header {
   &Root {
     @include superimposed-children();
 
-    margin: 2rem 0;
+    margin-top: $titlebar-height;
 
     &:hover {
       background-color: #f0f0f0;
@@ -61,8 +87,8 @@
     }
 
     &Title {
-      font-size: 1.2rem;
-      font-weight: 600;
+      font-size: 1.1rem;
+      font-weight: 500;
     }
 
     &Subtitle {
@@ -92,24 +118,12 @@
     display: flex;
     flex-direction: column;
     row-gap: 2.4rem;
-
-    &:nth-last-child(2) {
-      align-self: center;
-      grid-row: 2;
-    }
-
-    &:last-child {
-      align-self: end;
-      grid-row: 3;
-    }
   }
 
   &Group {
     display: flex;
     flex-direction: column;
     row-gap: 0.8rem;
-
-    margin: 0 1rem;
   }
 
   &Entry {

@@ -43,13 +43,19 @@ export class ViewChips extends React.Component<ViewChipsProps> {
     return (
       <main className={viewStyles.root}>
         <div className={viewStyles.barRoot}>
-          <div className={viewStyles.barTitle}>Experiments</div>
-          <div className={viewStyles.barBreadcrumbRoot}>
-            <div className={viewStyles.barBreadcrumbItem}>
-              <div className={viewStyles.barBreadcrumbLink}>Experiments</div>
-            </div>
-            <div className={viewStyles.barBreadcrumbItem}>
-              <div className={viewStyles.barBreadcrumbLink}>Test #234</div>
+          <div className={viewStyles.barLeft} />
+          <div className={viewStyles.barTitleRoot}>
+            <div className={viewStyles.barTitleMain}>Experiments</div>
+            <div className={viewStyles.barTitleSub}>Last saved: 2 minutes ago</div>
+          </div>
+          <div className={viewStyles.barRight}>
+            <div className={viewStyles.barToolsRoot}>
+              <button type="button" className={viewStyles.barToolsItem}>
+                <Icon name="view_list" />
+              </button>
+              <button type="button" className={viewStyles.barToolsItem}>
+                <Icon name="code" />
+              </button>
             </div>
           </div>
         </div>

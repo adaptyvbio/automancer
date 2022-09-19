@@ -1,3 +1,6 @@
+@use "../constants" as *;
+
+
 :root {
   --sidebar-width: 60px;
 }
@@ -7,14 +10,14 @@
   display: grid;
   grid-template: 40px 1fr / var(--sidebar-width) 1fr;
   grid-template-areas: "bar bar" "x contents";
-
-  pointer-events: none;
 }
 
 .bar {
   &Root {
     display: grid;
     align-items: center;
+    grid-template-columns: 1fr auto 1fr;
+    padding: 0 3rem;
 
     grid-area: bar;
 
@@ -26,41 +29,73 @@
   }
 
   &Title {
-    font-weight: 500;
-    text-align: center;
+    &Root {
+      padding: 0 2rem;
+      cursor: default;
+    }
+
+    &Main {
+      color: #333;
+      font-weight: 500;
+      text-align: center;
+
+      transition: translate $dur-short;
+    }
+
+    &Sub {
+      color: #999;
+      font-size: 0.9rem;
+      text-align: center;
+
+      transition: opacity $dur-short;
+    }
+
+    &Root:not(:hover) &Main {
+      translate: 0 #{$line-height * 0.9rem * 0.5};
+    }
+
+    &Root:not(:hover) &Sub {
+      opacity: 0;
+    }
   }
 
-  &Breadcrumb {
+  &Right {
+    display: flex;
+    justify-content: end;
+  }
+
+  &Tools {
     &Root {
-      display: none !important;
-
       display: flex;
-      column-gap: 1rem;
-      margin: 0 1rem 0 8rem;
-
-      height: 100%; // tmp
+      column-gap: 0.2rem;
     }
 
     &Item {
-      display: flex;
-      align-items: center;
+      padding: 2px;
+      border-radius: 4px;
 
-      font-weight: 500;
+      :global(.icon) {
+        display: flex;
+        color: #666;
 
-      position: relative;
-
-      &::after {
-        content: "";
-        position: absolute;
-        left: -0.5rem; // = 0.5 the gap
-
-        width: 3px;
-        height: 200%;
-
-        background-color: #bbb;
-        rotate: 10deg;
-        translate: -50% 0;
+        font-variation-settings:
+          'FILL' 0,
+          'wght' 200,
+          'GRAD' 200,
+          'opsz' 24;
       }
+
+      &:hover {
+        background-color: #ddd;
+      }
+
+      // &:first-child {
+      //   border-radius: 4px 0 0 4px;
+      // }
+
+      // &:last-child {
+      //   border-radius: 0 4px 4px 0;
+      // }
     }
   }
 }

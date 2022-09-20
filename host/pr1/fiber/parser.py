@@ -3,11 +3,13 @@ from .. import reader
 from ..util import schema as sc
 
 
-# TODO: use decorator instead
-class Debug:
-  def __repr__(self):
+def debug(cls):
+  def repr_cls(self):
     props = ", ".join(f"{key}={repr(value)}" for key, value in self.__dict__.items())
     return f"{type(self).__name__}({props})"
+
+  setattr(cls, '__repr__', repr_cls)
+  return cls
 
 
 class AcmeParser:
@@ -61,7 +63,8 @@ class AcmeParser:
     return None
 
 
-class AcmeActivateBlock(Debug):
+@debug
+class AcmeActivateBlock:
   def __init__(self, segment):
     self._segment = segment
 
@@ -108,7 +111,8 @@ class SequenceParser:
       return SequenceBlock(children)
 
 
-class SequenceBlock(Debug):
+@debug
+class SequenceBlock:
   def __init__(self, children):
     self._children = children
 
@@ -128,11 +132,13 @@ class SequenceBlock(Debug):
     return self._children[-1].last_segment
 
 
-class GotoPostNode(Debug):
+@debug
+class GotoPostNode:
   def __init__(self, target):
     self._target = target
 
-class Segment(Debug):
+@debug
+class Segment:
   def __init__(self, index, process_namespace, process_data, state):
     self.index = index
     self.process_data = process_data

@@ -1,4 +1,5 @@
 from collections import namedtuple
+import functools
 import math
 import sys
 from enum import Enum
@@ -340,6 +341,24 @@ class LocatedString(str, LocatedValue):
     stripped = self.value.rstrip(chars)
     return self[0:len(stripped)]
 
+  @staticmethod
+  def from_ast_node(node, source):
+    import ast
+
+    value = ast.get_source_segment(source, node)
+    start = source.compute_location(Position(node.lineno - 1, node.col_offset))
+    end = source.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
+
+    return LocatedString(value, area=LocationArea([LocationRange(source, start, end)]))
+
+  @staticmethod
+  def from_syntax_error(err, source):
+    start = source.compute_location(Position(err.lineno - 1, err.offset - 1))
+    end = source.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
+
+    # TODO: fix 'err.text' which is currently identical to 'source'
+    return LocatedString(err.text, area=LocationArea([LocationRange(source, start, end)]))
+
 
 class LocatedDict(dict, LocatedValue):
   def __new__(cls, *args, **kwargs):
@@ -369,11 +388,23 @@ class Source(LocatedString):
   def __init__(self, value):
     super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
 
+  @functools.cached_property
+  def line_cumlengths(self):
+    lengths = [0]
+
+    for line in self.splitlines(keepends=True):
+      lengths.append(lengths[-1] + len(line))
+
+    return lengths
+
   def offset_position(self, offset):
     line = self.value[:offset].count("\n")
     column = (offset - self.value[:offset].rindex("\n") - 1) if line > 0 else offset
 
     return Position(line, column)
+
+  def compute_location(self, position):
+    return self.line_cumlengths[position.line] + position.column
 
 
 ## Tokenization

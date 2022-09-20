@@ -18,13 +18,14 @@ class AcmeParser:
   root_attributes = {
     'microscope': lang.Attribute(
       description=["`acme.microscope`", "Microscope settings"],
+      optional=True,
       type=lang.SimpleDict({
         'exposure': lang.Attribute(
           description=["`exposure`", "Camera exposure"],
           detail="Exposure time in seconds",
-          type=lang.SimpleType()
+          type=lang.AnyType()
         ),
-        'zzz': lang.Attribute(type=lang.SimpleType())
+        'zzz': lang.Attribute(type=lang.AnyType())
       }, foldable=True)
     ),
     'value': lang.Attribute(
@@ -32,25 +33,25 @@ class AcmeParser:
       detail="Value of the object",
       description=["`acme.value`", "The value for the acme device."],
       optional=True,
-      type=lang.SimpleType()
+      type=lang.PrimitiveType(float)
     ),
     'wait': lang.Attribute(
       label="Wait for a fixed delay",
       detail="Wait for a delay",
       optional=True,
-      type=lang.SimpleType()
+      type=lang.AnyType()
     )
   }
 
   segment_attributes = {
-    'activate': lang.Attribute(type=lang.SimpleType())
+    'activate': lang.Attribute(type=lang.AnyType())
   }
 
   def __init__(self, fiber):
     self._fiber = fiber
 
   def enter_protocol(self, data_protocol):
-    pass
+    print("Acme root >", data_protocol)
 
   def parse_block_state(self, data_block, parent_state):
     return None
@@ -78,6 +79,65 @@ class AcmeActivateBlock:
   @property
   def last_segment(self):
     return self._segment
+
+
+# ----
+
+
+class ConditionParser:
+  namespace = "condition"
+
+  root_attributes = dict()
+  segment_attributes = {
+    'if': lang.Attribute(type=lang.AnyType())
+  }
+
+  def __init__(self, fiber):
+    self._fiber = fiber
+
+  def enter_protocol(self, data_protocol):
+    pass
+
+  def parse_block_state(self, data_block, parent_state):
+    return None
+
+  def parse_block(self, data_block, block_state):
+    if 'if' in data_block:
+      data_others = { key: value for key, value in data_block.items() if key != 'if' }
+
+      child_block = self._fiber.parse_block(data_others)
+      return ConditionBlock(child_block, condition=data_block['if'])
+
+    return None
+
+
+@debug
+class ConditionBlock:
+  def __init__(self, child_block, condition):
+    self._child_block = child_block
+    self._condition = condition
+
+  def activate(self):
+    self._child_block.activate()
+    self.first_segment.pre_nodes.append(ConditionNode(
+      condition=self._condition,
+      target=self.last_segment.post_head
+    ))
+
+  @property
+  def first_segment(self):
+    return self._child_block.first_segment
+
+  @property
+  def last_segment(self):
+    return self._child_block.last_segment
+
+
+@debug
+class ConditionNode:
+  def __init__(self, condition, target):
+    self._condition = condition
+    self._target = target
 
 
 # ---
@@ -117,11 +177,12 @@ class SequenceBlock:
     self._children = children
 
   def activate(self):
-    for index, child_block in enumerate(self._children[0:-1]):
-      next_child_block = self._children[index + 1]
-
+    for index, child_block in enumerate(self._children):
       child_block.activate()
-      child_block.last_segment.post_nodes.append(GotoPostNode(target=(next_child_block.first_segment.index, None)))
+
+      if index < (len(self._children) - 1):
+        next_child_block = self._children[index + 1]
+        child_block.last_segment.post_nodes.append(GotoPostNode(target=(next_child_block.first_segment.index, None)))
 
   @property
   def first_segment(self):
@@ -130,6 +191,9 @@ class SequenceBlock:
   @property
   def last_segment(self):
     return self._children[-1].last_segment
+
+
+# ----
 
 
 @debug
@@ -148,10 +212,14 @@ class Segment:
     self.pre_nodes = list()
     self.post_nodes = list()
 
+  @property
+  def post_head(self):
+    return (self.index, len(self.post_nodes))
+
 
 class FiberParser:
   def __init__(self, text, *, host, parsers):
-    self._parsers = [Parser(self) for Parser in [SequenceParser, AcmeParser]]
+    self._parsers = [Parser(self) for Parser in [ConditionParser, SequenceParser, AcmeParser]]
 
 
     self.analysis = lang.Analysis()
@@ -166,11 +234,11 @@ class FiberParser:
         label="Protocol name",
         description=["`name`", "The protocol's name."],
         optional=True,
-        type=lang.SimpleType()
+        type=lang.AnyType()
       ),
       'steps': lang.Attribute(
         description=["`steps`", "Protocol steps"],
-        type=lang.SimpleType()
+        type=lang.AnyType()
       )
     }, foldable=True)
 
@@ -196,8 +264,14 @@ class FiberParser:
     entry_block = self.parse_block(data_actions)
     entry_block.activate()
 
+    print()
+
+    print("== ANALYSIS")
+    print("Errors >", self.analysis.errors)
+    print()
+
     print("== ENTRY")
-    print(entry_block)
+    print(entry_block.first_segment.index)
     print()
 
     print("== SEGMENTS")
@@ -234,6 +308,8 @@ class FiberParser:
 
 if __name__ == "__main__":
   p = FiberParser("""
+acme.value: 42.3
+
 steps:
   actions:
     - activate: yes
@@ -241,4 +317,5 @@ steps:
         - activate: yes
         - activate: yes
     - activate: no
+      if: {{ False }}
 """, host=None, parsers=None)

@@ -1,3 +1,4 @@
+import builtins
 from collections import namedtuple
 
 from ..draft import DraftDiagnostic
@@ -175,12 +176,16 @@ class CompositeDict:
     # else:
     #   return attr_entries
 
-  def analyze(self, obj):
+  def analyze(self, obj, target_namespace = None):
     analysis = Analysis()
 
-    if not isinstance(obj, dict):
-      analysis.errors.append(...)
-      return dict()
+    primitive_analysis, obj = PrimitiveType(dict).analyze(obj)
+    analysis += primitive_analysis
+
+    if obj is Ellipsis:
+      return analysis, obj
+
+    # if not target_namespace:
 
     if self._foldable:
       analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
@@ -264,9 +269,40 @@ class SimpleDict(CompositeDict):
     return analysis, output[self._native_namespace]
 
 
-class SimpleType:
+class InvalidPrimitiveError(LangServiceError):
+  def __init__(self, target, primitive):
+    self.primitive = primitive
+    self.target = target
+
+class AnyType:
   def __init__(self):
     pass
 
   def analyze(self, obj):
     return Analysis(), obj
+
+class PrimitiveType:
+  def __init__(self, primitive):
+    self._primitive = primitive
+
+  def analyze(self, obj):
+    analysis = Analysis()
+
+    match self._primitive:
+      case builtins.float | builtins.int:
+        try:
+          value = self._primitive(obj)
+        except ValueError:
+          analysis.errors.append(InvalidPrimitiveError(obj, self._primitive))
+          value = Ellipsis
+
+        value = reader.LocatedValueContainer(value, area=obj.area)
+      case builtins.str:
+        value = obj
+      case _ if not isinstance(obj, self._primitive):
+        analysis.errors.append(InvalidPrimitiveError(obj, self._primitive))
+        value = reader.LocatedValueContainer(Ellipsis, area=obj.area)
+      case _:
+        value = obj
+
+    return analysis, value

@@ -42,3 +42,44 @@ body {
 #root {
   height: 100%;
 }
+
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 2px 1fr;
+
+  height: 100%;
+
+  > :nth-child(2) {
+    cursor: col-resize;
+    position: relative;
+
+    &::before, &::after {
+      content: "";
+
+      position: absolute;
+      inset: 0;
+
+      height: 100%;
+    }
+
+    &::before {
+      width: 4px;
+      translate: -25% 0;
+    }
+
+    &::after {
+      width: 1px;
+      background-color: #ddd;
+    }
+
+    &:is(:hover, ._dragging)::after {
+      background-color: $app-blue;
+      scale: 4 1;
+    }
+
+    &:hover::after {
+      transition: background-color $dur-short 300ms, scale $dur-short 300ms;
+    }
+  }
+}

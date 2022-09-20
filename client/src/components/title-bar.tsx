@@ -36,15 +36,17 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
   }
 
   notify() {
-    if (this.notificationHideTimeout !== null) {
-      clearTimeout(this.notificationHideTimeout);
+    if (this.props.subtitle) {
+      if (this.notificationHideTimeout !== null) {
+        clearTimeout(this.notificationHideTimeout);
+      }
+
+      this.setState({ notifying: true });
+
+      this.notificationHideTimeout = setTimeout(() => {
+        this.setState({ notifying: false });
+      }, 2000);
     }
-
-    this.setState({ notifying: true });
-
-    this.notificationHideTimeout = setTimeout(() => {
-      this.setState({ notifying: false });
-    }, 2000);
   }
 
   render() {
@@ -54,6 +56,7 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
       <div className={styles.root}>
         <div className={styles.left} />
         <div className={util.formatClass(styles.titleRoot, {
+          '_subtitle': (this.props.subtitle !== null),
           '_visible': (this.props.subtitleVisible || this.state.notifying)
         })} ref={this.refTitle}>
           <div className={styles.titleMain}>{this.props.title}</div>

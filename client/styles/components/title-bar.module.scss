@@ -43,11 +43,11 @@
     transition: opacity $dur-short;
   }
 
-  &Root:not(:hover, :global(._visible)) &Main:not(:only-child) {
+  &Root:not(:global(._subtitle):hover, :global(._visible)) &Main {
     translate: 0 #{$line-height * (0.9rem + 1rem) * 0.25};
   }
 
-  &Root:not(:hover, :global(._visible)) &Sub {
+  &Root:not(:global(._subtitle):hover, :global(._visible)) &Sub {
     opacity: 0;
   }
 }

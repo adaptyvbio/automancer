@@ -115,14 +115,14 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
           : []),
         { id: 'last',
           entries: [
-            { id: 'settings',
+            { id: 'units',
               label: 'Modules',
               icon: 'extension',
               route: ['settings'] },
-            { id: 'settings2',
+            { id: 'settings',
               label: 'Settings',
               icon: 'settings',
-              route: null },
+              route: ['test.split'] },
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',

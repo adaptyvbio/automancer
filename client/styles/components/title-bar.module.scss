@@ -34,6 +34,8 @@
   }
 
   &Sub {
+    height: $line-height * 1em;
+
     color: #999;
     font-size: 0.9rem;
     text-align: center;
@@ -41,11 +43,11 @@
     transition: opacity $dur-short;
   }
 
-  &Root:not(:hover) &Main:not(:only-child) {
+  &Root:not(:hover, :global(._visible)) &Main:not(:only-child) {
     translate: 0 #{$line-height * (0.9rem + 1rem) * 0.25};
   }
 
-  &Root:not(:hover) &Sub {
+  &Root:not(:hover, :global(._visible)) &Sub {
     opacity: 0;
   }
 }

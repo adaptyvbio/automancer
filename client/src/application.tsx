@@ -12,6 +12,7 @@ import { ViewChips } from './views/chips';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
+import { ViewSplit } from './views/test/split';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 
@@ -421,6 +422,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               app={this}
               host={this.state.host}
               setRoute={setRoute} />
+          );
+
+          case 'test.split': return (
+            <ViewSplit />
           );
         }
       } else if (route.length === 3) {

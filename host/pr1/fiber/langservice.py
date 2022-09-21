@@ -13,10 +13,6 @@ class Analysis:
     self.completions = completions or list()
     self.folds = folds or list()
     self.hovers = hovers or list()
-    # self.definitions = definitions / definition + references
-    # self.links = links
-    # self.lenses = lenses
-    # self.symbols = symbols / rename + highlight
 
   def __add__(self, other):
     return Analysis(
@@ -176,7 +172,23 @@ class CompositeDict:
     # else:
     #   return attr_entries
 
-  def analyze(self, obj, target_namespace = None):
+  # def analyze_backbone(self, obj):
+  #   analysis = Analysis()
+
+  #   primitive_analysis, obj = PrimitiveType(dict).analyze(obj)
+  #   analysis += primitive_analysis
+
+  #   if obj is Ellipsis:
+  #     return analysis
+
+  #   if self._foldable:
+  #     analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
+
+  #   # TODO: add completion
+
+  #   return analysis
+
+  def analyze(self, obj):
     analysis = Analysis()
 
     primitive_analysis, obj = PrimitiveType(dict).analyze(obj)
@@ -184,8 +196,6 @@ class CompositeDict:
 
     if obj is Ellipsis:
       return analysis, obj
-
-    # if not target_namespace:
 
     if self._foldable:
       analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
@@ -257,6 +267,11 @@ class CompositeDict:
     ))
 
     return analysis, attr_values
+
+  def merge(self, attr_values1, attr_values2):
+    return {
+      namespace: attr_values1[namespace] | attr_values2[namespace] for namespace in attr_values1.keys()
+    }
 
 
 class SimpleDict(CompositeDict):

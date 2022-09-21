@@ -281,7 +281,15 @@ class Host:
 
   async def process_request(self, request):
     if request["type"] == "compileDraft":
-      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      try:
+        draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      except:
+        import traceback
+        traceback.print_exc()
+
+        from .fiber import langservice as lang
+        draft = Draft(analysis=lang.Analysis(), id=request["draftId"])
+
       return draft.export()
 
     if request["type"] == "command":

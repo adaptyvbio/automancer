@@ -289,6 +289,9 @@ class InvalidPrimitiveError(LangServiceError):
     self.primitive = primitive
     self.target = target
 
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid type", ranges=self.target.area.ranges)
+
 class AnyType:
   def __init__(self):
     pass
@@ -306,8 +309,8 @@ class PrimitiveType:
     match self._primitive:
       case builtins.float | builtins.int:
         try:
-          value = self._primitive(obj)
-        except ValueError:
+          value = self._primitive(obj.value)
+        except (TypeError, ValueError):
           analysis.errors.append(InvalidPrimitiveError(obj, self._primitive))
           value = Ellipsis
 

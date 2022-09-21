@@ -1,5 +1,8 @@
+from collections import namedtuple
+
 from . import langservice as lang
 from .. import reader
+from ..draft import DraftDiagnostic
 from ..util import schema as sc
 
 
@@ -12,19 +15,16 @@ def debug(cls):
   return cls
 
 
-class ComplexDict:
-  def __init__(self, init_dict = None):
-    self._dict = init_dict or dict()
+@debug
+class MissingProcessError(Exception):
+  def __init__(self, target):
+    self.target = target
 
-  def __contains__(self, item):
-    return item in self._dict
+  def diagnostic(self):
+    return DraftDiagnostic(f"Missing process", ranges=self.target.area.ranges)
 
-  def exclude(self, excluded_key):
-    return ComplexDict({ key: values for key, values in self._dict.items() if key != excluded_key })
 
-  # def __add__(self, other):
-  #   pass
-
+AcmeState = namedtuple('AcmeState', ['value'])
 
 class AcmeParser:
   namespace = "acme"
@@ -58,7 +58,11 @@ class AcmeParser:
   }
 
   segment_attributes = {
-    'activate': lang.Attribute(optional=True, type=lang.AnyType())
+    'activate': lang.Attribute(
+      description=["#### ACTIVATE", 'Type: int'],
+      optional=True,
+      type=lang.PrimitiveType(int)
+    )
   }
 
   def __init__(self, fiber):
@@ -67,13 +71,31 @@ class AcmeParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block_state(self, data_block, parent_state):
-    return None
+  def parse_block_state(self, block_attrs, parent_state):
+    attrs = block_attrs[self.namespace]
 
-  def parse_block(self, data_block, block_state):
-    if 'activate' in data_block[self.namespace]:
-      segment = self._fiber.register_segment(self.namespace, { 'value': data_block[self.namespace]['activate'] })
+    if 'activate' in attrs:
+      value = attrs['activate'].value
+      return AcmeState(value) if value is not Ellipsis else Ellipsis
+    else:
+      return None
+
+  def parse_block(self, block_attrs, block_state):
+    if block_state[self.namespace]:
+      segment = self._fiber.register_segment(self.namespace)
       return AcmeActivateBlock(segment)
+
+
+    # attrs = block_attrs[self.namespace]
+
+    # if 'activate' in attrs:
+    #   value = attrs['activate'].value
+
+    #   if value is Ellipsis:
+    #     return Ellipsis
+
+    #   segment = self._fiber.register_segment(self.namespace, { 'value': value })
+    #   return AcmeActivateBlock(segment)
 
     return None
 
@@ -93,6 +115,32 @@ class AcmeActivateBlock:
   @property
   def last_segment(self):
     return self._segment
+
+
+# ----
+
+
+ScoreState = namedtuple("ScoreState", ['value'])
+
+class ScoreParser:
+  namespace = "score"
+  root_attributes = dict()
+  segment_attributes = {
+    'score': lang.Attribute(optional=True, type=lang.PrimitiveType(float))
+  }
+
+  def __init__(self, fiber):
+    self._fiber = fiber
+
+  def enter_protocol(self, data_protocol):
+    pass
+
+  def parse_block_state(self, block_attrs, parent_state):
+    attrs = block_attrs[self.namespace]
+    return ScoreState((parent_state.value if parent_state else 0.0) + (attrs['score'].value if 'score' in attrs else 0.0))
+
+  def parse_block(self, block_attrs, block_state):
+    return None
 
 
 # ----
@@ -158,6 +206,36 @@ class ConditionNode:
 # ----
 
 
+class DoParser:
+  namespace = "do"
+
+  root_attributes = dict()
+  segment_attributes = {
+    'do': lang.Attribute(optional=True, type=lang.AnyType())
+  }
+
+  def __init__(self, fiber):
+    self._fiber = fiber
+
+  def enter_protocol(self, data_protocol):
+    pass
+
+  def parse_block_state(self, block_attrs, parent_state):
+    return None
+
+  def parse_block(self, block_attrs, block_state):
+    attrs = block_attrs[self.namespace]
+
+    if 'do' in attrs:
+      # return self._fiber.parse_attributes({ **self._fiber.segment_dict.merge(block_attrs, attrs['do']), self.namespace: dict() })
+      return self._fiber.parse_block(attrs['do'])
+
+    return None
+
+
+# ----
+
+
 class ShorthandsParser:
   namespace = "shorthands"
 
@@ -218,16 +296,17 @@ class SequenceParser:
   def parse_block_state(self, data_block, parent_state):
     return None
 
-  def parse_block(self, data_block, block_state):
-    # dict destructuring
-    # others = { key: value for key, value in data_block.items() if key != 'actions' }
+  def parse_block(self, block_attrs, block_state):
+    attrs = block_attrs[self.namespace]
 
-    if 'actions' in data_block[self.namespace]:
+    if 'actions' in attrs:
       children = list()
 
-      for data_action in data_block[self.namespace]['actions']:
+      for data_action in attrs['actions']:
         child_block = self._fiber.parse_block(data_action)
-        children.append(child_block)
+
+        if child_block is not Ellipsis:
+          children.append(child_block)
 
       return SequenceBlock(children)
 
@@ -264,9 +343,8 @@ class GotoPostNode:
 
 @debug
 class Segment:
-  def __init__(self, index, process_namespace, process_data, state):
+  def __init__(self, index, process_namespace, state):
     self.index = index
-    self.process_data = process_data
     self.process_namespace = process_namespace
     self.state = state
 
@@ -280,7 +358,7 @@ class Segment:
 
 class FiberParser:
   def __init__(self, text, *, host, parsers):
-    self._parsers = [Parser(self) for Parser in [ShorthandsParser, ConditionParser, SequenceParser, AcmeParser]]
+    self._parsers = [Parser(self) for Parser in [SequenceParser, DoParser, AcmeParser, ScoreParser]] # [ShorthandsParser, ConditionParser, SequenceParser, AcmeParser]]
 
 
     self.analysis = lang.Analysis()
@@ -323,7 +401,9 @@ class FiberParser:
     data_actions = output['_']['steps']
 
     entry_block = self.parse_block(data_actions)
-    entry_block.activate()
+
+    if entry_block is not Ellipsis:
+      entry_block.activate()
 
     print()
 
@@ -331,9 +411,10 @@ class FiberParser:
     print("Errors >", self.analysis.errors)
     print()
 
-    print("<= ENTRY =>")
-    print(entry_block.first_segment.index)
-    print()
+    if entry_block is not Ellipsis:
+      print("<= ENTRY =>")
+      print(entry_block.first_segment.index)
+      print()
 
     print("<= SEGMENTS =>")
     pprint(self._segments)
@@ -353,36 +434,41 @@ class FiberParser:
     return dict_output
 
   def parse_block(self, data_block):
-    block_dict = self.parse_block_dict(data_block)
+    block_attrs = self.parse_block_dict(data_block)
     block_state = dict()
 
     for parser in self._parsers:
-      block_state[parser.namespace] = parser.parse_block_state(block_dict[parser.namespace], parent_state=(self._block_states[-1][parser.namespace] if self._block_states else None))
+      unit_state = parser.parse_block_state(block_attrs, parent_state=(self._block_states[-1][parser.namespace] if self._block_states else None))
+
+      if unit_state is Ellipsis:
+        return Ellipsis
+
+      block_state[parser.namespace] = unit_state
 
     self._block_states.append(block_state)
 
     for parser in self._parsers:
-      result = parser.parse_block(block_dict, block_state=block_state[parser.namespace])
+      result = parser.parse_block(block_attrs, block_state)
 
       if result is not None:
         self._block_states.pop()
         return result
 
-    raise Exception("No process candidate for ", data_block)
+    self.analysis.errors.append(MissingProcessError(data_block))
+    return Ellipsis
 
-  def parse_attributes(self, attributes):
-    for parser in self._parsers:
-      result = parser.parse_block(attributes, block_state=None)
+  # def parse_attributes(self, attributes):
+  #   for parser in self._parsers:
+  #     result = parser.parse_block(attributes, None)
 
-      if result is not None:
-        return result
+  #     if result is not None:
+  #       return result
 
-    raise Exception("No process candidate for ", attributes)
+  #   raise Exception("No process candidate for ", attributes)
 
-  def register_segment(self, process_namespace, process_data):
+  def register_segment(self, process_namespace):
     segment = Segment(
       index=len(self._segments),
-      process_data=process_data,
       process_namespace=process_namespace,
       state=self._block_states[-1]
     )
@@ -393,14 +479,10 @@ class FiberParser:
 
 if __name__ == "__main__":
   p = FiberParser("""
-acme.value: 42.3
-
-shorthands:
-  foo:
-    activate: no
-
 steps:
+  score: 2
   actions:
-    - activate: yes
-    - foo:
+    - activate: 4
+    - activate: 3
+      score: 16.3
 """, host=None, parsers=None)

@@ -4,15 +4,7 @@ from . import langservice as lang
 from .. import reader
 from ..draft import DraftDiagnostic
 from ..util import schema as sc
-
-
-def debug(cls):
-  def repr_cls(self):
-    props = ", ".join(f"{key}={repr(value)}" for key, value in self.__dict__.items())
-    return f"{type(self).__name__}({props})"
-
-  setattr(cls, '__repr__', repr_cls)
-  return cls
+from ..util.decorators import debug
 
 
 @debug
@@ -98,7 +90,7 @@ class ScoreParser:
   namespace = "score"
   root_attributes = dict()
   segment_attributes = {
-    'score': lang.Attribute(optional=True, type=lang.PrimitiveType(float))
+    'score': lang.Attribute(optional=True, type=lang.PrimitiveType(float, allow_expr=True))
   }
 
   def __init__(self, fiber):
@@ -109,9 +101,17 @@ class ScoreParser:
 
   def parse_block(self, block_attrs, parent_state):
     attrs = block_attrs[self.namespace]
-    return BlockData(
-      state=ScoreState((parent_state.value if parent_state else 0.0) + (attrs['score'].value if 'score' in attrs else 0.0))
-    )
+
+    if ('score' in attrs) and (attrs['score'] is not Ellipsis):
+      print(attrs['score'])
+    #   result = PythonExpr.parse(attrs['score'])
+    #   print(result)
+
+      return BlockData(
+        state=ScoreState((parent_state.value if parent_state else 0.0) + (attrs['score'].value if 'score' in attrs else 0.0))
+      )
+    else:
+      return BlockData(state=ScoreState(0.0))
 
 @debug
 class ScoreState:
@@ -466,7 +466,7 @@ steps:
   actions:
     - activate: 4
     - activate: 3
-      score: 16.3
+      score: ${{ 16.3!!!! }}
     - do:
         activate: 5
         score: 1

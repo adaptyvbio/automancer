@@ -2,6 +2,15 @@ import warnings
 import functools
 
 
+def debug(cls):
+  def repr_cls(self):
+    props = ", ".join(f"{key}={repr(value)}" for key, value in self.__dict__.items())
+    return f"{type(self).__name__}({props})"
+
+  setattr(cls, '__repr__', repr_cls)
+  return cls
+
+
 def deprecated(func):
   @functools.wraps(func)
 

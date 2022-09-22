@@ -79,6 +79,10 @@ class LocationArea:
   def __init__(self, ranges = list()):
     self.ranges = ranges
 
+  @property
+  def source(self):
+    return self.ranges[0].source if self.ranges else None
+
   def enclosing_range(self):
     return LocationRange(
       source=self.ranges[0].source,
@@ -249,6 +253,10 @@ class LocatedValue:
   def error(self, message):
     return LocatedError(message, self.area.ranges[0])
 
+  @property
+  def source(self):
+    return self.area.source
+
   def create_error(message, object):
     if isinstance(object, LocatedValue):
       return object.error(message)
@@ -300,6 +308,9 @@ class LocatedString(str, LocatedValue):
       absolute=(self.absolute and (other_located or (not other)))
     )
 
+  def __radd__(self, other):
+    return self + other
+
   def __getitem__(self, key):
     if isinstance(key, slice):
       if self.absolute:
@@ -341,8 +352,20 @@ class LocatedString(str, LocatedValue):
     stripped = self.value.rstrip(chars)
     return self[0:len(stripped)]
 
+  @functools.cached_property
+  def _line_cumlengths(self):
+    lengths = [0]
+
+    for line in self.splitlines(keepends=True):
+      lengths.append(lengths[-1] + len(line))
+
+    return lengths
+
+  def compute_location(self, position):
+    return self._line_cumlengths[position.line] + position.column
+
   @staticmethod
-  def from_ast_node(node, source):
+  def from_ast_node(node, source): # TODO: update
     import ast
 
     value = ast.get_source_segment(source, node)
@@ -352,12 +375,16 @@ class LocatedString(str, LocatedValue):
     return LocatedString(value, area=LocationArea([LocationRange(source, start, end)]))
 
   @staticmethod
-  def from_syntax_error(err, source):
-    start = source.compute_location(Position(err.lineno - 1, err.offset - 1))
-    end = source.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
+  def from_match_group(match, group):
+    span = match.span(group)
+    return match.string[span[0]:span[1]]
 
-    # TODO: fix 'err.text' which is currently identical to 'source'
-    return LocatedString(err.text, area=LocationArea([LocationRange(source, start, end)]))
+  @staticmethod
+  def from_syntax_error(err, text):
+    start = text.compute_location(Position(err.lineno - 1, err.offset - 1))
+    end = text.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
+
+    return text[start:end]
 
 
 class LocatedDict(dict, LocatedValue):
@@ -388,23 +415,11 @@ class Source(LocatedString):
   def __init__(self, value):
     super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
 
-  @functools.cached_property
-  def line_cumlengths(self):
-    lengths = [0]
-
-    for line in self.splitlines(keepends=True):
-      lengths.append(lengths[-1] + len(line))
-
-    return lengths
-
   def offset_position(self, offset):
     line = self.value[:offset].count("\n")
     column = (offset - self.value[:offset].rindex("\n") - 1) if line > 0 else offset
 
     return Position(line, column)
-
-  def compute_location(self, position):
-    return self.line_cumlengths[position.line] + position.column
 
 
 ## Tokenization

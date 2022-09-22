@@ -300,10 +300,18 @@ class AnyType:
     return Analysis(), obj
 
 class PrimitiveType:
-  def __init__(self, primitive):
+  def __init__(self, primitive, allow_expr = False):
+    self._allow_expr = allow_expr
     self._primitive = primitive
 
   def analyze(self, obj):
+    if self._allow_expr:
+      from .expr import PythonExpr # TODO: improve
+      result = PythonExpr.parse(obj)
+
+      if result:
+        return result
+
     analysis = Analysis()
 
     match self._primitive:

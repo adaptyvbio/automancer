@@ -43,7 +43,10 @@ class Backend:
         "path": str(path)
       }))
     else:
-      pass # TODO: add a Python implementation
+      if sys.platform == "darwin":
+        os.system(f"open -R '{str(path)}'")
+
+      # TODO: Add support for Linux and Windows
 
   def trash(self, path: Path):
     if self._app.owner_bridge:

@@ -31,6 +31,12 @@ class Runner(BaseRunner):
     self._description = str()
     self._title = "Untitled chip"
 
+  def duplicate(self, other):
+    self._archived = False
+    self._creation_date = time.time() * 1000
+    self._description = other._description
+    self._title = other._title + " (copy)"
+
   def export(self):
     return {
       "archived": self._archived,

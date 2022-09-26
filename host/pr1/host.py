@@ -1,3 +1,4 @@
+from graphlib import TopologicalSorter
 import asyncio
 import platform
 import shutil
@@ -12,15 +13,6 @@ from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
-
-
-# class ClientProps:
-#   def __init__(self, privileged, remote):
-#     self.privileged = privileged
-#     self.remote = remote
-
-#   def send(self, message):
-#     raise NotImplementedError()
 
 
 class Host:
@@ -89,6 +81,14 @@ class Host:
       name: unit.Executor(self.manager.units_info[name].options, host=self) for name, unit in self.manager.units.items() if hasattr(unit, 'Executor')
     }
 
+
+  @property
+  def ordered_namespaces(self):
+    graph = {
+      namespace: unit.Runner.dependencies for namespace, unit in self.units.items() if hasattr(unit, 'Runner')
+    }
+
+    return list(TopologicalSorter(graph).static_order())
 
   @property
   def units(self):
@@ -171,7 +171,7 @@ class Host:
 
     return draft
 
-  def create_chip(self, name):
+  def create_chip(self):
     chip = Chip.create(
       chips_dir=self.chips_dir,
       host=self
@@ -296,7 +296,7 @@ class Host:
       await chip.runners[request["namespace"]].command(request["command"])
 
     if request["type"] == "createChip":
-      chip = self.create_chip(name="Untitled experiment")
+      chip = self.create_chip()
       self.update_callback()
 
       return {
@@ -363,8 +363,18 @@ class Host:
 
         del self.chips[request["chipId"]]
 
-      # case "duplicateChip":
-      #   chip = self.chips[request["chipId"]]
+      case "duplicateChip":
+        chip = self.chips[request["chipId"]]
+        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self)
+
+        self.chips[duplicated.id] = duplicated
+        logger.info(f"Duplicated chip '{chip.id}' into '{duplicated.id}'")
+
+        self.update_callback()
+
+        return {
+          "chipId": duplicated.id
+        }
 
       case "revealChipDirectory":
         if client.remote:

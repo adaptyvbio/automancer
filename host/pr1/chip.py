@@ -1,5 +1,4 @@
 import base64
-from graphlib import TopologicalSorter
 import json
 import math
 import pickle
@@ -86,18 +85,21 @@ class Chip(BaseChip):
   condition = ChipCondition.Ok
   version = 2
 
-  def __init__(self, *, dir, id, unit_list):
+  def __init__(self, *, dir, id):
     self.dir = dir
     self.id = id
     self.issues = list()
     self.master = None
     self.runners = dict()
-    self.unit_list = unit_list
 
     self._header_path = (dir / ".header.json")
 
     self._history_path = (dir / ".history.dat")
     self._history_file = None
+
+  @property
+  def _unit_list(self):
+    return list(self.runners.keys())
 
   def _push_history(self, *, flags, payload):
     if not self._history_file:
@@ -114,19 +116,18 @@ class Chip(BaseChip):
       'runners': {
         namespace: base64.b85encode(runner.serialize_raw()).decode("utf-8") for namespace, runner in self.runners.items()
       },
-      'unit_list': self.unit_list,
+      'unit_list': self._unit_list,
       'version': self.version
     }, self._header_path.open("w"))
 
   def push_process(self, namespace, data):
-    unit_index = self.unit_list.index(namespace)
+    unit_index = self._unit_list.index(namespace)
     self._push_history(flags=2, payload=(struct.pack("H", unit_index) + data))
 
   def update_runners(self, *namespaces):
     payload = bytearray()
 
-    # for namespace in (namespaces or self.unit_list):
-    for namespace in self.unit_list:
+    for namespace in self._unit_list:
       runner = self.runners.get(namespace)
 
       runner_payload = runner.serialize_raw() if runner else pickle.dumps(None)
@@ -148,20 +149,43 @@ class Chip(BaseChip):
       "unitList": list(self.runners.keys())
     }
 
-
-  @staticmethod
-  def create(chips_dir, *, host):
+  def duplicate(self, chips_dir, *, host):
     chip_id = str(uuid.uuid4())
     chip_dir = chips_dir / chip_id
     chip_dir.mkdir(exist_ok=True)
 
     chip = Chip(
       id=chip_id,
-      dir=chip_dir,
-      unit_list=[namespace for namespace, unit in host.units.items() if hasattr(unit, 'Runner')]
+      dir=chip_dir
     )
 
-    chip.runners = { namespace: host.units[namespace].Runner(chip=chip, host=host) for namespace in chip.unit_list }
+    chip.runners = {
+      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner')
+    }
+
+    for namespace, runner in chip.runners.items():
+      runner.duplicate(self.runners[namespace])
+
+    chip._save_header()
+    chip.update_runners()
+
+    return chip
+
+
+  @classmethod
+  def create(cls, chips_dir, *, host):
+    chip_id = str(uuid.uuid4())
+    chip_dir = chips_dir / chip_id
+    chip_dir.mkdir(exist_ok=True)
+
+    chip = cls(
+      id=chip_id,
+      dir=chip_dir
+    )
+
+    chip.runners = {
+      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner')
+    }
 
     for runner in chip.runners.values():
       runner.create()
@@ -171,12 +195,12 @@ class Chip(BaseChip):
 
     return chip
 
-  @staticmethod
-  def unserialize(chip_dir, *, host):
+  @classmethod
+  def unserialize(cls, chip_dir, *, host):
     header_path = chip_dir / ".header.json"
     header = json.load(header_path.open())
 
-    if header['version'] != Chip.version:
+    if header['version'] != cls.version:
       chip = UnreadableChip(
         dir=chip_dir,
         id=header['id']
@@ -185,24 +209,20 @@ class Chip(BaseChip):
       chip.issues.append(UnsupportedChipVersionError())
       return chip
 
-    chip = Chip(
+    chip = cls(
       dir=chip_dir,
-      id=header['id'],
-      unit_list=header['unit_list'] # TODO: Deprecate
+      id=header['id']
     )
 
-    graph = dict()
     issues = list()
 
     for namespace in header['unit_list']:
       unit = host.units.get(namespace)
 
-      if unit and hasattr(unit, 'Runner'):
-        graph[namespace] = unit.Runner.dependencies
-      else:
+      if not (unit and hasattr(unit, 'Runner')):
         issues.append(MissingUnitError(namespace))
 
-    for namespace in TopologicalSorter(graph).static_order():
+    for namespace in host.ordered_namespaces:
       unit = host.units.get(namespace)
       runner = unit.Runner(chip=chip, host=host)
 
@@ -253,10 +273,10 @@ class Chip(BaseChip):
 
     #   history_file.seek(payload_size, 1)
 
-  @staticmethod
-  def try_unserialize(chip_dir, *, host):
+  @classmethod
+  def try_unserialize(cls, chip_dir, *, host):
     try:
-      return Chip.unserialize(chip_dir, host=host)
+      return cls.unserialize(chip_dir, host=host)
     except Exception:
       logger.warn(f"Chip '{chip_dir.name}' is corrupted and will be ignored. The exception is printed below.")
       log_exception(logger)

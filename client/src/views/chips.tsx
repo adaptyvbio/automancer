@@ -89,7 +89,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                 return (
                   <ContextMenuArea
                     createMenu={(_event) => [
-                      { id: 'duplicate', name: 'Duplicate', icon: 'content_copy', disabled: true },
+                      { id: 'duplicate', name: 'Duplicate', icon: 'content_copy' },
                       { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                       { id: '_divider', type: 'divider' },
                       { id: 'archive', name: 'Archive', icon: 'archive' },
@@ -108,6 +108,15 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                         case 'delete': {
                           this.pool.add(async () => {
                             await this.props.host.backend.deleteChip(chip.id, { trash: true });
+                          });
+
+                          break;
+                        }
+
+                        case 'duplicate': {
+                          this.pool.add(async () => {
+                            let result = await this.props.host.backend.duplicateChip(chip.id);
+                            this.chipIdAwaitingRedirect = result.chipId;
                           });
 
                           break;

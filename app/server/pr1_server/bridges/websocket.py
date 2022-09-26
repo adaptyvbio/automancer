@@ -36,6 +36,10 @@ class Client(BaseClient):
   def id(self):
     return str(self.conn.id)
 
+  @property
+  def remote(self):
+    return self.conn.remote_address[0] != "::1"
+
   async def recv(self):
     try:
       return json.loads(await self.conn.recv())
@@ -198,4 +202,4 @@ class WebsocketBridge:
       self.data_server.close()
       await self.data_server.wait_closed()
     finally:
-      logger.debug("Done closing bridge")
+      logger.debug("Closed bridge")

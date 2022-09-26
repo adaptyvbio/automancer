@@ -74,6 +74,9 @@ class BaseRunner:
   def create(self):
     pass
 
+  def duplicate(self, other):
+    self.unserialize(other.serialize())
+
   def export(self):
     return dict()
 

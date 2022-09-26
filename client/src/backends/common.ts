@@ -70,35 +70,25 @@ export interface Device {
 
 export interface Chip {
   id: ChipId;
-  condition: ChipCondition.Ok;
+  condition: ChipCondition.Ok | ChipCondition.Partial | ChipCondition.Unrunnable;
   master: Master | null;
   runners: Record<UnitNamespace, unknown>;
   unitList: UnitNamespace[];
 }
 
-export type GeneralChip = Chip | PartialChip | ObsoleteChip | CorruptedChip;
-
-export interface PartialChip {
-  id: ChipId;
-  condition: ChipCondition.Unsuitable | ChipCondition.Unsupported;
-}
-
 export interface CorruptedChip {
   id: ChipId;
-  condition: ChipCondition.Corrupted;
+  condition: ChipCondition.Unsupported | ChipCondition.Corrupted;
 }
 
-export interface ObsoleteChip {
-  id: ChipId;
-  condition: ChipCondition.Obsolete;
-}
+export type GeneralChip = Chip | CorruptedChip;
 
 
 export enum ChipCondition {
   Ok = 0,
-  Unsuitable = 1,
-  Unsupported = 2,
-  Obsolete = 3,
+  Partial = 1,
+  Unrunnable = 2,
+  Unsupported = 3,
   Corrupted = 4
 }
 

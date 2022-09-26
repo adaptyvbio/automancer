@@ -63,6 +63,8 @@ class BaseParser:
 
 
 class BaseRunner:
+  dependencies = set()
+
   def __init__(self, *, chip, host):
     pass
 

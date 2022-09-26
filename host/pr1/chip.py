@@ -1,4 +1,5 @@
 import base64
+from graphlib import TopologicalSorter
 import json
 import math
 import pickle
@@ -7,6 +8,9 @@ import time
 import uuid
 from collections import namedtuple
 from enum import IntEnum
+
+from . import logger
+from .util.misc import log_exception
 
 # flags (4)
 #  0 - reserved
@@ -21,84 +25,73 @@ class ChipCondition(IntEnum):
   # The chip is fine.
   Ok = 0
 
-  # The chip's corresponding setup is older than the current setup.
-  Unsuitable = 1
+  # The chip is not using all units available.
+  Partial = 1
 
-  # The chip depends on older or missing units.
-  Unsupported = 2
+  # The chip is in compatibility mode and read-only. Certain units might be missing.
+  Unrunnable = 2
 
-  # The chip's definition is too old.
-  Obsolete = 3
+  # The chip is unreadable as it relies on older software.
+  Unsupported = 3
 
   # The chip's file is missing or unreadable.
   Corrupted = 4
 
 
-UnitSpec = namedtuple("UnitSpec", ["hash", "version"])
+class ChipIssue(Exception):
+  def export(self):
+    return "Unknown issue"
+
+class CorruptedChipError(ChipIssue):
+  pass
+
+class UnsupportedChipRunnerError(ChipIssue):
+  def __init__(self, namespace = None):
+    self.namespace = namespace
+
+class UnsupportedChipVersionError(ChipIssue):
+  def export(self):
+    return "Unsupported chip version"
+
+class MissingUnitError(Exception):
+  def __init__(self, namespace):
+    self.namespace = namespace
 
 
 class BaseChip:
   condition = None
 
-class CorruptedChip(BaseChip):
-  condition = ChipCondition.Corrupted
-
-  def __init__(self, *, dir):
+class UnreadableChip(BaseChip):
+  def __init__(self, *, corrupted = False, dir, id = None):
     self.dir = dir
-    self.id = str(uuid.uuid4())
+    self.id = id or str(uuid.uuid4())
+    self.issues = list()
 
-  def export(self):
-    return {
-      "id": self.id,
-      "condition": self.condition
-    }
-
-class ObsoleteChip(BaseChip):
-  condition = ChipCondition.Obsolete
-
-  def __init__(self, *, dir, id):
-    self.dir = dir
-    self.id = id
-
-  def export(self):
-    return {
-      "id": self.id,
-      "condition": self.condition
-    }
-
-class PartialChip(BaseChip):
-  def __init__(self, *, dir, id, issues):
-    self.dir = dir
-    self.id = id
-    self.issues = issues
+    self._corrupted = corrupted
 
   @property
   def condition(self):
-    for issue in self.issues:
-      if (issue['type'] == 'missing') or (issue['type'] == 'version'):
-        return ChipCondition.Unsupported
-
-    return ChipCondition.Unsuitable
+    return ChipCondition.Corrupted if self._corrupted else ChipCondition.Unsupported
 
   def export(self):
     return {
       "id": self.id,
-      "condition": self.condition
+      "condition": self.condition,
+      "issues": [issue.export() for issue in self.issues]
     }
 
 
 class Chip(BaseChip):
   condition = ChipCondition.Ok
-  version = 1
+  version = 2
 
-  def __init__(self, *, archived, dir, id, unit_list, unit_spec):
-    self.archived = archived
+  def __init__(self, *, dir, id, unit_list):
     self.dir = dir
     self.id = id
+    self.issues = list()
     self.master = None
-    self.runners = None
+    self.runners = dict()
     self.unit_list = unit_list
-    self.unit_spec = unit_spec
 
     self._header_path = (dir / ".header.json")
 
@@ -117,17 +110,10 @@ class Chip(BaseChip):
   def _save_header(self):
     json.dump({
       'id': self.id,
-      'archived': self.archived,
       'runners': {
         namespace: base64.b85encode(runner.serialize_raw()).decode("utf-8") for namespace, runner in self.runners.items()
       },
       'unit_list': self.unit_list,
-      'unit_spec': {
-        namespace: {
-          'hash': unit_spec.hash,
-          'version': unit_spec.version
-        } for namespace, unit_spec in self.unit_spec.items()
-      },
       'version': self.version
     }, self._header_path.open("w"))
 
@@ -153,38 +139,27 @@ class Chip(BaseChip):
     return {
       "id": self.id,
       "condition": self.condition,
-      "archived": self.archived,
       "master": self.master and self.master.export(),
       "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
       },
-      "unitList": self.unit_list
+      "unitList": list(self.runners.keys())
     }
 
 
-  def create(chips_dir, name, *, host):
+  @staticmethod
+  def create(chips_dir, *, host):
     chip_id = str(uuid.uuid4())
     chip_dir = chips_dir / chip_id
     chip_dir.mkdir(exist_ok=True)
 
-    unit_spec = dict()
-
-    for namespace, unit in host.units.items():
-      executor = host.executors.get(namespace)
-      unit_spec[namespace] = UnitSpec(
-        hash=(executor.hash if executor else None),
-        version=unit.version
-      )
-
     chip = Chip(
-      archived=False,
       id=chip_id,
       dir=chip_dir,
-      unit_list=list(unit_spec.keys()),
-      unit_spec=unit_spec
+      unit_list=[namespace for namespace, unit in host.units.items() if hasattr(unit, 'Runner')]
     )
 
-    chip.runners = { namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner') }
+    chip.runners = { namespace: host.units[namespace].Runner(chip=chip, host=host) for namespace in chip.unit_list }
 
     for runner in chip.runners.values():
       runner.create()
@@ -194,42 +169,66 @@ class Chip(BaseChip):
 
     return chip
 
+  @staticmethod
   def unserialize(chip_dir, *, host):
     header_path = chip_dir / ".header.json"
     header = json.load(header_path.open())
 
     if header['version'] != Chip.version:
-      return ObsoleteChip(
+      chip = UnreadableChip(
         dir=chip_dir,
         id=header['id']
       )
 
+      chip.issues.append(UnsupportedChipVersionError())
+      return chip
+
+    chip = Chip(
+      dir=chip_dir,
+      id=header['id'],
+      unit_list=header['unit_list'] # TODO: Deprecate
+    )
+
+    graph = dict()
     issues = list()
 
-    for namespace, unit_spec in header['unit_spec'].items():
+    for namespace in header['unit_list']:
       unit = host.units.get(namespace)
 
-      if not unit:
-        issues.append({ 'type': 'missing', 'namespace': namespace })
-      elif unit.version != unit_spec['version']:
-        issues.append({
-          'type': 'version',
-          'namespace': namespace,
-          'current_version': unit.version,
-          'target_version': unit_spec['version']
-        })
-      elif hasattr(unit, 'Executor'):
-        executor = host.executors[namespace]
+      if unit and hasattr(unit, 'Runner'):
+        graph[namespace] = unit.Runner.dependencies
+      else:
+        issues.append(MissingUnitError(namespace))
 
-        if executor.hash != unit_spec['hash']:
-          issues.append({ 'type': 'hash', 'namespace': namespace })
+    for namespace in TopologicalSorter(graph).static_order():
+      unit = host.units.get(namespace)
+      runner = unit.Runner(chip=chip, host=host)
 
-    if issues:
-      return PartialChip(
-        dir=chip_dir,
-        id=header['id'],
-        issues=issues
-      )
+      try:
+        runner.unserialize_raw(base64.b85decode(header['runners'][namespace].encode("utf-8")))
+      except UnsupportedChipRunnerError as e:
+        e.namespace = namespace
+        issues.append(e)
+      except CorruptedChipError as e:
+        issues.append(e)
+        break
+      except Exception as e:
+        issues.append(CorruptedChipError())
+        break
+      else:
+        chip.runners[namespace] = runner
+    else:
+      chip.issues += issues
+      return chip
+
+    chip = UnreadableChip(
+      dir=chip_dir,
+      id=header['id']
+    )
+
+    chip.issues += issues
+
+    return chip
 
 
     # history_path = chip_dir / ".history.dat"
@@ -252,24 +251,15 @@ class Chip(BaseChip):
 
     #   history_file.seek(payload_size, 1)
 
-    chip = Chip(
-      archived=header['archived'],
-      dir=chip_dir,
-      id=header['id'],
-      unit_list=header['unit_list'],
-      unit_spec={
-        namespace: UnitSpec(
-          hash=unit_spec['hash'],
-          version=unit_spec['version']
-        ) for namespace, unit_spec in header['unit_spec'].items()
-      }
-    )
+  @staticmethod
+  def try_unserialize(chip_dir, *, host):
+    try:
+      return Chip.unserialize(chip_dir, host=host)
+    except Exception:
+      logger.warn(f"Chip '{chip_dir.name}' is corrupted and will be ignored. The exception is printed below.")
+      log_exception(logger)
 
-    chip.runners = {
-      name: host.units[name].Runner(chip=chip, host=host) for name in header['runners'].keys()
-    }
-
-    for name, runner in chip.runners.items():
-      runner.unserialize_raw(base64.b85decode(header['runners'][name].encode("utf-8")))
-
-    return chip
+      return UnreadableChip(
+        corrupted=True,
+        dir=chip_dir
+      )

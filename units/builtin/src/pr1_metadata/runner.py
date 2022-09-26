@@ -1,15 +1,19 @@
 import time
 
+from pr1.chip import UnsupportedChipRunnerError
 from pr1.units.base import BaseRunner
 
 from . import namespace
 
 
 class Runner(BaseRunner):
+  _data_version = 1
+
   def __init__(self, *, chip, host):
     self._chip = chip
     self._host = host
 
+    self._archived = None
     self._creation_date = None
     self._description = None
     self._title = None
@@ -27,13 +31,19 @@ class Runner(BaseRunner):
 
   def export(self):
     return {
+      "archived": self._archived,
       "creationDate": self._creation_date,
       "description": self._description,
       "title": self._title
     }
 
   def serialize(self):
-    return (self._creation_date, self._description, self._title)
+    return self._data_version, (self._archived, self._creation_date, self._description, self._title)
 
   def unserialize(self, state):
-    self._creation_date, self._description, self._title = state
+    version, data = state
+
+    if version != self._data_version:
+      raise UnsupportedChipRunnerError()
+
+    self._archived, self._creation_date, self._description, self._title = data

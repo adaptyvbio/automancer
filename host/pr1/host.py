@@ -5,7 +5,7 @@ import time
 import uuid
 
 from . import logger, reader
-from .chip import Chip, ChipCondition, CorruptedChip
+from .chip import Chip, ChipCondition
 from .draft import Draft
 from .master import Master
 from .protocol import Protocol
@@ -96,17 +96,10 @@ class Host:
 
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):
-        try:
-          chip = Chip.unserialize(path, host=self)
-        except Exception:
-          logger.warn(f"Chip '{path.name}' is corrupted and will be ignored. The exception is printed below.")
-          log_exception(logger)
-
-          chip = CorruptedChip(dir=path)
-
+        chip = Chip.try_unserialize(path, host=self)
         self.chips[chip.id] = chip
 
-    keywords = ["okay", "unsuitable", "unsupported", "obsolete", "corrupted"]
+    keywords = ["okay", "partial", "unrunnable", "unsupported", "corrupted"]
     counts = [sum(chip.condition == condition for chip in self.chips.values()) for condition in ChipCondition]
 
     logger.debug(f"Loaded {len(self.chips)} existing chips")
@@ -117,7 +110,7 @@ class Host:
 
     # debug
     # if not any(chip.condition == ChipCondition.Ok for chip in self.chips.values()):
-    #   self.create_chip(name="Default experiment")
+      # self.create_chip(name="Default experiment")
 
   async def start(self):
     try:
@@ -172,7 +165,6 @@ class Host:
   def create_chip(self, name):
     chip = Chip.create(
       chips_dir=self.chips_dir,
-      name=name,
       host=self
     )
 

@@ -122,29 +122,17 @@ export class ViewChips extends React.Component<ViewChipsProps> {
             <div className="lproto-container">
               <div className="lproto-list">
                 {pastChips.map((chip) => {
+                  console.log(chip)
+
                   switch (chip.condition) {
-                    case ChipCondition.Unsuitable:
-                    case ChipCondition.Unsupported: (
+                    case ChipCondition.Unsupported: return (
                       <DraftEntry
                         createMenu={() => []}
                         disabled={true}
                         name="[Unsupported experiment]"
                         onSelect={() => { }}
                         properties={[
-                          { id: 'issues', label: 'Unsupported', icon: 'error' }
-                          // { id: 'created', label: formatRelativeDate(metadata.creationDate), icon: 'schedule' }
-                        ]}
-                        key={chip.id} />
-                    );
-
-                    case ChipCondition.Obsolete: return (
-                      <DraftEntry
-                        createMenu={() => []}
-                        disabled={true}
-                        name="[Obsolete experiment]"
-                        onSelect={() => { }}
-                        properties={[
-                          { id: 'obsolete', label: 'Obsolete', icon: 'broken_image' }
+                          { id: 'issues', label: chip.issues[0] ?? '–', icon: 'error' }
                         ]}
                         key={chip.id} />
                     );

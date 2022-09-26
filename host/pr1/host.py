@@ -1,5 +1,6 @@
 import asyncio
 import platform
+import shutil
 import sys
 import time
 import uuid
@@ -11,7 +12,15 @@ from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
-from .util.misc import log_exception
+
+
+# class ClientProps:
+#   def __init__(self, privileged, remote):
+#     self.privileged = privileged
+#     self.remote = remote
+
+#   def send(self, message):
+#     raise NotImplementedError()
 
 
 class Host:
@@ -277,7 +286,7 @@ class Host:
     self.previous_state = state
     return state_update
 
-  async def process_request(self, request):
+  async def process_request(self, request, *, client):
     if request["type"] == "compileDraft":
       draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
       return draft.export()
@@ -293,10 +302,6 @@ class Host:
       return {
         "chipId": chip.id
       }
-
-    if request["type"] == "deleteChip":
-      # TODO: checks
-      del self.chips[request["chipId"]]
 
     if request["type"] == "createDraftSample":
       return "# Example protocol\nname: My protocol\n\nstages:\n  - steps:\n      - name: Step no. 1\n        duration: 5 min"
@@ -344,6 +349,29 @@ class Host:
       }
 
       self.start_plan(chip=chip, codes=request["data"], location=location, protocol=protocol)
+
+    match request["type"]:
+      case "deleteChip":
+        chip = self.chips[request["chipId"]]
+
+        # TODO: checks
+
+        if request["trash"]:
+          self.backend.trash(chip.dir)
+        else:
+          shutil.rmtree(chip.dir)
+
+        del self.chips[request["chipId"]]
+
+      # case "duplicateChip":
+      #   chip = self.chips[request["chipId"]]
+
+      case "revealChipDirectory":
+        if client.remote:
+          return
+
+        chip = self.chips[request["chipId"]]
+        self.backend.reveal(chip.dir)
 
     self.update_callback()
 

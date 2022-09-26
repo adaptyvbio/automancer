@@ -19,12 +19,14 @@ export interface BaseBackend {
     source: string;
   }): Promise<DraftCompilation>;
   createChip(): Promise<{ chipId: ChipId; }>;
-  deleteChip(chipId: ChipId): Promise<void>;
   createDraftSample(): Promise<string>;
+  deleteChip(chipId: ChipId, options: { trash: boolean; }): Promise<void>;
+  duplicateChip(chipId: ChipId): Promise<{ chipId: ChipId; }>;
   instruct<T>(instruction: T): Promise<void>;
   pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   reloadUnits(): Promise<void>;
   resume(chipId: ChipId): Promise<void>;
+  revealChipDirectory(chipId: ChipId): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   startPlan(options: {

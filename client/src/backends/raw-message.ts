@@ -35,17 +35,25 @@ export abstract class RawMessageBackend extends BackendCommon {
     }) as { chipId: ChipId; };
   }
 
-  async deleteChip(chipId: ChipId) {
-    await this._request({
-      type: 'deleteChip',
-      chipId
-    });
-  }
-
   async createDraftSample() {
     return await this._request({
       type: 'createDraftSample'
     }) as string;
+  }
+
+  async deleteChip(chipId: ChipId, options: { trash: boolean; }) {
+    await this._request({
+      type: 'deleteChip',
+      chipId,
+      trash: options.trash
+    });
+  }
+
+  async duplicateChip(chipId: ChipId) {
+    return await this._request({
+      type: 'duplicateChip',
+      chipId
+    }) as { chipId: ChipId; };
   }
 
   async instruct<T>(instruction: T) {
@@ -72,6 +80,13 @@ export abstract class RawMessageBackend extends BackendCommon {
   async resume(chipId: string) {
     await this._request({
       type: 'resume',
+      chipId
+    });
+  }
+
+  async revealChipDirectory(chipId: string) {
+    await this._request({
+      type: 'revealChipDirectory',
       chipId
     });
   }

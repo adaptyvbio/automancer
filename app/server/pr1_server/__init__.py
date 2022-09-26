@@ -19,6 +19,7 @@ from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .client import ClientClosed
 from .session import Session
+from .trash import trash
 
 
 class Backend:
@@ -34,6 +35,25 @@ class Backend:
       "type": "app.notification",
       "message": message
     }))
+
+  def reveal(self, path: Path):
+    if self._app.owner_bridge:
+      asyncio.create_task(self._app.owner_bridge.client.send({
+        "type": "owner.reveal",
+        "path": str(path)
+      }))
+    else:
+      pass # TODO: add a Python implementation
+
+  def trash(self, path: Path):
+    if self._app.owner_bridge:
+      asyncio.create_task(self._app.owner_bridge.client.send({
+        "type": "owner.trash",
+        "path": str(path)
+      }))
+    else:
+      trash(path)
+
 
 conf_schema = sc.Schema({
   'authentication': sc.Optional(sc.List(
@@ -136,20 +156,27 @@ class App:
 
     self.clients = dict()
     self.conf = conf
-    self.host = Host(backend=Backend(self), update_callback=self.update)
+    self.host = Host(
+      backend=Backend(self),
+      update_callback=self.update
+    )
 
 
     # Create bridges
 
     self.bridges = set()
-    self.remote_bridge = None
+
+    if local:
+      self.owner_bridge = StdioBridge(self)
+      self.bridges.add(self.owner_bridge)
+    else:
+      self.owner_bridge = None
 
     if 'remote' in conf:
       self.remote_bridge = WebsocketBridge(self, conf=conf['remote'])
       self.bridges.add(self.remote_bridge)
-
-    if local:
-      self.bridges.add(StdioBridge(self))
+    else:
+      self.remote_bridge = None
 
 
     # Misc
@@ -269,7 +296,7 @@ class App:
       client.sessions[request["id"]].resize((request["size"]["columns"], request["size"]["rows"]))
 
     else:
-      return await self.host.process_request(request)
+      return await self.host.process_request(request, client=client)
 
   def update(self):
     if not self.updating:

@@ -1,5 +1,5 @@
 const childProcess = require('child_process');
-const { app } = require('electron');
+const { shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
@@ -68,10 +68,31 @@ class InternalHost {
     (async () => {
       for await (let msg of iter) {
         let message = JSON.parse(msg);
-        this.hostWindow.window.webContents.send('internalHost.message', message);
 
-        if (message.type === 'state') {
-          this.stateMessage = message;
+        switch (message.type) {
+          case 'owner.open': {
+            await shell.openPath(message.path);
+            break;
+          }
+
+          case 'reveal': {
+            shell.showItemInFolder(message.path);
+            break;
+          }
+
+          case 'trash': {
+            await shell.trashItem(message.path);
+            break;
+          }
+
+          default: {
+            if (message.type === 'state') {
+              this.stateMessage = message;
+            }
+
+            this.hostWindow.window.webContents.send('internalHost.message', message);
+            break;
+          }
         }
       }
     })();

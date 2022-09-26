@@ -90,10 +90,10 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                   <ContextMenuArea
                     createMenu={(_event) => [
                       { id: 'duplicate', name: 'Duplicate', icon: 'content_copy', disabled: true },
-                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: true },
+                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                       { id: '_divider', type: 'divider' },
                       { id: 'archive', name: 'Archive', icon: 'archive' },
-                      { id: 'delete', name: 'Move to trash', icon: 'delete', disabled: true }
+                      { id: 'delete', name: 'Move to trash', icon: 'delete' }
                     ]}
                     onSelect={(path) => {
                       switch (path.first()) {
@@ -101,6 +101,24 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                           this.pool.add(async () => {
                             await metadataTools.archiveChip!(this.props.host, chip, true);
                           });
+
+                          break;
+                        }
+
+                        case 'delete': {
+                          this.pool.add(async () => {
+                            await this.props.host.backend.deleteChip(chip.id, { trash: true });
+                          });
+
+                          break;
+                        }
+
+                        case 'reveal': {
+                          this.pool.add(async () => {
+                            await this.props.host.backend.revealChipDirectory(chip.id);
+                          });
+
+                          break;
                         }
                       }
                     }}

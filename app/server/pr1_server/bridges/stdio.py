@@ -7,11 +7,11 @@ from ..client import BaseClient
 
 
 class Client(BaseClient):
+  privileged = False
   remote = False
 
   def __init__(self):
     super().__init__()
-
     self.id = "0"
 
   async def recv(self):

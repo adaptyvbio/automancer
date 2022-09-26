@@ -9,7 +9,6 @@ import { ChipSettings } from '../components/chip-settings';
 import { ErrorBoundary } from '../components/error-boundary';
 import { Pool } from '../util';
 import * as util from '../util';
-import { getChipMetadata } from '../backends/misc';
 
 
 export interface ViewChipProps {
@@ -53,7 +52,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   render() {
-    let metadata = getChipMetadata(this.chip);
+    let metadata = this.props.host.units.metadata.getChipMetadata(this.chip);
 
     let unitEntries = Object.values(this.props.host.units)
       .filter((unit) => this.chip.unitList.includes(unit.namespace))

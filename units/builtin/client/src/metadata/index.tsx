@@ -1,4 +1,4 @@
-import { Form, MatrixEditorProps } from 'pr1';
+import { Chip, Form, Host, MatrixEditorProps } from 'pr1';
 import { React } from 'pr1';
 
 
@@ -6,11 +6,13 @@ export const namespace = 'metadata';
 
 export interface Command {
   type: 'set';
+  archived: boolean;
   description: string;
   title: string;
 }
 
 export interface Runner {
+  archived: boolean;
   creationDate: number;
   description: string;
   title: string;
@@ -22,12 +24,13 @@ export function MatrixEditor(props: MatrixEditorProps) {
   let [description, setDescription] = React.useState(runner.description);
   let [title, setTitle] = React.useState(runner.title);
 
-  let synchronize = ({ description, title }) => {
+  let synchronize = ({ description, title }: { description: string; title: string; }) => {
     props.host.backend.command({
       chipId: props.chip.id,
       namespace,
       command: {
         type: 'set',
+        archived: runner.archived,
         description,
         title
       }
@@ -67,4 +70,33 @@ export function MatrixEditor(props: MatrixEditorProps) {
       </Form.Form>
     </>
   );
+}
+
+
+// Other contribution points
+
+export async function archiveChip(host: Host, chip: Chip, value: boolean) {
+  let runner = chip.runners[namespace] as Runner;
+
+  await host.backend.command({
+    chipId: chip.id,
+    namespace,
+    command: {
+      type: 'set',
+      archived: value,
+      description: runner.description,
+      title: runner.title
+    }
+  });
+}
+
+export function getChipMetadata(chip: Chip) {
+  let runner = chip.runners[namespace] as Runner;
+
+  return {
+    archived: runner.archived,
+    creationDate: runner.creationDate,
+    description: runner.description,
+    title: runner.title
+  };
 }

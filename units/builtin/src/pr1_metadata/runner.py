@@ -20,11 +20,13 @@ class Runner(BaseRunner):
 
   async def command(self, data):
     if data["type"] == "set":
+      self._archived = data["archived"]
       self._description = data["description"]
       self._title = data["title"]
       self._chip.update_runners(namespace)
 
   def create(self):
+    self._archived = False
     self._creation_date = time.time() * 1000
     self._description = str()
     self._title = "Untitled chip"

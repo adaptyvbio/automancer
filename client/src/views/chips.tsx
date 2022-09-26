@@ -7,9 +7,9 @@ import type { Host } from '../host';
 import { Chip, ChipCondition, ChipId } from '../backends/common';
 import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
+import { TimeSensitive } from '../components/time-sensitive';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
-import { getChipMetadata } from '../backends/misc';
 
 
 export interface ViewChipsProps {
@@ -28,15 +28,29 @@ export class ViewChips extends React.Component<ViewChipsProps> {
   }
 
   render() {
-    let chips = Object.values(this.props.host.state.chips);
-    let activeChips = (chips.filter(chip => (chip.condition === ChipCondition.Ok)) as Chip[])
-      .sort((a, b) => getChipMetadata(b).creationDate - getChipMetadata(a).creationDate);
+    let metadataTools = this.props.host.units.metadata as unknown as {
+      archiveChip(host: Host, chip: Chip, value: boolean): Promise<void>;
+      getChipMetadata(chip: Chip): { archived: boolean; creationDate: number; title: string; description: string; };
+    };
 
-    let pastChips = chips
-      .filter(chip => (chip.condition !== ChipCondition.Ok))
-      .sort(seqOrd(function* (a, b, rules) {
-        yield rules.numeric(a.condition, b.condition);
-      }));
+    let chips = Object.values(this.props.host.state.chips);
+    let readableChips = (chips.filter((chip) => chip.readable) as Chip[])
+      .map((chip) => ({ chip, metadata: metadataTools.getChipMetadata(chip) }))
+      .sort((a, b) => b.metadata.creationDate - a.metadata.creationDate);
+
+    let activeChips = readableChips
+      .filter(({ metadata }) => !metadata.archived)
+
+    let pastChips = [
+      ...readableChips.filter(({ metadata }) => metadata.archived),
+      ...chips
+        .map((chip) => ({ chip, metadata: null }))
+        .filter(({ chip }) => !chip.readable)
+        .sort(seqOrd(function* (a, b, rules) {
+          yield rules.numeric(a.chip.condition, b.chip.condition);
+        }))
+    ] /* satisfies Chip */;
+
 
     return (
       <main>
@@ -59,8 +73,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
         {(activeChips.length > 0)
           ? (
             <div className="clist-root">
-              {activeChips.map((chip) => {
-                let metadata = getChipMetadata(chip);
+              {activeChips.map(({ chip, metadata }) => {
                 let previewUrl: string | null = null;
 
                 for (let unit of Object.values(this.props.host.units)) {
@@ -77,12 +90,20 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                   <ContextMenuArea
                     createMenu={(_event) => [
                       { id: 'duplicate', name: 'Duplicate', icon: 'content_copy', disabled: true },
-                      { id: 'reveal', name: 'Reveal in Finder', icon: 'folder', disabled: true },
+                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: true },
                       { id: '_divider', type: 'divider' },
-                      { id: 'archive', name: 'Archive', icon: 'archive', disabled: true },
+                      { id: 'archive', name: 'Archive', icon: 'archive' },
                       { id: 'delete', name: 'Move to trash', icon: 'delete', disabled: true }
                     ]}
-                    onSelect={(_path) => { }}
+                    onSelect={(path) => {
+                      switch (path.first()) {
+                        case 'archive': {
+                          this.pool.add(async () => {
+                            await metadataTools.archiveChip!(this.props.host, chip, true);
+                          });
+                        }
+                      }
+                    }}
                     key={chip.id}>
                     <button type="button" className="clist-entrywide" onClick={() => {
                       this.props.setRoute(['chip', chip.id, 'settings']);
@@ -92,7 +113,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                       </div>
                       <dl className="clist-data">
                         <dt>Created</dt>
-                        <dd>{formatRelativeDate(metadata.creationDate)}</dd>
+                        <dd><TimeSensitive child={() => <>{formatRelativeDate(metadata.creationDate)}</>} /></dd>
                         <dt>Protocol</dt>
                         <dd>{chip.master?.protocol.name ?? 'Idle'}</dd>
                       </dl>
@@ -121,13 +142,38 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
             <div className="lproto-container">
               <div className="lproto-list">
-                {pastChips.map((chip) => {
-                  console.log(chip)
+                {pastChips.map(({ chip, metadata }) => {
+                  // console.log(chip)
 
                   switch (chip.condition) {
+                    case ChipCondition.Ok:
+                    case ChipCondition.Partial:
+                    case ChipCondition.Unrunnable: return (
+                      <DraftEntry
+                        createMenu={() => [
+                          { id: 'archive', name: 'Unarchive', icon: 'unarchive' },
+                        ]}
+                        disabled={false}
+                        name={metadata!.title}
+                        onSelect={(path) => {
+                          switch (path.first()) {
+                            case 'archive': {
+                              this.pool.add(async () => {
+                                await metadataTools.archiveChip!(this.props.host, chip, false);
+                              });
+                            }
+                          }
+                        }}
+                        properties={[
+                          { id: 'created', label: formatRelativeDate(metadata!.creationDate), icon: 'schedule' }
+                        ]}
+                        key={chip.id} />
+                    );
+
                     case ChipCondition.Unsupported: return (
                       <DraftEntry
-                        createMenu={() => []}
+                        createMenu={() => [
+                        ]}
                         disabled={true}
                         name="[Unsupported experiment]"
                         onSelect={() => { }}

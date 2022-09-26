@@ -71,17 +71,19 @@ export interface Device {
 export interface Chip {
   id: ChipId;
   condition: ChipCondition.Ok | ChipCondition.Partial | ChipCondition.Unrunnable;
+  readable: true;
   master: Master | null;
   runners: Record<UnitNamespace, unknown>;
   unitList: UnitNamespace[];
 }
 
-export interface CorruptedChip {
+export interface UnreadableChip {
   id: ChipId;
   condition: ChipCondition.Unsupported | ChipCondition.Corrupted;
+  readable: false;
 }
 
-export type GeneralChip = Chip | CorruptedChip;
+export type GeneralChip = Chip | UnreadableChip;
 
 
 export enum ChipCondition {

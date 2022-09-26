@@ -12,7 +12,6 @@ import { Host } from '../host';
 import { Codes } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
-import { getChipMetadata } from '../backends/misc';
 
 
 export interface Plan {
@@ -133,12 +132,12 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                         disabled={(chip.condition !== ChipCondition.Ok) || (chip.master !== null) || (Object.entries(this.props.host.units)
                           .filter(([namespace, _unit]) => chip.unitList.includes(namespace))
                           .some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip)))}>
-                        {getChipMetadata(chip).title}
+                        {this.props.host.units.metadata.getChipMetadata(chip).title}
                       </option>
                     ))}
                   </select>
                   <div className="btn illustrated-root superimposed-visible">
-                    <div>{chip ? `Chip: ${getChipMetadata(chip).title}` : 'Select experiment'}</div>
+                    <div>{chip ? `Chip: ${this.props.host.units.metadata.getChipMetadata(chip).title}` : 'Select experiment'}</div>
                     <div className="btn-icon"><Icon name="expand_more" /></div>
                   </div>
                 </div>

@@ -11,17 +11,3 @@ export async function createBackend(options: HostBackendOptions): Promise<BaseBa
     }
   }
 }
-
-export function getChipMetadata(chip: Chip) {
-  let runner = chip.runners.metadata as {
-    creationDate: number;
-    description: string;
-    title: string;
-  };
-
-  return {
-    creationDate: runner.creationDate,
-    description: runner.description,
-    title: runner.title
-  };
-}

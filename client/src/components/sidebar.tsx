@@ -6,7 +6,6 @@ import type { Route } from '../application';
 import { ChipCondition, Chip, HostId } from '../backends/common';
 import type { Draft, DraftId } from '../draft';
 import * as util from '../util';
-import { getChipMetadata } from '../backends/misc';
 
 
 export interface SidebarProps {
@@ -61,7 +60,7 @@ export class Sidebar extends React.Component<SidebarProps> {
             label: 'Experiments',
             icon: 'science',
             route: ['chip'],
-            children: (
+            children: [] /* (
               Object.values(this.props.host.state.chips)
                 .filter((chip) => (chip.condition === ChipCondition.Ok)) as Chip[]
             ).map((chip) => ({
@@ -69,7 +68,7 @@ export class Sidebar extends React.Component<SidebarProps> {
               label: getChipMetadata(chip).title,
               route: ['chip', chip.id, 'settings'],
               routeRef: ['chip', chip.id]
-            }))
+            })) */
           },
           { id: 'protocol',
             label: 'Protocols',

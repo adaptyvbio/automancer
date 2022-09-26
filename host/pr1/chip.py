@@ -77,6 +77,7 @@ class UnreadableChip(BaseChip):
     return {
       "id": self.id,
       "condition": self.condition,
+      "readable": False,
       "issues": [issue.export() for issue in self.issues]
     }
 
@@ -140,6 +141,7 @@ class Chip(BaseChip):
       "id": self.id,
       "condition": self.condition,
       "master": self.master and self.master.export(),
+      "readable": True,
       "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
       },

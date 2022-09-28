@@ -32,8 +32,8 @@ int main() {
     ux = (dx[chipPointOffset + 1] - dx[chipPointOffset]) / (cols - 1);
     uy = (dy[chipPointOffset + 1] - dy[chipPointOffset]) / (cols - 1); // ~0
 
-    vx = (dx[chipPointOffset + 2] - dx[chipPointOffset]) / (rows - 1); // ~0
-    vy = (dy[chipPointOffset + 2] - dy[chipPointOffset]) / (rows - 1);
+    vx = (dx[chipPointOffset + 3] - dx[chipPointOffset]) / (rows - 1); // ~0
+    vy = (dy[chipPointOffset + 3] - dy[chipPointOffset]) / (rows - 1);
 
     for (j = 0; j < rows; j = j + 1) {
       for (i = 0; i < cols; i = i + 1) {
@@ -53,32 +53,11 @@ int main() {
 
 
 double bilinear(double* x[4], double* y[4], double* s[4], double px, double py) {
-  double a, b, c, d, e, f, g, h, ka1, ka2, kb1, kb2, kc;
-  double alpha, beta;
-  double tol = 0.0001;
+  double a, u, v;
 
-  a = -x[0] + x[2];
-  b = -x[0] + x[1];
-  c = ((x[0] - x[1]) - x[2]) + x[3];
-  d = px - x[0];
-  e = -y[0] + y[2];
-  f = -y[0] + y[1];
-  g = ((y[0] - y[1]) - y[2]) + y[3];
-  h = py - y[0];
+  a = x[0] * (y[1] - y[3]) + x[1] * (y[3] - y[0]) + x[3] * (y[0] - y[1]);
+  u = ((x[1] - x[0]) * py - (y[1] - y[0]) * px + x[0] * y[1] - y[0] * x[1]) / a;
+  v  = ((x[0] - x[3]) * py - (y[0] - y[3]) * px - x[0] * y[3] + y[0] * x[3]) / a;
 
-  ka1 = c*e - a*g;
-  ka2 = c*f - b*g;
-  kb1 = ((b*e - a*f) + d*g) - c*h;
-  kb2 = ((b*e - a*f) - d*g) + c*h;
-  kc = d*f - b*h;
-
-  alpha = -(kb1 + sqrt(-4.*ka1*kc + kb1*kb1)) / (2.*ka1);
-  beta  = (kb2 + sqrt(-4.*ka1*kc + kb1*kb1)) / (2.*ka2);
-
-  if ((alpha < -tol) || (alpha > (1. + tol)) || (beta < -tol) || (beta > (1. + tol))) {
-    alpha = (-kb1 + sqrt(-4.*ka1*kc + kb1*kb1)) / (2.*ka1);
-    beta = (kb2 - sqrt(-4.*ka1*kc + kb1*kb1)) / (2.*ka2);
-  }
-
-  return (1 - alpha) * ((1 - beta) * s[0] + beta * s[1]) + alpha * ((1 - beta) * s[2] + beta * s[3]);
+  return (1 - v) * ((1 - u) * s[0] + u * s[3]) + v * ((1 - u) * s[1] + u * s[2]);
 }

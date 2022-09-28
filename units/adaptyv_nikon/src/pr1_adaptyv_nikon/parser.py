@@ -37,6 +37,9 @@ class Parser(BaseParser):
       if capture['exposure'] < 1:
         raise capture['exposure'].error("Invalid exposure")
 
+      if not "{}" in capture['save']:
+        raise capture['save'].error("Missing '{}' to specify chip index")
+
       return {
         namespace: {
           'exposure': capture['exposure'],

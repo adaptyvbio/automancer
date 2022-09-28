@@ -9,6 +9,7 @@ import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, 
 import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
+import { ViewDesign } from './views/test/design';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
@@ -409,13 +410,17 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setRoute={setRoute} />
           );
 
+          case 'design': return (
+            <ViewDesign />
+          );
+
           case 'protocol': return (
             <ViewProtocols
               app={this}
               drafts={this.state.drafts}
               host={this.state.host}
               setRoute={setRoute} />
-          )
+          );
 
           case 'settings': return (
             <ViewSettings

@@ -56,7 +56,7 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
       <div className={styles.root}>
         <div className={styles.left} />
         <div className={util.formatClass(styles.titleRoot, {
-          '_subtitle': (this.props.subtitle !== null),
+          '_subtitle': this.props.subtitle,
           '_visible': (this.props.subtitleVisible || this.state.notifying)
         })} ref={this.refTitle}>
           <div className={styles.titleMain}>{this.props.title}</div>

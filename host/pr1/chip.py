@@ -45,6 +45,8 @@ class CorruptedChipError(ChipIssue):
   pass
 
 class UnsupportedChipRunnerError(ChipIssue):
+  condition = ChipCondition.Unrunnable
+
   def __init__(self, namespace = None):
     self.namespace = namespace
 
@@ -52,7 +54,15 @@ class UnsupportedChipVersionError(ChipIssue):
   def export(self):
     return "Unsupported chip version"
 
-class MissingUnitError(Exception):
+class ExtraneousUnitError(ChipIssue):
+  condition = ChipCondition.Unrunnable
+
+  def __init__(self, namespace):
+    self.namespace = namespace
+
+class MissingUnitError(ChipIssue):
+  condition = ChipCondition.Partial
+
   def __init__(self, namespace):
     self.namespace = namespace
 
@@ -82,7 +92,6 @@ class UnreadableChip(BaseChip):
 
 
 class Chip(BaseChip):
-  condition = ChipCondition.Ok
   version = 2
 
   def __init__(self, *, dir, id):
@@ -96,6 +105,10 @@ class Chip(BaseChip):
 
     self._history_path = (dir / ".history.dat")
     self._history_file = None
+
+  @property
+  def condition(self):
+    return max([ChipCondition.Ok, *[issue.condition for issue in self.issues]])
 
   @property
   def _unit_list(self):
@@ -149,7 +162,7 @@ class Chip(BaseChip):
       "unitList": list(self.runners.keys())
     }
 
-  def duplicate(self, chips_dir, *, host):
+  def duplicate(self, chips_dir, *, host, upgrade = False):
     chip_id = str(uuid.uuid4())
     chip_dir = chips_dir / chip_id
     chip_dir.mkdir(exist_ok=True)
@@ -160,11 +173,17 @@ class Chip(BaseChip):
     )
 
     chip.runners = {
-      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner')
+      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items()\
+        if hasattr(unit, 'Runner') and (upgrade or (namespace in self.runners))
     }
 
     for namespace, runner in chip.runners.items():
-      runner.duplicate(self.runners[namespace])
+      if namespace in self.runners:
+        runner.duplicate(self.runners[namespace])
+      else:
+        runner.create()
+
+    chip.issues = [issue for issue in chip.issues if not (isinstance(issue, MissingUnitError) or isinstance(issue, UnsupportedChipRunnerError))]
 
     chip._save_header()
     chip.update_runners()
@@ -199,31 +218,36 @@ class Chip(BaseChip):
   def unserialize(cls, chip_dir, *, host):
     header_path = chip_dir / ".header.json"
     header = json.load(header_path.open())
-
-    if header['version'] != cls.version:
-      chip = UnreadableChip(
-        dir=chip_dir,
-        id=header['id']
-      )
-
-      chip.issues.append(UnsupportedChipVersionError())
-      return chip
-
-    chip = cls(
+    chip_kwargs = dict(
       dir=chip_dir,
       id=header['id']
     )
 
+    if header['version'] != cls.version:
+      chip = UnreadableChip(**chip_kwargs)
+      chip.issues.append(UnsupportedChipVersionError())
+
+      return chip
+
+    chip = cls(**chip_kwargs)
     issues = list()
 
     for namespace in header['unit_list']:
       unit = host.units.get(namespace)
 
       if not (unit and hasattr(unit, 'Runner')):
-        issues.append(MissingUnitError(namespace))
+        issues.append(ExtraneousUnitError(namespace))
 
     for namespace in host.ordered_namespaces:
-      unit = host.units.get(namespace)
+      unit = host.units[namespace]
+
+      if not hasattr(unit, 'Runner'):
+        continue
+
+      if not (namespace in header['unit_list']):
+        issues.append(MissingUnitError(namespace))
+        continue
+
       runner = unit.Runner(chip=chip, host=host)
 
       try:
@@ -234,20 +258,13 @@ class Chip(BaseChip):
       except CorruptedChipError as e:
         issues.append(e)
         break
-      except Exception as e:
-        issues.append(CorruptedChipError())
-        break
       else:
         chip.runners[namespace] = runner
     else:
       chip.issues += issues
       return chip
 
-    chip = UnreadableChip(
-      dir=chip_dir,
-      id=header['id']
-    )
-
+    chip = UnreadableChip(**chip_kwargs)
     chip.issues += issues
 
     return chip

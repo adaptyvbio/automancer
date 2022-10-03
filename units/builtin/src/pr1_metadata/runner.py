@@ -1,3 +1,4 @@
+import re
 import time
 
 from pr1.chip import UnsupportedChipRunnerError
@@ -35,7 +36,16 @@ class Runner(BaseRunner):
     self._archived = False
     self._creation_date = time.time() * 1000
     self._description = other._description
-    self._title = other._title + " (copy)"
+
+    match = re.search(r"\(copy(?: (\d+))?\)$", other._title)
+
+    if match:
+      count = int(match.group(1) or 0) + 1
+      start = match.start(0)
+      self._title = other._title[0:start] + f" (copy {count})"
+    else:
+      self._title = other._title + " (copy)"
+
 
   def export(self):
     return {

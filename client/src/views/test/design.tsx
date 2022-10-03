@@ -21,7 +21,7 @@ export class ViewDesign extends React.Component<any, any> {
       <main className={viewStyles.root}>
         <TitleBar title="Design" />
 
-        <div className={util.formatClass(viewStyles.contents, formStyles.container)}>
+        <div className={viewStyles.contents}>
           <div className={formStyles.main}>
             <div className={formStyles.header}>
               <h2>Settings super super long super super long super super long</h2>

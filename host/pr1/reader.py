@@ -152,7 +152,7 @@ class LocatedValue:
     elif isinstance(object, str):
       return LocatedString(object, locrange)
     else:
-      return object
+      return LocatedValue(object, locrange)
 
   def transfer(dest, source):
     if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):

@@ -1,12 +1,14 @@
 import asyncio
-import time
 
+from pr1.chip import UnsupportedChipRunnerError
 from pr1.units.base import BaseProcessRunner
 
 from . import namespace
 
 
 class Runner(BaseProcessRunner):
+  _version = 1
+
   def __init__(self, chip, *, host):
     self._chip = chip
     self._executor = host.executors[namespace]
@@ -16,10 +18,17 @@ class Runner(BaseProcessRunner):
     return dict()
 
   def enter_segment(self, segment, seg_index):
-    valve = segment[namespace]['valve']
+    futures = list()
+    valves = segment[namespace]['valves']
 
-    if (valve is not None) and (valve != self._executor._main_device._valve_target):
-      self._rotation_task = asyncio.create_task(self._executor._main_device.try_rotate(valve))
+    for device in self._executor._devices.values():
+      valve = valves[device.id]
+
+      if (valve is not None) and (valve != device._valve_target):
+        futures.append(asyncio.create_task(device.try_rotate(valve)))
+
+    if futures:
+      self._rotation_task = asyncio.gather(*futures)
 
   async def run_process(self, segment, seg_index, state):
     if self._rotation_task:
@@ -31,3 +40,14 @@ class Runner(BaseProcessRunner):
 
   def import_state(self, data_state):
     return dict()
+
+  def serialize(self):
+    return self._version, { device.id: device.serialize() for device in self._executor._devices.values() }
+
+  def unserialize(self, state):
+    version, data_devices = state
+
+    if version != self._version:
+      raise UnsupportedChipRunnerError()
+
+    # TODO: add checks

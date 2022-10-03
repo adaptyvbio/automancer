@@ -213,8 +213,7 @@ class RotaryValveDevice:
     if self._reconnect_task:
       self._reconnect_task.cancel()
 
-  @property
-  def hash(self):
+  def serialize(self):
     return ("rotary_valve", self._valve_count)
 
 

@@ -60,8 +60,7 @@ class MockRotaryValveDevice:
   async def destroy(self):
     pass
 
-  @property
-  def hash(self):
+  def serialize(self):
     return ("rotary_valve", self._valve_count)
 
   async def rotate(self, valve):

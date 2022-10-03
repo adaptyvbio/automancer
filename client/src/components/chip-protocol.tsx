@@ -62,6 +62,7 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
       }))
       .flatMap((unit) => {
         return unit.createFeatures?.({
+          host: this.props.host,
           protocol,
           segment: currentSegment,
           segmentIndex: currentSegmentIndex

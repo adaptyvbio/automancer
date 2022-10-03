@@ -89,6 +89,7 @@ export function ProtocolOverview(props: {
                               }))
                               .flatMap((unit) => {
                                 return unit.createFeatures?.({
+                                  host: props.host,
                                   location: props.location,
                                   protocol: props.protocol,
                                   segment,

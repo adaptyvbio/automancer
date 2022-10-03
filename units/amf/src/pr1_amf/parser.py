@@ -1,3 +1,4 @@
+from pr1.reader import LocatedValue
 from pr1.units.base import BaseParser
 from pr1.util import schema as sc
 from pr1.util.parser import CompositeValue, Identifier, UnclassifiedExpr
@@ -13,7 +14,7 @@ class Parser(BaseParser):
     self._parent = parent
 
     self._aliases = dict()
-    self._valve = None
+    self._valves = { device.id: None for device in self._executor._devices.values() }
 
   def _parse_valve(self, data_value: UnclassifiedExpr):
     composite_value = data_value.interpolate()
@@ -38,16 +39,10 @@ class Parser(BaseParser):
       else:
         raise value_located.error("Invalid valve")
 
-    if not self._executor._main_device:
-      raise value_located.error("No device configured")
-
-    if not (1 <= valve <= self._executor._main_device._valve_count):
-      raise value_located.error("Invalid valve")
-
-    return valve
+    return LocatedValue.transfer(valve, value_located)
 
   def parse_block(self, data_block):
-    if 'rotation_wait' in data_block:
+    if 'wait_rotation' in data_block:
       return { 'role': 'process' }
 
   def enter_protocol(self, data_protocol):
@@ -59,19 +54,22 @@ class Parser(BaseParser):
         self._aliases[alias] = self._parse_valve(UnclassifiedExpr(data_valve, None))
 
   def handle_segment(self, data_segment):
-    if 'rotation' in data_segment:
-      self._valve = self._parse_valve(UnclassifiedExpr(*data_segment['rotation']))
+    for device in self._executor._devices.values():
+      attr = f"{device.id}.rotation"
 
-      if 'rotation_wait' in data_segment:
-        sc.Schema(None).validate(data_segment['rotation_wait'][0])
-    elif 'rotation_wait' in data_segment:
-      self._valve = self._parse_valve(UnclassifiedExpr(*data_segment['rotation_wait']))
+      if attr in data_segment:
+        valve = self._parse_valve(UnclassifiedExpr(*data_segment[attr]))
+
+        if not (1 <= valve.value <= device._valve_count):
+          raise valve.error(f"Invalid valve for '{device.label}', expected a number between 1 and {device._valve_count}")
+
+        self._valves[device.id] = valve.value
 
     return {
-      namespace: { 'valve': self._valve }
+      namespace: { 'valves': dict(self._valves) }
     }
 
   def export_segment(data):
     return {
-      "valve": data['valve']
+      "valves": data['valves']
     }

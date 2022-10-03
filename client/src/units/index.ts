@@ -17,6 +17,7 @@ export interface Feature {
 export type Features = Feature[];
 
 export interface CreateFeaturesOptions {
+  host: Host;
   location?: ProtocolLocation;
   protocol: Protocol;
   segment: ProtocolSegment;

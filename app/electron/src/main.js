@@ -169,7 +169,7 @@ class CoreApplication {
             type: 'separator'
           }];
 
-          default: [];
+          default: return [];
         }
       }));
 

@@ -1,6 +1,6 @@
 import { Chip, ChipTabComponentProps, Pool, React, util } from 'pr1';
 
-import { type Runner, namespace, RunnerValveError, Command, ReprData } from '.';
+import { Command, ExecutorState, getModel, namespace, ReprData, Runner, RunnerValveError } from '.';
 import { Diagram } from './diagram';
 
 
@@ -24,8 +24,9 @@ export class ManualControl extends React.Component<ChipTabComponentProps, Manual
   }
 
   render() {
+    let executor = this.props.host.state.executors[namespace] as ExecutorState;
     let runner = this.chip.runners[namespace] as Runner;
-    let model = runner.settings.model;
+    let model = getModel(runner, { executor });
 
     if (!model) {
       return <div />;

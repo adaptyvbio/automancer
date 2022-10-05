@@ -38,6 +38,10 @@ export interface Model {
   }[];
 }
 
+export function getModel(runner: Runner, options: { executor: ExecutorState; }): Model | null {
+  return runner.settings.model ?? (runner.settings.modelId ? options.executor.models[runner.settings.modelId] : null);
+}
+
 
 export interface Code {
   arguments: (number | null)[];
@@ -54,7 +58,7 @@ export type Command = {
   valveMap: number[];
 }
 
-export interface Executor {
+export interface ExecutorState {
   models: Record<ModelId, Model>;
   valves: { label: string; }[];
 }
@@ -62,6 +66,7 @@ export interface Executor {
 export interface Runner {
   settings: {
     model: Model | null;
+    modelId: ModelId | null;
     valveMap: number[] | null;
   };
 
@@ -155,12 +160,14 @@ export function getChipTabs(chip: Chip) {
     { id: 'manual',
       label: 'Valve control',
       icon: 'tune',
-      disabled: !runner.settings.model,
+      disabled: !runner.settings.modelId,
       component: ManualControl }
   ];
 }
 
 export function providePreview(options: { chip: Chip; host: Host; }) {
+  let executor = options.host.state.executors[namespace] as ExecutorState;
   let runner = options.chip.runners[namespace] as Runner;
-  return runner.settings.model?.previewUrl ?? null;
+
+  return getModel(runner, { executor })?.previewUrl ?? null;
 }

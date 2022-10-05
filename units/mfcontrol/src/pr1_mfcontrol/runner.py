@@ -1,6 +1,8 @@
 from collections import namedtuple
 from enum import IntEnum
+import uuid
 
+from pr1.chip import DegradedChipRunnerError
 from pr1.units.base import BaseRunner
 
 from . import namespace
@@ -25,7 +27,7 @@ class Runner(BaseRunner):
     self._valve_map = None
 
     self._proto_mask = None
-    self._signal = None
+    self._signal = 0
 
   @property
   def _default_signal(self):
@@ -96,7 +98,8 @@ class Runner(BaseRunner):
 
     return {
       "settings": {
-        "model": (self._model.export() if self._model else None),
+        "model": (self._model.export() if self._model and self._model.self_hosted else None),
+        "modelId": (self._model.id if self._model else None),
         "valveMap": self._valve_map
       },
       "state": {
@@ -110,10 +113,30 @@ class Runner(BaseRunner):
     return ((self._model.serialize() if self._model else None), self._valve_map)
 
   def unserialize(self, state):
-    model, self._valve_map = state
+    model_serialized, self._valve_map = state
 
-    # TODO: check if the valve map is still valid with respect to the current setup
+    compat = False
 
-    if model:
-      self._model = Model.unserialize(model)
-      self._signal = 0
+    if model_serialized:
+      executor = self._host.executors[namespace]
+
+      runner_model = Model.unserialize(model_serialized)
+      host_model = executor.models.get(runner_model.id)
+
+      if host_model and (host_model.hash == runner_model.hash):
+        self._model = host_model
+      else:
+        runner_model.id = str(uuid.uuid4())
+        runner_model.self_hosted = True
+        self._model = runner_model
+
+        if host_model:
+          compat = True
+
+    for valve_index, valve_value in enumerate(self._valve_map):
+      if (valve_value is not None) and (valve_value >= len(self._executor.valves)):
+        self._valve_map[valve_index] = None
+        compat = True
+
+    if compat:
+      raise DegradedChipRunnerError()

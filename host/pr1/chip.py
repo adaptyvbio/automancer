@@ -46,6 +46,12 @@ class ChipIssue(Exception):
 class CorruptedChipError(ChipIssue):
   pass
 
+class DegradedChipRunnerError(ChipIssue):
+  condition = ChipCondition.Unrunnable
+
+  def __init__(self, namespace = None):
+    self.namespace = namespace
+
 class UnsupportedChipRunnerError(ChipIssue):
   condition = ChipCondition.Unrunnable
 
@@ -248,6 +254,10 @@ class Chip(BaseChip):
       except UnsupportedChipRunnerError as e:
         e.namespace = namespace
         issues.append(e)
+      except DegradedChipRunnerError as e:
+        e.namespace = namespace
+        issues.append(e)
+        chip.runners[namespace] = runner
       except CorruptedChipError as e:
         issues.append(e)
         break

@@ -49,6 +49,7 @@ class Model:
     self.id = id
     self.name = name
     self.preview = preview
+    self.self_hosted = False
 
   @functools.cached_property
   def hash(self):

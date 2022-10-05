@@ -39,7 +39,9 @@ class ChipCondition(IntEnum):
 
 class ChipIssue(Exception):
   def export(self):
-    return "Unknown issue"
+    return {
+      "message": "Unknown issue"
+    }
 
 class CorruptedChipError(ChipIssue):
   pass
@@ -52,13 +54,20 @@ class UnsupportedChipRunnerError(ChipIssue):
 
 class UnsupportedChipVersionError(ChipIssue):
   def export(self):
-    return "Unsupported chip version"
+    return {
+      "message": "Unsupported chip version"
+    }
 
 class ExtraneousUnitError(ChipIssue):
   condition = ChipCondition.Unrunnable
 
   def __init__(self, namespace):
     self.namespace = namespace
+
+  def export(self):
+    return {
+      "message": f"""This experiment references the module "{self.namespace}" which is not available on this setup."""
+    }
 
 class MissingUnitError(ChipIssue):
   condition = ChipCondition.Partial
@@ -155,6 +164,7 @@ class Chip(BaseChip):
       "id": self.id,
       "condition": self.condition,
       "master": self.master and self.master.export(),
+      "issues": [issue.export() for issue in self.issues],
       "readable": True,
       "runners": {
         namespace: runner.export() for namespace, runner in self.runners.items()
@@ -162,56 +172,39 @@ class Chip(BaseChip):
       "unitList": list(self.runners.keys())
     }
 
-  def duplicate(self, chips_dir, *, host, upgrade = False):
-    chip_id = str(uuid.uuid4())
-    chip_dir = chips_dir / chip_id
-    chip_dir.mkdir(exist_ok=True)
-
-    chip = Chip(
-      id=chip_id,
-      dir=chip_dir
-    )
-
-    chip.runners = {
-      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items()\
-        if hasattr(unit, 'Runner') and (upgrade or (namespace in self.runners))
-    }
+  def duplicate(self, chips_dir, *, host, template):
+    chip = self._allocate_chip(chips_dir, host=host)
 
     for namespace, runner in chip.runners.items():
       if namespace in self.runners:
-        runner.duplicate(self.runners[namespace])
+        runner.duplicate(self.runners[namespace], template=template)
       else:
         runner.create()
 
-    chip.issues = [issue for issue in chip.issues if not (isinstance(issue, MissingUnitError) or isinstance(issue, UnsupportedChipRunnerError))]
-
-    chip._save_header()
     chip.update_runners()
 
     return chip
 
+  def upgrade(self, *, host):
+    for namespace, unit in host.units.items():
+      if hasattr(unit, 'Runner') and not (namespace in self.runners):
+        runner = unit.Runner(chip=self, host=host)
+        self.runners[namespace] = runner
+
+        runner.create()
+
+    self.issues.clear()
+    self.update_runners()
+
 
   @classmethod
   def create(cls, chips_dir, *, host):
-    chip_id = str(uuid.uuid4())
-    chip_dir = chips_dir / chip_id
-    chip_dir.mkdir(exist_ok=True)
-
-    chip = cls(
-      id=chip_id,
-      dir=chip_dir
-    )
-
-    chip.runners = {
-      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner')
-    }
+    chip = cls._allocate_chip(chips_dir, host=host)
 
     for runner in chip.runners.values():
       runner.create()
 
-    chip._save_header()
     chip.update_runners()
-
     return chip
 
   @classmethod
@@ -302,3 +295,20 @@ class Chip(BaseChip):
         corrupted=True,
         dir=chip_dir
       )
+
+  @staticmethod
+  def _allocate_chip(chips_dir, *, host):
+    chip_id = str(uuid.uuid4())
+    chip_dir = chips_dir / chip_id
+    chip_dir.mkdir(exist_ok=True)
+
+    chip = Chip(
+      id=chip_id,
+      dir=chip_dir
+    )
+
+    chip.runners = {
+      namespace: unit.Runner(chip=chip, host=host) for namespace, unit in host.units.items() if hasattr(unit, 'Runner')
+    }
+
+    return chip

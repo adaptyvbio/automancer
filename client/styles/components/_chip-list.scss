@@ -52,6 +52,11 @@
   }
 
   &-header {
+    display: grid;
+    align-items: center;
+    column-gap: 2rem;
+    grid-template-columns: 1fr auto;
+
     grid-column: 1 / -1;
   }
 
@@ -60,6 +65,18 @@
 
     font-size: 1.4rem;
     font-weight: 600;
+  }
+
+  &-status {
+    display: flex;
+
+    &--error { color: $app-red; }
+    &--info { color: $app-blue; }
+    &--warning { color: $app-orange; }
+
+    .icon {
+      scale: 1.2;
+    }
   }
 
   &-data {

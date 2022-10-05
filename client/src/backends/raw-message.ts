@@ -49,10 +49,11 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
-  async duplicateChip(chipId: ChipId) {
+  async duplicateChip(chipId: ChipId, options: { template: boolean; }) {
     return await this._request({
       type: 'duplicateChip',
-      chipId
+      chipId,
+      template: options.template
     }) as { chipId: ChipId; };
   }
 
@@ -128,6 +129,13 @@ export abstract class RawMessageBackend extends BackendCommon {
       data: options.data,
       location: options.location,
       source: options.source
+    });
+  }
+
+  async upgradeChip(chipId: string) {
+    await this._request({
+      type: 'upgradeChip',
+      chipId
     });
   }
 }

@@ -21,6 +21,10 @@
     grid-template: auto auto / 1fr auto;
 
     padding: 1rem 1.4rem;
+
+    @at-root :not(button)#{&} {
+      cursor: default;
+    }
   }
 
   &-label {
@@ -28,16 +32,12 @@
     font-weight: 500;
   }
 
-  &-sublabel {
-    color: #666;
-  }
-
   &-property {
     &-list {
       display: flex;
       column-gap: 1.6rem;
 
-      // grid-column: 1;
+      grid-row: 2;
     }
 
     &-item {
@@ -50,29 +50,21 @@
   }
 
   &-action {
-    &-item {
-      display: flex;
-      align-items: center;
-      column-gap: $icon-gap;
+    display: flex;
+    align-self: start;
 
-      grid-column: 2;
-      grid-row: 1 / -1;
+    grid-column: 2;
+    grid-row: 1 / -1;
 
-      transition: opacity $dur-short, transform $dur-short;
-    }
-
-    &-label {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
+    transition: opacity $dur-short, transform $dur-short;
   }
 
-  &-entry:not(:focus-visible, :hover) &-action-item {
+  &-entry:not(:focus-visible, :hover) &-action {
     opacity: 0;
     transform: translateX(-60%);
   }
 
-  &-entry._context &-action-item {
+  &-entry._context &-action {
     transition: none;
   }
 }

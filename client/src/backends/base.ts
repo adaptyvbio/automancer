@@ -21,7 +21,7 @@ export interface BaseBackend {
   createChip(): Promise<{ chipId: ChipId; }>;
   createDraftSample(): Promise<string>;
   deleteChip(chipId: ChipId, options: { trash: boolean; }): Promise<void>;
-  duplicateChip(chipId: ChipId): Promise<{ chipId: ChipId; }>;
+  duplicateChip(chipId: ChipId, options: { template: boolean; }): Promise<{ chipId: ChipId; }>;
   instruct<T>(instruction: T): Promise<void>;
   pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   reloadUnits(): Promise<void>;
@@ -35,6 +35,7 @@ export interface BaseBackend {
     location: ProtocolLocation;
     source: string;
   }): Promise<void>;
+  upgradeChip(chipId: ChipId): Promise<void>;
 
   loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>>;
 }

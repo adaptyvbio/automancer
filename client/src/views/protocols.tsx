@@ -148,24 +148,32 @@ export function DraftEntry(props: ContextMenuAreaProps & {
   }[];
   onClick?(event: React.SyntheticEvent): void;
 }) {
+  let contents = (
+    <>
+      <div className="lproto-label">{props.name}</div>
+      <div className="lproto-property-list">
+        {props.properties.map((property) => (
+          <div className="lproto-property-item" key={property.id}>
+            <Icon name={property.icon} />
+            <div className="lproto-property-label">{property.label}</div>
+          </div>
+        ))}
+      </div>
+      {!props.disabled && (
+        <div className="lproto-action">
+          <Icon name="arrow_forward" />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <ContextMenuArea
       createMenu={props.createMenu}
       onSelect={props.onSelect}>
-      <button type="button" className="lproto-entry" disabled={!!props.disabled} onClick={props.onClick}>
-        <div className="lproto-label">{props.name}</div>
-        <div className="lproto-property-list">
-          {props.properties.map((property) => (
-            <div className="lproto-property-item" key={property.id}>
-              <Icon name={property.icon} />
-              <div className="lproto-property-label">{property.label}</div>
-            </div>
-          ))}
-        </div>
-        <div className="lproto-action-item">
-          <Icon name="arrow_forward" />
-        </div>
-      </button>
+      {!props.disabled
+        ? <button type="button" className="lproto-entry" onClick={props.onClick}>{contents}</button>
+        : <div className="lproto-entry">{contents}</div>}
     </ContextMenuArea>
   );
 }

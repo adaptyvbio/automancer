@@ -5,9 +5,9 @@ import { DraftEntry } from './protocols';
 import type { Route } from '../application';
 import type { Host } from '../host';
 import { Chip, ChipCondition, ChipId } from '../backends/common';
+import { MenuEntry } from '../components/context-menu';
 import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
-import { TimeSensitive } from '../components/time-sensitive';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
 
@@ -86,61 +86,70 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                   }
                 }
 
+                let status = (() => {
+                  switch (chip.condition) {
+                    case ChipCondition.Partial:
+                      return { icon: 'report', modifier: 'info' };
+                    case ChipCondition.Unrunnable:
+                      return { icon: 'error', modifier: 'warning' };
+                    default:
+                      return null;
+                  }
+                })();
+
                 return (
                   <ContextMenuArea
                     createMenu={(_event) => [
-                      { id: 'duplicate', name: 'Duplicate', icon: 'content_copy' },
-                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
-                      { id: '_divider', type: 'divider' },
+                      { id: 'duplicate_template', name: 'Use as template', icon: 'content_copy' },
                       { id: 'archive', name: 'Archive', icon: 'archive' },
+                      { id: '_divider', type: 'divider' },
+                      ...(status
+                        ? [
+                          { id: 'upgrade', name: 'Upgrade', icon: 'upgrade' },
+                          { id: 'duplicate_upgrade', name: 'Upgrade copy', icon: 'control_point_duplicate' },
+                          { id: '_divider2', type: 'divider' }
+                        ] as MenuEntry[]
+                        : []),
+                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                       { id: 'delete', name: 'Move to trash', icon: 'delete' }
                     ]}
                     onSelect={(path) => {
-                      switch (path.first()) {
-                        case 'archive': {
-                          this.pool.add(async () => {
-                            await metadataTools.archiveChip!(this.props.host, chip, true);
-                          });
+                      let command = path.first();
 
+                      switch (command) {
+                        case 'archive':
+                          this.pool.add(async () => void await metadataTools.archiveChip!(this.props.host, chip, true));
                           break;
-                        }
-
-                        case 'delete': {
-                          this.pool.add(async () => {
-                            await this.props.host.backend.deleteChip(chip.id, { trash: true });
-                          });
-
+                        case 'delete':
+                          this.pool.add(async () => void await this.props.host.backend.deleteChip(chip.id, { trash: true }));
                           break;
-                        }
-
-                        case 'duplicate': {
-                          this.pool.add(async () => {
-                            let result = await this.props.host.backend.duplicateChip(chip.id);
-                            this.chipIdAwaitingRedirect = result.chipId;
-                          });
-
+                        case 'duplicate_template':
+                        case 'duplicate_upgrade':
+                          this.pool.add(async () => void await this.props.host.backend.duplicateChip(chip.id, { template: (command === 'duplicate_template') }));
                           break;
-                        }
-
-                        case 'reveal': {
-                          this.pool.add(async () => {
-                            await this.props.host.backend.revealChipDirectory(chip.id);
-                          });
-
+                        case 'reveal':
+                          this.pool.add(async () => void await this.props.host.backend.revealChipDirectory(chip.id));
                           break;
-                        }
+                        case 'upgrade':
+                          this.pool.add(async () => void await this.props.host.backend.upgradeChip(chip.id));
+                          break;
                       }
                     }}
                     key={chip.id}>
                     <button type="button" className="clist-entrywide" onClick={() => {
                       this.props.setRoute(['chip', chip.id, 'settings']);
-                    }}>
+                    }} title={chip.issues.map((issue) => issue.message).join(String.fromCharCode(10))}>
                       <div className="clist-header">
                         <div className="clist-title">{metadata.title}</div>
+                        {status && (
+                          <div className={`clist-status clist-status--${status.modifier}`}>
+                            <Icon name={status.icon} style="sharp" />
+                          </div>
+                        )}
                       </div>
                       <dl className="clist-data">
                         <dt>Created</dt>
-                        <dd><TimeSensitive child={() => <>{formatRelativeDate(metadata.creationDate)}</>} /></dd>
+                        <dd>{formatRelativeDate(metadata.creationDate)}</dd>
                         <dt>Protocol</dt>
                         <dd>{chip.master?.protocol.name ?? 'Idle'}</dd>
                       </dl>
@@ -170,58 +179,44 @@ export class ViewChips extends React.Component<ViewChipsProps> {
             <div className="lproto-container">
               <div className="lproto-list">
                 {pastChips.map(({ chip, metadata }) => {
-                  // console.log(chip)
-
-                  switch (chip.condition) {
-                    case ChipCondition.Ok:
-                    case ChipCondition.Partial:
-                    case ChipCondition.Unrunnable: return (
-                      <DraftEntry
-                        createMenu={() => [
-                          { id: 'archive', name: 'Unarchive', icon: 'unarchive' },
-                        ]}
-                        disabled={false}
-                        name={metadata!.title}
-                        onSelect={(path) => {
-                          switch (path.first()) {
-                            case 'archive': {
-                              this.pool.add(async () => {
-                                await metadataTools.archiveChip!(this.props.host, chip, false);
-                              });
-                            }
-                          }
-                        }}
-                        properties={[
-                          { id: 'created', label: formatRelativeDate(metadata!.creationDate), icon: 'schedule' }
-                        ]}
-                        key={chip.id} />
-                    );
-
-                    case ChipCondition.Unsupported: return (
-                      <DraftEntry
-                        createMenu={() => [
-                        ]}
-                        disabled={true}
-                        name="[Unsupported experiment]"
-                        onSelect={() => { }}
-                        properties={[
-                          { id: 'issues', label: chip.issues[0] ?? '–', icon: 'error' }
-                        ]}
-                        key={chip.id} />
-                    );
-
-                    case ChipCondition.Corrupted: return (
-                      <DraftEntry
-                        createMenu={() => []}
-                        disabled={true}
-                        name="[Corrupted experiment]"
-                        onSelect={() => { }}
-                        properties={[
-                          { id: 'corrupted', label: 'Corrupted', icon: 'broken_image' }
-                        ]}
-                        key={chip.id} />
-                    );
-                  }
+                  return (
+                    <DraftEntry
+                      createMenu={() => [
+                        ...(chip.readable
+                          ? [
+                            { id: 'duplicate', name: 'Use as template', icon: 'content_copy' },
+                            { id: 'archive', name: 'Unarchive', icon: 'unarchive' },
+                            { id: '_divider', type: 'divider' }
+                          ] as MenuEntry[]
+                          : []),
+                        { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
+                        { id: 'delete', name: 'Move to trash', icon: 'delete' }
+                      ]}
+                      disabled={!chip.readable}
+                      name={metadata?.title ?? ((chip.condition === ChipCondition.Unsupported) ? '[Unsupported]' : '[Corrupted]')}
+                      onSelect={(path) => {
+                        switch (path.first()) {
+                          case 'archive':
+                            this.pool.add(async () => void await metadataTools.archiveChip!(this.props.host, chip as Chip, false));
+                            break;
+                          case 'delete':
+                            this.pool.add(async () => void await this.props.host.backend.deleteChip(chip.id, { trash: true }));
+                            break;
+                          case 'duplicate_template':
+                            this.pool.add(async () => void await this.props.host.backend.duplicateChip(chip.id, { template: true }));
+                            break;
+                          case 'reveal':
+                            this.pool.add(async () => void await this.props.host.backend.revealChipDirectory(chip.id));
+                            break;
+                        }
+                      }}
+                      properties={[
+                        ...(metadata
+                          ? [{ id: 'created', label: formatRelativeDate(metadata!.creationDate), icon: 'schedule' }]
+                          : [{ id: 'corrupted', label: 'Unreadable', icon: 'broken_image' }])
+                      ]}
+                      key={chip.id} />
+                  );
                 })}
               </div>
             </div>

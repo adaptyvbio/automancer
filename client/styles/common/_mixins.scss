@@ -14,11 +14,6 @@
     outline-offset: 3px;
   }
 
-  &:hover, &._context {
-    border-color: #ccc;
-    box-shadow: 2px 2px 6px rgba(#000, 6%);
-  }
-
   &:disabled {
     border-color: #eaeaea;
     box-shadow: none;
@@ -26,5 +21,8 @@
     color: #666;
   }
 
-  // @at-root #{selector-append(button, &)} { }
+  @at-root #{selector-append(button, &)}:hover, &._context {
+    border-color: #ccc;
+    box-shadow: 2px 2px 6px rgba(#000, 6%);
+  }
 }

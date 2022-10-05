@@ -74,7 +74,7 @@ class BaseRunner:
   def create(self):
     pass
 
-  def duplicate(self, other):
+  def duplicate(self, other, *, template):
     self.unserialize(other.serialize())
 
   def export(self):

@@ -30,21 +30,27 @@ class Runner(BaseRunner):
     self._archived = False
     self._creation_date = time.time() * 1000
     self._description = str()
-    self._title = "Untitled chip"
+    self._title = "Untitled experiment"
 
-  def duplicate(self, other):
-    self._archived = False
-    self._creation_date = time.time() * 1000
+  def duplicate(self, other, *, template):
     self._description = other._description
 
-    match = re.search(r"\(copy(?: (\d+))?\)$", other._title)
-
-    if match:
-      count = int(match.group(1) or 0) + 1
-      start = match.start(0)
-      self._title = other._title[0:start] + f" (copy {count})"
+    if template:
+      self._archived = False
+      self._creation_date = time.time() * 1000
+      self._title = "Untitled experiment"
     else:
-      self._title = other._title + " (copy)"
+      self._archived = other._archived
+      self._creation_date = other._creation_date
+
+      match = re.search(r"\(copy(?: (\d+))?\)$", other._title)
+
+      if match:
+        count = int(match.group(1) or 0) + 1
+        start = match.start(0)
+        self._title = other._title[0:start] + f" (copy {count})"
+      else:
+        self._title = other._title + " (copy)"
 
 
   def export(self):

@@ -35,7 +35,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract createDraftSample(): Promise<string>;
   abstract deleteChip(chipId: ChipId, options: { trash: boolean; }): Promise<void>;
-  abstract duplicateChip(chipId: ChipId): Promise<{ chipId: ChipId; }>;
+  abstract duplicateChip(chipId: ChipId, options: { template: boolean; }): Promise<{ chipId: ChipId; }>;
   abstract instruct<T>(instruction: T): Promise<void>;
   abstract pause(chipId: ChipId, options: { neutral: boolean; }): Promise<void>;
   abstract reloadUnits(): Promise<void>;
@@ -49,6 +49,7 @@ export abstract class BackendCommon implements BaseBackend {
     location: ProtocolLocation;
     source: string;
   }): Promise<void>;
+  abstract upgradeChip(chipId: ChipId): Promise<void>;
 
   abstract loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>>;
 }
@@ -73,8 +74,9 @@ export interface Device {
 export interface Chip {
   id: ChipId;
   condition: ChipCondition.Ok | ChipCondition.Partial | ChipCondition.Unrunnable;
-  readable: true;
+  issues: ChipIssue[];
   master: Master | null;
+  readable: true;
   runners: Record<UnitNamespace, unknown>;
   unitList: UnitNamespace[];
 }
@@ -82,6 +84,7 @@ export interface Chip {
 export interface UnreadableChip {
   id: ChipId;
   condition: ChipCondition.Unsupported | ChipCondition.Corrupted;
+  issues: ChipIssue[];
   readable: false;
 }
 
@@ -94,6 +97,10 @@ export enum ChipCondition {
   Unrunnable = 2,
   Unsupported = 3,
   Corrupted = 4
+}
+
+export interface ChipIssue {
+  message: string;
 }
 
 

@@ -365,16 +365,13 @@ class Host:
 
       case "duplicateChip":
         chip = self.chips[request["chipId"]]
-        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self)
+        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self, template=request["template"])
 
         self.chips[duplicated.id] = duplicated
         logger.info(f"Duplicated chip '{chip.id}' into '{duplicated.id}'")
 
         self.update_callback()
-
-        return {
-          "chipId": duplicated.id
-        }
+        return { "chipId": duplicated.id }
 
       case "revealChipDirectory":
         if client.remote:
@@ -382,6 +379,12 @@ class Host:
 
         chip = self.chips[request["chipId"]]
         self.backend.reveal(chip.dir)
+
+      case "upgradeChip":
+        chip = self.chips[request["chipId"]]
+        chip.upgrade(host=self)
+
+        logger.info(f"Upgraded chip '{chip.id}'")
 
     self.update_callback()
 

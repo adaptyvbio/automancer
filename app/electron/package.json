@@ -1,6 +1,6 @@
 {
   "name": "pr1-app",
-  "version": "0.0.0",
+  "version": "3.0.0",
   "main": "src/main.js",
   "productName": "PR–1",
   "scripts": {

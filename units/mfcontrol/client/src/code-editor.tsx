@@ -2,13 +2,14 @@ import { List } from 'immutable';
 import { React } from 'pr1';
 import { CodeEditorInstance, CodeEditorProps, Icon } from 'pr1';
 
-import { Code, ReprData, namespace, Runner, ProtocolData } from '.';
+import { Code, ExecutorState, ReprData, Runner, ProtocolData, getModel, namespace } from '.';
 
 
 export class CodeEditor extends React.Component<CodeEditorProps<Code>> implements CodeEditorInstance<Code> {
   render() {
+    let executor = this.props.host.state.executors[namespace] as ExecutorState
     let runner = this.props.chip.runners[namespace] as Runner;
-    let model = runner.settings.model!;
+    let model = getModel(runner, { executor })!;
 
     let protocol = this.props.draft.compilation!.protocol!;
     let protocolData = protocol.data[namespace] as ProtocolData;

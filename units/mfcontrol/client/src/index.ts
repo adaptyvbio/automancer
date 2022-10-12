@@ -103,15 +103,14 @@ export interface SegmentData {
 
 
 export function canChipRunProtocol(protocol: Protocol, chip: Chip): boolean {
-  let runner = chip.runners[namespace] as Runner;
   let protocolData = protocol.data[namespace] as ProtocolData;
+  let runner = chip.runners[namespace] as Runner;
 
-  // TODO: check model hash instead of id
-  return (runner.settings.model !== null) && (!protocolData.modelId || (runner.settings.model.id === protocolData.modelId));
+  return (runner.settings.modelId !== null) && (!protocolData.modelId || (runner.settings.modelId === protocolData.modelId));
 }
 
 export function createCode(protocol: Protocol): Code {
-  let protocolData = protocol.data[namespace];
+  let protocolData = protocol.data[namespace] as ProtocolData;
 
   return {
     arguments: protocolData.parameters.map((param) => {

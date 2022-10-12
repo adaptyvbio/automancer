@@ -58,11 +58,6 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
   }
 
   render() {
-    let chips = (
-      Object.values(this.props.host.state.chips)
-        .filter((chip) => chip.condition === ChipCondition.Ok)
-    ) as Chip[];
-
     if (!this.props.compilation) {
       // The initial compilation is loading.
       return (
@@ -125,16 +120,22 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                     }));
                   }}>
                     {!chip && <option value="">–</option>}
-                    {chips.map((chip) => (
-                      <option
-                        value={chip.id}
-                        key={chip.id}
-                        disabled={(chip.condition !== ChipCondition.Ok) || (chip.master !== null) || (Object.entries(this.props.host.units)
-                          .filter(([namespace, _unit]) => chip.unitList.includes(namespace))
-                          .some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip)))}>
-                        {this.props.host.units.metadata.getChipMetadata(chip).title}
-                      </option>
-                    ))}
+                    {Object.values(this.props.host.state.chips)
+                      .filter((chip) => chip.readable)
+                        .map((chip) => {
+                        let metadata = this.props.host.units.metadata.getChipMetadata(chip);
+
+                        return (
+                          <option
+                            value={chip.id}
+                            key={chip.id}
+                            disabled={(chip.condition !== ChipCondition.Ok) || metadata.archived || (chip.master !== null) || (Object.entries(this.props.host.units)
+                              .filter(([namespace, _unit]) => chip.unitList.includes(namespace))
+                              .some(([_namespace, unit]) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip)))}>
+                            {metadata.title}
+                          </option>
+                        );
+                      })}
                   </select>
                   <div className="btn illustrated-root superimposed-visible">
                     <div>{chip ? `Chip: ${this.props.host.units.metadata.getChipMetadata(chip).title}` : 'Select experiment'}</div>

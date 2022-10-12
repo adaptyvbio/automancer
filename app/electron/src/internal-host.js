@@ -75,12 +75,12 @@ class InternalHost {
             break;
           }
 
-          case 'reveal': {
+          case 'owner.reveal': {
             shell.showItemInFolder(message.path);
             break;
           }
 
-          case 'trash': {
+          case 'owner.trash': {
             await shell.trashItem(message.path);
             break;
           }

@@ -26,7 +26,6 @@ class AccessLogger(AbstractAccessLogger):
 
 class Client(BaseClient):
   privileged = False
-  remote = True
 
   def __init__(self, conn):
     super().__init__()

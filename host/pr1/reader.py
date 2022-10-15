@@ -77,13 +77,6 @@ class LocationRange:
   def full_string(cls, source, value):
     return cls(source, 0, len(value))
 
-  @classmethod
-  def from_ast_node(cls, node, source):
-    start = source.compute_location(Position(node.lineno - 1, node.col_offset))
-    end = source.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
-
-    return cls(source, start, end)
-
 class LocationArea:
   def __init__(self, ranges = list()):
     self.ranges = ranges
@@ -387,22 +380,27 @@ class LocatedString(str, LocatedValue):
   def compute_location(self, position):
     return self._line_cumlengths[position.line] + position.column
 
-  @classmethod
-  def from_ast_node(cls, node, source):
-    value = ast.get_source_segment(source, node)
-    return cls(value, area=LocationArea([LocationRange.from_ast_node(node, source)]), absolute=False)
+  def compute_ast_node_area(self, node):
+    assert self.absolute
+
+    start = self.compute_location(Position(node.lineno - 1, node.col_offset))
+    end = self.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
+
+    return self.area % (start, end)
+
+  def index_ast_node(self, node):
+    return LocatedString(self.value, area=self.compute_ast_node_area(node), absolute=False)
+
+  def index_syntax_error(self, err):
+    start = self.compute_location(Position(err.lineno - 1, err.offset - 1))
+    end = self.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
+
+    return self[start:end]
 
   @staticmethod
   def from_match_group(match, group):
     span = match.span(group)
     return match.string[span[0]:span[1]]
-
-  @staticmethod
-  def from_syntax_error(err, text):
-    start = text.compute_location(Position(err.lineno - 1, err.offset - 1))
-    end = text.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
-
-    return text[start:end]
 
 
 class LocatedDict(dict, LocatedValue):

@@ -1,5 +1,7 @@
 from collections import namedtuple
 
+from .staticeval import EvaluationContext
+
 
 from . import langservice as lang
 from .expr import PythonExprEvaluator
@@ -25,7 +27,10 @@ class BlockData:
     self.transforms = transforms
 
 
-AcmeState = namedtuple('AcmeState', ['process', 'value'])
+@debug
+class AcmeState:
+  def __init__(self, value):
+    self._value = value
 
 class AcmeParser:
   namespace = "acme"
@@ -77,7 +82,8 @@ class AcmeParser:
 
     if 'activate' in attrs:
       value = attrs['activate'].value
-      return BlockData(state=AcmeState(process=True, value=value)) if value is not Ellipsis else Ellipsis
+      # return BlockData(state=AcmeState(value=value)) if value is not Ellipsis else Ellipsis
+      return BlockData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)]) if value is not Ellipsis else Ellipsis
     else:
       return BlockData()
 
@@ -251,23 +257,21 @@ class ShorthandsParser:
 
   def enter_protocol(self, data_protocol):
     for shorthand_name, data_shorthand in data_protocol.get('shorthands', dict()).items():
-      self._shorthands[shorthand_name] = self._fiber.parse_block(data_shorthand, None, None)
+      self._shorthands[shorthand_name] = data_shorthand
 
-    from pprint import pprint
-    pprint(self._shorthands)
+      # self._shorthands[shorthand_name] = self._fiber.parse_block(data_shorthand, None, None)
+      # dict_analysis, block_attrs = self.parse_block_attrs(data_block)
+
+    # from pprint import pprint
+    # pprint(self._shorthands)
 
   def parse_block(self, block_attrs, parent_state, context):
-    return BlockData()
-
     attrs = block_attrs[self.namespace]
     state = None
 
     if attrs:
-      for shorthand_name in attrs.keys():
-        state = self._shorthands[shorthand_name]
-
       return BlockData(transforms=[
-        ShorthandTransform(..., parser=self)
+        ShorthandTransform(attrs, parser=self)
       ])
     else:
       return BlockData()
@@ -283,13 +287,23 @@ class ShorthandsParser:
 
 
 @debug
-class ShorthandsTransform:
-  def __init__(self, data_shorthands, parser):
-    self._data_shorthands = data_shorthands
+class ShorthandTransform:
+  def __init__(self, attrs, parser):
+    self._attrs = attrs
     self._parser = parser
 
-  # def execute(self, block_state, block_transforms):
-  #   return self._parser._fiber.parse_block(self._data_shorthands, block_state, block_transforms)
+  def execute(self, block_state, block_transforms):
+    state = block_state
+    transforms = list()
+
+    for shorthand_name, shorthand_value in self._attrs.items():
+      data_shorthand = self._parser._shorthands[shorthand_name]
+      state, shorthand_transforms = self._parser._fiber.parse_block_partial(data_shorthand, state)
+      transforms += shorthand_transforms
+
+    transforms += block_transforms
+
+    return self._parser._fiber.parse_block({}, state, transforms)
 
 
 # ----
@@ -371,6 +385,26 @@ class Segment:
     self.state = state
 
 @debug
+class SegmentTransform:
+  def __init__(self, namespace):
+    self._namespace = namespace
+    self._segment = None
+
+  def execute(self, block_state, block_transforms):
+    self._segment = SegmentBlock(Segment(
+      index=0,
+      process_namespace=self._namespace,
+      state=block_state
+    ))
+
+    print(">", block_transforms)
+
+    return self._segment
+
+  def linearize(self):
+    return [self._segment]
+
+@debug
 class SegmentBlock:
   def __init__(self, segment):
     self._segment = segment
@@ -385,7 +419,7 @@ class SegmentBlock:
 
 class FiberParser:
   def __init__(self, text, *, host, parsers):
-    self._parsers = [Parser(self) for Parser in [SequenceParser, DoParser, AcmeParser, ScoreParser]]
+    self._parsers = [Parser(self) for Parser in [SequenceParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser]]
 
     self.analysis = lang.Analysis()
 
@@ -453,14 +487,48 @@ class FiberParser:
     return schema_dict
 
 
-  def parse_block(self, data_block, parent_state = None, parent_transforms = None):
+  # def parse_block_attrs(self, data_block):
+  #   return self.segment_dict.analyze(data_block)
+
+  def parse_block_partial(self, data_block, /, parent_state = None, parent_transforms = None):
     dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
     self.analysis += dict_analysis
 
     block_state = dict()
     block_transforms = parent_transforms or list()
 
-    context = dict()
+    from random import random
+    context = EvaluationContext(
+      variables=dict(
+        random=(lambda start, end: random() * (end.value - start.value) + start.value)
+      )
+    )
+
+    for parser in self._parsers:
+      unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None, context)
+
+      if unit_data is Ellipsis:
+        return Ellipsis
+
+      block_state[parser.namespace] = unit_data.state
+      block_transforms += unit_data.transforms
+
+    return block_state, block_transforms
+
+  def parse_block(self, data_block, parent_state = None, parent_transforms = list()):
+    dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
+    # dict_analysis, block_attrs = self.parse_block_attrs(data_block)
+    self.analysis += dict_analysis
+
+    block_state = dict()
+    block_transforms = parent_transforms.copy()
+
+    from random import random
+    context = EvaluationContext(
+      variables=dict(
+        random=(lambda start, end: random() * (end.value - start.value) + start.value)
+      )
+    )
 
     for parser in self._parsers:
       unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None, context)
@@ -474,39 +542,49 @@ class FiberParser:
     for transform_index, transform in enumerate(block_transforms):
       return transform.execute(block_state, block_transforms[(transform_index + 1):])
 
-    process_namespaces = {namespace for namespace, state in block_state.items() if state and state.process}
+    # process_namespaces = {namespace for namespace, state in block_state.items() if state and state.process}
 
-    if (not process_namespaces) or (len(process_namespaces) > 1):
-      self.analysis.errors.append(MissingProcessError(data_block))
-      return Ellipsis
+    # if (not process_namespaces) or (len(process_namespaces) > 1):
+    #   self.analysis.errors.append(MissingProcessError(data_block))
+    #   return Ellipsis
 
-    segment = Segment(
-      index=len(self._segments),
-      process_namespace=process_namespaces.pop(),
-      state=block_state
-    )
+    # segment = Segment(
+    #   index=len(self._segments),
+    #   process_namespace=process_namespaces.pop(),
+    #   state=block_state
+    # )
 
-    self._segments.append(segment)
-    return SegmentBlock(segment)
+    # self._segments.append(segment)
+    # return SegmentBlock(segment)
 
 
 if __name__ == "__main__":
   p = FiberParser("""
-# shorthands:
-#   foo:
-#     score: 200
-#     actions:
-#       - activate: 56
-#       - activate: 57
+shorthands:
+  foo:
+    actions:
+      - score: 200
+      - score: 300
+    # actions:
+    #   - activate: 56
+    #   - activate: 57
 
 steps:
-  score: 4
+  # activate: 1
+  foo:
+  # score: 16
   actions:
     - activate: 4
     - activate: 3
-      score: ${{ 16.3 }}
-    - do:
-        activate: 5
-        score: 1
-      score: 2
+
+  # score: 4
+  # foo:
+  # actions:
+  #   - activate: 4
+  #   - activate: 3
+  #     score: ${{ random(100, 200) }}
+  #   - do:
+  #       activate: 5
+  #       score: 1
+  #     score: 2
 """, host=None, parsers=None)

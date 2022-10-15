@@ -72,7 +72,7 @@ class PythonExpr:
     try:
       tree = ast.parse(contents, mode='eval')
     except SyntaxError as e:
-      target = LocatedString.from_syntax_error(e, contents)
+      target = contents.index_syntax_error(e)
       analysis.errors.append(PythonSyntaxError(e.msg, target))
 
       return analysis, Ellipsis
@@ -94,7 +94,7 @@ class PythonExprEvaluator:
     from ..reader import Source
 
     try:
-      result = evaluate(self._expr.tree.body, Source(self._expr.contents), context)
+      result = evaluate(self._expr.tree.body, self._expr.contents, context)
     except EvaluationError as e:
       return Analysis(errors=[e]), Ellipsis
     else:

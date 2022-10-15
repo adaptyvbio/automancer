@@ -1,8 +1,9 @@
 from collections import namedtuple
+from enum import Enum
+import ast
 import functools
 import math
 import sys
-from enum import Enum
 
 from .draft import DraftDiagnostic
 from .util.decorators import deprecated
@@ -72,8 +73,16 @@ class LocationRange:
     assert self.start == self.end
     return Location(self.source, offset=self.start)
 
-  def full_string(source, value):
-    return LocationRange(source, 0, len(value))
+  @classmethod
+  def full_string(cls, source, value):
+    return cls(source, 0, len(value))
+
+  @classmethod
+  def from_ast_node(cls, node, source):
+    start = source.compute_location(Position(node.lineno - 1, node.col_offset))
+    end = source.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
+
+    return cls(source, start, end)
 
 class LocationArea:
   def __init__(self, ranges = list()):
@@ -257,6 +266,20 @@ class LocatedValue:
   def source(self):
     return self.area.source
 
+  @classmethod
+  def new(cls, obj, area):
+    match obj:
+      case LocatedValue():
+        return obj
+      case dict():
+        return LocatedDict(obj, area)
+      case list():
+        return LocatedList(obj, area)
+      case str():
+        return LocatedString(obj, area, absolute=False)
+      case _:
+        return LocatedValueContainer(obj, area)
+
   def create_error(message, object):
     if isinstance(object, LocatedValue):
       return object.error(message)
@@ -305,7 +328,7 @@ class LocatedString(str, LocatedValue):
     return LocatedString(
       self.value + str(other),
       self.area + other.area if other_located else self.area,
-      absolute=(self.absolute and (other_located or (not other)))
+      absolute=(self.absolute and ((other_located and other.absolute) or (not other)))
     )
 
   def __radd__(self, other):
@@ -364,15 +387,10 @@ class LocatedString(str, LocatedValue):
   def compute_location(self, position):
     return self._line_cumlengths[position.line] + position.column
 
-  @staticmethod
-  def from_ast_node(node, source): # TODO: update
-    import ast
-
+  @classmethod
+  def from_ast_node(cls, node, source):
     value = ast.get_source_segment(source, node)
-    start = source.compute_location(Position(node.lineno - 1, node.col_offset))
-    end = source.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
-
-    return LocatedString(value, area=LocationArea([LocationRange(source, start, end)]))
+    return cls(value, area=LocationArea([LocationRange.from_ast_node(node, source)]), absolute=False)
 
   @staticmethod
   def from_match_group(match, group):
@@ -429,7 +447,7 @@ class Source(LocatedString):
 # - a:      key: 'a',   value: None,  kind: List
 # - a: b    key: 'a',   value: 'b',   kind: List
 # - b       key: None,  value: 'b',   kind: List
-# | a       key: None, value: 'a',    kind: String
+# | a       key: None,  value: 'a',   kind: String
 
 Whitespace = " "
 

@@ -1,8 +1,10 @@
 import builtins
 from collections import namedtuple
 
+from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic
-from .. import reader
+from ..reader import LocatedValue
+
 
 
 class Analysis:
@@ -300,35 +302,47 @@ class AnyType:
     return Analysis(), obj
 
 class PrimitiveType:
-  def __init__(self, primitive, allow_expr = False):
-    self._allow_expr = allow_expr
+  def __init__(self, primitive):
     self._primitive = primitive
 
   def analyze(self, obj):
-    if self._allow_expr:
-      from .expr import PythonExpr # TODO: improve
-      result = PythonExpr.parse(obj)
-
-      if result:
-        return result
-
-    analysis = Analysis()
-
     match self._primitive:
       case builtins.float | builtins.int:
         try:
           value = self._primitive(obj.value)
         except (TypeError, ValueError):
-          analysis.errors.append(InvalidPrimitiveError(obj, self._primitive))
-          value = Ellipsis
-
-        value = reader.LocatedValueContainer(value, area=obj.area)
-      case builtins.str:
-        value = obj
+          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+        else:
+          return Analysis(), LocatedValue.new(value, area=obj.area)
       case _ if not isinstance(obj, self._primitive):
-        analysis.errors.append(InvalidPrimitiveError(obj, self._primitive))
-        value = reader.LocatedValueContainer(Ellipsis, area=obj.area)
+        return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _:
-        value = obj
+        return Analysis(), obj
 
-    return analysis, value
+
+class LiteralOrExprType:
+  def __init__(self, obj_type, /, *, field = True, static = False):
+    from .expr import PythonExprKind
+
+    self._kinds = set()
+    self._type = obj_type
+
+    if field:
+      self._kinds.add(PythonExprKind.Field)
+    if static:
+      self._kinds.add(PythonExprKind.Static)
+
+  def analyze(self, obj):
+    from .expr import PythonExpr # TODO: improve
+    result = PythonExpr.parse(obj)
+
+    if result:
+      analysis, expr = result
+
+      if expr is Ellipsis:
+        return analysis, Ellipsis
+
+      # if expr.kind in self._kinds:
+      return analysis, PythonExprEvaluator(expr, type=self._type)
+    else:
+      return self._type.analyze(obj)

@@ -1,6 +1,8 @@
 from collections import namedtuple
 
+
 from . import langservice as lang
+from .expr import PythonExprEvaluator
 from .. import reader
 from ..draft import DraftDiagnostic
 from ..util import schema as sc
@@ -70,7 +72,7 @@ class AcmeParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state):
+  def parse_block(self, block_attrs, parent_state, context):
     attrs = block_attrs[self.namespace]
 
     if 'activate' in attrs:
@@ -90,7 +92,7 @@ class ScoreParser:
   namespace = "score"
   root_attributes = dict()
   segment_attributes = {
-    'score': lang.Attribute(optional=True, type=lang.PrimitiveType(float, allow_expr=True))
+    'score': lang.Attribute(optional=True, type=lang.LiteralOrExprType(lang.PrimitiveType(float)))
   }
 
   def __init__(self, fiber):
@@ -99,24 +101,33 @@ class ScoreParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state):
+  def parse_block(self, block_attrs, parent_state, context):
     attrs = block_attrs[self.namespace]
+    parent_state = parent_state or ScoreState(0.0)
 
-    if ('score' in attrs) and (attrs['score'] is not Ellipsis):
-      print(attrs['score'])
-    #   result = PythonExpr.parse(attrs['score'])
-    #   print(result)
+    if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
+      if isinstance(score_raw, PythonExprEvaluator):
+        analysis, score = score_raw.evaluate(context)
+        # TODO: Do something with 'analysis'
+
+        if score is Ellipsis:
+          print(analysis.errors[0].area.format())
+          return BlockData(state=parent_state)
+
+        score = score.value
+      else:
+        score = score_raw.value
 
       return BlockData(
-        state=ScoreState((parent_state.value if parent_state else 0.0) + (attrs['score'].value if 'score' in attrs else 0.0))
+        state=ScoreState(parent_state.points + score)
       )
     else:
-      return BlockData(state=ScoreState(0.0))
+      return BlockData(state=parent_state)
 
 @debug
 class ScoreState:
-  def __init__(self, value):
-    self.value = value
+  def __init__(self, points):
+    self.points = points
 
   @property
   def process(self):
@@ -199,7 +210,7 @@ class DoParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state):
+  def parse_block(self, block_attrs, parent_state, context):
     attrs = block_attrs[self.namespace]
 
     if 'do' in attrs:
@@ -240,9 +251,14 @@ class ShorthandsParser:
 
   def enter_protocol(self, data_protocol):
     for shorthand_name, data_shorthand in data_protocol.get('shorthands', dict()).items():
-      self._shorthands[shorthand_name] = self._fiber.parse_block_state(data_shorthand)
+      self._shorthands[shorthand_name] = self._fiber.parse_block(data_shorthand, None, None)
 
-  def parse_block(self, block_attrs, parent_state):
+    from pprint import pprint
+    pprint(self._shorthands)
+
+  def parse_block(self, block_attrs, parent_state, context):
+    return BlockData()
+
     attrs = block_attrs[self.namespace]
     state = None
 
@@ -256,14 +272,24 @@ class ShorthandsParser:
     else:
       return BlockData()
 
-  def parse_block(self, block_attrs, block_state):
-    state = block_state[self.namespace]
+  # def parse_block(self, block_attrs, block_state):
+  #   state = block_state[self.namespace]
 
-    if state:
-      # new_state = { namespace: (block_state[namespace] or dict()) | (state[namespace] or dict()) for namespace in set(block_state.keys()) | set(state.keys()) }
-      return self._fiber.parse_part(state)
+  #   if state:
+  #     # new_state = { namespace: (block_state[namespace] or dict()) | (state[namespace] or dict()) for namespace in set(block_state.keys()) | set(state.keys()) }
+  #     return self._fiber.parse_part(state)
 
-    return None
+  #   return None
+
+
+@debug
+class ShorthandsTransform:
+  def __init__(self, data_shorthands, parser):
+    self._data_shorthands = data_shorthands
+    self._parser = parser
+
+  # def execute(self, block_state, block_transforms):
+  #   return self._parser._fiber.parse_block(self._data_shorthands, block_state, block_transforms)
 
 
 # ----
@@ -282,7 +308,7 @@ class SequenceParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state):
+  def parse_block(self, block_attrs, parent_state, context):
     attrs = block_attrs[self.namespace]
 
     if 'actions' in attrs:
@@ -326,6 +352,10 @@ class SequenceBlock:
   def __init__(self, children):
     self._children = children
 
+  def evaluate(self, context):
+    for child in self._children:
+      child.evaluate(context)
+
   def linearize(self):
     return [segment for child in self._children for segment in child.linearize()]
 
@@ -344,6 +374,10 @@ class Segment:
 class SegmentBlock:
   def __init__(self, segment):
     self._segment = segment
+
+  # def evaluate(self, context):
+  #   for namespace, parser in context.fiber.parsers.items():
+  #     parser.evaluate_segment(self._segment.state[namespace], context)
 
   def linearize(self):
     return [self._segment]
@@ -383,11 +417,10 @@ class FiberParser:
     analysis, output = schema.analyze(data)
     self.analysis += analysis
 
+    self._segments = list()
+
     for parser in self._parsers:
       parser.enter_protocol(output[parser.namespace])
-
-
-    self._segments = list()
 
     data_actions = output['_']['steps']
     entry_block = self.parse_block(data_actions)
@@ -427,8 +460,10 @@ class FiberParser:
     block_state = dict()
     block_transforms = parent_transforms or list()
 
+    context = dict()
+
     for parser in self._parsers:
-      unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None)
+      unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None, context)
 
       if unit_data is Ellipsis:
         return Ellipsis
@@ -459,14 +494,17 @@ if __name__ == "__main__":
   p = FiberParser("""
 # shorthands:
 #   foo:
-#     activate: 56
+#     score: 200
+#     actions:
+#       - activate: 56
+#       - activate: 57
 
 steps:
   score: 4
   actions:
     - activate: 4
     - activate: 3
-      score: ${{ 16.3!!!! }}
+      score: ${{ 16.3 }}
     - do:
         activate: 5
         score: 1

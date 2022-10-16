@@ -21,6 +21,8 @@ interface StartupProps {
   deleteHostSettings(settingsId: string): void;
   launchHost(settingsId: string): void;
   setDefaultHostSettings(settingsId: string | null): void;
+  revealHostSettingsDirectory?(settingsId: string): void;
+  revealHostLogsDirectory?(settingsId: string): void;
 }
 
 interface StartupState {
@@ -125,6 +127,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
               <div className="startup-right-entry-list">
                 {Object.values(this.props.hostSettings).map((hostSettings) => {
                   let isDefault = (this.props.defaultSettingsId === hostSettings.id);
+                  let isLocal = (hostSettings.backendOptions.type === 'internal');
 
                   return (
                     <ContextMenuArea
@@ -132,25 +135,35 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                         ...(isDefault
                           ? [{ id: 'default.unset', name: 'Unset as default' }]
                           : [{ id: 'default.set', name: 'Set as default' }]),
-                        { id: '_divider', type: 'divider' },
+                        { id: 'divider', type: 'divider' },
+                        ...(this.props.revealHostSettingsDirectory
+                          ? [{ id: 'reveal-settings', name: 'Reveal settings in explorer', icon: 'folder_open', disabled: !isLocal }]
+                          : []),
+                        ...(this.props.revealHostLogsDirectory
+                          ? [{ id: 'reveal-logs', name: 'Reveal logs in explorer', icon: 'folder_open', disabled: !isLocal }]
+                          : []),
+                        ...(this.props.revealHostLogsDirectory || this.props.revealHostSettingsDirectory
+                          ? [{ id: 'divider2', type: 'divider' }]
+                          : []),
                         { id: 'delete', name: 'Delete', icon: 'delete', disabled: hostSettings.builtin },
                       ] as MenuDef}
                       onSelect={(path) => {
                         switch (path.first()!) {
-                          case 'delete': {
+                          case 'delete':
                             this.props.deleteHostSettings(hostSettings.id);
                             break;
-                          }
-
-                          case 'default.set': {
+                          case 'default.set':
                             this.props.setDefaultHostSettings(hostSettings.id);
                             break;
-                          }
-
-                          case 'default.unset': {
+                          case 'default.unset':
                             this.props.setDefaultHostSettings(null);
                             break;
-                          }
+                          case 'reveal-logs':
+                            this.props.revealHostLogsDirectory!(hostSettings.id);
+                            break;
+                          case 'reveal-settings':
+                            this.props.revealHostSettingsDirectory!(hostSettings.id);
+                            break;
                         }
                       }}
                       key={hostSettings.id}>

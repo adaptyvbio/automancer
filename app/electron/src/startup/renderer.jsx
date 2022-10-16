@@ -55,6 +55,12 @@ class App extends React.Component {
         launchHost={(settingsId) => {
           window.api.launchHost(settingsId);
         }}
+        revealHostLogsDirectory={(hostSettingsId) => {
+          window.api.hostSettings.revealLogsDirectory({ hostSettingsId });
+        }}
+        revealHostSettingsDirectory={(hostSettingsId) => {
+          window.api.hostSettings.revealSettingsDirectory({ hostSettingsId });
+        }}
         setDefaultHostSettings={(hostSettingsId) => {
           this.pool.add(async () => {
             await window.api.hostSettings.setDefault({ hostSettingsId });

@@ -73,13 +73,13 @@ class CoreApplication {
                 this.createStartupWindow();
               } },
             { type: 'separator' },
-            { label: 'Reveal data directory',
+            { label: 'Reveal data directory in explorer',
               click: () => {
-                shell.showItemInFolder(this.app.dataDirPath);
+                shell.showItemInFolder(this.dataDirPath);
               } },
-            { label: 'Reveal logs directory',
+            { label: 'Reveal logs directory in explorer',
               click: () => {
-                shell.showItemInFolder(this.app.logsDirPath);
+                shell.showItemInFolder(this.logsDirPath);
               } },
             { type: 'separator' },
             { role: 'reload' },
@@ -222,6 +222,18 @@ class CoreApplication {
           })
         )
       };
+    });
+
+    ipcMain.handle('hostSettings.revealLogsDirectory', async (_event, { hostSettingsId }) => {
+      let logsDirPath = path.join(this.logsDirPath, hostSettingsId);
+      await util.fsMkdir(logsDirPath);
+
+      shell.showItemInFolder(logsDirPath);
+    });
+
+    ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
+      let hostSettings = this.data.hostSettings[hostSettingsId];
+      shell.showItemInFolder(hostSettings.backendOptions.dataDirPath);
     });
 
     ipcMain.handle('hostSettings.setDefault', async (_event, { hostSettingsId }) => {

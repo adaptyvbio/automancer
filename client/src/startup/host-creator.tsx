@@ -271,7 +271,6 @@ export namespace HostCreatorStep {
                   settings: {
                     id: crypto.randomUUID(),
                     builtin: false,
-                    hostId: null,
                     locked: false,
                     label: props.data.label,
 

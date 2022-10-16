@@ -21,13 +21,10 @@ export interface HostRemoteBackendOptions {
 export type HostBackendOptions = HostRemoteBackendOptions | {
   type: 'internal';
   model: string;
-  Backend: { new(): BaseBackend; };
 } | {
   type: 'local';
   id: string;
   storage: LocalBackendStorage;
-} | {
-  type: 'inactive';
 };
 
 export type LocalBackendStorage = {
@@ -50,7 +47,6 @@ export type HostBackendAuthOptions = {
 export interface HostSettings {
   id: string;
   builtin: boolean;
-  hostId: HostId | null;
   label: string | null;
   locked: boolean;
 

@@ -105,7 +105,6 @@ update_state(json.dumps(host.get_state()))`);
           id,
           builtin: true,
           disabled: false,
-          hostId: null,
           locked: false,
           name: 'Local host',
           location: {

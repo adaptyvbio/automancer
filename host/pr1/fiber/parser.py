@@ -366,12 +366,15 @@ class SequenceBlock:
   def __init__(self, children):
     self._children = children
 
+  def __getitem__(self, key):
+    return self._children[key]
+
   def evaluate(self, context):
     for child in self._children:
       child.evaluate(context)
 
   def linearize(self):
-    return [segment for child in self._children for segment in child.linearize()]
+    return [([index, *path], subblock) for index, block in enumerate(self._children) for path, subblock in block.linearize()]
 
 
 # ----
@@ -379,8 +382,7 @@ class SequenceBlock:
 
 @debug
 class Segment:
-  def __init__(self, index, process_namespace, state):
-    self.index = index
+  def __init__(self, process_namespace, state):
     self.process_namespace = process_namespace
     self.state = state
 
@@ -388,33 +390,30 @@ class Segment:
 class SegmentTransform:
   def __init__(self, namespace):
     self._namespace = namespace
-    self._segment = None
 
   def execute(self, block_state, block_transforms):
-    self._segment = SegmentBlock(Segment(
-      index=0,
+    print(">", block_transforms)
+
+    return SegmentBlock(Segment(
       process_namespace=self._namespace,
       state=block_state
     ))
-
-    print(">", block_transforms)
-
-    return self._segment
-
-  def linearize(self):
-    return [self._segment]
 
 @debug
 class SegmentBlock:
   def __init__(self, segment):
     self._segment = segment
 
+  def __getitem__(self, key):
+    assert key is None
+    return self._segment
+
   # def evaluate(self, context):
   #   for namespace, parser in context.fiber.parsers.items():
   #     parser.evaluate_segment(self._segment.state[namespace], context)
 
   def linearize(self):
-    return [self._segment]
+    return [([None], self._segment)]
 
 
 class FiberParser:

@@ -1,15 +1,18 @@
 {
   "name": "pr1-app",
   "version": "3.0.0",
-  "main": "src/main.js",
+  "main": "lib/app/main.js",
   "productName": "PR–1",
   "scripts": {
-    "build": "npm run build-client && npm run build-js && npm run build-other && electron-forge make && npm install",
-    "build-client": "rm -rf node_modules/pr1 && npm i ../../client --install-links",
-    "build-host": "./build/beta/build.sh",
-    "build-js": "esbuild src/host/renderer.jsx src/startup/renderer.jsx --bundle --external:electron --external:pr1 --outdir=lib --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --external:vm --external:path --external:fs/promises",
-    "build-other": "cp -r node_modules/pr1/dist/vs lib/vs",
-    "build-package": "npm run build-client && electron-forge package && npm install",
+    "build": "npm run build:app && npm run build:client && npm run build:preload && npm run build:renderer && npm run build:static",
+    "build:app": "esbuild src/main.js --bundle --external:electron --platform=node --loader:.node=copy --outdir=lib/app --target=node18",
+    "build:client": "rm -rf lib/client && mkdir -p lib && cp -r node_modules/pr1/dist lib/client",
+    "build:host": "./build/beta/build.sh",
+    "build:preload": "esbuild src/host/preload.js src/startup/preload.js --bundle --external:electron --outdir=lib/preload",
+    "build:renderer": "esbuild src/host/renderer.jsx src/startup/renderer.jsx --bundle --external:electron --external:fs/promises --external:path --external:pr1 --external:vm --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --outdir=lib/renderer",
+    "build:static": "mkdir -p lib/static/host lib/static/startup && cp src/host/index.html lib/static/host/index.html && cp src/startup/index.html lib/static/startup/index.html",
+    "make": "electron-forge make",
+    "package": "electron-forge package",
     "start": "electron ."
   },
   "dependencies": {

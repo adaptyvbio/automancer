@@ -16,7 +16,7 @@ exports.StartupWindow = class StartupWindow {
       resizable: false,
       show: false,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js')
+        preload: path.join(__dirname, '../preload/startup/preload.js')
       },
       ...(util.isDarwin
         ? {
@@ -36,7 +36,7 @@ exports.StartupWindow = class StartupWindow {
       });
     });
 
-    this.window.loadFile(__dirname + '/index.html');
+    this.window.loadFile(path.join(__dirname, '../static/startup/index.html'));
   }
 
   focus() {

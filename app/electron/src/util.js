@@ -115,7 +115,7 @@ async function getLocalHostModels() {
 function getResourcePath(relativePath) {
   return app.isPackaged
     ? path.join(process.resourcesPath, relativePath)
-    : path.join(__dirname, '../tmp/resources', relativePath);
+    : path.join(__dirname, '../../tmp/resources', relativePath);
 }
 
 function parsePythonVersion(input) {

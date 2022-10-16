@@ -160,6 +160,8 @@ class CoreApplication {
         switch (entry.type) {
           case undefined:
           case 'option': return [{
+            checked: !!entry.checked,
+            type: entry.checked ? 'checkbox' : 'normal',
             enabled: !entry.disabled,
             label: entry.name,
             click: () => void deferred.resolve(path)

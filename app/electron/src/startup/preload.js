@@ -1,9 +1,6 @@
-const { contextBridge, ipcRenderer } = require('electron');
+import { contextBridge, ipcRenderer } from 'electron';
+import '../shared/preload';
 
-
-contextBridge.exposeInMainWorld('common', {
-  isDarwin: (process.platform === 'darwin')
-});
 
 contextBridge.exposeInMainWorld('api', {
   launchHost: (settingsId) => {

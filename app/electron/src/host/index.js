@@ -1,6 +1,5 @@
 const { BrowserWindow, dialog } = require('electron');
 const path = require('path');
-const { throwDeprecation } = require('process');
 
 const { InternalHost } = require('../internal-host');
 const { Pool, defer } = require('../util');
@@ -55,13 +54,13 @@ exports.HostWindow = class HostWindow {
     this.window = new BrowserWindow({
       show: false,
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js')
+        preload: path.join(__dirname, '../preload/host/preload.js')
       }
     });
 
     this.window.maximize();
     this.window.hide();
-    this.window.loadFile(__dirname + '/index.html', { query: { hostSettingsId: this.hostSettings.id } });
+    this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
       this._closingDeferred.resolve();

@@ -132,15 +132,13 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                   return (
                     <ContextMenuArea
                       createMenu={(_event) => [
-                        ...(isDefault
-                          ? [{ id: 'default.unset', name: 'Unset as default' }]
-                          : [{ id: 'default.set', name: 'Set as default' }]),
+                        { id: 'toggleDefault', name: 'Default', checked: isDefault },
                         { id: 'divider', type: 'divider' },
                         ...(this.props.revealHostSettingsDirectory
-                          ? [{ id: 'reveal-settings', name: 'Reveal settings in explorer', icon: 'folder_open', disabled: !isLocal }]
+                          ? [{ id: 'revealSettings', name: 'Reveal settings in explorer', icon: 'folder_open', disabled: !isLocal }]
                           : []),
                         ...(this.props.revealHostLogsDirectory
-                          ? [{ id: 'reveal-logs', name: 'Reveal logs in explorer', icon: 'folder_open', disabled: !isLocal }]
+                          ? [{ id: 'revealLogs', name: 'Reveal logs in explorer', icon: 'folder_open', disabled: !isLocal }]
                           : []),
                         ...(this.props.revealHostLogsDirectory || this.props.revealHostSettingsDirectory
                           ? [{ id: 'divider2', type: 'divider' }]
@@ -152,18 +150,14 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                           case 'delete':
                             this.props.deleteHostSettings(hostSettings.id);
                             break;
-                          case 'default.set':
-                            this.props.setDefaultHostSettings(hostSettings.id);
-                            break;
-                          case 'default.unset':
-                            this.props.setDefaultHostSettings(null);
-                            break;
-                          case 'reveal-logs':
+                          case 'revealLogs':
                             this.props.revealHostLogsDirectory!(hostSettings.id);
                             break;
-                          case 'reveal-settings':
+                          case 'revealSettings':
                             this.props.revealHostSettingsDirectory!(hostSettings.id);
                             break;
+                          case 'toggleDefault':
+                            this.props.setDefaultHostSettings(isDefault ? null : hostSettings.id);
                         }
                       }}
                       key={hostSettings.id}>

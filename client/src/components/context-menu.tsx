@@ -22,6 +22,7 @@ export interface MenuOption {
   id: MenuEntryId;
   type?: 'option';
 
+  checked?: unknown;
   children?: MenuList;
   disabled?: unknown;
   icon?: string;
@@ -230,6 +231,7 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: ContextM
                           <div className="cmenu-name">{entry.name}</div>
                           {entry.shortcut && <div className="cmenu-shortcut">{entry.shortcut}</div>}
                           {entry.children && <div className="cmenu-chevron"><Icon name="chevron_right" /></div>}
+                          {entry.checked && <div className="cmenu-chevron"><Icon name="check" /></div>}
                         </button>
                       </li>
                     );

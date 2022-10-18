@@ -264,7 +264,17 @@ class CoreApplication {
     );
 
     let createClientDraftEntry = async (draftEntry) => {
-      let stats = await fs.stat(draftEntry.path);
+      let stats;
+
+      try {
+        stats = await fs.stat(draftEntry.path);
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          return null;
+        }
+
+        throw err;
+      }
 
       return {
         id: draftEntry.id,
@@ -312,9 +322,30 @@ class CoreApplication {
     });
 
     ipcMain.handle('drafts.list', async () => {
-      return await Promise.all(
-        Object.values(this.data.drafts).map(createClientDraftEntry)
-      );
+      let missingDraftIds = new Set();
+
+      let clientDraftEntries = (await Promise.all(
+        Object.values(this.data.drafts).map(async (draftEntry) => {
+          let clientDraftEntry = await createClientDraftEntry(draftEntry);
+
+          if (!clientDraftEntry) {
+            missingDraftIds.add(draftEntry.id);
+            return [];
+          }
+
+          return clientDraftEntry;
+        })
+      )).flat();
+
+      if (missingDraftIds.size > 0) {
+        this.setData({
+          drafts: Object.fromEntries(
+            Object.entries(this.data.drafts).filter(([_draftId, draftEntry]) => !missingDraftIds.has(draftEntry.id))
+          )
+        });
+      }
+
+      return clientDraftEntries;
     });
 
     ipcMain.handle('drafts.load', async (event) => {

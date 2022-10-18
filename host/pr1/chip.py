@@ -39,11 +39,12 @@ class ChipCondition(IntEnum):
 
 class ChipIssue(Exception):
   def export(self):
-    return {
-      "message": "Unknown issue"
-    }
+    return { "message": "Unknown issue." }
 
 class CorruptedChipError(ChipIssue):
+  pass
+
+class UnsupportedChipVersionError(ChipIssue):
   pass
 
 class DegradedChipRunnerError(ChipIssue):
@@ -52,17 +53,17 @@ class DegradedChipRunnerError(ChipIssue):
   def __init__(self, namespace = None):
     self.namespace = namespace
 
+  def export(self):
+    return { "message": f"""This experiment references the module "{self.namespace}" which is running in compatibility mode.""" }
+
 class UnsupportedChipRunnerError(ChipIssue):
   condition = ChipCondition.Unrunnable
 
   def __init__(self, namespace = None):
     self.namespace = namespace
 
-class UnsupportedChipVersionError(ChipIssue):
   def export(self):
-    return {
-      "message": "Unsupported chip version"
-    }
+    return { "message": f"""This experiment references the module "{self.namespace}" which is unsupported on this setup.""" }
 
 class ExtraneousUnitError(ChipIssue):
   condition = ChipCondition.Unrunnable
@@ -71,15 +72,16 @@ class ExtraneousUnitError(ChipIssue):
     self.namespace = namespace
 
   def export(self):
-    return {
-      "message": f"""This experiment references the module "{self.namespace}" which is not available on this setup."""
-    }
+    return { "message": f"""This experiment references the module "{self.namespace}" which is not available on this setup.""" }
 
 class MissingUnitError(ChipIssue):
   condition = ChipCondition.Partial
 
   def __init__(self, namespace):
     self.namespace = namespace
+
+  def export(self):
+    return { "message": f"""This experiment does not reference the module "{self.namespace}" which is available on this setup.""" }
 
 
 class BaseChip:

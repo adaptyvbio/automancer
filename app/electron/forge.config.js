@@ -1,9 +1,13 @@
 const fs = require('fs');
+const setLanguages = require('electron-packager-languages');
+
 
 console.log();
 
 module.exports = {
   packagerConfig: {
+    name: 'PR–1',
+    icon: 'icon.icns',
     extraResource: [
       'tmp/resources/alpha',
       'tmp/resources/beta'
@@ -23,12 +27,16 @@ module.exports = {
     }),
     ignore: [
       /^\/build(\/|$)/,
-      /^\/tmp(\/|$)/,
+      /^\/forge\.config\.js$/,
       /^\/icon\.icns$/,
-      /^\/forge\.config\.js$/
+      /^\/jsconfig.json$/,
+      /^\/node_modules(\/|$)/,
+      /^\/src(\/|$)/,
+      /^\/tmp(\/|$)/
     ],
-    name: 'PR–1',
-    icon: 'icon.icns'
+    afterCopy: [
+      setLanguages(['en'])
+    ]
   },
   makers: [
     { name: '@electron-forge/maker-zip' },

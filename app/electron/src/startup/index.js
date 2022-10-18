@@ -10,7 +10,7 @@ exports.StartupWindow = class StartupWindow {
 
     this.window = new BrowserWindow({
       width: 800,
-      height: 450,
+      height: Math.round(800 / 1.7),
       backgroundColor: '#000000',
       fullscreenable: false,
       resizable: false,
@@ -24,7 +24,7 @@ exports.StartupWindow = class StartupWindow {
         }
         : {
           titleBarOverlay: {
-            color: '#e7e3e6'
+            color: '#f6f6f6'
           },
           titleBarStyle: 'hidden'
         })

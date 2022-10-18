@@ -41,8 +41,8 @@ export class Startup extends React.Component<StartupProps, StartupState> {
     this.state = {
       fullDisplay: false,
       hostCreatorIndex: 0,
-      hostCreatorOpen: false,
-      hostCreatorVisible: false
+      hostCreatorOpen: true,
+      hostCreatorVisible: true
     };
   }
 
@@ -92,6 +92,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
               }
             }} />
             <div className="startup-editor-holder">
+              <div className="startup-editor-dragregion" />
               {this.state.hostCreatorVisible && (
                 <HostCreator
                   onCancel={() => {

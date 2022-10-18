@@ -10,7 +10,7 @@ metadata = Metadata(
   description="Microfluidic control.",
   icon=MetadataIcon(kind='icon', value="air"),
   title="Microfluidic control",
-  version="1.0"
+  version="1.1"
 )
 
 client_path = files(__name__ + '.client')

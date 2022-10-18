@@ -133,10 +133,10 @@ class Runner(BaseRunner):
         if host_model:
           compat = True
 
-    for valve_index, valve_value in enumerate(self._valve_map):
-      if (valve_value is not None) and (valve_value >= len(self._executor.valves)):
-        self._valve_map[valve_index] = None
-        compat = True
+      for valve_index, valve_value in enumerate(self._valve_map):
+        if (valve_value is not None) and (valve_value >= len(self._executor.valves)):
+          self._valve_map[valve_index] = None
+          compat = True
 
     if compat:
       raise DegradedChipRunnerError()

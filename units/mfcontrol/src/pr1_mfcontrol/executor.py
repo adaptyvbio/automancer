@@ -4,7 +4,7 @@ from collections import namedtuple
 
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
-from pr1.util.misc import fast_hash, log_exception
+from pr1.util.misc import log_exception
 from pr1.util.parser import Identifier, IdentifierPath
 
 from . import logger
@@ -77,10 +77,3 @@ class Executor(BaseExecutor):
         { "label": valve.label } for valve in self.valves
       ]
     }
-
-  @functools.cached_property
-  def hash(self):
-    return fast_hash(json.dumps((
-      [model.hash for model in self.models.values()],
-      [valve.label for valve in self.valves]
-    )))

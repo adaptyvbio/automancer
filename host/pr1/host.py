@@ -221,14 +221,37 @@ class Host:
     self.manager.reload()
 
     for unit_info in self.manager.units_info.values():
+      namespace = unit_info.namespace
+
       if unit_info.enabled and unit_info.development:
-        if unit_info.namespace in self.executors:
-          await self.executors[unit_info.namespace].destroy()
-          del self.executors[unit_info.namespace]
+        if namespace in self.executors:
+          await self.executors[namespace].destroy()
+          del self.executors[namespace]
 
         if hasattr(unit_info.unit, 'Executor'):
-          self.executors[unit_info.namespace] = unit_info.unit.Executor(unit_info.options, host=self)
-          await self.executors[unit_info.namespace].initialize()
+          self.executors[namespace] = unit_info.unit.Executor(unit_info.options, host=self)
+          await self.executors[namespace].initialize()
+
+        for chip in set(self.chips.values()):
+          self.chips[chip.id] = Chip.try_unserialize(chip.dir, host=self)
+
+        # for chip in self.chips.values():
+        #   old_runner = chip.runners.get(namespace)
+
+        #   if old_runner:
+        #     del chip.runners[namespace]
+
+        #   if hasattr(unit_info.unit, 'Runner'):
+        #     runner = unit_info.unit.Runner(chip=chip, host=self)
+
+        #     if old_runner:
+        #       runner.unserialize(old_runner.serialize())
+        #     else:
+        #       runner.create()
+
+        #     chip.runners[namespace] = runner
+
+        #   # <- Save chip
 
   def get_state(self):
     return {

@@ -48,7 +48,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
             label="Protocol"
             onInput={(_id) => { }}
             options={[
-              { id: 'websocket', label: 'Secure WebSocket' }
+              { id: 'websocket', label: 'Insecure WebSocket' }
             ]}
             value="websocket"
             targetRef={firstInputRef} />

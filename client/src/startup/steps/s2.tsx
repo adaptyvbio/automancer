@@ -19,7 +19,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
       <div className="startup-editor-inner">
         <header className="startup-editor-header">
           <div className="startup-editor-subtitle">New setup</div>
-          <h2>Connected</h2>
+          <h2>Set connection parameters</h2>
         </header>
         <div className="startup-editor-status">
           <LargeIcon name="success" />

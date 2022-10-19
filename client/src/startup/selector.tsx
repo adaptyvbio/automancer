@@ -21,22 +21,21 @@ selectedEntryId: EntryId | null;
 return (
   <div className="selector-root">
     {props.entries.map((entry) => (
-      <button type="button"
-        className={util.formatClass('selector-entry', { '_selected': (entry.id === props.selectedEntryId) })}
-        disabled={!!entry.disabled}
-        key={entry.id}
-        onClick={() => {
+      <label className="selector-input" key={entry.id}>
+        <input type="radio" name="a" checked={entry.id === props.selectedEntryId} disabled={!!entry.disabled} onChange={() => {
           props.onSelect(entry.id);
-        }}>
-        <div className="selector-entry-icon">
-          <Icon name={entry.icon} />
+        }} />
+        <div className="selector-entry">
+          <div className="selector-entry-icon">
+            <Icon name={entry.icon} />
+          </div>
+          <div className="selector-entry-name">{entry.name}</div>
+          <div className="selector-entry-icon">
+            <Icon name="check_circle" />
+          </div>
+          <p className="selector-entry-desc">{entry.description}</p>
         </div>
-        <div className="selector-entry-name">{entry.name}</div>
-        <div className="selector-entry-icon">
-          <Icon name="check_circle" />
-        </div>
-        <p className="selector-entry-desc">{entry.description}</p>
-      </button>
+      </label>
     ))}
   </div>
 );

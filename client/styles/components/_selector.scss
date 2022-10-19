@@ -22,29 +22,31 @@
     border: 1px solid #ccc;
     border-radius: 4px;
 
-    &:focus-visible {
+    cursor: pointer;
+
+    input:focus-visible + & {
       border-color: $highlight-blue;
       box-shadow: $highlight-shadow;
     }
 
-    &:where(:not(:focus-visible)):hover {
+    input:not(:checked, :focus-visible) + &:hover {
       border-color: #aaa;
     }
 
-    &:hover:not(:focus-visible), &._selected:not(:focus-visible) {
+    input:not(:focus-visible) + &:hover, input:checked:not(:focus-visible) + & {
       box-shadow: 2px 2px 6px #0001;
     }
 
-    &._selected {
+    input:checked + & {
       background-color: lighten($app-blue, 55%);
       border-color: $app-blue;
     }
 
-    &:not(._selected) {
+    input:not(:checked) + & {
       transition: background-color $dur-short, border-color $dur-short, box-shadow $dur-short;
     }
 
-    &:disabled {
+    input:disabled + & {
       opacity: 0.5;
     }
 
@@ -64,7 +66,7 @@
       color: $app-blue;
     }
 
-    &:not(._selected) &-icon:not(:first-child) {
+    input:not(:checked) + & &-icon:not(:first-child) {
       visibility: hidden;
     }
 

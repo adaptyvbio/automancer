@@ -161,7 +161,7 @@ export function TextArea(props: {
 export function TextField(props: {
   label: string;
   onBlur?(): void;
-  onInput(value: string): void;
+  onInput?(value: string): void;
   placeholder?: string;
   targetRef?: React.RefObject<HTMLInputElement>;
   value: string;
@@ -172,7 +172,9 @@ export function TextField(props: {
       <input type="text" className="sform-textfield"
         placeholder={props.placeholder}
         onBlur={props.onBlur}
-        onInput={(event) => void props.onInput(event.currentTarget.value)}
+        onInput={props.onInput && ((event) => void props.onInput!(event.currentTarget.value))}
+        readOnly={!props.onInput}
+        disabled={!props.onInput}
         value={props.value}
         ref={props.targetRef} />
     </label>

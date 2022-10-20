@@ -12,3 +12,5 @@ metadata = Metadata(
 )
 
 logger = parent_logger.getChild(namespace)
+
+from .executor import Executor

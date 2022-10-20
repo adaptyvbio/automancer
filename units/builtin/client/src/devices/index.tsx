@@ -26,6 +26,13 @@ export interface ExecutorState {
         options: { label: string; }[];
         targetValue: number | null;
         value: number | null;
+      } | {
+        type: 'scalar';
+        targetValue: number | null;
+        value: number | null;
+      } | {
+        type: 'readonlyScalar';
+        value: number | null;
       };
     }[];
   }>;
@@ -60,11 +67,11 @@ function DevicesTab(props: ChipTabComponentProps) {
           </header>
 
           <p>Connected: {device.connected ? 'yes' : 'no'}</p>
+          {/* <pre>{JSON.stringify(device, null, 2)}</pre> */}
 
           <Form.Form>
             {device.nodes.map((node, nodeIndex) => {
               let label = (node.label ?? node.id);
-
               let data = node.data;
 
               if (data.type === 'boolean') {
@@ -80,6 +87,25 @@ function DevicesTab(props: ChipTabComponentProps) {
               }
 
               switch (data.type) {
+                case 'readonlyScalar': {
+                  return (
+                    <React.Fragment key={node.id}>{label}: {data.value ?? '–'}</React.Fragment>
+                  );
+
+                  break;
+                }
+
+                case 'scalar': {
+                  return (
+                    <Form.TextField
+                      label={label}
+                      value={data.targetValue !== null ? data.targetValue.toString() : ''}
+                      key={node.id} />
+                  );
+
+                  break;
+                }
+
                 case 'select': {
                   let busy = (data.value !== data.targetValue);
                   let unknown = (data.value === null);

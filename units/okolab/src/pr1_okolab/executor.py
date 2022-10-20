@@ -12,12 +12,12 @@ conf_schema = sc.Schema({
     'id': sc.Optional(Identifier()),
     'label': sc.Optional(str),
     'serial': str,
-    'workers': sc.List({
+    'workers': sc.Optional(sc.Noneable(sc.List({
       'id': Identifier(),
-      'label': Identifier(),
+      'label': sc.Optional(Identifier()),
       'side': sc.Optional(sc.Or('glass', 'metal')),
-      'type': int
-    })
+      'type': sc.ParseType(int)
+    })))
   }))
 })
 
@@ -36,13 +36,19 @@ class Executor(BaseExecutor):
       master_device = MasterDevice(
         id=master_id,
         label=device_conf.get('label'),
-        serial_number=device_conf['serial']
+        serial_number=device_conf['serial'],
+        update_callback=self._host.update_callback
       )
 
       self._devices[master_id] = master_device
       self._host.devices[master_id] = master_device
 
-      for worker_index, worker_conf in enumerate(device_conf['workers']):
+      devices_conf = device_conf.get('workers') or list()
+
+      if len(devices_conf) > 2:
+        raise devices_conf.error(f"Too many workers for master device '{master_id}'")
+
+      for worker_index, worker_conf in enumerate(devices_conf):
         worker_id = worker_conf['id']
 
         if worker_id in self._host.devices:

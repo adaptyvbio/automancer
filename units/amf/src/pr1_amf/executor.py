@@ -23,7 +23,7 @@ class Executor(BaseExecutor):
     self._devices = dict()
     self._host = host
 
-    for device_conf in self._conf.get('devices', dict()):
+    for device_conf in self._conf.get('devices', list()):
       device_addr = device_conf['address']
       device_id = device_conf['id']
 

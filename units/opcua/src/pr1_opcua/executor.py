@@ -5,6 +5,7 @@ from asyncua import Client, ua
 from pr1.device import BooleanNode
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
+from pr1.util.parser import Identifier
 
 from . import logger, namespace
 
@@ -22,7 +23,7 @@ conf_schema = sc.Schema({
   'devices': sc.Optional(sc.List({
     'address': str,
     'label': sc.Optional(str),
-    'id': str,
+    'id': Identifier(),
     'nodes': sc.Noneable(sc.List({
       'id': str,
       'label': sc.Optional(str),

@@ -91,19 +91,25 @@ function DevicesTab(props: ChipTabComponentProps) {
                   return (
                     <React.Fragment key={node.id}>{label}: {data.value ?? '–'}</React.Fragment>
                   );
-
-                  break;
                 }
 
                 case 'scalar': {
                   return (
                     <Form.TextField
                       label={label}
+                      // onInput={(value) => {
+                      //   props.host.backend.instruct({
+                      //     [namespace]: {
+                      //       type: 'setValue',
+                      //       deviceId: device.id,
+                      //       nodeIndex: nodeIndex,
+                      //       value: parseFloat(value)
+                      //     }
+                      //   });
+                      // }}
                       value={data.targetValue !== null ? data.targetValue.toString() : ''}
                       key={node.id} />
                   );
-
-                  break;
                 }
 
                 case 'select': {

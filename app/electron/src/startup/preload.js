@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
     create: async (options) => await ipcRenderer.invoke('hostSettings.create', options),
     delete: async (options) => await ipcRenderer.invoke('hostSettings.delete', options),
     query: async () => await ipcRenderer.invoke('hostSettings.query'),
+    getCreatorContext: async () => await ipcRenderer.invoke('hostSettings.getCreatorContext'),
     revealLogsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealLogsDirectory', options),
     revealSettingsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealSettingsDirectory', options),
     setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options)

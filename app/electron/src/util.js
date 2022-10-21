@@ -62,17 +62,85 @@ async function findPythonInstallations() {
 
   possiblePythonLocations = (await Promise.all(
     possiblePythonLocations.map(async (possibleLocation) => await which(possibleLocation).catch(() => null))
-  )).filter((possibleLocation, index, arr) => possibleLocation && (arr.indexOf(possibleLocation) === index));
+  )).filter((possibleLocation) => possibleLocation);
 
-  return (await Promise.all(possiblePythonLocations.map(async (possibleLocation) => {
-    let [stdout, stderr] = await runCommand(`${possibleLocation} --version`);
+  let installations = {};
+
+  for (let possibleLocation of possiblePythonLocations) {
+    if (possibleLocation in installations) {
+      continue;
+    }
+
+    let [stdout, stderr] = await runCommand(`"${possibleLocation}" --version`);
     let version = parsePythonVersion(stdout || stderr);
 
-    return version && {
-      location: possibleLocation,
+    if (!version) {
+      continue;
+    }
+
+    let architectures = null;
+
+    if (process.platform === 'darwin') {
+      let [stdout, _stderr] = await runCommand(`file "${possibleLocation}"`);
+      let matches = Array.from(stdout.matchAll(/executable ([a-z0-9_]+)$/gm));
+
+      architectures = matches.map((match) => match[1]);
+    }
+
+    let info = {
+      architectures,
       version
     };
-  }))).filter((installation) => installation);
+
+    let installation = {
+      info,
+      leaf: true,
+      path: possibleLocation,
+      symlink: false
+    };
+
+    let lastInstallation = installation;
+    installations[installation.path] = installation;
+
+    while (true) {
+      let linkPath = null;
+
+      try {
+        linkPath = await fs.readlink(lastInstallation.path);
+      } catch (err) {
+        if (err.code === 'EINVAL') {
+          break;
+        }
+
+        throw err;
+      }
+
+      lastInstallation.symlink = true;
+
+      let installationPath = path.resolve(path.dirname(lastInstallation.path), linkPath);
+
+      if (installationPath in installations) {
+        installations[installationPath].leaf = false;
+        break;
+      }
+
+      let installation = {
+        info,
+        leaf: false,
+        path: installationPath,
+        symlink: false
+      };
+
+      installations[installation.path] = installation;
+      lastInstallation = installation;
+    }
+  };
+
+  // TODO: Add support for virtual environments
+  // TODO: Add support for system installations
+  // Use arch -x84_64 <command>
+
+  return installations;
 }
 
 async function fsExists(path) {

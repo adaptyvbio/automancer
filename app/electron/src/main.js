@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
+const os = require('os');
 
 const { HostWindow } = require('./host');
 const { StartupWindow } = require('./startup');
@@ -137,6 +138,7 @@ class CoreApplication {
 
     this.localHostModels = await util.getLocalHostModels();
     this.pythonInstallations = await util.findPythonInstallations();
+    // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: null }));
 
     await app.whenReady();
     await this.loadData();
@@ -202,6 +204,13 @@ class CoreApplication {
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
       let { [hostSettingsId]: _, ...hostSettings } = this.data.hostSettings;
       await this.setData({ hostSettings });
+    });
+
+    ipcMain.handle('hostSettings.getCreatorContext', async (_event) => {
+      return {
+        computerName: os.hostname(),
+        pythonInstallations: this.pythonInstallations
+      };
     });
 
     ipcMain.handle('hostSettings.query', async (_event) => {

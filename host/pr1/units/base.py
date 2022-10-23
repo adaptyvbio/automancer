@@ -19,13 +19,7 @@ logger = root_logger.getChild("unit")
 
 
 class BaseParser:
-  namespace: str
-  priority = 0
-  root_attributes: dict[str, Attribute]
-  segment_attributes: dict[str, Attribute]
-
-  def enter_protocol(self, data_protocol: dict[str, Any]):
-    pass
+  pass
 
 
 class BaseRunner:

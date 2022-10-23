@@ -1,12 +1,11 @@
 from collections import namedtuple
 
-from .staticeval import EvaluationContext
-
-
 from . import langservice as lang
 from .expr import PythonExprEvaluator
+from .staticeval import EvaluationContext
 from .. import reader
 from ..draft import DraftDiagnostic
+from ..units.base import BaseParser
 from ..util import schema as sc
 from ..util.decorators import debug
 
@@ -26,13 +25,21 @@ class BlockData:
     self.state = state
     self.transforms = transforms
 
+class BlockUnitState:
+  process = False
+
+  def __or__(self, other):
+    return other
+
 
 @debug
-class AcmeState:
+class AcmeState(BlockUnitState):
+  process = True
+
   def __init__(self, value):
     self._value = value
 
-class AcmeParser:
+class AcmeParser(BaseParser):
   namespace = "acme"
 
   root_attributes = {
@@ -77,13 +84,12 @@ class AcmeParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state, context):
+  def parse_block(self, block_attrs, context):
     attrs = block_attrs[self.namespace]
 
     if 'activate' in attrs:
       value = attrs['activate'].value
-      # return BlockData(state=AcmeState(value=value)) if value is not Ellipsis else Ellipsis
-      return BlockData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)]) if value is not Ellipsis else Ellipsis
+      return BlockData(state=AcmeState(value))
     else:
       return BlockData()
 
@@ -94,7 +100,7 @@ class AcmeParser:
 # ----
 
 
-class ScoreParser:
+class ScoreParser(BaseParser):
   namespace = "score"
   root_attributes = dict()
   segment_attributes = {
@@ -107,9 +113,8 @@ class ScoreParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state, context):
+  def parse_block(self, block_attrs, context):
     attrs = block_attrs[self.namespace]
-    parent_state = parent_state or ScoreState(0.0)
 
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
       if isinstance(score_raw, PythonExprEvaluator):
@@ -118,31 +123,28 @@ class ScoreParser:
 
         if score is Ellipsis:
           print(analysis.errors[0].area.format())
-          return BlockData(state=parent_state)
+          return Ellipsis
 
         score = score.value
       else:
         score = score_raw.value
 
-      return BlockData(
-        state=ScoreState(parent_state.points + score)
-      )
+      return BlockData(state=ScoreState(score))
     else:
-      return BlockData(state=parent_state)
+      return BlockData(state=ScoreState(0.0))
 
 @debug
-class ScoreState:
+class ScoreState(BlockUnitState):
   def __init__(self, points):
     self.points = points
 
-  @property
-  def process(self):
-    return False
+  def __or__(self, other: 'ScoreState'):
+    return ScoreState(self.points + other.points)
 
 # ----
 
 
-class ConditionParser:
+class ConditionParser(BaseParser):
   namespace = "condition"
 
   root_attributes = dict()
@@ -171,7 +173,7 @@ class ConditionParser:
 
 
 @debug
-class ConditionBlock:
+class ConditionBlock(BaseParser):
   def __init__(self, child_block, condition):
     self._child_block = child_block
     self._condition = condition
@@ -202,7 +204,7 @@ class ConditionNode:
 # ----
 
 
-class DoParser:
+class DoParser(BaseParser):
   namespace = "do"
 
   root_attributes = dict()
@@ -216,7 +218,7 @@ class DoParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state, context):
+  def parse_block(self, block_attrs, context):
     attrs = block_attrs[self.namespace]
 
     if 'do' in attrs:
@@ -225,19 +227,21 @@ class DoParser:
       return BlockData()
 
 @debug
-class DoTransform:
+class DoTransform: # do after
   def __init__(self, data_do, parser):
     self._data_do = data_do
     self._parser = parser
 
-  def execute(self, block_state, block_transforms):
-    return self._parser._fiber.parse_block(self._data_do, block_state, block_transforms)
+  def execute(self, state, parent_state, transforms):
+    block_state, block_transforms = self._parser._fiber.parse_block(self._data_do)
+    return self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms)
+    # return all_transforms[0].execute(substate, parent_state | state, all_transforms[1:])
 
 
 # ----
 
 
-class ShorthandsParser:
+class ShorthandsParser(BaseParser):
   namespace = "shorthands"
 
   root_attributes = {
@@ -309,7 +313,7 @@ class ShorthandTransform:
 # ----
 
 
-class SequenceParser:
+class SequenceParser(BaseParser):
   namespace = "sequence"
   root_attributes = dict()
   segment_attributes = {
@@ -322,7 +326,7 @@ class SequenceParser:
   def enter_protocol(self, data_protocol):
     pass
 
-  def parse_block(self, block_attrs, parent_state, context):
+  def parse_block(self, block_attrs, context):
     attrs = block_attrs[self.namespace]
 
     if 'actions' in attrs:
@@ -332,17 +336,6 @@ class SequenceParser:
     else:
       return BlockData()
 
-  def transform_block(self, transform, block_state, block_transforms):
-    children = list()
-
-    for data_action in transform._data_actions:
-      child = self._fiber.parse_block(data_action, block_state, block_transforms)
-
-      if child is not Ellipsis:
-        children.append(child)
-
-    return SequenceBlock(children)
-
 
 @debug
 class SequenceTransform:
@@ -350,14 +343,13 @@ class SequenceTransform:
     self._data_actions = data_actions
     self._parser = parser
 
-  def execute(self, block_state, block_transforms):
+  def execute(self, state, parent_state, transforms):
     children = list()
 
     for data_action in self._data_actions:
-      child = self._parser._fiber.parse_block(data_action, block_state, block_transforms)
-
-      if child is not Ellipsis:
-        children.append(child)
+      block_state, block_transforms = self._parser._fiber.parse_block(data_action)
+      block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms)
+      children.append(block)
 
     return SequenceBlock(children)
 
@@ -391,12 +383,10 @@ class SegmentTransform:
   def __init__(self, namespace):
     self._namespace = namespace
 
-  def execute(self, block_state, block_transforms):
-    print(">", block_transforms)
-
+  def execute(self, state, parent_state, transforms):
     return SegmentBlock(Segment(
       process_namespace=self._namespace,
-      state=block_state
+      state=(parent_state | state)
     ))
 
 @debug
@@ -416,10 +406,34 @@ class SegmentBlock:
     return [([None], self._segment)]
 
 
+
+class BlockState(dict):
+  def __or__(self, other):
+    return other.__ror__(self)
+
+  def __ror__(self, other):
+    if other is None:
+      return self
+    else:
+      result = dict()
+
+      for key, value in self.items():
+        other_value = other[key]
+
+        if value is None:
+          result[key] = other_value
+        elif other_value is None:
+          result[key] = value
+        else:
+          result[key] = other_value | value
+
+      return BlockState(result)
+
+
 class FiberParser:
   def __init__(self, text, *, host, parsers):
-    self._parsers = [Parser(self) for Parser in [SequenceParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser]]
-
+    self._parsers: list[BaseParser] = [Parser(self) for Parser in [SequenceParser, DoParser, AcmeParser, ScoreParser]]
+    # self._parsers: list[BaseParser] = [Parser(self) for Parser in [SequenceParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser]]
     self.analysis = lang.Analysis()
 
     data, reader_errors, reader_warnings = reader.loads(text)
@@ -456,7 +470,8 @@ class FiberParser:
       parser.enter_protocol(output[parser.namespace])
 
     data_actions = output['_']['steps']
-    entry_block = self.parse_block(data_actions)
+    state, transforms = self.parse_block(data_actions)
+    entry_block = self.execute(state, None, transforms)
 
     print()
 
@@ -469,9 +484,9 @@ class FiberParser:
       print(entry_block)
       print()
 
-      print("<= LINEARIZATION =>")
-      pprint(entry_block.linearize())
-      print()
+      # print("<= LINEARIZATION =>")
+      # pprint(entry_block.linearize())
+      # print()
 
     print("<= SEGMENTS =>")
     pprint(self._segments)
@@ -486,15 +501,23 @@ class FiberParser:
     return schema_dict
 
 
-  # def parse_block_attrs(self, data_block):
-  #   return self.segment_dict.analyze(data_block)
-
-  def parse_block_partial(self, data_block, /, parent_state = None, parent_transforms = None):
+  def parse_block(self, data_block):
     dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
     self.analysis += dict_analysis
 
-    block_state = dict()
-    block_transforms = parent_transforms or list()
+    # class State:
+    #   def __init__(self):
+    #     self._data = dict()
+
+    #   def __getitem__(self, index):
+    #     return self._data[index]
+
+    #   def __setitem__(self, index, value):
+    #     self._data[index] = value
+
+
+    state = BlockState()
+    transforms = list()
 
     from random import random
     context = EvaluationContext(
@@ -504,42 +527,32 @@ class FiberParser:
     )
 
     for parser in self._parsers:
-      unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None, context)
+      unit_data = parser.parse_block(block_attrs, context)
 
       if unit_data is Ellipsis:
         return Ellipsis
 
-      block_state[parser.namespace] = unit_data.state
-      block_transforms += unit_data.transforms
+      state[parser.namespace] = unit_data.state
+      transforms += unit_data.transforms
 
-    return block_state, block_transforms
+    return state, transforms
 
-  def parse_block(self, data_block, parent_state = None, parent_transforms = list()):
-    dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
-    # dict_analysis, block_attrs = self.parse_block_attrs(data_block)
-    self.analysis += dict_analysis
+  def execute(self, state, parent_state, transforms):
+    # if (not transforms) and (parent_state | state)['acme']:
+    #   transforms = [SegmentTransform('acme')]
+    # else:
+    #   pass
+      # print(state, parent_state, parent_state | state)
 
-    block_state = dict()
-    block_transforms = parent_transforms.copy()
+    if not transforms:
+      for namespace, parser_state in (parent_state | state).items():
+        if parser_state and parser_state.process:
+          transforms = [SegmentTransform(namespace)]
+          break
+      else:
+        raise ValueError()
 
-    from random import random
-    context = EvaluationContext(
-      variables=dict(
-        random=(lambda start, end: random() * (end.value - start.value) + start.value)
-      )
-    )
-
-    for parser in self._parsers:
-      unit_data = parser.parse_block(block_attrs, parent_state[parser.namespace] if parent_state else None, context)
-
-      if unit_data is Ellipsis:
-        return Ellipsis
-
-      block_state[parser.namespace] = unit_data.state
-      block_transforms += unit_data.transforms
-
-    for transform_index, transform in enumerate(block_transforms):
-      return transform.execute(block_state, block_transforms[(transform_index + 1):])
+    return transforms[0].execute(state, parent_state, transforms[1:])
 
     # process_namespaces = {namespace for namespace, state in block_state.items() if state and state.process}
 
@@ -561,20 +574,25 @@ if __name__ == "__main__":
   p = FiberParser("""
 shorthands:
   foo:
-    actions:
-      - score: 200
-      - score: 300
+    activate: 42
+    # actions:
+    #   - score: 200
+    #   - score: 300
     # actions:
     #   - activate: 56
     #   - activate: 57
 
 steps:
-  # activate: 1
-  foo:
-  # score: 16
-  actions:
-    - activate: 4
-    - activate: 3
+  # foo:
+  activate: 50
+  score: 1
+  do:
+    score: 7
+    # activate: 100
+
+  # actions:
+  #   - score: 4
+  #   - activate: 3
 
   # score: 4
   # foo:

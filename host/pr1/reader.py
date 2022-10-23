@@ -4,6 +4,7 @@ import ast
 import functools
 import math
 import sys
+from typing import Any
 
 from .draft import DraftDiagnostic
 from .util.decorators import deprecated
@@ -820,7 +821,7 @@ def parse(raw_source):
   return result
 
 
-def loads(raw_source):
+def loads(raw_source) -> tuple[Any, list[ReaderError], list[ReaderError]]:
   tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
   result, analysis_errors, analysis_warnings = analyze(tokens)
 

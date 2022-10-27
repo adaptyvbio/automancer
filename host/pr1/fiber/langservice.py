@@ -265,7 +265,10 @@ class CompositeDict:
 
     analysis.completions.append(Completion(
       items=completion_items,
-      ranges=[obj_key.area.single_range() for obj_key in obj.keys()]
+      ranges=[
+        *[obj_key.area.single_range() for obj_key in obj.keys()],
+        *obj.completion_ranges
+      ]
     ))
 
     return analysis, attr_values

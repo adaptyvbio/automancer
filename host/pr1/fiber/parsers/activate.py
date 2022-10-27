@@ -1,6 +1,7 @@
 from .. import langservice as lang
 from ..parser import BaseParser, BlockData, BlockUnitState, SegmentTransform
 # from ...units.base import BaseParser
+from ...draft import DraftGenericError
 from ...util.decorators import debug
 
 
@@ -14,37 +15,9 @@ class AcmeState(BlockUnitState):
 class AcmeParser(BaseParser):
   namespace = "activate"
 
-  root_attributes = {
-    'microscope': lang.Attribute(
-      description=["`acme.microscope`", "Microscope settings"],
-      optional=True,
-      type=lang.SimpleDict({
-        'exposure': lang.Attribute(
-          description=["`exposure`", "Camera exposure"],
-          detail="Exposure time in seconds",
-          type=lang.AnyType()
-        ),
-        'zzz': lang.Attribute(type=lang.AnyType())
-      }, foldable=True)
-    ),
-    'value': lang.Attribute(
-      label="Value",
-      detail="Value of the object",
-      description=["`acme.value`", "The value for the acme device."],
-      optional=True,
-      type=lang.PrimitiveType(float)
-    ),
-    'wait': lang.Attribute(
-      label="Wait for a fixed delay",
-      detail="Wait for a delay",
-      optional=True,
-      type=lang.AnyType()
-    )
-  }
-
+  root_attributes = dict()
   segment_attributes = {
     'activate': lang.Attribute(
-      description=["#### ACTIVATE", 'Type: int'],
       optional=True,
       type=lang.PrimitiveType(int)
     )
@@ -60,10 +33,15 @@ class AcmeParser(BaseParser):
     attrs = block_attrs[self.namespace]
 
     if 'activate' in attrs:
-      value = attrs['activate'].value
+      raw_value = attrs['activate']
+
+      if raw_value is Ellipsis:
+        return lang.Analysis(), Ellipsis
+
+      value = raw_value.value
 
       if value < 0:
-        return lang.Analysis(errors=[Exception("Negative value")]), Ellipsis
+        return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
 
       return lang.Analysis(), BlockData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)])
     else:

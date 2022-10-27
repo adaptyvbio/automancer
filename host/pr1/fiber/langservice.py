@@ -1,9 +1,10 @@
 import builtins
 from collections import namedtuple
+from typing import Any, Literal, Optional
 
 from .expr import PythonExprEvaluator
-from ..draft import DraftDiagnostic
-from ..reader import LocatedValue
+from ..draft import DraftDiagnostic, DraftGenericError
+from ..reader import LocatedValue, LocationRange
 
 
 
@@ -29,20 +30,22 @@ class Analysis:
     return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)})"
 
 
-CompletionItem = namedtuple("CompletionItem", ['description', 'detail', 'kind', 'label', 'text'])
+CompletionItem = namedtuple("CompletionItem", ['documentation', 'kind', 'label', 'namespace', 'signature', 'sublabel', 'text'])
 
 class Completion:
-  def __init__(self, *, items, ranges):
+  def __init__(self, *, items: list[CompletionItem], ranges: list[LocationRange]):
     self.items = items
     self.ranges = ranges
 
   def export(self):
     return {
       "items": [{
-        "description": item.description,
-        "detail": item.detail,
+        "documentation": item.documentation,
         "kind": item.kind,
         "label": item.label,
+        "namespace": item.namespace,
+        "signature": item.signature,
+        "sublabel": item.sublabel,
         "text": item.text
       } for item in self.items],
       "ranges": [[range.start, range.end] for range in self.ranges]
@@ -111,22 +114,43 @@ class MissingKeyError(LangServiceError):
     return DraftDiagnostic(f"Missing key '{self.key}'", ranges=self.target.area.ranges)
 
 
+CompletionKind = Literal['class', 'constant', 'enum', 'field', 'property']
+
 class Attribute:
-  def __init__(self, *, description = None, detail = None, label = None, optional = False, type):
+  def __init__(
+    self,
+    *,
+    deprecated: bool = False,
+    description: Optional[str] = None,
+    documentation: Optional[list[str]] = None,
+    kind: CompletionKind = 'field',
+    label: Optional[str] = None,
+    optional: bool = False,
+    signature: Optional[str] = None,
+    type: Any
+  ):
+    self._deprecated = deprecated
     self._description = description
-    self._detail = detail
+    self._documentation = documentation
+    self._kind = kind
     self._label = label
     self._optional = optional
+    self._signature = signature
     self._type = type
 
   def analyze(self, obj, key):
     analysis = Analysis()
+    key_range = key.area.single_range()
 
-    if self._description:
+    if self._description or self._documentation:
       analysis.hovers.append(Hover(
-        contents=self._description,
-        range=key.area.single_range()
+        contents=([f"#### {key.upper()}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
+        range=key_range
       ))
+
+    if self._deprecated:
+      # TODO: Use a deprecation flag
+      analysis.warnings.append(DraftGenericError("This attribute is deprecated", ranges=[key_range]))
 
     value_analysis, value = self._type.analyze(obj)
 
@@ -136,7 +160,7 @@ class Attribute:
 class CompositeDict:
   _native_namespace = "_"
 
-  def __init__(self, attrs = dict(), *, foldable = False):
+  def __init__(self, attrs: dict[str, Attribute] = dict(), *, foldable = False):
     self._foldable = foldable
 
     self._attributes = {
@@ -256,10 +280,12 @@ class CompositeDict:
         native = (namespace == self._native_namespace)
 
         completion_items.append(CompletionItem(
-          description=(namespace if not native else None),
-          detail=attr._detail,
+          documentation=attr._description,
+          kind=attr._kind,
           label=attr_name,
-          kind='constant',
+          namespace=(namespace if not native else None),
+          signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
+          sublabel=attr._label,
           text=(f"{namespace}.{attr_name}" if ambiguous and (not native) else attr_name)
         ))
 

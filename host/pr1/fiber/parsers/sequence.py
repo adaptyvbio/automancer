@@ -11,7 +11,14 @@ class SequenceParser(BaseParser):
   namespace = "sequence"
   root_attributes = dict()
   segment_attributes = {
-    'actions': lang.Attribute(optional=True, type=lang.AnyType())
+    'actions': lang.Attribute(
+      description="Describes a nested list of steps.",
+      documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened in the output."],
+      kind='class',
+      optional=True,
+      signature="actions:\n  - <action 1>\n  - <action 2>",
+      type=lang.AnyType()
+    )
   }
 
   def __init__(self, fiber: FiberParser):
@@ -48,6 +55,7 @@ class SequenceTransform(BaseTransform):
         block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms)
 
         if block is None:
+          return lang.Analysis(), Ellipsis
           raise Exception("Not ok")
 
         children.append(block)

@@ -1,7 +1,8 @@
+from typing import Any
 from .. import langservice as lang
 from ..expr import PythonExprEvaluator
-from ..parser import BlockData, BlockUnitState
-from ...units.base import BaseParser
+from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState
+# from ...units.base import BaseParser
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -33,14 +34,19 @@ class DoParser(BaseParser):
     return lang.Analysis(), BlockData(transforms=transforms)
 
 @debug
-class DoTransform: # do after
-  def __init__(self, data_do, /, *, before, parser):
+class DoTransform(BaseTransform):
+  def __init__(self, data_do: Any, /, *, before: bool, parser: DoParser):
     self._before = before
     self._data_do = data_do
     self._parser = parser
 
   def execute(self, state, parent_state, transforms):
-    block_state, block_transforms = self._parser._fiber.parse_block(self._data_do)
+    result = self._parser._fiber.parse_block(self._data_do)
+
+    if result is Ellipsis:
+      return lang.Analysis(), Ellipsis
+
+    block_state, block_transforms = result
 
     if self._before:
       return lang.Analysis(), self._parser._fiber.execute(state, parent_state | block_state, block_transforms + transforms)

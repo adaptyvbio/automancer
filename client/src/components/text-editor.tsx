@@ -97,6 +97,17 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       overflowWidgetsDomNode: this.refWidgetContainer.current!,
       fixedOverflowWidgets: true,
       readOnly: false // !this.props.draft.writable
+    }, {
+      storageService: {
+        get() {},
+        getBoolean(key: string) {
+          return ['expandSuggestionDocs'].includes(key);
+        },
+        remove() {},
+        store() {},
+        onWillSaveState() {},
+        onDidChangeStorage() {}
+    }
     });
 
     this.model = this.editor.getModel()!;
@@ -169,7 +180,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        let result = util.findMap(compilation.completions, (completion) => {
+        let match = util.findMap(compilation.completions, (completion) => {
           let modelRange = util.findMap(completion.ranges, (draftRange) => {
             let modelRange = getModelRangeFromDraftRange(model, draftRange);
 
@@ -183,25 +194,28 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             : null;
         });
 
-        if (!result) {
+        if (!match) {
           return null;
         }
 
-        console.log('>', result);
-
         return {
-          suggestions: result.completion.items.map((item) => ({
+          suggestions: match.completion.items.map((item) => ({
+            detail: item.signature ?? undefined,
+            documentation: item.documentation ?? undefined,
+            insertText: item.text,
             kind: {
+              class: monaco.languages.CompletionItemKind.Class,
               constant: monaco.languages.CompletionItemKind.Constant,
+              enum: monaco.languages.CompletionItemKind.Enum,
+              field: monaco.languages.CompletionItemKind.Field,
               property: monaco.languages.CompletionItemKind.Property
             }[item.kind],
             label: {
-              description: item.description,
-              detail: ((item.detail !== null) ? ' ' + item.detail : null),
+              description: item.namespace ?? undefined,
+              detail: ((item.sublabel !== null) ? ' ' + item.sublabel : undefined),
               label: item.label
             },
-            insertText: item.text,
-            range: result!.range
+            range: match!.range
           }))
         };
       },

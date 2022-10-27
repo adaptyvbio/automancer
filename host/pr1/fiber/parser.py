@@ -193,15 +193,8 @@ class FiberParser:
     dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
     self.analysis += dict_analysis
 
-    # class State:
-    #   def __init__(self):
-    #     self._data = dict()
-
-    #   def __getitem__(self, index):
-    #     return self._data[index]
-
-    #   def __setitem__(self, index, value):
-    #     self._data[index] = value
+    if block_attrs is Ellipsis:
+      return Ellipsis
 
 
     state = BlockState()

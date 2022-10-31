@@ -77,7 +77,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           ],
           position: {
             x: 18,
-            y: 2
+            y: 3
           }
         },
         {
@@ -233,11 +233,39 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
                 y: this.state.nodes[0].position.y + 1
               },
               end: {
+                x: this.state.nodes[2].position.x,
+                y: this.state.nodes[2].position.y + 1
+              }
+            }}
+            settings={settings} />
+          <Link
+            autoMove={this.action?.type !== 'move'}
+            link={{
+              start: {
+                x: this.state.nodes[0].position.x + nodeWidth,
+                y: this.state.nodes[0].position.y + 1
+              },
+              end: {
                 x: this.state.nodes[1].position.x,
                 y: this.state.nodes[1].position.y + 1
               }
             }}
             settings={settings} />
+
+          <g
+            className="geditor-group"
+            transform={`translate(${settings.cellSize * 1} ${settings.cellSize * 1})`}>
+            <foreignObject
+              x="0"
+              y="0"
+              width={settings.cellSize * settings.nodeWidth * 4}
+              height={settings.cellSize * settings.nodeHeight * 3}
+              className="geditor-groupobject">
+                <div className="geditor-group">
+                  <div className="geditor-grouplabel">Repeat 3 times</div>
+                </div>
+              </foreignObject>
+          </g>
 
           {this.state.nodes.map((node) => (
             <Node

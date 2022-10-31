@@ -8,11 +8,46 @@
     --node-padding: 10px;
 
     // nodePadding + nodeHeaderHeight * 0.5 == cellSize
+
+    position: absolute;
+    inset: 0;
   }
 
   &-svg {
     background-color: #f1f1f1;
     overflow: visible;
+  }
+
+
+  $orange: #ff851b;
+
+  &-grouproot {
+
+  }
+
+  &-groupobject {
+    padding: var(--node-padding);
+  }
+
+  &-group {
+    height: 100%;
+
+    background-color: rgba($orange, 10%);
+    border: 2px solid $orange;
+    border-radius: 8px;
+  }
+
+  &-grouplabel {
+    width: max-content;
+    padding: 0.4rem 1rem;
+
+    background-color: $orange;
+    border-bottom: 2px solid transparent;
+    border-right: 2px solid transparent;
+    border-radius: 0 0 8px 0;
+
+    color: #fff;
+    font-weight: 500;
   }
 
 

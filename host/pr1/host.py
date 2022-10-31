@@ -8,11 +8,22 @@ import uuid
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
+from .devices.node import CollectionNode, DeviceNode
 from .draft import Draft
 from .master import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
+
+
+class HostRootNode(CollectionNode):
+  def __init__(self, devices):
+    super().__init__()
+
+    self.connected = True
+    self.id = 'root'
+    self.label = "Root"
+    self.nodes = devices
 
 
 class Host:
@@ -25,7 +36,8 @@ class Host:
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
-    self.devices = dict()
+    self.devices: dict[str, DeviceNode] = dict()
+    self.root_node = HostRootNode(self.devices)
 
     self.previous_state = {
       "info": None

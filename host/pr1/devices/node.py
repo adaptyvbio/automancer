@@ -22,9 +22,10 @@ class BaseNode:
       "label": self.label
     }
 
-class BaseListenableNode(BaseNode):
+class BaseWatchableNode(BaseNode):
   def __init__(self):
     super().__init__()
+
     self._listeners: set[Callable] = set()
 
   def _trigger_listeners(self):
@@ -34,34 +35,43 @@ class BaseListenableNode(BaseNode):
       except Exception:
         traceback.print_exc()
 
-  def listen(self, listener: Callable[[], None]):
+  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
     self._listeners.add(listener)
 
-    registration = Cancelable()
-    registration.cancel = lambda: self._listeners.remove(listener)
-    return registration
+    reg = Cancelable()
+    reg.cancel = lambda: self._listeners.remove(listener)
+    return reg
 
 
-class BaseReadonlyNode(BaseListenableNode):
-  def register(self, *, interval: float):
-    raise NotImplementedError()
+class BaseReadonlyNode(BaseWatchableNode):
+  pass
 
-class CollectionNode(BaseListenableNode):
+class CollectionNode(BaseWatchableNode):
   def __init__(self):
     super().__init__()
 
     self.nodes: dict[str, BaseNode]
     self._listening = False
 
-  def listen(self, listener: Callable[[], None]):
+  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
+    regs = set()
+
     if not self._listening:
       self._listening = True
 
       for node in self.nodes.values():
-        if isinstance(node, BaseListenableNode):
-          node.listen(self._trigger_listeners)
+        if isinstance(node, BaseWatchableNode):
+          regs.add(node.watch(self._trigger_listeners, interval))
 
-    super().listen(listener)
+    reg = super().watch(listener, interval)
+    old_cancel = reg.cancel
+
+    def cancel():
+      old_cancel()
+      for reg in regs: reg.cancel()
+
+    reg.cancel = cancel
+    return reg
 
   def export(self):
     return {
@@ -71,6 +81,8 @@ class CollectionNode(BaseListenableNode):
 
 class DeviceNode(CollectionNode):
   def __init__(self):
+    super().__init__()
+
     self.model: str
     self.owner: str
 
@@ -86,6 +98,8 @@ class DeviceNode(CollectionNode):
 
 class ReadonlyBooleanNode(BaseReadonlyNode):
   def __init__(self):
+    super().__init__()
+
     self.value: Optional[bool] = None
 
   def export(self):
@@ -128,7 +142,7 @@ class ReadonlyScalarNode(BaseReadonlyNode):
     return {
       **super().export(),
       "data": {
-        "type": "scalar",
+        "type": "readScalar",
         "value": self.value
       }
     }
@@ -178,15 +192,23 @@ class PolledReadonlyNode(BaseReadonlyNode, Generic[T]):
   async def _read(self) -> T:
     raise NotImplementedError()
 
-  def register(self, *, interval: float):
-    self._intervals.append(interval)
+  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
+    reg = super().watch(listener, interval)
+    old_cancel = reg.cancel
 
-    if (not self._poll_task) and self.connected:
-      self._poll()
+    if interval is not None:
+      self._intervals.append(interval)
 
-    registration = Cancelable()
-    registration.cancel = lambda: self._intervals.remove(interval)
-    return registration
+      def cancel():
+        old_cancel()
+        self._intervals.remove(interval)
+
+      reg.cancel = cancel
+
+      if (not self._poll_task) and self.connected:
+        self._poll()
+
+    return reg
 
   async def _configure(self):
     self.value = await self._read()

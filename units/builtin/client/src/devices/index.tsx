@@ -5,37 +5,43 @@ import { React } from 'pr1';
 export const namespace = 'devices';
 
 
-export interface ExecutorState {
-  devices: Record<string, {
-    id: string;
-    connected: boolean;
-    label: string | null;
-    model: string;
-    owner: string;
+export interface BaseNode {
+  id: string;
+  connected: string;
+  label: string | null;
+}
 
-    nodes: {
-      id: string;
-      connected: boolean;
-      label: string | null;
-      data: {
-        type: 'boolean';
-        targetValue: boolean | null;
-        value: boolean | null;
-      } | {
-        type: 'select';
-        options: { label: string; }[];
-        targetValue: number | null;
-        value: number | null;
-      } | {
-        type: 'scalar';
-        targetValue: number | null;
-        value: number | null;
-      } | {
-        type: 'readonlyScalar';
-        value: number | null;
-      };
-    }[];
-  }>;
+export interface CollectionNode<T = BaseNode> extends BaseNode {
+  nodes: Record<BaseNode['id'], T>;
+}
+
+export interface DeviceNode extends CollectionNode {
+  model: string;
+  owner: string;
+}
+
+export interface DataNode extends BaseNode {
+  data: {
+    type: 'boolean';
+    targetValue: boolean | null;
+    value: boolean | null;
+  } | {
+    type: 'select';
+    options: { label: string; }[];
+    targetValue: number | null;
+    value: number | null;
+  // } | {
+  //   type: 'scalar';
+  //   targetValue: number | null;
+  //   value: number | null;
+  } | {
+    type: 'readScalar';
+    value: number | null;
+  };
+}
+
+export interface ExecutorState {
+  root: CollectionNode<DeviceNode>;
 }
 
 
@@ -54,25 +60,40 @@ export function getGeneralTabs() {
 function DevicesTab(props: ChipTabComponentProps) {
   let executor = props.host.state.executors[namespace] as ExecutorState;
 
+  React.useEffect(() => {
+    props.host.backend.instruct({
+      [namespace]: { type: 'register' }
+    });
+  }, []);
+
+  // return (
+  //   <main>
+  //     <header className="header header--1">
+  //       <h1>Devices</h1>
+  //     </header>
+  //     <pre>{JSON.stringify(executor, null, 2)}</pre>
+  //   </main>
+  // );
+
   return (
     <main>
       <header className="header header--1">
         <h1>Devices</h1>
       </header>
 
-      {Object.values(executor.devices).map((device) => (
+      {Object.values(executor.root.nodes).map((device) => (
         <React.Fragment key={device.id}>
           <header className="header header--2">
-            <h2>{device.label ?? `[${device.model}]`}</h2>
+            <h2>{(device.label ? `${device.label} ` : '') + ` [${device.model}]`}</h2>
           </header>
 
           <p>Connected: {device.connected ? 'yes' : 'no'}</p>
           {/* <pre>{JSON.stringify(device, null, 2)}</pre> */}
 
           <Form.Form>
-            {device.nodes.map((node, nodeIndex) => {
+            {Object.values(device.nodes).map((node, nodeIndex) => {
               let label = (node.label ?? node.id);
-              let data = node.data;
+              let data = (node as DataNode).data;
 
               if (data.type === 'boolean') {
                 data = {
@@ -87,7 +108,7 @@ function DevicesTab(props: ChipTabComponentProps) {
               }
 
               switch (data.type) {
-                case 'readonlyScalar': {
+                case 'readScalar': {
                   return (
                     <React.Fragment key={node.id}>{label}: {data.value ?? '–'}</React.Fragment>
                   );

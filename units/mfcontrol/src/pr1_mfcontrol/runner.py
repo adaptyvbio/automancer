@@ -91,8 +91,9 @@ class Runner(BaseRunner):
       if not valve.node.connected:
         return { "error": ValveError.Disconnected }
 
-      if valve.node.unwritable:
-        return { "error": ValveError.Unwritable }
+      # TODO: Deprecate
+      # if valve.node.unwritable:
+      #   return { "error": ValveError.Unwritable }
 
       return { "error": None }
 

@@ -10,8 +10,9 @@ from .device import MasterDevice, WorkerDevice
 conf_schema = sc.Schema({
   'devices': sc.Optional(sc.List({
     'id': sc.Optional(Identifier()),
+    'address': sc.Optional(str),
     'label': sc.Optional(str),
-    'serial': str,
+    'serial': sc.Optional(str),
     'workers': sc.Optional(sc.Noneable(sc.List({
       'id': Identifier(),
       'label': sc.Optional(Identifier()),
@@ -35,9 +36,9 @@ class Executor(BaseExecutor):
 
       master_device = MasterDevice(
         id=master_id,
+        address=device_conf.get('address'),
         label=device_conf.get('label'),
-        serial_number=device_conf['serial'],
-        update_callback=self._host.update_callback
+        serial_number=device_conf.get('serial')
       )
 
       self._devices[master_id] = master_device

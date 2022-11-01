@@ -17,10 +17,7 @@ class GeneralDevice(Protocol):
   def __init__(self, address: str, *, on_close: Optional[Callable[..., Awaitable[None]]] = None):
     pass
 
-  async def close(self):
-    raise NotImplementedError()
-
-  async def get_serial_number(self) -> Optional[str]:
+  async def close(self) -> None:
     raise NotImplementedError()
 
   @staticmethod
@@ -40,12 +37,11 @@ class GeneralDeviceAdapter(Generic[T]):
     on_connection_fail: Optional[Callable] = None,
     on_disconnection: Optional[Callable] = None,
     reconnect: bool = True,
-    serial_number: Optional[str] = None
+    test_device: Callable
   ):
     self._Device = Device
 
     self._address = address
-    self._serial_number = serial_number
 
     self._device: Optional[T] = None
     self._reconnect_task = None
@@ -53,6 +49,7 @@ class GeneralDeviceAdapter(Generic[T]):
     self._on_connection = on_connection
     self._on_connection_fail = on_connection_fail
     self._on_disconnection = on_disconnection
+    self._test_device = test_device
 
     self.connected = False
     self.reconnect_device = reconnect
@@ -91,14 +88,13 @@ class GeneralDeviceAdapter(Generic[T]):
 
     try:
       self._device = self._Device(address, on_close=on_close)
-      serial_number = await asyncio.wait_for(self._device.get_serial_number(), timeout=1)
+
+      if not await asyncio.wait_for(self._test_device(self._device), timeout=1.0):
+        raise SerialException()
     except (asyncio.TimeoutError, SerialException):
       self._device = None
     else:
-      if (self._serial_number is None) or (serial_number == self._serial_number):
-        self.connected = True
-      else:
-        self._device = None
+      self.connected = True
 
 
   async def connect(self):

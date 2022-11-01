@@ -4,18 +4,18 @@ from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceDisconnectedError, OkolabDeviceStatus
 from pr1.devices.adapter import GeneralDeviceAdapter
-from pr1.devices.node import DeviceNode, PolledNodeUnavailableError, PolledReadonlyNode, ReadonlyScalarNode
+from pr1.devices.node import DeviceNode, PolledNodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, BiWritableNode
 
 from . import logger, namespace
 
 
-class BoardTemperatureNode(PolledReadonlyNode, ReadonlyScalarNode):
+class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
   id = "boardTemperature"
   label = "Board temperature"
 
   def __init__(self, *, master: 'MasterDevice'):
-    PolledReadonlyNode.__init__(self, min_interval=1.0)
-    ReadonlyScalarNode.__init__(self)
+    PolledReadableNode.__init__(self, min_interval=0.2)
+    ScalarReadableNode.__init__(self)
 
     self._master = master
 
@@ -26,13 +26,13 @@ class BoardTemperatureNode(PolledReadonlyNode, ReadonlyScalarNode):
       raise PolledNodeUnavailableError() from e
 
 
-class TemperatureReadoutNode(PolledReadonlyNode, ReadonlyScalarNode):
+class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
   id = "readout"
   label = "Temperature readout"
 
   def __init__(self, *, index: int, master: 'MasterDevice'):
-    PolledReadonlyNode.__init__(self, min_interval=1.0)
-    ReadonlyScalarNode.__init__(self)
+    PolledReadableNode.__init__(self, min_interval=0.2)
+    ScalarReadableNode.__init__(self)
 
     self._index = index
     self._master = master
@@ -44,49 +44,23 @@ class TemperatureReadoutNode(PolledReadonlyNode, ReadonlyScalarNode):
     except OkolabDeviceDisconnectedError as e:
       raise PolledNodeUnavailableError() from e
 
-# class TemperatureSetpointNode(ScalarNode):
-#   id = "setpoint"
-#   label = "Temperature setpoint"
+class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
+  id = "setpoint"
+  label = "Temperature setpoint"
 
-#   def __init__(self, *, index: int, master: 'MasterDevice'):
-#     self._index = index
-#     self._master = master
+  def __init__(self, *, index: int, master: 'MasterDevice'):
+    ScalarWritableNode.__init__(self, range=(25.0, 60.0))
+    BiWritableNode.__init__(self)
 
-#     self.target_value = None
-#     self.value = None
-#     self.value_range = (25.0, 60.0)
+    self._index = index
+    self._master = master
 
-#   @property
-#   def connected(self):
-#     return self._master.connected
-
-#   async def write(self, value: float, /):
-#     self.target_value = value
-
-#     if self._master.connected:
-#       await self._write()
-
-#   async def _configure(self):
-#     self.value = await self._master.get_temperature_setpoint1()
-
-#     if self.target_value is None:
-#       self.target_value = self.value
-
-#     if self.value != self.target_value:
-#       await self._write()
-
-#     self.value_range = await self._master.get_temperature_setpoint_range1()
-
-#   async def _write(self):
-#     assert self.target_value is not None
-
-#     try:
-#       match self._index:
-#         case 1: await self._master.set_temperature_setpoint1(self.target_value)
-#     except OkolabDeviceDisconnectedError:
-#       pass
-#     else:
-#       self.value = self.target_value
+  async def _write(self, value: float):
+    try:
+      match self._index:
+        case 1: await self._master._adapter.device.set_temperature_setpoint1(value)
+    except OkolabDeviceDisconnectedError:
+      pass
 
 
 class MasterDevice(DeviceNode):
@@ -95,10 +69,10 @@ class MasterDevice(DeviceNode):
   def __init__(
     self,
     *,
+    address: Optional[str],
     id: str,
     label: Optional[str],
-    serial_number: str,
-    update_callback: Callable[[], None],
+    serial_number: Optional[str]
   ):
     super().__init__()
 
@@ -108,11 +82,11 @@ class MasterDevice(DeviceNode):
 
     self._adapter = GeneralDeviceAdapter(
       OkolabDevice,
+      address=address,
       on_connection=self._on_connection,
       on_connection_fail=self._on_connection_fail,
       on_disconnection=self._on_disconnection,
-      reconnect=True,
-      serial_number=serial_number
+      test_device=self._test_device
     )
 
     self._node_board_temperature = BoardTemperatureNode(master=self)
@@ -147,6 +121,9 @@ class MasterDevice(DeviceNode):
 
     for worker in self._workers:
       await worker._unconfigure()
+
+  async def _test_device(self, device: OkolabDevice):
+    return await device.get_serial_number() == self._serial_number
 
   @property
   def connected(self):
@@ -184,19 +161,18 @@ class WorkerDevice(DeviceNode):
     self._type = type
 
     self._node_readout = TemperatureReadoutNode(index=index, master=master)
-    # self._node_setpoint = TemperatureSetpointNode(index=index, master=master)
+    self._node_setpoint = TemperatureSetpointNode(index=index, master=master)
     self._status = None
     self._status_check_task = None
 
-    # self.nodes = { node.id: node for node in {self._node_readout, self._node_setpoint} }
-    self.nodes = { node.id: node for node in {self._node_readout} }
+    self.nodes = { node.id: node for node in {self._node_readout, self._node_setpoint} }
 
   async def _configure(self):
     match self._index:
       case 1: await self._master._adapter.device.set_device1(self._type, side=self._side)
 
     await self._node_readout._configure()
-    # await self._node_setpoint._configure()
+    await self._node_setpoint._configure()
 
     async def status_check_loop():
       try:
@@ -217,7 +193,8 @@ class WorkerDevice(DeviceNode):
       self._status_check_task.cancel()
 
     await self._node_readout._unconfigure()
+    await self._node_setpoint._unconfigure()
 
   @property
   def connected(self):
-    return self._status in {OkolabDeviceStatus.Alarm, OkolabDeviceStatus.Ok, OkolabDeviceStatus.Transient}
+    return self._master.connected and (self._status in {OkolabDeviceStatus.Alarm, OkolabDeviceStatus.Ok, OkolabDeviceStatus.Transient})

@@ -1,6 +1,9 @@
 import asyncio
 import traceback
-from typing import Callable, Generic, Optional, Protocol, TypeVar
+from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
+
+
+T = TypeVar('T')
 
 
 # Base nodes
@@ -14,6 +17,14 @@ class BaseNode:
     self.connected: bool
     self.id: str
     self.label: Optional[str]
+
+  # Called by the producer
+
+  @property
+  def _label(self):
+    return f"'{self.label or self.id}'"
+
+  # Called by the consumer
 
   def export(self):
     return {
@@ -42,9 +53,6 @@ class BaseWatchableNode(BaseNode):
     reg.cancel = lambda: self._listeners.remove(listener)
     return reg
 
-
-class BaseReadonlyNode(BaseWatchableNode):
-  pass
 
 class CollectionNode(BaseWatchableNode):
   def __init__(self):
@@ -94,19 +102,20 @@ class DeviceNode(CollectionNode):
     }
 
 
-# Simple readonly value nodes
+# Readable value nodes
 
-class ReadonlyBooleanNode(BaseReadonlyNode):
+class BaseReadableNode(BaseNode, Generic[T]):
   def __init__(self):
     super().__init__()
 
-    self.value: Optional[bool] = None
+    self.value: Optional[T] = None
 
+class BooleanReadableNode(BaseReadableNode[bool]):
   def export(self):
     return {
       **super().export(),
       "data": {
-        "type": "readonlyBoolean",
+        "type": "readableBoolean",
         "value": self.value
       }
     }
@@ -115,7 +124,7 @@ class EnumNodeOption(Protocol):
   label: str
   value: int
 
-class ReadonlyEnumNode(BaseReadonlyNode):
+class EnumReadableNode(BaseReadableNode[int]):
   def __init__(self):
     self.options: list[EnumNodeOption]
     self.value: Optional[int] = None
@@ -125,12 +134,12 @@ class ReadonlyEnumNode(BaseReadonlyNode):
       return next((index for index, option in enumerate(self.options) if option.value == value), None)
 
     return {
-      "type": "select",
+      "type": "readableEnum",
       "options": [{ 'label': option.label } for option in self.options],
       "value": find_option_index(self.value)
     }
 
-class ReadonlyScalarNode(BaseReadonlyNode):
+class ScalarReadableNode(BaseReadableNode[float]):
   def __init__(self):
     super().__init__()
 
@@ -142,28 +151,137 @@ class ReadonlyScalarNode(BaseReadonlyNode):
     return {
       **super().export(),
       "data": {
-        "type": "readScalar",
+        "type": "readableScalar",
+        "error": self.error,
+        "unit": self.unit,
         "value": self.value
       }
     }
 
 
-# Polled
+# Writable value nodes
+
+class BaseWritableNode(BaseNode, Generic[T]):
+  def __init__(self):
+    super().__init__()
+
+    self.current_value: Optional[T] = None
+    self.target_value: Optional[T] = None
+
+  # To be implemented
+
+  async def write(self, value: T):
+    raise NotImplementedError()
+
+  async def write_import(self, value: Any):
+    raise NotImplementedError()
+
+  # Called by the consumer
+
+  def export(self):
+    return {
+      **super().export(),
+      "data": {
+        "type": "writableBoolean",
+        "currentValue": self.current_value,
+        "targetValue": self.target_value
+      }
+    }
+
+class ScalarWritableNode(BaseWritableNode[float]):
+  def __init__(self, *, range: Optional[tuple[float, float]] = None):
+    super().__init__()
+
+    self.range = range
+    self.resolution = None
+    self.unit = None
+
+  async def write_import(self, value: float):
+    await self.write(value)
+
+  def export(self):
+    exported = super().export()
+
+    return {
+      **exported,
+      "data": {
+        **exported["data"],
+        "type": "writableScalar",
+        "range": self.range,
+        "unit": self.unit
+      }
+    }
+
+class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
+  def __init__(self):
+    BaseWatchableNode.__init__(self)
+    BaseWritableNode.__init__(self)
+
+    self.connected = False
+    self.current_value: Optional[T] = None
+    self.target_value: Optional[T] = None
+
+  # To be implemented
+
+  async def _read(self) -> T:
+    raise NotImplementedError()
+
+  async def _write(self, value: T) -> None:
+    raise NotImplementedError()
+
+  # Called by the producer
+
+  async def _configure(self):
+    try:
+      current_value = await self._read()
+    except NotImplementedError:
+      current_value = None
+    else:
+      self.current_value = current_value
+
+    if self.target_value is None:
+      self.target_value = self.current_value
+
+    self.connected = True
+
+    if (self.target_value is not None) and (current_value != self.target_value):
+      await self.write(self.target_value)
+
+    self._trigger_listeners()
+
+  async def _unconfigure(self):
+    self.connected = False
+    self._trigger_listeners()
+
+  # Called by the consumer
+
+  async def write(self, value: T):
+    self.target_value = value
+
+    if self.connected:
+      await self._write(value)
+      self.current_value = value
+
+    self._trigger_listeners()
+
+
+# Polled nodes
 
 class PolledNodeUnavailableError(Exception):
   pass
 
-T = TypeVar('T')
-
-class PolledReadonlyNode(BaseReadonlyNode, Generic[T]):
+class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
   def __init__(self, *, min_interval = 0.0):
+    super().__init__()
+
     self.connected: bool = False
     self.interval: float
-    self.value: Optional[T]
 
     self._intervals: list[float] = list()
     self._min_interval = min_interval
     self._poll_task: Optional[asyncio.Task] = None
+
+  # Internal
 
   @property
   def _interval(self) -> Optional[float]:
@@ -184,13 +302,33 @@ class PolledReadonlyNode(BaseReadonlyNode, Generic[T]):
       except Exception:
         traceback.print_exc()
       finally:
-        self.connected = False
         self._poll_task = None
 
     self._poll_task = asyncio.create_task(poll_loop())
 
+  # To be implemented
+
   async def _read(self) -> T:
     raise NotImplementedError()
+
+  # Called by the producer
+
+  async def _configure(self):
+    self.value = await self._read()
+    self.connected = True
+    self._trigger_listeners()
+
+    if self._interval is not None:
+      self._poll()
+
+  async def _unconfigure(self):
+    self.connected = False
+    self._trigger_listeners()
+
+    if self._poll_task:
+      self._poll_task.cancel()
+
+  # Called by the consumer
 
   def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
     reg = super().watch(listener, interval)
@@ -209,18 +347,3 @@ class PolledReadonlyNode(BaseReadonlyNode, Generic[T]):
         self._poll()
 
     return reg
-
-  async def _configure(self):
-    self.value = await self._read()
-    self.connected = True
-    self._trigger_listeners()
-
-    if self._interval is not None:
-      self._poll()
-
-  async def _unconfigure(self):
-    self.connected = False
-    self._trigger_listeners()
-
-    if self._poll_task:
-      self._poll_task.cancel()

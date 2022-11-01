@@ -1,4 +1,5 @@
 import asyncio
+from pr1.devices.node import BaseWritableNode, CollectionNode
 
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
@@ -18,18 +19,22 @@ class Executor(BaseExecutor):
     match instruction["type"]:
       case "register":
         if self._registration is None:
-          self._registration = self._host.root_node.watch(self._host.update_callback, interval=1.0)
+          self._registration = self._host.root_node.watch(self._host.update_callback, interval=0.5)
           logger.info("Watching all nodes")
 
-      case "setValue":
-        device = self._host.devices[instruction["deviceId"]]
-        node = device.nodes[instruction["nodeIndex"]]
+      case "write":
+        node = self._host.root_node
 
-        async def write():
+        for segment in instruction["path"]:
+          if isinstance(node, CollectionNode):
+            node = node.nodes[segment]
+          else:
+            raise ValueError()
+
+        if isinstance(node, BaseWritableNode):
           await node.write_import(instruction["value"])
-          self._host.update_callback()
-
-        asyncio.create_task(write())
+        else:
+          raise ValueError()
 
   async def destroy(self):
     if self._registration:

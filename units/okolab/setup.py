@@ -11,5 +11,9 @@ setup(
     'pr1.units': [
       "okolab = pr1_okolab",
     ]
-  }
+  },
+
+  install_requires=[
+    "okolab==0.1.0"
+  ]
 )

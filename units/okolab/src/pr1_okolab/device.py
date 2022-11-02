@@ -96,7 +96,7 @@ class MasterDevice(DeviceNode):
     self.nodes = { node.id: node for node in {self._node_board_temperature, *self._workers} }
 
   async def _on_connection(self, *, reconnection: bool):
-    logger.info(f"Connected to '{self._serial_number}'")
+    logger.info(f"Connected to {self._label}")
     self.model = await self._adapter.device.get_product_name()
 
     await self._node_board_temperature._configure()
@@ -111,11 +111,11 @@ class MasterDevice(DeviceNode):
 
   async def _on_connection_fail(self, reconnection: bool):
     if not reconnection:
-      logger.warning(f"Failed connecting to '{self._serial_number}'")
+      logger.warning(f"Failed connecting to {self._label}")
 
   async def _on_disconnection(self, *, lost: bool):
     if lost:
-      logger.warning(f"Lost connection to '{self._serial_number}'")
+      logger.warning(f"Lost connection to {self._label}")
 
     await self._node_board_temperature._unconfigure()
 

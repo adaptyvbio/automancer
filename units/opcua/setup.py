@@ -14,6 +14,6 @@ setup(
   },
 
   install_requires=[
-    "asyncua==0.9.94"
+    "asyncua==1.0.0"
   ]
 )

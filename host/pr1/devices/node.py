@@ -313,7 +313,7 @@ class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
           if value != self.value:
             self.value = value
             self._trigger_listeners()
-      except (asyncio.CancelledError, PolledNodeUnavailableError):
+      except (asyncio.CancelledError, NodeUnavailableError, PolledNodeUnavailableError):
         pass
       except Exception:
         traceback.print_exc()

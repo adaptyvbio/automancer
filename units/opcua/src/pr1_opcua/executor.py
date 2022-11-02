@@ -40,6 +40,9 @@ class OPCUADeviceReadableNode(PolledReadableNode):
   def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode):
     super().__init__(min_interval=0.2)
 
+    self.id = id
+    self.label = label
+
     self._device = device
     self._node = node
 
@@ -65,8 +68,7 @@ class OPCUADeviceWritableNode(BiWritableNode):
 
   async def _read(self):
     try:
-      await asyncio.sleep(3)
-      await self._node.read_value() # TODO: catch errors from this
+      await self._node.read_value()
     except ConnectionError as e:
       await self._device._lost()
       raise NodeUnavailableError() from e
@@ -118,7 +120,7 @@ class OPCUADevice(DeviceNode):
     self._address = address
     self._client = Client(address)
 
-    self._connecting = False
+    self._connected = False
     self._reconnect_task = None
 
 
@@ -133,10 +135,6 @@ class OPCUADevice(DeviceNode):
         type=node_conf['type'].value
       )
 
-    self.nodes: dict[str, OPCUADeviceWritableNode] = {
-      node.id: node for node in {create_node(node_conf) for node_conf in nodes_conf}
-    }
-
     self._keepalive_node = OPCUADeviceReadableNode(
       device=self,
       id="keepalive",
@@ -146,21 +144,25 @@ class OPCUADevice(DeviceNode):
 
     self._keepalive_reg = self._keepalive_node.watch(interval=1.0)
 
+    self.nodes: dict[str, OPCUADeviceWritableNode] = {
+      node.id: node for node in {*{create_node(node_conf) for node_conf in nodes_conf}, self._keepalive_node}
+    }
+
   async def initialize(self):
     await self._connect()
 
     if not self.connected:
-      logger.error(f"Failed connecting to {self._label}")
+      logger.warning(f"Failed connecting to {self._label}")
       self._reconnect()
 
   async def destroy(self):
-    if self.connected:
-      await self._client.disconnect()
+    self._keepalive_reg.cancel()
+
+    await self._disconnect()
+    await self._client.disconnect()
 
     if self._reconnect_task:
       self._reconnect_task.cancel()
-
-    self._keepalive_reg.cancel()
 
   async def _connect(self):
     logger.debug(f"Connecting to {self._label}")
@@ -171,23 +173,35 @@ class OPCUADevice(DeviceNode):
     except (ConnectionRefusedError, OSError, asyncio.TimeoutError):
       return
 
-    logger.info(f"Connected to {self._label}")
-    self.connected = True
+    logger.info(f"Configuring {self._label}")
+    self._connected = True
 
     for node in self.nodes.values():
       await node._configure()
 
-      if not self.connected:
+      if not self._connected:
         break
+    else:
+      self.connected = True
+      logger.info(f"Connected to {self._label}")
+
+  async def _disconnect(self):
+    self.connected = False
+    self._connected = False
+
+    for node in self.nodes.values():
+      if node.connected:
+        await node._unconfigure()
 
   async def _lost(self):
     logger.warn(f"Lost connection to {self._label}")
-    self.connected = False
+    was_connected = self.connected
 
-    for node in self.nodes.values():
-      await node._unconfigure()
+    await self._disconnect()
+    await self._client.close_session()
 
-    self._reconnect()
+    if was_connected:
+      self._reconnect()
 
   def _reconnect(self, interval = 1):
     async def reconnect():
@@ -215,15 +229,15 @@ class Executor(BaseExecutor):
     self._host = host
 
     for device_conf in conf.get('devices', list()):
-      device_id = device_conf['id']
+      device_id = device_conf['id'].value
 
       if device_id in self._host.devices:
         raise device_id.error(f"Duplicate device id '{device_id}'")
 
       device = OPCUADevice(
-        address=device_conf['address'],
+        address=device_conf['address'].value,
         id=device_id,
-        label=device_conf.get('label'),
+        label=(device_conf['label'].value if 'label' in device_conf else None),
         nodes_conf=device_conf['nodes']
       )
 

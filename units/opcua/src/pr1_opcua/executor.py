@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from typing import Any, Optional
 
 from asyncua import Client, ua
-from pr1.device import BooleanNode
+from asyncua.common import Node as UANode
+from pr1.devices.node import BaseWritableNode, BiWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarWritableNode
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
 from pr1.util.parser import Identifier
@@ -14,9 +16,9 @@ logging.getLogger("asyncua.client.client").setLevel(logging.WARNING)
 
 variants_map = {
   'bool': ua.VariantType.Boolean,
-  # 'i32': ua.VariantType.Int32,
-  # 'f32': ua.VariantType.Float,
-  # 'f64': ua.VariantType.Double
+  'i32': ua.VariantType.Int32,
+  'f32': ua.VariantType.Float,
+  'f64': ua.VariantType.Double
 }
 
 conf_schema = sc.Schema({
@@ -34,98 +36,134 @@ conf_schema = sc.Schema({
 })
 
 
-class DeviceNode(BooleanNode):
-  def __init__(self, *, id, label, node, type):
+class OPCUADeviceReadableNode(PolledReadableNode):
+  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode):
+    super().__init__(min_interval=0.2)
+
+    self._device = device
+    self._node = node
+
+  async def _read(self):
+    try:
+      return await self._node.read_value()
+    except (ConnectionError, asyncio.TimeoutError) as e:
+      await self._device._lost()
+      raise NodeUnavailableError() from e
+
+
+class OPCUADeviceWritableNode(BiWritableNode):
+  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
+    super().__init__()
+
     self.id = id
     self.label = label
     self.type = type
 
-    self.target_value = None
-    self.value = None
-
-    self.connected = False
-    self.unwritable = False
-
+    self._device = device
     self._node = node
     self._variant = variants_map[type]
 
-  async def _connect(self):
+  async def _read(self):
     try:
-      self.value = await self._node.get_value()
-    except ua.uaerrors._auto.BadNodeIdUnknown:
-      logger.error(f"Missing node '{self._node.nodeid}'")
-    else:
-      self.connected = True
+      await asyncio.sleep(3)
+      await self._node.read_value() # TODO: catch errors from this
+    except ConnectionError as e:
+      await self._device._lost()
+      raise NodeUnavailableError() from e
+    except ua.uaerrors._auto.BadNodeIdUnknown as e: # type: ignore
+      logger.error(f"Missing node {self._label}" + (f" with id '{self._node.nodeid.to_string()}'" if self._node.nodeid else str()))
+      raise NodeUnavailableError() from e
 
-      if self.target_value is None:
-        self.target_value = self.value
-
-      if self.target_value != self.value:
-        await self.write(self.target_value)
-
-  async def write(self, value):
-    self.target_value = value
-
-    if self.connected:
-      await self._node.write_value(ua.DataValue(value))
-      self.value = value
+  async def _write(self, value: bool):
+    await self._node.write_value(ua.DataValue(value)) # type: ignore
 
 
-class Device:
+class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
+  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
+    OPCUADeviceWritableNode.__init__(self, device=device, id=id, label=label, node=node, type=type)
+    BooleanWritableNode.__init__(self)
+
+class OPCUADeviceScalarNode(OPCUADeviceWritableNode, ScalarWritableNode):
+  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
+    OPCUADeviceWritableNode.__init__(self, device=device, id=id, label=label, node=node, type=type)
+    ScalarWritableNode.__init__(self)
+
+
+nodes_map: dict[str, type[OPCUADeviceWritableNode]] = {
+  'bool': OPCUADeviceBooleanNode,
+  'i32': OPCUADeviceScalarNode,
+  'f32': OPCUADeviceScalarNode,
+  'f64': OPCUADeviceScalarNode
+}
+
+
+class OPCUADevice(DeviceNode):
   model = "Generic OPC-UA device"
   owner = namespace
 
-  def __init__(self, id, *, label, address, nodes_conf, update_callback):
+  def __init__(
+    self,
+    *,
+    address: str,
+    id: str,
+    label: Optional[str],
+    nodes_conf: Any
+  ):
+    super().__init__()
+
     self.connected = False
     self.id = id
     self.label = label
 
     self._address = address
     self._client = Client(address)
-    self._update_callback = update_callback
 
-    self._check_task = None
+    self._connecting = False
     self._reconnect_task = None
 
-    self._node_ids = { node['id']: node_index for node_index, node in enumerate(nodes_conf) }
-    self.nodes = [
-      DeviceNode(
-        id=node_conf['id'],
-        label=node_conf.get('label'),
-        node=self._client.get_node(node_conf['location'].value),
-        type=node_conf['type']
-      ) for node_conf in nodes_conf
-    ]
 
+    def create_node(node_conf):
+      Node = nodes_map[node_conf['type']]
+
+      return Node(
+        device=self,
+        id=node_conf['id'].value,
+        label=(node_conf['label'].value if 'label' in node_conf else None),
+        node=self._client.get_node(node_conf['location'].value),
+        type=node_conf['type'].value
+      )
+
+    self.nodes: dict[str, OPCUADeviceWritableNode] = {
+      node.id: node for node in {create_node(node_conf) for node_conf in nodes_conf}
+    }
+
+    self._keepalive_node = OPCUADeviceReadableNode(
+      device=self,
+      id="keepalive",
+      label=None,
+      node=self._client.get_node("ns=0;i=2259")
+    )
+
+    self._keepalive_reg = self._keepalive_node.watch(interval=1.0)
 
   async def initialize(self):
     await self._connect()
 
     if not self.connected:
-      logger.error(f"Failed connecting to '{self._address}'")
+      logger.error(f"Failed connecting to {self._label}")
       self._reconnect()
 
   async def destroy(self):
     if self.connected:
       await self._client.disconnect()
 
-    if self._check_task:
-      self._check_task.cancel()
-
     if self._reconnect_task:
       self._reconnect_task.cancel()
 
-  def get_node(self, id):
-    node_index = self._node_ids.get(id)
-
-    if node_index is None:
-      return None
-
-    return self.nodes[node_index]
-
+    self._keepalive_reg.cancel()
 
   async def _connect(self):
-    logger.debug(f"Connecting to '{self._address}'")
+    logger.debug(f"Connecting to {self._label}")
 
     try:
       await self._client.connect()
@@ -133,36 +171,23 @@ class Device:
     except (ConnectionRefusedError, OSError, asyncio.TimeoutError):
       return
 
-    logger.info(f"Connected to '{self._address}'")
+    logger.info(f"Connected to {self._label}")
     self.connected = True
 
-    for node in self.nodes:
-      await node._connect()
+    for node in self.nodes.values():
+      await node._configure()
 
-    server_state_node = self._client.get_node("ns=0;i=2259")
+      if not self.connected:
+        break
 
-    async def check_loop():
-      try:
-        while True:
-          await server_state_node.get_value()
-          await asyncio.sleep(1)
-      except (ConnectionError, asyncio.TimeoutError):
-        logger.error(f"Lost connection to '{self._address}'")
+  async def _lost(self):
+    logger.warn(f"Lost connection to {self._label}")
+    self.connected = False
 
-        self.connected = False
+    for node in self.nodes.values():
+      await node._unconfigure()
 
-        for node in self.nodes:
-          node.connected = False
-
-        self._reconnect()
-        self._update_callback()
-      except asyncio.CancelledError:
-        pass
-      finally:
-        self._check_task = None
-
-    self._check_task = asyncio.create_task(check_loop())
-
+    self._reconnect()
 
   def _reconnect(self, interval = 1):
     async def reconnect():
@@ -171,8 +196,7 @@ class Device:
           await self._connect()
 
           if self.connected:
-            self._update_callback()
-            return
+            break
 
           await asyncio.sleep(interval)
       except asyncio.CancelledError:
@@ -196,12 +220,11 @@ class Executor(BaseExecutor):
       if device_id in self._host.devices:
         raise device_id.error(f"Duplicate device id '{device_id}'")
 
-      device = Device(
+      device = OPCUADevice(
         address=device_conf['address'],
         id=device_id,
         label=device_conf.get('label'),
-        nodes_conf=device_conf['nodes'],
-        update_callback=self._host.update_callback
+        nodes_conf=device_conf['nodes']
       )
 
       self._devices[device_id] = device

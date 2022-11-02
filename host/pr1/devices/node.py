@@ -12,6 +12,9 @@ class Cancelable:
   def cancel(self):
     raise NotImplementedError()
 
+class NodeUnavailableError(Exception):
+  pass
+
 class BaseNode:
   def __init__(self):
     self.connected: bool
@@ -46,11 +49,17 @@ class BaseWatchableNode(BaseNode):
       except Exception:
         traceback.print_exc()
 
-  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
-    self._listeners.add(listener)
+  def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
+    if listener:
+      self._listeners.add(listener)
+
+    def cancel():
+      if listener:
+        self._listeners.remove(listener)
 
     reg = Cancelable()
-    reg.cancel = lambda: self._listeners.remove(listener)
+    reg.cancel = cancel
+
     return reg
 
 
@@ -61,7 +70,7 @@ class CollectionNode(BaseWatchableNode):
     self.nodes: dict[str, BaseNode]
     self._listening = False
 
-  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
+  def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
     regs = set()
 
     if not self._listening:
@@ -176,6 +185,8 @@ class BaseWritableNode(BaseNode, Generic[T]):
   async def write_import(self, value: Any):
     raise NotImplementedError()
 
+
+class BooleanWritableNode(BaseWritableNode[bool]):
   # Called by the consumer
 
   def export(self):
@@ -205,10 +216,11 @@ class ScalarWritableNode(BaseWritableNode[float]):
     return {
       **exported,
       "data": {
-        **exported["data"],
         "type": "writableScalar",
         "range": self.range,
-        "unit": self.unit
+        "unit": self.unit,
+        "currentValue": self.current_value,
+        "targetValue": self.target_value
       }
     }
 
@@ -223,6 +235,8 @@ class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
 
   # To be implemented
 
+  # This method may raise a NodeUnavailableError exception to indicate that the node is not available
+  # on the underlying device, e.g. because of a configuration or disconnection issue.
   async def _read(self) -> T:
     raise NotImplementedError()
 
@@ -234,6 +248,8 @@ class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
   async def _configure(self):
     try:
       current_value = await self._read()
+    except NodeUnavailableError:
+      return
     except NotImplementedError:
       current_value = None
     else:
@@ -308,13 +324,18 @@ class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
 
   # To be implemented
 
+  # This method may throw a NodeUnavailableError exception.
   async def _read(self) -> T:
     raise NotImplementedError()
 
   # Called by the producer
 
   async def _configure(self):
-    self.value = await self._read()
+    try:
+      self.value = await self._read()
+    except NodeUnavailableError:
+      return
+
     self.connected = True
     self._trigger_listeners()
 
@@ -330,7 +351,7 @@ class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
 
   # Called by the consumer
 
-  def watch(self, listener: Callable[[], None], /, interval: Optional[float] = None):
+  def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
     reg = super().watch(listener, interval)
     old_cancel = reg.cancel
 

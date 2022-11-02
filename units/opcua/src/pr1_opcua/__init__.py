@@ -8,7 +8,7 @@ metadata = Metadata(
   description="OPC-UA communication.",
   icon=MetadataIcon(kind='icon', value="sensors"),
   title="OPC-UA",
-  version="1.0"
+  version="2.0"
 )
 
 logger = parent_logger.getChild(namespace)

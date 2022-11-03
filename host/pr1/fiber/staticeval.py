@@ -1,6 +1,8 @@
 import ast
 import builtins
+import functools
 import math
+from typing import Optional
 
 from .. import reader as reader
 from ..draft import DraftDiagnostic
@@ -12,7 +14,8 @@ class EvaluationError(Exception):
     self.area = area
 
 class InvalidCall(EvaluationError):
-  pass
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid call", ranges=self.area.ranges)
 
 class InvalidNode(EvaluationError):
   def diagnostic(self):
@@ -20,9 +23,19 @@ class InvalidNode(EvaluationError):
 
 
 class EvaluationContext: # or Environment?
-  def __init__(self, variables):
-    # allow dynamic evaluation
-    self.variables = variables
+  def __init__(self, *, closure: Optional[dict] = None, globals: Optional[dict] = None):
+    self.closure = closure or dict()
+    self.globals = globals or dict()
+
+  def __add__(self, other: 'EvaluationContext'):
+    return EvaluationContext(
+      closure={**self.closure, **other.closure},
+      globals={**self.globals, **other.globals}
+    )
+
+  @functools.cached_property
+  def variables(self):
+    return {**self.globals, **self.closure}
 
 def evaluate(expr, /, input, context):
   area = input.compute_ast_node_area(expr)
@@ -32,25 +45,30 @@ def evaluate(expr, /, input, context):
       left = evaluate(expr.left, input, context)
       right = evaluate(expr.right, input, context)
 
-      match expr.op:
-        case ast.Add():
-          return LocatedValue.new(left.value + right.value, area)
-        case ast.Mult():
-          return LocatedValue.new(left.value * right.value, area)
-        case ast.Sub():
-          return left - right
-        case _:
-          raise InvalidNode(area)
+      try:
+        match expr.op:
+          case ast.Add():
+            return LocatedValue.new(left.value + right.value, area)
+          case ast.Mult():
+            return LocatedValue.new(left.value * right.value, area)
+          case ast.Sub():
+            return left - right
+          case _:
+            raise InvalidNode(area)
+      except TypeError as e:
+        raise InvalidNode(area) from e
 
     case ast.Call(args=args, func=ast.Name(ctx=ast.Load(), id=func_name), keywords=kwargs):
       # TODO: Add checks for duplicate kwargs
       kwargs = { keyword.arg: evaluate(keyword.value, input, context).value for keyword in kwargs }
 
       match func_name, args, kwargs:
-        case "abs", [arg], []:
+        case "abs", [arg], {}:
           return LocatedValue.new(abs(evaluate(arg, input, context).value), area)
-        case "cos", [arg], []:
+        case "cos", [arg], {}:
           return LocatedValue.new(math.cos(evaluate(arg, input, context).value), area)
+        case "int", [arg], {}:
+          return LocatedValue.new(int(evaluate(arg, input, context).value), area)
         case name, args, kwargs if name in context.variables:
           return LocatedValue.new(context.variables[name](*args, **kwargs), area)
         case _:
@@ -106,7 +124,7 @@ if __name__ == "__main__":
     # )))
 
     try:
-      x = evaluate(tree.body, context=EvaluationContext(variables=dict(foo=3)), input=input)
+      x = evaluate(tree.body, context=EvaluationContext(globals=dict(foo=3)), input=input)
     except EvaluationError as e:
       print("Error: " + type(e).__name__)
       print(e.area.format())

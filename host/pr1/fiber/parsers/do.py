@@ -1,8 +1,9 @@
 from typing import Any
+
 from .. import langservice as lang
 from ..expr import PythonExprEvaluator
 from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState
-# from ...units.base import BaseParser
+from ..staticeval import EvaluationContext
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -27,21 +28,22 @@ class DoParser(BaseParser):
     transforms = list()
 
     if 'do_before' in attrs:
-      transforms.append(DoTransform(attrs['do_before'], before=True, parser=self))
+      transforms.append(DoTransform(attrs['do_before'], before=True, context=context, parser=self))
     if 'do_after' in attrs:
-      transforms.append(DoTransform(attrs['do_after'], before=False, parser=self))
+      transforms.append(DoTransform(attrs['do_after'], before=False, context=context, parser=self))
 
     return lang.Analysis(), BlockData(transforms=transforms)
 
 @debug
 class DoTransform(BaseTransform):
-  def __init__(self, data_do: Any, /, *, before: bool, parser: DoParser):
+  def __init__(self, data_do: Any, /, *, before: bool, context: EvaluationContext, parser: DoParser):
     self._before = before
+    self._context = context
     self._data_do = data_do
     self._parser = parser
 
   def execute(self, state, parent_state, transforms):
-    result = self._parser._fiber.parse_block(self._data_do)
+    result = self._parser._fiber.parse_block(self._data_do, context=self._context)
 
     if result is Ellipsis:
       return lang.Analysis(), Ellipsis

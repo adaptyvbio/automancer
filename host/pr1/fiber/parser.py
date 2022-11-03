@@ -213,7 +213,7 @@ class FiberParser:
     return schema_dict
 
 
-  def parse_block(self, data_block) -> EllipsisType | tuple[BlockState, list[BaseTransform]]:
+  def parse_block(self, data_block, *, context: Optional[EvaluationContext] = None) -> EllipsisType | tuple[BlockState, list[BaseTransform]]:
     dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
     self.analysis += dict_analysis
 
@@ -224,12 +224,14 @@ class FiberParser:
     state = BlockState()
     transforms = list()
 
-    from random import random
-    context = EvaluationContext(
-      variables=dict(
-        random=(lambda start, end: random() * (end.value - start.value) + start.value)
+    if not context:
+      from random import random
+
+      context = EvaluationContext(
+        globals=dict(
+          random=(lambda start, end: random() * (end.value - start.value) + start.value)
+        )
       )
-    )
 
     for parser in self._parsers:
       analysis, unit_data = parser.parse_block(block_attrs, context)

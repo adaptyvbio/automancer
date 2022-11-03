@@ -1,6 +1,7 @@
 from .. import langservice as lang
-from ..expr import PythonExprEvaluator
+from ..expr import PythonExpr, PythonExprEvaluator
 from ..parser import BaseTransform, BlockData, BlockUnitState
+from ..staticeval import EvaluationContext
 from ...units.base import BaseParser
 from ...util import schema as sc
 from ...util.decorators import debug
@@ -39,7 +40,7 @@ class ShorthandsParser(BaseParser):
 
     if attrs:
       return lang.Analysis(), BlockData(transforms=[
-        ShorthandTransform(attrs, parser=self)
+        ShorthandTransform(attrs, context=context, parser=self)
       ])
     else:
       return lang.Analysis(), BlockData()
@@ -56,17 +57,51 @@ class ShorthandsParser(BaseParser):
 
 @debug
 class ShorthandTransform(BaseTransform):
-  def __init__(self, attrs, parser):
+  def __init__(self, attrs, *, context, parser):
     self._attrs = attrs
+    self._context = context
     self._parser = parser
 
   def execute(self, block_state, parent_state, block_transforms):
+    analysis = lang.Analysis()
     state = None
     transforms = list()
 
     for shorthand_name, shorthand_value in self._attrs.items():
       data_shorthand = self._parser._shorthands[shorthand_name]
-      shorthand_state, shorthand_transforms = self._parser._fiber.parse_block(data_shorthand)
+
+      if isinstance(shorthand_value, str):
+        expr_result = PythonExpr.parse(shorthand_value)
+
+        if expr_result:
+          expr_analysis, expr_value = expr_result
+          analysis += expr_analysis
+
+          if expr_value is Ellipsis:
+            return analysis, Ellipsis
+
+          eval_analysis, eval_value = PythonExprEvaluator(expr_value, type=lang.AnyType()).evaluate(self._context)
+          analysis += eval_analysis
+
+          if eval_value is Ellipsis:
+            return analysis, Ellipsis
+
+          arg = eval_value
+        else:
+          arg = shorthand_value
+      else:
+        arg = shorthand_value
+
+      shorthand_context = self._context + EvaluationContext(closure={
+        'arg': arg
+      })
+
+      parse_result = self._parser._fiber.parse_block(data_shorthand, context=shorthand_context)
+
+      if parse_result is Ellipsis:
+        return analysis, Ellipsis
+
+      shorthand_state, shorthand_transforms = parse_result
       transforms += shorthand_transforms
 
       if state is not None:
@@ -76,4 +111,4 @@ class ShorthandTransform(BaseTransform):
 
     transforms += block_transforms
 
-    return lang.Analysis(), self._parser._fiber.execute(block_state, parent_state | state, transforms)
+    return analysis, self._parser._fiber.execute(block_state, parent_state | state, transforms)

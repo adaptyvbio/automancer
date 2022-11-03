@@ -8,7 +8,7 @@ from ..reader import LocatedString
 from ..util.decorators import debug
 
 
-expr_regexp = re.compile(r"(\$)?{{((?:\\.|[^\\}]|}(?!}))*)}}") # TODO: add @
+expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
 escape_regexp = re.compile(r"\\(.)")
 
 def unescape(value):
@@ -67,8 +67,12 @@ class PythonExpr:
         kind = PythonExprKind.Field
       case "$":
         kind = PythonExprKind.Static
+      case "%":
+        kind = PythonExprKind.Dynamic
       case "@":
         kind = PythonExprKind.Binding
+      case _:
+        raise ValueError()
 
     analysis = Analysis()
     contents = unescape(LocatedString.from_match_group(match, 2).strip())
@@ -95,7 +99,6 @@ class PythonExprEvaluator:
 
   def evaluate(self, context):
     from .langservice import Analysis
-    from ..reader import Source
 
     try:
       result = evaluate(self._expr.tree.body, self._expr.contents, context)

@@ -39,17 +39,33 @@ class ScoreParser(BaseParser):
         analysis = lang.Analysis()
         score = score_raw.value
 
-      return lang.Analysis(), BlockData(state=ScoreState(score))
+      return lang.Analysis(), BlockData(state=ScoreState([score]))
     else:
-      return lang.Analysis(), BlockData(state=ScoreState(0.0))
+      return lang.Analysis(), BlockData(state=ScoreState([0.0]))
 
 @debug
 class ScoreState(BlockUnitState):
-  def __init__(self, points):
-    self.points = points
+  def __init__(self, points_list, /):
+    self.points_list = points_list
 
   def __or__(self, other: 'ScoreState'):
-    return ScoreState(self.points + other.points)
+    return ScoreState(self.points_list + other.points_list)
+
+  def compile(self, context):
+    points = 0.0
+
+    for point in self.points_list:
+      points += point
+
+    return lang.Analysis(), ScoreStateCompiled(points)
+
+  def export(self):
+    return { "pointsList": self.points_list }
+
+@debug
+class ScoreStateCompiled:
+  def __init__(self, points: float, /):
+    self.points = points
 
   def export(self):
     return { "points": self.points }

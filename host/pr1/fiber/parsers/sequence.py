@@ -54,7 +54,7 @@ class SequenceTransform(BaseTransform):
         block_state, block_transforms = result
         block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms)
 
-        if block is None:
+        if (block is Ellipsis) or (block is None):
           return lang.Analysis(), Ellipsis
           raise Exception("Not ok")
 

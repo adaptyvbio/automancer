@@ -48,7 +48,7 @@ class OPCUADeviceWritableNode(BiWritableNode):
 
   async def _read(self):
     try:
-      await self._node.read_value()
+      return await self._node.read_value()
     except ConnectionError as e:
       await self._device._lost()
       raise NodeUnavailableError() from e

@@ -1,10 +1,34 @@
-from typing import Optional
+import functools
+from typing import Callable, Optional
 
-from pr1.devices.adapter import GeneralDeviceAdapter
-from pr1.devices.node import BaseWritableNode, DeviceNode
+from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
+from pr1.devices.node import BaseWritableNode, BiWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
 
-from .numato import NumatoRelayBoardDevice
+from .numato import NumatoRelayBoardDevice, NumatoRelayBoardDeviceDisconnectedError
 from .. import logger, namespace
+
+
+class RelayBoardGlobalNode(ScalarWritableNode, BiWritableNode):
+  id = "global"
+  label = "Global"
+
+  def __init__(self, *, device: 'RelayBoardDevice'):
+    ScalarWritableNode.__init__(self)
+    BiWritableNode.__init__(self)
+
+    self._device = device
+
+  async def _read(self):
+    try:
+      return await self._device._adapter.device.read()
+    except NumatoRelayBoardDeviceDisconnectedError as e:
+      raise NodeUnavailableError() from e
+
+  async def _write(self, value: int):
+    try:
+      await self._device._adapter.device.write(value)
+    except NumatoRelayBoardDeviceDisconnectedError as e:
+      raise NodeUnavailableError() from e
 
 
 class RelayBoardNode(BaseWritableNode[bool]):
@@ -14,7 +38,7 @@ class RelayBoardNode(BaseWritableNode[bool]):
     self._device = device
     self._index = index
 
-  @property
+  @functools.cached_property
   def _mask(self):
     return (1 << self._index)
 
@@ -22,35 +46,27 @@ class RelayBoardNode(BaseWritableNode[bool]):
   def connected(self):
     return self._device.connected
 
-  @property
+  @functools.cached_property
   def id(self):
     return "relay" + str(self._index)
 
-  @property
+  @functools.cached_property
   def label(self):
     return f"Relay {self._index}"
 
   @property
   def current_value(self):
-    if self._device._current_value is None:
-      return None
-
-    return (self._device._current_value & self._mask) > 0
+    value: Optional[int] = self._device._global_node.current_value
+    return (value & self._mask) > 0 if value is not None else 0
 
   @property
   def target_value(self):
-    if self._device._target_value is None:
-      return None
-
-    return (self._device._target_value & self._mask) > 0
+    value: Optional[int] = self._device._global_node.target_value
+    return (value & self._mask) > 0 if value is not None else 0
 
   async def write(self, value: bool):
-    full_value = ((self._device._target_value or 0) & ~self._mask) | (int(value) << self._index)
-    self._device._target_value = full_value
-
-    if self._device.connected:
-      await self._device._adapter.device.write(full_value)
-      self._device._current_value = full_value
+    global_value = ((self._device._global_node.target_value or 0) & ~self._mask) | (int(value) << self._index)
+    await self._device._global_node.write(global_value)
 
     self._device._trigger_listeners()
 
@@ -70,54 +86,55 @@ class RelayBoardDevice(DeviceNode):
   ):
     super().__init__()
 
+    self.connected = False
     self.id = id
     self.label = label
 
+
+    self._global_node = RelayBoardGlobalNode(device=self)
+
+    parent = self
+
+    class Controller(GeneralDeviceAdapterController[NumatoRelayBoardDevice]):
+      async def create_device(self, address: str, *, on_close: Callable):
+        try:
+          return NumatoRelayBoardDevice(address=address, on_close=on_close)
+        except NumatoRelayBoardDeviceDisconnectedError:
+          return None
+
+      async def list_devices(self):
+        return NumatoRelayBoardDevice.list()
+
+      async def test_device(self, device: NumatoRelayBoardDevice):
+        try:
+          return await device.get_id() == serial_number
+        except NumatoRelayBoardDeviceDisconnectedError:
+          return False
+
+      async def on_connection(self, *, reconnection: bool):
+        logger.info(f"Connected to {parent._label}")
+
+        parent.connected = True
+        await parent._global_node._configure()
+
+        parent._trigger_listeners()
+
+      async def _on_disconnection(self, *, lost: bool):
+        if lost:
+          logger.warning(f"Lost connection to {parent._label}")
+
+        parent.connected = False
+        await parent._global_node._unconfigure()
+
+        parent._trigger_listeners()
+
+
     self._adapter = GeneralDeviceAdapter(
-      NumatoRelayBoardDevice,
       address=address,
-      on_connection=self._on_connection,
-      on_connection_fail=self._on_connection_fail,
-      on_disconnection=self._on_disconnection,
-      test_device=self._test_device
+      controller=Controller()
     )
 
     self.nodes = { node.id: node for node in {RelayBoardNode(index, device=self) for index in range(relay_count)} }
-
-    self._relay_count = relay_count
-    self._serial_number = serial_number
-
-    self._current_value = None
-    self._target_value = None
-
-  async def _on_connection(self, *, reconnection: bool):
-    logger.info(f"Connected to {self._label}")
-
-    self._current_value = await self._adapter.device.read()
-
-    if self._target_value is None:
-      self._target_value = self._current_value
-    if self._current_value != self._target_value:
-      await self._adapter.device.write(self._target_value)
-
-    self._trigger_listeners()
-
-  async def _on_connection_fail(self, reconnection: bool):
-    if not reconnection:
-      logger.warning(f"Failed connecting to {self._label}")
-
-  async def _on_disconnection(self, *, lost: bool):
-    if lost:
-      logger.warning(f"Lost connection to {self._label}")
-
-    self._trigger_listeners()
-
-  async def _test_device(self, device: NumatoRelayBoardDevice):
-    return await device.get_id() == self._serial_number
-
-  @property
-  def connected(self):
-    return self._adapter.connected
 
   async def initialize(self):
     await self._adapter.start()

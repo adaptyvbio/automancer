@@ -1,8 +1,9 @@
 import asyncio
 import builtins
 import traceback
-from typing import Awaitable, Callable, Optional, overload
+from typing import Awaitable, Callable, Optional, Sequence, overload
 
+import serial.tools.list_ports
 from aioserial import AioSerial
 from serial.serialutil import SerialException
 
@@ -11,6 +12,14 @@ Datatype = type[bool] | type[int]
 
 class AMFRotaryValveDeviceDisconnectedError(Exception):
   pass
+
+class AMFRotaryValveDeviceInfo:
+  def __init__(self, *, address: str):
+    self.address = address
+
+  def create(self, **kwargs):
+    return AMFRotaryValveDevice(self.address, **kwargs)
+
 
 class AMFRotaryValveDevice:
   def __init__(self, address: str, *, on_close: Optional[Callable[..., Awaitable[None]]] = None):
@@ -159,5 +168,6 @@ class AMFRotaryValveDevice:
 
 
   @staticmethod
-  async def list():
-    return []
+  def list(*, all = False) -> Sequence[AMFRotaryValveDeviceInfo]:
+    infos = serial.tools.list_ports.comports()
+    return [AMFRotaryValveDeviceInfo(address=info.device) for info in infos if all or (info.vid, info.pid) == (0x03eb, 0x2404)] # TODO: Update

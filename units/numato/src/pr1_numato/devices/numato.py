@@ -21,10 +21,14 @@ class NumatoRelayBoardDevice:
   def __init__(self, address: str, *, on_close: Optional[Callable[..., Awaitable[None]]] = None):
     self._lock = asyncio.Lock()
     self._on_close = on_close
-    self._serial: Optional[AioSerial] = AioSerial(
-      baudrate=9600,
-      port=address
-    )
+
+    try:
+      self._serial: Optional[AioSerial] = AioSerial(
+        baudrate=9600,
+        port=address
+      )
+    except SerialException:
+      raise NumatoRelayBoardDeviceDisconnectedError()
 
   async def close(self):
     await self._lock.acquire()
@@ -41,14 +45,14 @@ class NumatoRelayBoardDevice:
     self._lock.release()
 
   @overload
-  async def _request(self, command, *, get_response: Literal[True]) -> str:
+  async def _request(self, command: str, *, get_response: Literal[True]) -> str:
     pass
 
   @overload
-  async def _request(self, command, *, get_response: Literal[False] = False) -> None:
+  async def _request(self, command: str, *, get_response: Literal[False] = False) -> None:
     pass
 
-  async def _request(self, command, *, get_response = False):
+  async def _request(self, command: str, *, get_response = False):
     await self._lock.acquire()
 
     if not self._serial:
@@ -90,9 +94,4 @@ class NumatoRelayBoardDevice:
   @staticmethod
   def list(*, all = False) -> Sequence[NumatoRelayBoardDeviceInfo]:
     infos = serial.tools.list_ports.comports()
-    return [NumatoRelayBoardDeviceInfo(address=info.device) for info in infos if all or (info.vid, info.pid) == (0x03eb, 0x2404)]
-
-
-# if __name__ == "__main__":
-#   import logging
-#   logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s :: %(name)-18s :: %(message)s")
+    return [NumatoRelayBoardDeviceInfo(address=info.device) for info in infos if all or (info.vid, info.pid) == (0x03eb, 0x2404)] # TODO: Update

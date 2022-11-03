@@ -80,50 +80,61 @@ class MasterDevice(DeviceNode):
     self.label = label
     self.model = "Generic Okolab device"
 
+
+    parent = self
+
+    class Controller(GeneralDeviceAdapter[OkolabDevice]):
+      async def create_device(self, address: str, on_close: Callable):
+        try:
+          return OkolabDevice(address, on_close=on_close)
+        except OkolabDeviceDisconnectedError:
+          return None
+
+      async def list_devices(self):
+        return OkolabDevice.list()
+
+      async def test_device(self, device: OkolabDevice):
+        try:
+          return await device.get_serial_number() == serial_number
+        except OkolabDeviceDisconnectedError:
+          return False
+
+      async def on_connection(self, *, reconnection: bool):
+        logger.info(f"Connected to {parent._label}")
+        parent.model = await parent._adapter.device.get_product_name()
+
+        await parent._node_board_temperature._configure()
+
+        for worker in parent._workers:
+          await worker._configure()
+
+        if len(parent._workers) < 1:
+          await parent._adapter.device.set_device1(None)
+        if len(parent._workers) < 2:
+          await parent._adapter.device.set_device2(None)
+
+      async def on_connection_fail(self, reconnection: bool):
+        if not reconnection:
+          logger.warning(f"Failed connecting to {parent._label}")
+
+      async def on_disconnection(self, *, lost: bool):
+        if lost:
+          logger.warning(f"Lost connection to {parent._label}")
+
+        await parent._node_board_temperature._unconfigure()
+
+        for worker in parent._workers:
+          await worker._unconfigure()
+
     self._adapter = GeneralDeviceAdapter(
-      OkolabDevice,
       address=address,
-      on_connection=self._on_connection,
-      on_connection_fail=self._on_connection_fail,
-      on_disconnection=self._on_disconnection,
-      test_device=self._test_device
+      controller=Controller()
     )
 
     self._node_board_temperature = BoardTemperatureNode(master=self)
-    self._serial_number = serial_number
     self._workers: set['WorkerDevice'] = set()
 
     self.nodes = { node.id: node for node in {self._node_board_temperature, *self._workers} }
-
-  async def _on_connection(self, *, reconnection: bool):
-    logger.info(f"Connected to {self._label}")
-    self.model = await self._adapter.device.get_product_name()
-
-    await self._node_board_temperature._configure()
-
-    for worker in self._workers:
-      await worker._configure()
-
-    if len(self._workers) < 1:
-      await self._adapter.device.set_device1(None)
-    if len(self._workers) < 2:
-      await self._adapter.device.set_device2(None)
-
-  async def _on_connection_fail(self, reconnection: bool):
-    if not reconnection:
-      logger.warning(f"Failed connecting to {self._label}")
-
-  async def _on_disconnection(self, *, lost: bool):
-    if lost:
-      logger.warning(f"Lost connection to {self._label}")
-
-    await self._node_board_temperature._unconfigure()
-
-    for worker in self._workers:
-      await worker._unconfigure()
-
-  async def _test_device(self, device: OkolabDevice):
-    return await device.get_serial_number() == self._serial_number
 
   @property
   def connected(self):

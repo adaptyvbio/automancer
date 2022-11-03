@@ -56,14 +56,14 @@ class RotaryValveDevice(DeviceNode):
     parent = self
 
     class Controller(GeneralDeviceAdapterController[AMFRotaryValveDevice]):
-      async def create_device(self, address: str, on_close: Callable):
+      async def create_device(self, address: str, *, on_close: Callable):
         try:
           return AMFRotaryValveDevice(address, on_close=on_close)
         except AMFRotaryValveDeviceDisconnectedError:
           return None
 
       async def list_devices(self):
-        return await AMFRotaryValveDevice.list()
+        return AMFRotaryValveDevice.list()
 
       async def test_device(self, device: AMFRotaryValveDevice):
         try:
@@ -83,6 +83,8 @@ class RotaryValveDevice(DeviceNode):
         parent.connected = True
         await parent._node._configure()
 
+        parent._trigger_listeners()
+
       async def on_connection_fail(self, reconnection: bool):
         if not reconnection:
           logger.warning(f"Failed connecting to {parent._label}")
@@ -93,6 +95,8 @@ class RotaryValveDevice(DeviceNode):
 
         parent.connected = False
         await parent._node._unconfigure()
+
+        parent._trigger_listeners()
 
 
     self._adapter = GeneralDeviceAdapter(

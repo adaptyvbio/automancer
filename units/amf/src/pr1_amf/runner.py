@@ -25,7 +25,7 @@ class Runner(BaseProcessRunner):
       valve = valves[device.id]
 
       if (valve is not None) and (valve != device._valve_target):
-        futures.append(asyncio.create_task(device.try_rotate(valve)))
+        futures.append(asyncio.create_task(device.nodes['rotation'].write(valve - 1)))
 
     if futures:
       self._rotation_task = asyncio.gather(*futures)

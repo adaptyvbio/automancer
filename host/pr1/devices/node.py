@@ -129,9 +129,9 @@ class BooleanReadableNode(BaseReadableNode[bool]):
       }
     }
 
-class EnumNodeOption(Protocol):
-  label: str
-  value: int
+class EnumNodeOption:
+  def __init__(self, label: str):
+    self.label = label
 
 class EnumReadableNode(BaseReadableNode[int]):
   def __init__(self):
@@ -143,9 +143,12 @@ class EnumReadableNode(BaseReadableNode[int]):
       return next((index for index, option in enumerate(self.options) if option.value == value), None)
 
     return {
-      "type": "readableEnum",
-      "options": [{ 'label': option.label } for option in self.options],
-      "value": find_option_index(self.value)
+      **super().export(),
+      "data": {
+        "type": "readableEnum",
+        "options": [{ 'label': option.label } for option in self.options],
+        "value": find_option_index(self.value)
+      }
     }
 
 class ScalarReadableNode(BaseReadableNode[float]):
@@ -185,7 +188,6 @@ class BaseWritableNode(BaseNode, Generic[T]):
   async def write_import(self, value: Any):
     raise NotImplementedError()
 
-
 class BooleanWritableNode(BaseWritableNode[bool]):
   # Called by the consumer
 
@@ -194,6 +196,28 @@ class BooleanWritableNode(BaseWritableNode[bool]):
       **super().export(),
       "data": {
         "type": "writableBoolean",
+        "currentValue": self.current_value,
+        "targetValue": self.target_value
+      }
+    }
+
+class EnumWritableNode(BaseWritableNode[int]):
+  def __init__(self, *, options: list[EnumNodeOption]):
+    super().__init__()
+
+    self.options = options
+
+  async def write_import(self, value: int):
+    await self.write(value)
+
+  def export(self):
+    exported = super().export()
+
+    return {
+      **exported,
+      "data": {
+        "type": "writableEnum",
+        "options": [{ 'label': option.label } for option in self.options],
         "currentValue": self.current_value,
         "targetValue": self.target_value
       }
@@ -275,16 +299,17 @@ class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
     self.target_value = value
 
     if self.connected:
-      await self._write(value)
-      self.current_value = value
+      try:
+        await self._write(value)
+      except NodeUnavailableError:
+        pass
+      else:
+        self.current_value = value
 
     self._trigger_listeners()
 
 
 # Polled nodes
-
-class PolledNodeUnavailableError(Exception):
-  pass
 
 class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
   def __init__(self, *, min_interval = 0.0):
@@ -313,7 +338,7 @@ class PolledReadableNode(BaseReadableNode[T], BaseWatchableNode, Generic[T]):
           if value != self.value:
             self.value = value
             self._trigger_listeners()
-      except (asyncio.CancelledError, NodeUnavailableError, PolledNodeUnavailableError):
+      except (asyncio.CancelledError, NodeUnavailableError):
         pass
       except Exception:
         traceback.print_exc()

@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceDisconnectedError, OkolabDeviceStatus
 from pr1.devices.adapter import GeneralDeviceAdapter
-from pr1.devices.node import DeviceNode, PolledNodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, BiWritableNode
+from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, BiWritableNode
 
 from . import logger, namespace
 
@@ -23,7 +23,7 @@ class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
     try:
       return await self._master._adapter.device.get_board_temperature()
     except OkolabDeviceDisconnectedError as e:
-      raise PolledNodeUnavailableError() from e
+      raise NodeUnavailableError() from e
 
 
 class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
@@ -42,7 +42,7 @@ class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
       match self._index:
         case 1: return await self._master._adapter.device.get_temperature1()
     except OkolabDeviceDisconnectedError as e:
-      raise PolledNodeUnavailableError() from e
+      raise NodeUnavailableError() from e
 
 class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
   id = "setpoint"
@@ -59,8 +59,8 @@ class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
     try:
       match self._index:
         case 1: await self._master._adapter.device.set_temperature_setpoint1(value)
-    except OkolabDeviceDisconnectedError:
-      pass
+    except OkolabDeviceDisconnectedError as e:
+      raise NodeUnavailableError() from e
 
 
 class MasterDevice(DeviceNode):

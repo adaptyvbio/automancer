@@ -1,244 +1,107 @@
-import asyncio
+from typing import Callable, Optional
 
-from serial.serialutil import SerialException
-from pr1.device import SelectNode, SelectNodeOption
-import aioserial
+from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
+from pr1.devices.node import BiWritableNode, DeviceNode, EnumNodeOption, EnumWritableNode, NodeUnavailableError
 
+from .amf import AMFRotaryValveDevice, AMFRotaryValveDeviceDisconnectedError
 from .. import logger, namespace
 
 
-class RotaryValveNode(SelectNode):
-  id = "position"
-  label = "Position"
+class RotaryValveNode(EnumWritableNode, BiWritableNode):
+  id = "rotation"
+  label = "Rotation"
 
-  def __init__(self, device):
+  def __init__(self, *, device: 'RotaryValveDevice', valve_count: int):
+    EnumWritableNode.__init__(self, options=[EnumNodeOption(f"Valve {index}") for index in range(valve_count)])
+    BiWritableNode.__init__(self)
+
     self._device = device
 
-  @property
-  def connected(self):
-    return self._device.connected
+  async def _read(self):
+    try:
+      return await self._device._adapter.device.get_valve() - 1
+    except AMFRotaryValveDeviceDisconnectedError as e:
+      raise NodeUnavailableError() from e
 
-  @property
-  def options(self):
-    return [SelectNodeOption(
-      label=f"Valve {index + 1}",
-      value=(index + 1)
-    ) for index in range(self._device._valve_count)]
-
-  @property
-  def target_value(self):
-    return self._device._valve_target
-
-  @property
-  def value(self):
-    return self._device._valve_value
-
-  async def write(self, valve):
-    await self._device.try_rotate(valve)
+  async def _write(self, value: int):
+    try:
+      await self._device._adapter.device.rotate(value + 1)
+    except AMFRotaryValveDeviceDisconnectedError as e:
+      raise NodeUnavailableError() from e
 
 
-class RotaryValveDevice:
+class RotaryValveDevice(DeviceNode):
   model = "LSP rotary valve"
   owner = namespace
 
-  def __init__(self, *, address, id, label, update_callback, valve_count):
+  def __init__(
+    self,
+    *,
+    address: Optional[str],
+    id: str,
+    label: Optional[str],
+    serial_number: Optional[str],
+    valve_count: int
+  ):
+    super().__init__()
+
     self.connected = False
     self.id = id
     self.label = label
-    self.nodes = [
-      RotaryValveNode(device=self)
-    ]
 
-    self._address = address
-    self._update_callback = update_callback
-    self._valve_count = valve_count
-
-    self._valve_target = None
-    self._valve_value = None
-
-    self._busy = False
-    self._busy_future = None
-    self._query_futures = list()
-    self._read_task = None
-    self._reconnect_task = None
-    self._serial = None
-
-  async def _connect(self):
-    logger.debug(f"Connecting to '{self._address}'")
-
-    try:
-      self._serial = aioserial.AioSerial(
-        port=self._address,
-        baudrate=9600
-      )
-    except SerialException:
-      return
-
-    async def read_loop():
-      try:
-        while True:
-          self._receive((await self._serial.read_until_async(b"\n"))[0:-2])
-      except asyncio.CancelledError:
-        pass
-      except SerialException as e:
-        self._lost(e)
-      finally:
-        self._read_task = None
-
-    self._read_task = asyncio.create_task(read_loop())
-
-    # Set the output mode to 2
-    # This will also set self._busy to its correct value
-    await self._query("!502")
-
-    if self._busy:
-      self._busy_future = asyncio.Future()
-
-    if (await self.get_valve_count()) != self._valve_count:
-      raise Exception("Invalid valve count")
-
-    valve_value = await self.get_valve()
-
-    if valve_value == 0:
-      await self.home()
-      valve_value = await self.get_valve()
-
-    self._valve_value = valve_value
-    self.connected = True
-
-    if self._valve_target is None:
-      self._valve_target = self._valve_value
-
-    if self._valve_value != self._valve_target:
-      await self.rotate(self._valve_target)
-
-    logger.info(f"Connected to '{self._address}'")
+    self._node = RotaryValveNode(device=self, valve_count=valve_count)
+    self.nodes = { node.id: node for node in {self._node} }
 
 
-  def _reconnect(self, interval = 1):
-    async def reconnect_loop():
-      try:
-        while True:
-          await self._connect()
+    parent = self
 
-          if self.connected:
-            self._update_callback()
-            return
+    class Controller(GeneralDeviceAdapterController[AMFRotaryValveDevice]):
+      async def create_device(self, address: str, on_close: Callable):
+        try:
+          return AMFRotaryValveDevice(address, on_close=on_close)
+        except AMFRotaryValveDeviceDisconnectedError:
+          return None
 
-          await asyncio.sleep(interval)
-      except asyncio.CancelledError:
-        pass
-      finally:
-        self._reconnect_task = None
+      async def list_devices(self):
+        return await AMFRotaryValveDevice.list()
 
-    self._reconnect_task = asyncio.create_task(reconnect_loop())
+      async def test_device(self, device: AMFRotaryValveDevice):
+        try:
+          return await device.get_unique_id() == serial_number
+        except AMFRotaryValveDeviceDisconnectedError:
+          return False
 
-  async def _query(self, command, dtype = None):
-    future = asyncio.Future()
-    self._query_futures.append(future)
+      async def on_connection(self, *, reconnection: bool):
+        logger.info(f"Connected to {parent._label}")
 
-    await self._serial.write_async(f"/_{command}\r".encode("utf-8"))
-    return self._parse(await future, dtype=dtype)
+        try:
+          if await parent._adapter.device.get_valve() == 0:
+            await parent._adapter.device.home()
+        except AMFRotaryValveDeviceDisconnectedError:
+          return
 
-  def _lost(self, exc):
-    logger.error(f"Lost connection to '{self._address}'")
+        parent.connected = True
+        await parent._node._configure()
 
-    self.connected = False
-    self._serial = None
+      async def on_connection_fail(self, reconnection: bool):
+        if not reconnection:
+          logger.warning(f"Failed connecting to {parent._label}")
 
-    if self._read_task:
-      self._read_task.cancel()
+      async def on_disconnection(self, *, lost: bool):
+        if lost:
+          logger.warning(f"Lost connection to {parent._label}")
 
-    if self._busy_future:
-      self._busy_future.set_exception(exc)
-      self._busy_future = None
+        parent.connected = False
+        await parent._node._unconfigure()
 
-    for future in self._query_futures:
-      future.set_exception(exc)
 
-    self._query_futures.clear()
-
-    self._reconnect()
-    self._update_callback()
-
-  def _parse(self, data, dtype = None):
-    response = data[3:-1].decode("utf-8")
-
-    if dtype == bool:
-      return (response == "1")
-    if dtype == int:
-      return int(response)
-
-    return response
-
-  def _receive(self, data):
-    was_busy = self._busy
-    self._busy = (data[2] & (1 << 5)) < 1
-
-    if self._busy_future and was_busy and (not self._busy):
-      self._busy_future.set_result(data)
-      self._busy_future = None
-    else:
-      query_future, *self._query_futures = self._query_futures
-      query_future.set_result(data)
-
-  async def _run(self, command):
-    while self._busy_future:
-      await self._busy_future
-
-    future = asyncio.Future()
-    self._busy_future = future
-
-    await self._query(command)
-    await future
-
+    self._adapter = GeneralDeviceAdapter(
+      address=address,
+      controller=Controller()
+    )
 
   async def initialize(self):
-    await self._connect()
-
-    if not self.connected:
-      logger.error(f"Failed connecting to '{self._address}'")
-      self._reconnect()
+    await self._adapter.start()
 
   async def destroy(self):
-    if self._serial:
-      logger.debug(f"Disconnecting from '{self._address}'")
-
-      self._serial.close()
-      self._serial = None
-
-    if self._read_task:
-      self._read_task.cancel()
-
-    if self._reconnect_task:
-      self._reconnect_task.cancel()
-
-  def serialize(self):
-    return ("rotary_valve", self._valve_count)
-
-
-  async def get_unique_id(self):
-    return await self._query("?9000")
-
-  async def get_valve(self):
-    return await self._query("?6", dtype=int)
-
-  async def get_valve_count(self):
-    return await self._query("?801", dtype=int)
-
-  async def home(self):
-    await self._run("ZR")
-
-  async def rotate(self, valve):
-    self._valve_target = valve
-    await self._run(f"b{valve}R")
-    self._valve_value = await self.get_valve()
-
-  async def try_rotate(self, valve):
-    if self.connected:
-      await self.rotate(valve)
-    else:
-      self._valve_target = valve
-
-  async def wait(self, delay):
-    await self._run(f"M{round(delay * 1000)}R")
+    await self._adapter.stop()

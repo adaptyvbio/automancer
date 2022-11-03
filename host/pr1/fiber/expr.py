@@ -3,6 +3,7 @@ from enum import Enum
 import re
 
 from .staticeval import EvaluationError, evaluate
+from ..draft import DraftDiagnostic
 from ..reader import LocatedString
 from ..util.decorators import debug
 
@@ -33,6 +34,9 @@ class PythonSyntaxError(Exception):
   def __init__(self, message, target):
     self.message = message
     self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(self.message, ranges=self.target.area.ranges)
 
 
 class PythonExprKind(Enum):
@@ -98,7 +102,7 @@ class PythonExprEvaluator:
     except EvaluationError as e:
       return Analysis(errors=[e]), Ellipsis
     else:
-      return self._type.analyze(result), result
+      return self._type.analyze(result)
 
 
 if __name__ == "__main__":

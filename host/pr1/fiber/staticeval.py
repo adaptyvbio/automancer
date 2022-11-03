@@ -3,6 +3,7 @@ import builtins
 import math
 
 from .. import reader as reader
+from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea, LocationRange, Source
 
 
@@ -14,7 +15,8 @@ class InvalidCall(EvaluationError):
   pass
 
 class InvalidNode(EvaluationError):
-  pass
+  def diagnostic(self):
+    return DraftDiagnostic("Invalid node", ranges=self.area.ranges)
 
 
 class EvaluationContext: # or Environment?

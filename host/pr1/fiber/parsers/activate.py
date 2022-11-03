@@ -12,12 +12,16 @@ class AcmeState(BlockUnitState):
   def __init__(self, value):
     self._value = value
 
+  def export(self):
+    return { "value": self._value }
+
 class AcmeParser(BaseParser):
   namespace = "activate"
 
   root_attributes = dict()
   segment_attributes = {
     'activate': lang.Attribute(
+      description="Activates the prototype.",
       optional=True,
       type=lang.PrimitiveType(int)
     )

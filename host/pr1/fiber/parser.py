@@ -115,12 +115,32 @@ class SegmentBlock:
   def linearize(self):
     return [([None], self._segment)]
 
+  def export(self):
+    return {
+      "process_namespace": self._segment.process_namespace,
+      "state": {
+        namespace: state and state.export() for namespace, state in self._segment.state.items()
+      }
+    }
+
 
 # ----
 
 
+class FiberProtocol:
+  def __init__(self, *, name: Optional[str], root):
+    self.name = name
+    self.root = root
+
+  def export(self):
+    return {
+      "name": self.name,
+      "root": self.root.export()
+    }
+
+
 class FiberParser:
-  def __init__(self, text, *, Parsers: Sequence[type[BaseParser]], host):
+  def __init__(self, text: str, *, Parsers: Sequence[type[BaseParser]], host):
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
     self.analysis = lang.Analysis()
 
@@ -132,9 +152,9 @@ class FiberParser:
     schema = lang.CompositeDict({
       'name': lang.Attribute(
         label="Protocol name",
-        description=["`name`", "The protocol's name."],
+        description="The protocol's name.",
         optional=True,
-        type=lang.AnyType()
+        type=lang.PrimitiveType(str)
       ),
       'steps': lang.Attribute(
         description=["`steps`", "Protocol steps"],
@@ -178,6 +198,10 @@ class FiberParser:
 
     print("<= SEGMENTS =>")
     pprint(self._segments)
+
+    if entry_block is not Ellipsis:
+      self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
+      pprint(self.protocol.export())
 
   @property
   def segment_dict(self):

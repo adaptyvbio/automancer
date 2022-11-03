@@ -13,7 +13,7 @@ class SequenceParser(BaseParser):
   segment_attributes = {
     'actions': lang.Attribute(
       description="Describes a nested list of steps.",
-      documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened in the output."],
+      documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
       kind='class',
       optional=True,
       signature="actions:\n  - <action 1>\n  - <action 2>",
@@ -79,3 +79,9 @@ class SequenceBlock:
 
   def linearize(self):
     return [([index, *path], subblock) for index, block in enumerate(self._children) for path, subblock in block.linearize()]
+
+  def export(self):
+    return {
+      "type": "sequence",
+      "children": [child.export() for child in self._children]
+    }

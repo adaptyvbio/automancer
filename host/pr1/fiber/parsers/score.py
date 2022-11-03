@@ -11,7 +11,11 @@ class ScoreParser(BaseParser):
   namespace = "score"
   root_attributes = dict()
   segment_attributes = {
-    'score': lang.Attribute(optional=True, type=lang.LiteralOrExprType(lang.PrimitiveType(float)))
+    'score': lang.Attribute(
+      description="Sets the score.",
+      optional=True,
+      type=lang.LiteralOrExprType(lang.PrimitiveType(float))
+    )
   }
 
   def __init__(self, fiber):
@@ -26,14 +30,13 @@ class ScoreParser(BaseParser):
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
       if isinstance(score_raw, PythonExprEvaluator):
         analysis, score = score_raw.evaluate(context)
-        # TODO: Do something with 'analysis'
 
         if score is Ellipsis:
-          print(analysis.errors[0].area.format())
-          return Ellipsis
+          return analysis, Ellipsis
 
         score = score.value
       else:
+        analysis = lang.Analysis()
         score = score_raw.value
 
       return lang.Analysis(), BlockData(state=ScoreState(score))
@@ -47,3 +50,6 @@ class ScoreState(BlockUnitState):
 
   def __or__(self, other: 'ScoreState'):
     return ScoreState(self.points + other.points)
+
+  def export(self):
+    return { "points": self.points }

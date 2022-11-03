@@ -2,7 +2,7 @@ import functools
 from typing import Callable, Optional
 
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import BaseWritableNode, BiWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
+from pr1.devices.node import BiWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
 
 from .numato import NumatoRelayBoardDevice, NumatoRelayBoardDeviceDisconnectedError
 from .. import logger, namespace
@@ -31,7 +31,7 @@ class RelayBoardGlobalNode(ScalarWritableNode, BiWritableNode):
       raise NodeUnavailableError() from e
 
 
-class RelayBoardNode(BaseWritableNode[bool]):
+class RelayBoardNode(BooleanWritableNode):
   def __init__(self, index: int, device: 'RelayBoardDevice'):
     super().__init__()
 
@@ -57,12 +57,12 @@ class RelayBoardNode(BaseWritableNode[bool]):
   @property
   def current_value(self):
     value: Optional[int] = self._device._global_node.current_value
-    return (value & self._mask) > 0 if value is not None else 0
+    return (value & self._mask) > 0 if value is not None else None
 
   @property
   def target_value(self):
     value: Optional[int] = self._device._global_node.target_value
-    return (value & self._mask) > 0 if value is not None else 0
+    return (value & self._mask) > 0 if value is not None else None
 
   async def write(self, value: bool):
     global_value = ((self._device._global_node.target_value or 0) & ~self._mask) | (int(value) << self._index)

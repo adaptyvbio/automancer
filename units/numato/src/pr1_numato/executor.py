@@ -32,15 +32,15 @@ class Executor(BaseExecutor):
         raise device_id.error(f"Duplicate device id '{device_id}'")
 
       device = RelayBoardDevice(
-        address=device_conf.get('address'),
-        id=device_id,
-        label=device_conf.get('label'),
+        address=(device_conf['address'].value if 'address' in device_conf else None),
+        id=device_id.value,
+        label=(device_conf['label'].value if 'label' in device_conf else None),
         relay_count=device_conf['relay_count'],
-        serial_number=device_conf.get('serial')
+        serial_number=(device_conf['serial'].value if 'serial' in device_conf else None)
       )
 
-      self._devices[device_id] = device
-      self._host.devices[device_id] = device
+      self._devices[device_id.value] = device
+      self._host.devices[device_id.value] = device
 
   async def initialize(self):
     for device in self._devices.values():

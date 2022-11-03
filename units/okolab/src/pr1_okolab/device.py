@@ -3,7 +3,7 @@ import traceback
 from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceDisconnectedError, OkolabDeviceStatus
-from pr1.devices.adapter import GeneralDeviceAdapter
+from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
 from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, BiWritableNode
 
 from . import logger, namespace
@@ -83,7 +83,7 @@ class MasterDevice(DeviceNode):
 
     parent = self
 
-    class Controller(GeneralDeviceAdapter[OkolabDevice]):
+    class Controller(GeneralDeviceAdapterController[OkolabDevice]):
       async def create_device(self, address: str, on_close: Callable):
         try:
           return OkolabDevice(address, on_close=on_close)

@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from pr1.devices.node import BaseWritableNode, CollectionNode
 
 from pr1.host import Host
@@ -32,7 +33,14 @@ class Executor(BaseExecutor):
             raise ValueError()
 
         if isinstance(node, BaseWritableNode):
-          await node.write_import(instruction["value"])
+          async def write():
+            try:
+              await node.write_import(instruction["value"])
+            except Exception:
+              traceback.print_exc()
+
+          # TODO: Find a way to cancel this task when destroying the executor.
+          asyncio.create_task(write())
         else:
           raise ValueError()
 

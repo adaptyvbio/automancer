@@ -7,18 +7,21 @@ from pr1.util.parser import Identifier
 from .device import MasterDevice, WorkerDevice
 
 
+worker_schema = sc.Schema({
+  'id': Identifier(),
+  'label': sc.Optional(str),
+  'side': sc.Optional(sc.Or('glass', 'metal')),
+  'type': sc.ParseType(int)
+})
+
 conf_schema = sc.Schema({
   'devices': sc.Optional(sc.List({
-    'id': sc.Optional(Identifier()),
+    'id': Identifier(),
     'address': sc.Optional(str),
     'label': sc.Optional(str),
     'serial': sc.Optional(str),
-    'workers': sc.Optional(sc.Noneable(sc.List({
-      'id': Identifier(),
-      'label': sc.Optional(Identifier()),
-      'side': sc.Optional(sc.Or('glass', 'metal')),
-      'type': sc.ParseType(int)
-    })))
+    'device1': sc.Optional(worker_schema),
+    'device2': sc.Optional(worker_schema)
   }))
 })
 
@@ -29,44 +32,51 @@ class Executor(BaseExecutor):
     self._host = host
 
     for device_conf in self._conf.get('devices', list()):
-      master_id = device_conf.get('id') or str(uuid.uuid4())
+      master_id = device_conf['id']
 
       if master_id in self._host.devices:
         raise master_id.error(f"Duplicate master device id '{master_id}'")
 
       master_device = MasterDevice(
-        id=master_id,
-        address=device_conf.get('address'),
-        label=device_conf.get('label'),
-        serial_number=device_conf.get('serial')
+        id=master_id.value,
+        address=(device_conf['address'].value if 'address' in device_conf else None),
+        label=(device_conf['label'].value if 'label' in device_conf else None),
+        serial_number=(device_conf['serial'].value if 'serial' in device_conf else None)
       )
 
-      self._devices[master_id] = master_device
-      self._host.devices[master_id] = master_device
+      self._devices[master_id.value] = master_device
+      self._host.devices[master_id.value] = master_device
 
-      devices_conf = device_conf.get('workers') or list()
-
-      if len(devices_conf) > 2:
-        raise devices_conf.error(f"Too many workers for master device '{master_id}'")
-
-      for worker_index, worker_conf in enumerate(devices_conf):
+      def create_worker(worker_conf, *, index: int):
         worker_id = worker_conf['id']
 
         if worker_id in self._host.devices:
           raise worker_id.error(f"Duplicate worker device id '{worker_id}'")
 
+        match worker_conf.get('side'):
+          case 'glass':
+            side = 1
+          case 'metal':
+            side = 2
+          case _:
+            side = 0
+
         worker_device = WorkerDevice(
-          id=worker_id,
-          index=(worker_index + 1),
-          label=worker_conf.get('label'),
+          id=worker_id.value,
+          index=index,
+          label=(worker_conf['label'].value if 'label' in worker_conf else None),
           master=master_device,
-          side=worker_conf.get('side'),
+          side=side,
           type=worker_conf['type']
         )
 
         master_device._workers.add(worker_device)
+        self._host.devices[worker_id.value] = worker_device
 
-        self._host.devices[worker_id] = worker_device
+      if 'device1' in device_conf:
+        create_worker(device_conf['device1'], index=1)
+      if 'device2' in device_conf:
+        create_worker(device_conf['device2'], index=2)
 
   async def initialize(self):
     for device in self._devices.values():

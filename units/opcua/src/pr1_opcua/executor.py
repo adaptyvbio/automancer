@@ -33,20 +33,20 @@ class Executor(BaseExecutor):
     self._host = host
 
     for device_conf in conf.get('devices', list()):
-      device_id = device_conf['id'].value
+      device_id = device_conf['id']
 
       if device_id in self._host.devices:
         raise device_id.error(f"Duplicate device id '{device_id}'")
 
       device = OPCUADevice(
         address=device_conf['address'].value,
-        id=device_id,
+        id=device_id.value,
         label=(device_conf['label'].value if 'label' in device_conf else None),
         nodes_conf=device_conf['nodes']
       )
 
-      self._devices[device_id] = device
-      self._host.devices[device_id] = device
+      self._devices[device_id.value] = device
+      self._host.devices[device_id.value] = device
 
   async def initialize(self):
     for device in self._devices.values():

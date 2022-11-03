@@ -12,7 +12,7 @@ class RotaryValveNode(EnumWritableNode, BiWritableNode):
   label = "Rotation"
 
   def __init__(self, *, device: 'RotaryValveDevice', valve_count: int):
-    EnumWritableNode.__init__(self, options=[EnumNodeOption(f"Valve {index}") for index in range(valve_count)])
+    EnumWritableNode.__init__(self, options=[EnumNodeOption(f"Valve {index + 1}") for index in range(valve_count)])
     BiWritableNode.__init__(self)
 
     self._device = device

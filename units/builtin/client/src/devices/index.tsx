@@ -22,14 +22,14 @@ export interface DeviceNode extends CollectionNode {
 
 export interface DataNode extends BaseNode {
   data: {
-    type: 'readableBoolean';
+    type: 'writableBoolean';
+    currentValue: boolean | null;
     targetValue: boolean | null;
-    value: boolean | null;
   } | {
-    type: 'readableEnum';
+    type: 'writableEnum';
     options: { label: string; }[];
+    currentValue: number | null;
     targetValue: number | null;
-    value: number | null;
   } | {
     type: 'readableScalar';
     value: number | null;
@@ -80,7 +80,6 @@ function DevicesTab(props: ChipTabComponentProps) {
       <header className="header header--1">
         <h1>Devices</h1>
       </header>
-      <pre>{JSON.stringify(executor, null, 2)}</pre>
 
       {Object.values(executor.root.nodes).map((device) => (
         <React.Fragment key={device.id}>
@@ -95,13 +94,15 @@ function DevicesTab(props: ChipTabComponentProps) {
             {Object.values(device.nodes).map((node, nodeIndex) => (
               <WritableNode
                 host={props.host}
-                node={node}
+                node={node as DataNode}
                 path={[device.id]}
                 key={node.id} />
             ))}
           </Form.Form>
         </React.Fragment>
       ))}
+
+      <pre>{JSON.stringify(executor, null, 2)}</pre>
     </main>
   );
 }
@@ -115,18 +116,18 @@ function WritableNode(props: {
   let node = props.node;
   let path = [...props.path, node.id];
 
-  let label = (node.label ?? node.id);
+  let label = (node.label ?? node.id) + (node.connected ? '' : ' (disconnected)');
   let data = node.data;
 
-  if (data.type === 'readableBoolean') {
+  if (data.type === 'writableBoolean') {
     data = {
-      type: 'select',
+      type: 'writableEnum',
       options: [
         { label: 'Off' },
         { label: 'On' }
       ],
-      targetValue: (data.targetValue !== null) ? (data.targetValue ? 1 : 0) : null,
-      value: (data.value !== null) ? (data.value ? 1 : 0) : null
+      currentValue: (data.currentValue !== null) ? (data.currentValue ? 1 : 0) : null,
+      targetValue: (data.targetValue !== null) ? (data.targetValue ? 1 : 0) : null
     };
   }
 
@@ -158,19 +159,21 @@ function WritableNode(props: {
       );
     }
 
-    case 'readableEnum': {
-      let busy = (data.value !== data.targetValue);
-      let unknown = (data.value === null);
+    case 'writableEnum': {
+      let { currentValue, options, targetValue } = data;
+
+      let busy = (currentValue !== targetValue);
+      let unknown = (currentValue === null);
 
       return (
         <Form.Select
-          label={label + (node.connected ? '' : ' (disconnected)')}
+          label={label}
           onInput={(value) => {
             props.host.backend.instruct({
               [namespace]: {
-                type: 'setValue',
+                type: 'write',
                 path,
-                value: (data.type === 'readableBoolean') ? (value === 1) : value
+                value: (node.data.type === 'writableBoolean') ? (value === 1) : value
               }
             });
           }}
@@ -180,10 +183,10 @@ function WritableNode(props: {
               : []),
             ...data.options.map((option, index) => ({
               id: index,
-              label: (busy && (data.targetValue === index) ? ((!unknown ? (data.options[data.value!].label + ' ') : '') + '→ ') : '') + option.label
+              label: (busy && (targetValue === index) ? ((!unknown ? (options[currentValue!].label + ' ') : '') + '→ ') : '') + option.label
             }))
           ]}
-          value={busy ? data.targetValue : (unknown ? -1 : data.value)}
+          value={busy ? targetValue : (unknown ? -1 : currentValue)}
           key={node.id} />
       );
     }

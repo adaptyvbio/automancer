@@ -177,8 +177,8 @@ class BaseWritableNode(BaseNode, Generic[T]):
   def __init__(self):
     super().__init__()
 
-    self.current_value: Optional[T] = None
-    self.target_value: Optional[T] = None
+    self.current_value: Optional[T]
+    self.target_value: Optional[T]
 
   # To be implemented
 
@@ -189,7 +189,8 @@ class BaseWritableNode(BaseNode, Generic[T]):
     raise NotImplementedError()
 
 class BooleanWritableNode(BaseWritableNode[bool]):
-  # Called by the consumer
+  async def write_import(self, value: bool):
+    await self.write(value)
 
   def export(self):
     return {

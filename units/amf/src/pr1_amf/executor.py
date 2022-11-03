@@ -30,14 +30,14 @@ class Executor(BaseExecutor):
 
       device = RotaryValveDevice(
         address=(device_conf['address'].value if 'address' in device_conf else None),
-        id=device_conf['id'].value,
+        id=device_id.value,
         label=(device_conf['label'].value if 'label' in device_conf else None),
         serial_number=(device_conf['serial'].value if 'serial' in device_conf else None),
-        valve_count=device_conf['valve_count'].value
+        valve_count=device_conf['valve_count']
       )
 
-      self._devices[device_id] = device
-      self._host.devices[device_id] = device
+      self._devices[device_id.value] = device
+      self._host.devices[device_id.value] = device
 
   async def initialize(self):
     for device in self._devices.values():

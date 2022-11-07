@@ -3,7 +3,6 @@ from typing import Any
 from .. import langservice as lang
 from ..expr import PythonExprEvaluator
 from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState
-from ..staticeval import EvaluationContext
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -36,7 +35,7 @@ class DoParser(BaseParser):
 
 @debug
 class DoTransform(BaseTransform):
-  def __init__(self, data_do: Any, /, *, before: bool, context: EvaluationContext, parser: DoParser):
+  def __init__(self, data_do: Any, /, *, before: bool, context, parser: DoParser):
     self._before = before
     self._context = context
     self._data_do = data_do

@@ -1,7 +1,6 @@
 from .. import langservice as lang
 from ..expr import PythonExpr, PythonExprEvaluator
 from ..parser import BaseTransform, BlockData, BlockUnitState
-from ..staticeval import EvaluationContext
 from ...units.base import BaseParser
 from ...util import schema as sc
 from ...util.decorators import debug

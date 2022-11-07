@@ -4,40 +4,22 @@ import functools
 import math
 from typing import Optional
 
+from .eval import EvalContext, EvalError
 from .. import reader as reader
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea, LocationRange, Source
 
 
-class EvaluationError(Exception):
-  def __init__(self, area, /):
-    self.area = area
-
-class InvalidCall(EvaluationError):
+class InvalidCall(EvalError):
   def diagnostic(self):
     return DraftDiagnostic("Invalid call", ranges=self.area.ranges)
 
-class InvalidNode(EvaluationError):
+class InvalidNode(EvalError):
   def diagnostic(self):
     return DraftDiagnostic("Invalid node", ranges=self.area.ranges)
 
 
-class EvaluationContext:
-  def __init__(self, *, closure: Optional[dict] = None, globals: Optional[dict] = None):
-    self.closure = closure or dict()
-    self.globals = globals or dict()
-
-  def __add__(self, other: 'EvaluationContext'):
-    return EvaluationContext(
-      closure={**self.closure, **other.closure},
-      globals={**self.globals, **other.globals}
-    )
-
-  @functools.cached_property
-  def variables(self):
-    return {**self.globals, **self.closure}
-
-def evaluate(expr, /, input, context):
+def evaluate(expr: ast.expr, /, input: LocatedString, context: EvalContext):
   area = input.compute_ast_node_area(expr)
 
   match expr:
@@ -124,8 +106,8 @@ if __name__ == "__main__":
     # )))
 
     try:
-      x = evaluate(tree.body, context=EvaluationContext(globals=dict(foo=3)), input=input)
-    except EvaluationError as e:
+      x = evaluate(tree.body, context=EvalContext(dict(foo=3)), input=input)
+    except EvalError as e:
       print("Error: " + type(e).__name__)
       print(e.area.format())
     else:

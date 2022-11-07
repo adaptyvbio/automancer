@@ -1,9 +1,9 @@
 from typing import Any
 
 from .. import langservice as lang
+from ..eval import EvalEnv
 from ..expr import PythonExprEvaluator
 from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState
-from ..staticeval import EvaluationContext
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -38,7 +38,7 @@ class RepeatTransform(BaseTransform):
     self._parser = parser
 
   def execute(self, state, parent_state, transforms, envs):
-    env = RepeatEnvironment()
+    env = RepeatEnv()
     block = self._parser._fiber.execute(state, parent_state, transforms, [*envs, env])
 
     if block is Ellipsis:
@@ -48,7 +48,7 @@ class RepeatTransform(BaseTransform):
 
 @debug
 class RepeatBlock:
-  def __init__(self, block, count: int, env: 'RepeatEnvironment'):
+  def __init__(self, block, count: int, env: 'RepeatEnv'):
     self._block = block
     self._count = count
     self._env = env
@@ -76,6 +76,6 @@ class RepeatBlock:
     }
 
 @debug
-class RepeatEnvironment:
+class RepeatEnv(EvalEnv):
   def __init__(self):
     pass

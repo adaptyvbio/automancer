@@ -44,7 +44,7 @@ class SequenceTransform(BaseTransform):
     self._data_actions = data_actions
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms, envs):
+  def execute(self, state, parent_state, transforms, envs, *, origin_area):
     children = list()
 
     for data_action in self._data_actions:
@@ -52,11 +52,10 @@ class SequenceTransform(BaseTransform):
 
       if result is not Ellipsis:
         block_state, block_transforms = result
-        block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs)
+        block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs, origin_area=data_action.area)
 
         if (block is Ellipsis) or (block is None):
           return lang.Analysis(), Ellipsis
-          raise Exception("Not ok")
 
         children.append(block)
 

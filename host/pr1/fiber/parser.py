@@ -1,10 +1,11 @@
 from collections import namedtuple
 from types import EllipsisType
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Protocol, Sequence
 
 from . import langservice as lang
 from .expr import PythonExprEvaluator
 from .. import reader
+from ..reader import LocationArea
 from ..draft import DraftDiagnostic
 from ..util import schema as sc
 from ..util.decorators import debug
@@ -12,11 +13,11 @@ from ..util.decorators import debug
 
 @debug
 class MissingProcessError(Exception):
-  def __init__(self, target):
-    self.target = target
+  def __init__(self, area: LocationArea):
+    self.area = area
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Missing process", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
 
 
 class BlockUnitState:
@@ -79,7 +80,7 @@ class BaseParser:
     return lang.Analysis(), BlockData()
 
 class BaseTransform:
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list['BaseTransform'], envs: list) -> tuple[lang.Analysis, BaseBlock]:
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list['BaseTransform'], envs: list, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     raise NotImplementedError()
 
 
@@ -107,7 +108,7 @@ class SegmentTransform(BaseTransform):
   def __init__(self, namespace):
     self._namespace = namespace
 
-  def execute(self, state, parent_state, transforms, envs):
+  def execute(self, state, parent_state, transforms, envs, *, origin_area):
     segment_state = parent_state | state
     segment_state.set_envs(envs)
 
@@ -192,7 +193,6 @@ class FiberParser:
         type=lang.PrimitiveType(str)
       ),
       'steps': lang.Attribute(
-        description=["`steps`", "Protocol steps"],
         type=lang.AnyType()
       )
     }, foldable=True)
@@ -214,7 +214,7 @@ class FiberParser:
 
     data_actions = output['_']['steps']
     state, transforms = self.parse_block(data_actions)
-    entry_block = self.execute(state, None, transforms)
+    entry_block = self.execute(state, None, transforms, None, origin_area=data_actions.area)
 
     print()
 
@@ -273,11 +273,12 @@ class FiberParser:
 
     return state, transforms
 
-  def execute(self, state, parent_state, transforms: list[BaseTransform], envs: Optional[list] = None) -> Optional[BaseBlock]:
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list[BaseTransform], envs: Optional[list] = None, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:
-      return None
+      self.analysis.errors.append(MissingProcessError(origin_area))
+      return Ellipsis
 
-    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], envs or list())
+    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], envs or list(), origin_area=origin_area)
     self.analysis += analysis
 
     return block

@@ -715,16 +715,18 @@ def analyze(tokens):
 
     while len(stack) - 1 > new_depth:
       entry = stack.pop()
-      entry_value = add_location(entry)
       head = stack[-1]
 
-      if head.mode == StackEntryMode.Dict:
-        head.value[entry.key] = entry_value
-      elif head.mode == StackEntryMode.List:
-        head.value.append(entry_value)
+      if entry.mode is None:
+        entry.area = entry.key.area
 
-      if entry.area:
-        head.area += entry.area
+      entry_value = add_location(entry)
+
+      match head.mode:
+        case StackEntryMode.Dict:
+          head.value[entry.key] = entry_value
+        case StackEntryMode.List:
+          head.value.append(entry_value)
 
   def check_diff(old_depth, new_depth):
     # print("!", old_depth, "<->", new_depth)
@@ -792,31 +794,34 @@ def analyze(tokens):
         stack.append(StackEntry(key=token.key, token=token))
         check_diff(len(stack) - 2, len(stack) - 1)
 
-      head.area += token.key.area
-
     elif head.mode == StackEntryMode.List:
       if token.kind != TokenKind.List:
         errors.append(InvalidTokenError(token.data))
         continue
 
+      # - a: ...
       if token.key:
+        # - a: b
         if token.value is not None:
           stack.append(StackEntry(
-            area=(token.key.area + token.value.area),
             mode=StackEntryMode.Dict,
             value={ token.key: token.value }
           ))
 
           check_diff(len(stack) - 2, len(stack) - 1)
+
+        # - a:
+        #     ...
         else:
           stack.append(StackEntry(
-            area=token.key.area,
             mode=StackEntryMode.Dict,
             value=dict()
           ))
 
           stack.append(StackEntry(key=token.key, token=token))
           check_diff(len(stack) - 3, len(stack) - 1)
+
+      # - a
       else:
         head.value.append(token.value)
 
@@ -836,17 +841,26 @@ def analyze(tokens):
 
 
 def add_location(entry):
-  if entry.area:
-    if entry.mode == StackEntryMode.Dict:
-      return ReliableLocatedDict(entry.value, entry.area, completion_ranges=entry.dict_ranges)
-    elif entry.mode == StackEntryMode.List:
-      return LocatedList(entry.value, entry.area)
-    elif entry.mode == StackEntryMode.String:
-      return LocatedString(entry.value, entry.area).rstrip("\n")
-  elif entry.token:
-    return LocatedValueContainer(entry.value, entry.token.data.area)
+  match entry.mode:
+    case StackEntryMode.Dict:
+      area = LocationArea()
 
-  return entry.value
+      for key, value in entry.value.items():
+        if isinstance(value, str):
+          area += LocationArea([(key.area + value.area).enclosing_range()])
+        else:
+          area += key.area
+
+      return ReliableLocatedDict(entry.value, area, completion_ranges=entry.dict_ranges)
+
+    case StackEntryMode.List:
+      return LocatedList(entry.value, entry.area)
+
+    case StackEntryMode.String:
+      return LocatedString(entry.value, entry.area).rstrip("\n")
+
+    case None:
+      return LocatedValueContainer(None, entry.area)
 
 
 ## Exported functions

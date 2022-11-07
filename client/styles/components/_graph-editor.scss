@@ -5,6 +5,7 @@
   &-root {
     --cell-size: 30px;
     --node-header-height: 40px;
+    --node-body-padding-y: #{0.8 * 14px};
     --node-padding: 10px;
 
     // nodePadding + nodeHeaderHeight * 0.5 == cellSize
@@ -98,7 +99,7 @@
     row-gap: 0.4rem;
 
     align-self: center;
-    padding: 0.8rem 1.6rem;
+    padding: var(--node-body-padding-y) 1.6rem;
   }
 
   &-feature {

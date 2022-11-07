@@ -4,6 +4,18 @@ import * as React from 'react';
 import { Icon } from './icon';
 import * as util from '../util';
 
+import RepeatRenderer from './graph/repeat';
+import SegmentRenderer from './graph/segment';
+import SequenceRenderer from './graph/sequence';
+import { BaseBlock, BaseMetrics, Coordinates, Renderers, Size } from './graph/spec';
+
+
+const Services: Renderers = {
+  repeat: RepeatRenderer,
+  segment: SegmentRenderer,
+  sequence: SequenceRenderer
+};
+
 
 export interface GraphEditorProps {
 
@@ -12,10 +24,7 @@ export interface GraphEditorProps {
 export interface GraphEditorState {
   nodes: NodeDef[];
   selectedNodeIds: ImSet<NodeId>;
-  size: {
-    width: number;
-    height: number;
-  } | null;
+  size: Size | null;
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
@@ -51,48 +60,68 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
   mouseDown = false;
   refContainer = React.createRef<HTMLDivElement>();
 
+  tree: any;
+
   constructor(props: GraphEditorProps) {
     super(props);
 
-    this.state = {
-      nodes: [
-        {
-          id: '0',
-          title: 'Alpha',
+    let repeat = (child: any) => ({
+      id: crypto.randomUUID(),
+      type: 'repeat',
+      child
+    });
+
+    let duplicate = (child: any) => ({
+      id: crypto.randomUUID(),
+      type: 'sequence',
+      children: [child, child]
+    });
+
+    this.tree = {
+      id: '0',
+      type: 'sequence',
+      children: [
+        repeat(duplicate(repeat(duplicate({
+          id: '5',
+          type: 'segment',
+          label: 'Delta',
+          features: [
+            { icon: 'hourglass_empty', label: '10 min' },
+          ]
+        })))),
+        { id: '1',
+          type: 'segment',
+          label: 'Alpha',
           features: [
             { icon: 'hourglass_empty', label: '10 min' },
             { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 3,
-            y: 5
-          }
+          ]
         },
-        {
-          id: '1',
-          title: 'Beta',
+        { id: '2',
+          type: 'segment',
+          label: 'Beta',
           features: [
             { icon: 'hourglass_empty', label: '10 min' },
             { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 18,
-            y: 3
-          }
+          ]
         },
-        {
-          id: '2',
-          title: 'Gamma',
+        { id: '3',
+          type: 'segment',
+          label: 'Gamma',
           features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 18,
-            y: 8
-          }
+            { icon: 'hourglass_empty', label: '20 min' },
+            { icon: 'air', label: 'Alpha' },
+            { icon: 'air', label: 'Bravo' },
+            { icon: 'air', label: 'Charlie' }
+          ]
         }
-      ],
+      ]
+    };
+
+    // this.tree = this.tree.children[0];
+
+    this.state = {
+      nodes: [],
       selectedNodeIds: ImSet(),
       size: null
     };
@@ -117,28 +146,35 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     let styles = this.refContainer.current!.computedStyleMap();
     // console.log(Object.fromEntries(Array.from(styles)));
-    let cellSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
+    let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
     let nodeHeaderHeight = CSSNumericValue.parse(styles.get('--node-header-height')!).value;
     let nodePadding = CSSNumericValue.parse(styles.get('--node-padding')!).value;
+    let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
 
-    let cellCountX = Math.floor(this.state.size.width / cellSize);
-    let cellCountY = Math.floor(this.state.size.height / cellSize);
+    let cellCountX = Math.floor(this.state.size.width / cellPixelSize);
+    let cellCountY = Math.floor(this.state.size.height / cellPixelSize);
 
-    let nodeWidth = Math.round((220 + nodePadding * 2) / cellSize);
-    let nodeHeight = Math.ceil((nodeHeaderHeight + 80 + nodePadding * 2) / cellSize);
-
-    // let link = {
-    //   start: { x: 11, y: 6 },
-    //   end: { x: 18, y: 3 }
-    // };
-
-    let settings = {
-      cellSize,
+    let settings: Settings = {
+      cellPixelSize,
+      nodeBodyPaddingY,
       nodeHeaderHeight,
-      nodePadding,
-      nodeWidth,
-      nodeHeight
+      nodePadding
     };
+
+
+    let computeMetrics = (block: BaseBlock) => {
+      return Services[block.type].computeMetrics(block, {
+        computeMetrics,
+        settings
+      });
+    };
+
+    let render = (block: BaseBlock, metrics: BaseMetrics, position: Coordinates) => {
+      return Services[block.type].render(block, metrics, position, { render, settings });
+    };
+
+    let treeMetrics = computeMetrics(this.tree);
+
 
     return (
       <div className="geditor-root" ref={this.refContainer}
@@ -221,11 +257,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             {new Array(cellCountX * cellCountY).fill(0).map((_, index) => {
               let x = index % cellCountX;
               let y = Math.floor(index / cellCountX);
-              return <circle cx={x * cellSize} cy={y * cellSize} r="1.5" fill="#d8d8d8" key={index} />;
+              return <circle cx={x * cellPixelSize} cy={y * cellPixelSize} r="1.5" fill="#d8d8d8" key={index} />;
             })}
           </g>
 
-          <Link
+          {render(this.tree, treeMetrics, { x: 1, y: 1 })}
+
+          {/* <Link
             autoMove={this.action?.type !== 'move'}
             link={{
               start: {
@@ -250,22 +288,11 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
                 y: this.state.nodes[1].position.y + 1
               }
             }}
-            settings={settings} />
+            settings={settings} /> */}
 
-          <g
-            className="geditor-group"
-            transform={`translate(${settings.cellSize * 1} ${settings.cellSize * 1})`}>
-            <foreignObject
-              x="0"
-              y="0"
-              width={settings.cellSize * settings.nodeWidth * 4}
-              height={settings.cellSize * settings.nodeHeight * 3}
-              className="geditor-groupobject">
-                <div className="geditor-group">
-                  <div className="geditor-grouplabel">Repeat 3 times</div>
-                </div>
-              </foreignObject>
-          </g>
+          {/* <NodeContainer
+            settings={settings}
+            title={<>Repeat n times</>} /> */}
 
           {this.state.nodes.map((node) => (
             <Node
@@ -342,12 +369,11 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 }
 
 
-interface Settings {
-  cellSize: number;
+export interface Settings {
+  cellPixelSize: number;
+  nodeBodyPaddingY: number;
   nodeHeaderHeight: number;
   nodePadding: number;
-  nodeWidth: number;
-  nodeHeight: number;
 }
 
 
@@ -366,8 +392,9 @@ interface NodeDef {
   };
 }
 
-function Node(props: {
+export function Node(props: {
   autoMove: unknown;
+  cellSize: Size;
   node: NodeDef;
   onMouseDown?(event: React.MouseEvent): void;
   selected: unknown;
@@ -378,12 +405,12 @@ function Node(props: {
   return (
     <g
       className={util.formatClass('geditor-noderoot', { '_automove': props.autoMove })}
-      transform={`translate(${settings.cellSize * node.position.x} ${settings.cellSize * node.position.y})`}>
+      transform={`translate(${settings.cellPixelSize * node.position.x} ${settings.cellPixelSize * node.position.y})`}>
       <foreignObject
         x="0"
         y="0"
-        width={settings.cellSize * settings.nodeWidth}
-        height={settings.cellSize * settings.nodeHeight}
+        width={settings.cellPixelSize * props.cellSize.width}
+        height={settings.cellPixelSize * props.cellSize.height}
         className="geditor-nodeobject">
         <div
           className={util.formatClass('geditor-node', { '_selected': props.selected })}
@@ -410,7 +437,7 @@ function Node(props: {
         stroke="#000"
         strokeWidth="2" />
       <circle
-        cx={settings.cellSize * settings.nodeWidth - settings.nodePadding}
+        cx={settings.cellPixelSize * props.cellSize.width - settings.nodePadding}
         cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
         r="5"
         fill="#fff"
@@ -433,11 +460,11 @@ function Link(props: {
 }) {
   let { link, settings } = props;
 
-  let startX = settings.cellSize * link.start.x - settings.nodePadding;
-  let startY = settings.cellSize * link.start.y;
+  let startX = settings.cellPixelSize * link.start.x - settings.nodePadding;
+  let startY = settings.cellPixelSize * link.start.y;
 
-  let endX = settings.cellSize * link.end.x + settings.nodePadding;;
-  let endY = settings.cellSize * link.end.y;
+  let endX = settings.cellPixelSize * link.end.x + settings.nodePadding;;
+  let endY = settings.cellPixelSize * link.end.y;
 
   let d = `M${startX} ${startY}`;
 
@@ -445,13 +472,13 @@ function Link(props: {
     let dir = (link.start.y < link.end.y) ? 1 : -1;
 
     let midCellX = Math.round((link.start.x + link.end.x) * 0.5);
-    let midX = settings.cellSize * midCellX;
+    let midX = settings.cellPixelSize * midCellX;
 
-    let midStartX = settings.cellSize * (midCellX - 1);
-    let midEndX = settings.cellSize * (midCellX + 1);
+    let midStartX = settings.cellPixelSize * (midCellX - 1);
+    let midEndX = settings.cellPixelSize * (midCellX + 1);
 
-    let curveStartY = settings.cellSize * (link.start.y + 1 * dir);
-    let curveEndY = settings.cellSize * (link.end.y - 1 * dir);
+    let curveStartY = settings.cellPixelSize * (link.start.y + 1 * dir);
+    let curveEndY = settings.cellPixelSize * (link.end.y - 1 * dir);
 
     d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
   }
@@ -459,4 +486,29 @@ function Link(props: {
   d += `L${endX} ${endY}`;
 
   return <path d={d} className={util.formatClass('geditor-link', { '_automove': props.autoMove })} />
+}
+
+
+export function NodeContainer(props: {
+  cellSize: Size;
+  position: Coordinates;
+  settings: Settings;
+  title: React.ReactNode;
+}) {
+  let { settings } = props;
+
+  return (
+    <g className="geditor-group">
+      <foreignObject
+        x={settings.cellPixelSize * props.position.x}
+        y={settings.cellPixelSize * props.position.y}
+        width={settings.cellPixelSize * props.cellSize.width}
+        height={settings.cellPixelSize * props.cellSize.height}
+        className="geditor-groupobject">
+          <div className="geditor-group">
+            <div className="geditor-grouplabel">{props.title}</div>
+          </div>
+        </foreignObject>
+    </g>
+  );
 }

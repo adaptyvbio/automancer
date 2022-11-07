@@ -44,7 +44,7 @@ class SequenceTransform(BaseTransform):
     self._data_actions = data_actions
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms):
+  def execute(self, state, parent_state, transforms, envs):
     children = list()
 
     for data_action in self._data_actions:
@@ -52,7 +52,7 @@ class SequenceTransform(BaseTransform):
 
       if result is not Ellipsis:
         block_state, block_transforms = result
-        block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms)
+        block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs)
 
         if (block is Ellipsis) or (block is None):
           return lang.Analysis(), Ellipsis
@@ -77,8 +77,20 @@ class SequenceBlock:
   def get_states(self):
     return {state for child in self._children for state in child.get_states()}
 
-  def linearize(self):
-    return [([index, *path], subblock) for index, block in enumerate(self._children) for path, subblock in block.linearize()]
+  def linearize(self, context):
+    analysis = lang.Analysis()
+    output = list()
+
+    for block in self._children:
+      item_analysis, item = block.linearize(context)
+      analysis += item_analysis
+
+      if item is Ellipsis:
+        continue
+
+      output += item
+
+    return analysis, output
 
   def export(self):
     return {

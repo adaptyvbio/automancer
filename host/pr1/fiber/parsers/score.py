@@ -28,18 +28,18 @@ class ScoreParser(BaseParser):
     attrs = block_attrs[self.namespace]
 
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
-      if isinstance(score_raw, PythonExprEvaluator):
-        analysis, score = score_raw.evaluate(context)
+      # if isinstance(score_raw, PythonExprEvaluator):
+      #   analysis, score = score_raw.evaluate(context)
 
-        if score is Ellipsis:
-          return analysis, Ellipsis
+      #   if score is Ellipsis:
+      #     return analysis, Ellipsis
 
-        score = score.value
-      else:
-        analysis = lang.Analysis()
-        score = score_raw.value
+      #   score = score.value
+      # else:
+      #   analysis = lang.Analysis()
+      #   score = score_raw.value
 
-      return lang.Analysis(), BlockData(state=ScoreState([score]))
+      return lang.Analysis(), BlockData(state=ScoreState([score_raw]))
     else:
       return lang.Analysis(), BlockData(state=ScoreState([0.0]))
 
@@ -51,19 +51,34 @@ class ScoreState(BlockUnitState):
   def __or__(self, other: 'ScoreState'):
     return ScoreState(self.points_list + other.points_list)
 
-  def compile(self, context):
-    points = 0.0
+  def set_envs(self, envs: list):
+    for points in self.points_list:
+      if isinstance(points, PythonExprEvaluator):
+        points.envs = envs
 
-    for point in self.points_list:
-      points += point
+  def assemble(self, context):
+    analysis = lang.Analysis()
+    total = 0.0
 
-    return lang.Analysis(), ScoreStateCompiled(points)
+    for score_raw in self.points_list:
+      if isinstance(score_raw, PythonExprEvaluator):
+        score_analysis, score = score_raw.evaluate(context)
+        analysis += score_analysis
+
+        if score is Ellipsis:
+          continue
+
+        total += score.value
+      else:
+        total += score_raw
+
+    return analysis, ScoreStateAssembled(total)
 
   def export(self):
     return { "pointsList": self.points_list }
 
 @debug
-class ScoreStateCompiled:
+class ScoreStateAssembled:
   def __init__(self, points: float, /):
     self.points = points
 

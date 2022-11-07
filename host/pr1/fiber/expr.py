@@ -1,8 +1,9 @@
 import ast
-from enum import Enum
 import re
+from enum import Enum
+from typing import Optional
 
-from .staticeval import EvaluationError, evaluate
+from .staticeval import EvaluationContext, EvaluationError, evaluate
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString
 from ..util.decorators import debug
@@ -97,11 +98,19 @@ class PythonExprEvaluator:
     self._expr = expr
     self._type = type
 
+    self.envs: Optional[list] = None
+
   def evaluate(self, context):
     from .langservice import Analysis
 
+    ctx = EvaluationContext()
+
+    for env in self.envs:
+      ctx.closure = {**ctx.closure, **context[env]}
+    # print(">>>>>", context, self.envs)
+
     try:
-      result = evaluate(self._expr.tree.body, self._expr.contents, context)
+      result = evaluate(self._expr.tree.body, self._expr.contents, ctx)
     except EvaluationError as e:
       return Analysis(errors=[e]), Ellipsis
     else:

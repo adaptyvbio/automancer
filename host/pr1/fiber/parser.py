@@ -24,6 +24,9 @@ class BlockUnitState:
   def __or__(self, other):
     return other
 
+  def set_envs(self, envs: list):
+    pass
+
 @debug
 class BlockData:
   def __init__(self, *, state: Optional[BlockUnitState] = None, transforms: list['BaseTransform'] = list()):
@@ -52,6 +55,11 @@ class BlockState(dict):
 
       return BlockState(result)
 
+  def set_envs(self, envs: list):
+    for state in self.values():
+      if state:
+        state.set_envs(envs)
+
 
 class BaseBlock:
   pass
@@ -72,11 +80,21 @@ class BaseParser:
     return lang.Analysis(), BlockData()
 
 class BaseTransform:
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list['BaseTransform']) -> tuple[lang.Analysis, BaseBlock]:
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list['BaseTransform'], envs: list) -> tuple[lang.Analysis, BaseBlock]:
     raise NotImplementedError()
 
 
 # ----
+
+
+class LinearizationContext(dict):
+  def __init__(self, d = None):
+    if d:
+      for key, value in d.items():
+        self[key] = value
+
+  def __or__(self, other):
+    return LinearizationContext({ **self, **other })
 
 
 @debug
@@ -90,10 +108,13 @@ class SegmentTransform(BaseTransform):
   def __init__(self, namespace):
     self._namespace = namespace
 
-  def execute(self, state, parent_state, transforms):
+  def execute(self, state, parent_state, transforms, envs):
+    segment_state = parent_state | state
+    segment_state.set_envs(envs)
+
     return lang.Analysis(), SegmentBlock(Segment(
       process_namespace=self._namespace,
-      state=(parent_state | state)
+      state=segment_state
     ))
 
 @debug
@@ -112,8 +133,23 @@ class SegmentBlock:
   def get_states(self):
     return {self._segment.state}
 
-  def linearize(self):
-    return [([None], self._segment)]
+  def linearize(self, context):
+    analysis = lang.Analysis()
+    state = dict()
+
+    for namespace, unit_state in self._segment.state.items():
+      if unit_state and hasattr(unit_state, 'assemble'):
+        unit_analysis, unit_state_assembled = unit_state.assemble(context)
+        analysis += unit_analysis
+
+        if unit_state_assembled is Ellipsis:
+          return analysis, Ellipsis
+
+        state[namespace] = unit_state_assembled
+      else:
+        state[namespace] = unit_state
+
+    return analysis, [Segment(process_namespace=self._segment.process_namespace, state=BlockState(state))]
 
   def export(self):
     return {
@@ -192,9 +228,11 @@ class FiberParser:
       print(entry_block)
       print()
 
-      # print("<= LINEARIZATION =>")
-      # pprint(entry_block.linearize())
-      # print()
+      print("<= LINEARIZATION =>")
+      linearization_analysis, linearized = entry_block.linearize(LinearizationContext())
+      self.analysis += linearization_analysis
+      pprint(linearized)
+      print()
 
     print("<= SEGMENTS =>")
     pprint(self._segments)
@@ -245,42 +283,21 @@ class FiberParser:
 
     return state, transforms
 
-  def execute(self, state, parent_state, transforms: list[BaseTransform]) -> Optional[BaseBlock]:
+  def execute(self, state, parent_state, transforms: list[BaseTransform], envs: Optional[list] = None) -> Optional[BaseBlock]:
     if not transforms:
       return None
 
-      # for namespace, parser_state in (parent_state | state).items():
-      #   if parser_state and parser_state.process:
-      #     transforms = [SegmentTransform(namespace)]
-      #     break
-      # else:
-      #   raise ValueError()
-
-    analysis, block = transforms[0].execute(state, parent_state, transforms[1:])
+    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], envs or list())
     self.analysis += analysis
 
     return block
-
-    # process_namespaces = {namespace for namespace, state in block_state.items() if state and state.process}
-
-    # if (not process_namespaces) or (len(process_namespaces) > 1):
-    #   self.analysis.errors.append(MissingProcessError(data_block))
-    #   return Ellipsis
-
-    # segment = Segment(
-    #   index=len(self._segments),
-    #   process_namespace=process_namespaces.pop(),
-    #   state=block_state
-    # )
-
-    # self._segments.append(segment)
-    # return SegmentBlock(segment)
 
 
 if __name__ == "__main__":
   from .parsers.activate import AcmeParser
   from .parsers.condition import ConditionParser
   from .parsers.do import DoParser
+  from .parsers.repeat import RepeatParser
   from .parsers.score import ScoreParser
   from .parsers.sequence import SequenceParser
   from .parsers.shorthands import ShorthandsParser
@@ -329,4 +346,4 @@ steps:
   #       activate: 5
   #       score: 1
   #     score: 2
-""", Parsers=[SequenceParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser], host=None)
+""", Parsers=[SequenceParser, RepeatParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser], host=None)

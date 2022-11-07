@@ -22,7 +22,7 @@ class InvalidNode(EvaluationError):
     return DraftDiagnostic("Invalid node", ranges=self.area.ranges)
 
 
-class EvaluationContext: # or Environment?
+class EvaluationContext:
   def __init__(self, *, closure: Optional[dict] = None, globals: Optional[dict] = None):
     self.closure = closure or dict()
     self.globals = globals or dict()

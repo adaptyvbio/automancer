@@ -62,7 +62,7 @@ class ShorthandTransform(BaseTransform):
     self._context = context
     self._parser = parser
 
-  def execute(self, block_state, parent_state, block_transforms):
+  def execute(self, block_state, parent_state, block_transforms, envs):
     analysis = lang.Analysis()
     state = None
     transforms = list()
@@ -111,4 +111,4 @@ class ShorthandTransform(BaseTransform):
 
     transforms += block_transforms
 
-    return analysis, self._parser._fiber.execute(block_state, parent_state | state, transforms)
+    return analysis, self._parser._fiber.execute(block_state, parent_state | state, transforms, [])

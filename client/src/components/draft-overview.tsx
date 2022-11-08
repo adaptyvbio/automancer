@@ -1,6 +1,7 @@
 import { setIn } from 'immutable';
 import * as React from 'react';
 
+import { GraphEditor } from './graph-editor';
 import type { Route } from '../application';
 import type { Draft, DraftCompilation } from '../draft';
 import { Chip, ChipCondition, ChipId, ProtocolLocation } from '../backends/common';
@@ -75,119 +76,14 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
 
     let plan = this.state.plan;
     let chip = plan.context && (this.props.host.state.chips[plan.context.chipId] as Chip);
+    // if (protocol) console.log(protocol.root)
 
     return (
       <div className="blayout-contents">
         {protocol
           ? (
             <>
-              <div className="header header--2">
-                <h2>Timeline</h2>
-              </div>
-
-              <ProtocolTimeline protocol={protocol} />
-
-              <div className="header header--2">
-                <h2>Sequence</h2>
-              </div>
-
-              <ProtocolOverview
-                host={this.props.host}
-                location={plan.location}
-                protocol={protocol}
-                setLocation={(location) => {
-                  this.setState((state) => ({
-                    plan: {
-                      ...state.plan,
-                      location
-                    }
-                  }));
-                }} />
-
-              <div className="header header--2">
-                <h2>Start protocol</h2>
-                <div className="superimposed-root">
-                  <select className="superimposed-target" onInput={(event) => {
-                    let chipId = event.currentTarget.value;
-                    let _chip = this.props.host.state.chips[chipId] as Chip;
-
-                    this.setState((state) => ({
-                      plan: {
-                        ...state.plan,
-                        context: {
-                          chipId,
-                          data: Object.fromEntries(
-                            Object.values(this.props.host.units)
-                              .filter((unit) => unit.createCode)
-                              .map((unit) => [unit.namespace, unit.createCode!(protocol!)])
-                          ) as unknown as Codes
-                        }
-                      }
-                    }));
-                  }}>
-                    {!chip && <option value="">–</option>}
-                    {chips.map((chip) => (
-                      <option
-                        value={chip.id}
-                        key={chip.id}
-                        disabled={(Object.values(this.props.host.units).some((unit) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
-                        {getChipMetadata(chip).title}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="btn illustrated-root superimposed-visible">
-                    <div>{chip ? `Chip: ${getChipMetadata(chip).title}` : 'Select experiment'}</div>
-                    <div className="btn-icon"><Icon name="expand_more" /></div>
-                  </div>
-                </div>
-              </div>
-
-              {plan.context && (
-                <>
-                  <div className="pconfig-root">
-                    {Object.values(this.props.host.units).map((unit) => {
-                      if (!unit.CodeEditor || !(unit.namespace in plan.context!.data)) {
-                        return null;
-                      }
-
-                      return (
-                        <unit.CodeEditor
-                          chip={chip!}
-                          draft={this.props.draft}
-                          code={plan.context!.data[unit.namespace as keyof Codes]}
-                          host={this.props.host}
-                          setCode={(code: Codes[keyof Codes]) => {
-                            this.setState((state) => ({
-                              plan: setIn(state.plan, ['context', 'data', unit.namespace], code)
-                            }));
-                          }}
-                          key={unit.namespace} />
-                      );
-                    })}
-                  </div>
-                  <div className="pconfig-submit">
-                    <button type="button" className="btn" onClick={() => {
-                      this.pool.add(async () => {
-                        let source = await this.props.draft.item.source;
-
-                        if (source !== null) {
-                          await this.props.host.backend.startPlan({
-                            chipId: plan.context!.chipId,
-                            data: plan.context!.data,
-                            location: plan.location,
-                            source
-                          });
-
-                          this.props.setRoute(['chip', plan.context!.chipId, 'protocol']);
-                        }
-                      });
-                    }}>
-                      <Icon name="play_circle" />
-                      <span>Start</span>
-                    </button>
-                  </div>
-                </>
-              )}
+              <GraphEditor tree={protocol.root} />
             </>
           )
           : (

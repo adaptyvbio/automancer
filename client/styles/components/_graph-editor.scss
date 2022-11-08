@@ -9,14 +9,12 @@
     --node-padding: 10px;
 
     // nodePadding + nodeHeaderHeight * 0.5 == cellSize
-
-    position: absolute;
-    inset: 0;
+    height: 100%;
   }
 
   &-svg {
+    // display: none;
     background-color: #f1f1f1;
-    overflow: visible;
   }
 
 

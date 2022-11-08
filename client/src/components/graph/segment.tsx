@@ -6,10 +6,15 @@ import { BaseBlock, BaseMetrics, Renderer } from './spec';
 
 export default {
   computeMetrics(block, options) {
-    let featureCount = block.features.length;
+    let features = [
+      { icon: 'hourglass_empty', label: '10 min' }
+    ];
+
+    let featureCount = features.length;
     let width = Math.round((220 + options.settings.nodePadding * 2) / options.settings.cellPixelSize);
 
     return {
+      features,
       start: { x: 0, y: 1 },
       end: { x: width, y: 1 },
       size: {
@@ -35,7 +40,7 @@ export default {
         node={{
           id: 'a',
           title: block.label,
-          features: block.features,
+          features: metrics.features,
           position
         }}
         selected={false}
@@ -46,6 +51,6 @@ export default {
   features: [
     { icon: 'hourglass_empty', label: '10 min' },
     { icon: 'air', label: 'Neutravidin' }
-  ],
-  label: string;
+  ];
+  label: string | null;
 }, BaseMetrics>;

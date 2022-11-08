@@ -130,20 +130,11 @@ export interface MasterEntry {
 
 export interface Protocol {
   name: string | null;
-  segments: ProtocolSegment[];
-  stages: ProtocolStage[];
-  data: ProtocolData;
+  root: Block;
 }
 
-export interface ProtocolStage {
-  name: string;
-  seq: ProtocolSeq;
-  steps: ProtocolStep[];
-}
-
-export interface ProtocolStep {
-  name: string;
-  seq: ProtocolSeq;
+export interface Block {
+  type: string;
 }
 
 export interface ProtocolSegment {
@@ -151,9 +142,10 @@ export interface ProtocolSegment {
   data: SegmentData;
 }
 
-export type ProtocolSeq = [number, number];
 
-
+/**
+ * @deprecated
+ */
 export interface ProtocolLocation {
   segmentIndex: number;
   state: any;

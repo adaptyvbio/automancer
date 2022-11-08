@@ -76,7 +76,7 @@ monaco.languages.setMonarchTokensProvider(LanguageName, {
       [/^/, { token: '', next: '@pop' }],
       { include: '@whitespace' },
       { include: '@comment' },
-      [/{{/, { token: 'expr', next: '@python', nextEmbedded: 'python', bracket: '@open' }],
+      [/[$%@]?{{/, { token: 'expr', next: '@python', nextEmbedded: 'python', bracket: '@open' }],
       [/./, 'string']
     ],
 

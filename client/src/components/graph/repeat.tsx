@@ -31,7 +31,7 @@ export default {
           cellSize={{ width: metrics.size.width, height: metrics.size.height }}
           position={position}
           settings={options.settings}
-          title="Repeat" />
+          title={`Repeat ${block.count} times`} />
         {options.render(block.child, metrics.child, {
           x: position.x + 1,
           y: position.y + 2
@@ -41,6 +41,7 @@ export default {
   }
 } as Renderer<BaseBlock & {
   child: BaseBlock;
+  count: number;
 }, BaseMetrics & {
   child: BaseMetrics;
 }>;

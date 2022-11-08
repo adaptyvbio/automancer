@@ -58,7 +58,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       }
 
       if (this.props.draft.item.readable) {
-        // await this.getCompilation();
+        await this.getCompilation();
       }
     });
   }

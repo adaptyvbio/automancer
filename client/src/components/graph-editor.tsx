@@ -20,7 +20,7 @@ const Services: Renderers = {
 
 
 export interface GraphEditorProps {
-
+  tree: BaseBlock;
 }
 
 export interface GraphEditorState {
@@ -66,7 +66,9 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
   mouseDown = false;
   refContainer = React.createRef<HTMLDivElement>();
 
-  tree: any;
+  observer = new ResizeObserver((_entries) => {
+    this.setSize();
+  });
 
   constructor(props: GraphEditorProps) {
     super(props);
@@ -89,62 +91,6 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       children: [child, child].map((c) => ({ ...c, id: crypto.randomUUID() }))
     });
 
-    this.tree = {
-      id: '0',
-      type: 'sequence',
-      children: [
-        { id: '0',
-          type: 'segment',
-          label: 'Alpha',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ] },
-        parallel(repeat(duplicate({ id: '0',
-          type: 'segment',
-          label: 'Alpha',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ]
-        }))),
-        repeat(duplicate(repeat(duplicate({
-          id: '5',
-          type: 'segment',
-          label: 'Delta',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-          ]
-        })))),
-        { id: '1',
-          type: 'segment',
-          label: 'Alpha',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ]
-        },
-        { id: '2',
-          type: 'segment',
-          label: 'Beta',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ]
-        },
-        { id: '3',
-          type: 'segment',
-          label: 'Gamma',
-          features: [
-            { icon: 'hourglass_empty', label: '20 min' },
-            { icon: 'air', label: 'Alpha' },
-            { icon: 'air', label: 'Bravo' },
-            { icon: 'air', label: 'Charlie' }
-          ]
-        }
-      ]
-    };
-
     // this.tree = this.tree.children[0];
 
     this.state = {
@@ -157,7 +103,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
   }
 
-  componentDidMount() {
+  setSize() {
     let container = this.refContainer.current!;
     let rect = container.getBoundingClientRect();
 
@@ -167,11 +113,28 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         height: rect.height
       }
     });
+  }
+
+  componentDidMount() {
+    let container = this.refContainer.current!;
+
+    this.setSize();
+    this.observer.observe(container);
+
+    this.controller.signal.addEventListener('abort', () => {
+      this.observer.disconnect();
+    });
 
     container.addEventListener('wheel', (event) => {
       event.preventDefault();
 
+      let rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+
       this.setState((state) => {
+
+        let mouseX = event.clientX - rect.left;
+        let mouseY = event.clientY - rect.top;
+
         if (event.ctrlKey) {
           let newScale = state.scale * (1 + event.deltaY / 100);
           newScale = Math.max(0.6, Math.min(3, newScale));
@@ -182,12 +145,15 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           let matrix = new DOMMatrix()
             .multiply(transform)
-            .translate(event.clientX, event.clientY)
+            .translate(mouseX, mouseY)
             .scale(newScale / state.scale)
-            .translate(-event.clientX, -event.clientY)
+            .translate(-mouseX, -mouseY)
             .multiply(transform.inverse());
 
-          let offset = matrix.transformPoint({ x: state.offset.x, y: state.offset.y });
+          let offset = matrix.transformPoint({
+            x: state.offset.x,
+            y: state.offset.y
+          });
 
           return {
             offset: {
@@ -246,7 +212,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       return Services[block.type].render(block, metrics, position, { render, settings });
     };
 
-    let treeMetrics = computeMetrics(this.tree);
+    let treeMetrics = computeMetrics(this.props.tree);
 
 
     return (
@@ -260,7 +226,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             })}
           </g> */}
 
-          {render(this.tree, treeMetrics, { x: 1, y: 1 })}
+          {render(this.props.tree, treeMetrics, { x: 1, y: 1 })}
         </svg>
       </div>
     );
@@ -278,13 +244,15 @@ export interface Settings {
 
 type NodeId = string;
 
+interface NodeFeature {
+  icon: string;
+  label: string;
+}
+
 interface NodeDef {
   id: NodeId;
-  title: string;
-  features: {
-    icon: string;
-    label: string;
-  }[];
+  title: string | null;
+  features: NodeFeature[];
   position: {
     x: number;
     y: number;
@@ -315,7 +283,7 @@ export function Node(props: {
           className={util.formatClass('geditor-node', { '_selected': props.selected })}
           onMouseDown={props.onMouseDown}>
           <div className="geditor-header">
-            <div className="geditor-title">{node.title}</div>
+            <div className="geditor-title">{node.title ? node.title : <i>Untitled</i>}</div>
           </div>
           <div className="geditor-body">
             {node.features.map((feature, index) => (

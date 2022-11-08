@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Icon } from './icon';
 import * as util from '../util';
 
+import ParallelRenderer from './graph/parallel';
 import RepeatRenderer from './graph/repeat';
 import SegmentRenderer from './graph/segment';
 import SequenceRenderer from './graph/sequence';
@@ -11,6 +12,7 @@ import { BaseBlock, BaseMetrics, Coordinates, Renderers, Size } from './graph/sp
 
 
 const Services: Renderers = {
+  parallel: ParallelRenderer,
   repeat: RepeatRenderer,
   segment: SegmentRenderer,
   sequence: SequenceRenderer
@@ -81,6 +83,12 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       children: [child, child].map((c) => ({ ...c, id: crypto.randomUUID() }))
     });
 
+    let parallel = (child: any) => ({
+      id: crypto.randomUUID(),
+      type: 'parallel',
+      children: [child, child].map((c) => ({ ...c, id: crypto.randomUUID() }))
+    });
+
     this.tree = {
       id: '0',
       type: 'sequence',
@@ -91,8 +99,15 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           features: [
             { icon: 'hourglass_empty', label: '10 min' },
             { icon: 'air', label: 'Neutravidin' }
+          ] },
+        parallel(repeat(duplicate({ id: '0',
+          type: 'segment',
+          label: 'Alpha',
+          features: [
+            { icon: 'hourglass_empty', label: '10 min' },
+            { icon: 'air', label: 'Neutravidin' }
           ]
-        },
+        }))),
         repeat(duplicate(repeat(duplicate({
           id: '5',
           type: 'segment',
@@ -237,13 +252,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     return (
       <div className="geditor-root" ref={this.refContainer}>
         <svg viewBox={`${this.state.offset.x} ${this.state.offset.y} ${this.state.size.width * this.state.scale} ${this.state.size.height * this.state.scale}`} className="geditor-svg">
-          <g>
+          {/* <g>
             {new Array(cellCountX * cellCountY).fill(0).map((_, index) => {
               let x = index % cellCountX;
               let y = Math.floor(index / cellCountX);
               return <circle cx={x * cellPixelSize} cy={y * cellPixelSize} r="1.5" fill="#d8d8d8" key={index} />;
             })}
-          </g>
+          </g> */}
 
           {render(this.tree, treeMetrics, { x: 1, y: 1 })}
         </svg>

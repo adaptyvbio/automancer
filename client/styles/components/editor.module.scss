@@ -12,12 +12,13 @@ $border-color: #ddd;
 
 .panels {
   display: grid;
-  grid-template-columns: 1fr 2px 1fr;
+  grid-template-columns: 1fr 1px 1fr;
 
   height: 100%;
 
   > :nth-child(2) {
     cursor: col-resize;
+    pointer-events: initial;
     position: relative;
 
     &::before, &::after {
@@ -29,17 +30,19 @@ $border-color: #ddd;
       height: 100%;
     }
 
+    // Hover area
     &::before {
-      width: 4px;
-      translate: -25% 0;
+      width: 6px;
+      translate: calc(0.5px - 50%) 0;
     }
 
+    // Blue handle
     &::after {
       width: 1px;
       background-color: $border-color;
     }
 
-    &:is(:hover, ._dragging)::after {
+    &:is(:hover, :global(._dragging))::after {
       background-color: $app-blue;
       scale: 4 1;
     }

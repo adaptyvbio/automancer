@@ -6,6 +6,7 @@ import Split from 'react-split-grid';
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 
+import tabNavStyles from '../../../styles/components/tab-nav.module.scss';
 import editorStyles from '../../../styles/components/editor.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
 
@@ -110,7 +111,28 @@ console.log(animals);
                   <div className={editorStyles.editorMonaco} ref={this.refEditor} />
                 </div>
                 <div className={util.formatClass({ '_dragging': this.state.dragging })} {...getGutterProps('column', 1)} />
-                <div />
+                <div className={tabNavStyles.root}>
+                  <nav className={tabNavStyles.nav}>
+                    <button type="button" className={tabNavStyles.entry}>Tree</button>
+                    <button type="button" className={tabNavStyles.entry}>Help</button>
+                    <button type="button" className={util.formatClass(tabNavStyles.entry, '_active')}>Parameters</button>
+                    <button type="button" disabled className={tabNavStyles.entry}>Help</button>
+
+                    {/* <button type="button" className={tabNavStyles.entryRoot}>
+                      <div className={tabNavStyles.entryIcon}>
+                        <div className="material-symbols-sharp">account_tree</div>
+                      </div>
+                      <div className={tabNavStyles.entryLabel}>Tree</div>
+                    </button>
+                    <button type="button" className={tabNavStyles.entryRoot}>
+                      <div className={tabNavStyles.entryIcon}>
+                        <div className="material-symbols-sharp">edit_note</div>
+                      </div>
+                      <div className={tabNavStyles.entryLabel}>Parameters</div>
+                    </button> */}
+                  </nav>
+                  <div className={tabNavStyles.contents} />
+                </div>
               </div>
             )}
           />

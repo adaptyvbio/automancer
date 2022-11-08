@@ -65,10 +65,13 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
         <div className={styles.right}>
           <div className={styles.toolsRoot}>
             <button type="button" className={styles.toolsItem}>
-              <Icon name="view_list" />
+              <Icon name="help" style="sharp" />
             </button>
             <button type="button" className={styles.toolsItem}>
-              <Icon name="code" />
+              <Icon name="assistant_navigation" style="sharp" />
+            </button>
+            <button type="button" className={styles.toolsItem}>
+              <Icon name="sync" style="sharp" />
             </button>
           </div>
         </div>

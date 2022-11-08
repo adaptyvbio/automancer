@@ -85,6 +85,14 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       id: '0',
       type: 'sequence',
       children: [
+        { id: '0',
+          type: 'segment',
+          label: 'Alpha',
+          features: [
+            { icon: 'hourglass_empty', label: '10 min' },
+            { icon: 'air', label: 'Neutravidin' }
+          ]
+        },
         repeat(duplicate(repeat(duplicate({
           id: '5',
           type: 'segment',
@@ -324,13 +332,17 @@ export function Node(props: {
 }
 
 
-interface LinkDef {
-  start: { x: number; y: number; };
-  end: { x: number; y: number; };
+export interface LinkEnd {
+  x: number;
+  y: number;
 }
 
-function Link(props: {
-  autoMove: unknown;
+export interface LinkDef {
+  start: LinkEnd;
+  end: LinkEnd;
+}
+
+export function Link(props: {
   link: LinkDef;
   settings: Settings;
 }) {
@@ -339,7 +351,7 @@ function Link(props: {
   let startX = settings.cellPixelSize * link.start.x - settings.nodePadding;
   let startY = settings.cellPixelSize * link.start.y;
 
-  let endX = settings.cellPixelSize * link.end.x + settings.nodePadding;;
+  let endX = settings.cellPixelSize * link.end.x + settings.nodePadding;
   let endY = settings.cellPixelSize * link.end.y;
 
   let d = `M${startX} ${startY}`;
@@ -361,7 +373,7 @@ function Link(props: {
 
   d += `L${endX} ${endY}`;
 
-  return <path d={d} className={util.formatClass('geditor-link', { '_automove': props.autoMove })} />
+  return <path d={d} className={util.formatClass('geditor-link', { '_automove': false })} />
 }
 
 

@@ -10,6 +10,14 @@ export default {
 
     return {
       child: childMetrics,
+      start: {
+        x: childMetrics.start.x + 1,
+        y: childMetrics.start.y + 2
+      },
+      end: {
+        x: childMetrics.end.x + 1,
+        y: childMetrics.end.y + 2
+      },
       size: {
         width: childMetrics.size.width + 2,
         height: childMetrics.size.height + 3

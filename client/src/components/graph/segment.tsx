@@ -7,10 +7,13 @@ import { BaseBlock, BaseMetrics, Renderer } from './spec';
 export default {
   computeMetrics(block, options) {
     let featureCount = block.features.length;
+    let width = Math.round((220 + options.settings.nodePadding * 2) / options.settings.cellPixelSize);
 
     return {
+      start: { x: 0, y: 1 },
+      end: { x: width, y: 1 },
       size: {
-        width: Math.round((220 + options.settings.nodePadding * 2) / options.settings.cellPixelSize),
+        width,
         height: Math.ceil((
           options.settings.nodeHeaderHeight
           + (24 * featureCount)

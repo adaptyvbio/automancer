@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Settings } from '../graph-editor';
+import { LinkEnd, Settings } from '../graph-editor';
 
 
 export type Namespace = string;
@@ -21,6 +21,9 @@ export interface BaseBlock {
 }
 
 export interface BaseMetrics {
+  start: LinkEnd;
+  end: LinkEnd;
+
   size: Size;
 }
 

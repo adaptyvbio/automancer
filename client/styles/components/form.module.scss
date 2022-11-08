@@ -21,6 +21,12 @@ $height: 2rem;
   padding: 30px;
 }
 
+.main2 {
+  height: 100%;
+  padding: 1rem 1.4rem;
+  overflow-y: auto;
+}
+
 
 .field {
   &Control {
@@ -188,6 +194,10 @@ $height: 2rem;
     display: grid;
     column-gap: 0.8rem;
     grid-template: auto auto / auto 1fr;
+
+    &:has(:focus-visible) {
+      box-shadow: $highlight-shadow;
+    }
 
     input {
       accent-color: $app-blue;

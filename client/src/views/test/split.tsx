@@ -3,9 +3,11 @@ import * as React from 'react';
 import seqOrd from 'seq-ord';
 import Split from 'react-split-grid';
 
+import { TabNav } from '../../components/tab-nav';
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 
+import formStyles from '../../../styles/components/form.module.scss';
 import tabNavStyles from '../../../styles/components/tab-nav.module.scss';
 import editorStyles from '../../../styles/components/editor.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
@@ -111,28 +113,53 @@ console.log(animals);
                   <div className={editorStyles.editorMonaco} ref={this.refEditor} />
                 </div>
                 <div className={util.formatClass({ '_dragging': this.state.dragging })} {...getGutterProps('column', 1)} />
-                <div className={tabNavStyles.root}>
-                  <nav className={tabNavStyles.nav}>
-                    <button type="button" className={tabNavStyles.entry}>Tree</button>
-                    <button type="button" className={tabNavStyles.entry}>Help</button>
-                    <button type="button" className={util.formatClass(tabNavStyles.entry, '_active')}>Parameters</button>
-                    <button type="button" disabled className={tabNavStyles.entry}>Help</button>
+                <TabNav entries={[
+                  { id: 'parameters',
+                    label: 'Parameters',
+                    contents: () => (
+                      <div className={formStyles.main2}>
+                        <div className={formStyles.header}>
+                          <h2>Okolab settings</h2>
+                        </div>
 
-                    {/* <button type="button" className={tabNavStyles.entryRoot}>
-                      <div className={tabNavStyles.entryIcon}>
-                        <div className="material-symbols-sharp">account_tree</div>
+                        <p className={formStyles.paragraph}>Codespaces created from the following repositories can have GPG capabilities and sign commits so that GitHub can verify that they come from a trusted source. Only enable this for repositories that you trust.</p>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" className={formStyles.fieldTextfield} />
+                        </label>
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" className={formStyles.fieldTextfield} />
+                        </label>
+                        <label className={formStyles.checkRoot}>
+                          <input type="checkbox" />
+                          <div className={formStyles.checkTitle}>Organizations within this enterprise</div>
+                          <p className={formStyles.checkDescription}>Members can fork a repository to an organization within this enterprise.</p>
+                        </label>
+                        <label className={formStyles.checkRoot}>
+                          <input type="checkbox" />
+                          <div className={formStyles.checkTitle}>Organizations within this enterprise</div>
+                          <p className={formStyles.checkDescription}>Members can fork a repository to an organization within this enterprise.</p>
+                        </label>
+                        <label className={formStyles.checkRoot}>
+                          <input type="checkbox" />
+                          <div className={formStyles.checkTitle}>Organizations within this enterprise</div>
+                          <p className={formStyles.checkDescription}>Members can fork a repository to an organization within this enterprise.</p>
+                        </label>
+                        <label className={formStyles.checkRoot}>
+                          <input type="checkbox" />
+                          <div className={formStyles.checkTitle}>Organizations within this enterprise</div>
+                          <p className={formStyles.checkDescription}>Members can fork a repository to an organization within this enterprise.</p>
+                        </label>
                       </div>
-                      <div className={tabNavStyles.entryLabel}>Tree</div>
-                    </button>
-                    <button type="button" className={tabNavStyles.entryRoot}>
-                      <div className={tabNavStyles.entryIcon}>
-                        <div className="material-symbols-sharp">edit_note</div>
-                      </div>
-                      <div className={tabNavStyles.entryLabel}>Parameters</div>
-                    </button> */}
-                  </nav>
-                  <div className={tabNavStyles.contents} />
-                </div>
+                    )
+                  },
+                  { id: 'help',
+                    label: 'Help' },
+                  { id: 'output',
+                    label: 'Output' }
+                ]} />
               </div>
             )}
           />

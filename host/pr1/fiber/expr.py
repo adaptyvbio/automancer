@@ -114,7 +114,7 @@ class PythonExprEvaluator:
 
     self.envs: Optional[list[EvalEnv]] = None
 
-  def evaluate(self, env_data: dict[EvalEnv, EvalVariables]):
+  def evaluate(self, env_data: dict[EvalEnv, EvalVariables], context):
     from .langservice import Analysis
     assert self.envs is not None
 
@@ -130,7 +130,7 @@ class PythonExprEvaluator:
     except EvalError as e:
       return Analysis(errors=[e]), Ellipsis
     else:
-      return self._type.analyze(result)
+      return self._type.analyze(result, context)
 
   def export(self):
     return dict()

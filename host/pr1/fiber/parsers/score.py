@@ -62,7 +62,7 @@ class ScoreState(BlockUnitState):
 
     for score_raw in self.points_list:
       if isinstance(score_raw, PythonExprEvaluator):
-        score_analysis, score = score_raw.evaluate(context)
+        score_analysis, score = score_raw.evaluate(context, context.parser.analysis_context)
         analysis += score_analysis
 
         if score is Ellipsis:

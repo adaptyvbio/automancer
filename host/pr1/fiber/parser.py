@@ -1,4 +1,5 @@
 from collections import namedtuple
+from pint import UnitRegistry
 from types import EllipsisType
 from typing import Any, Optional, Protocol, Sequence
 
@@ -94,14 +95,17 @@ class BaseTransform:
 # ----
 
 
+@debug
 class LinearizationContext(dict):
-  def __init__(self, d = None):
+  def __init__(self, d = None, *, parser):
+    self.parser = parser
+
     if d:
       for key, value in d.items():
         self[key] = value
 
   def __or__(self, other):
-    return LinearizationContext({ **self, **other })
+    return LinearizationContext({ **self, **other }, parser=self.parser)
 
 
 @debug
@@ -171,6 +175,12 @@ class SegmentBlock:
     }
 
 
+@debug
+class AnalysisContext:
+  def __init__(self, *, ureg: UnitRegistry):
+    self.ureg = ureg
+
+
 # ----
 
 
@@ -189,7 +199,11 @@ class FiberProtocol:
 class FiberParser:
   def __init__(self, text: str, *, Parsers: Sequence[type[BaseParser]], host):
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
+
+    self.ureg = UnitRegistry()
+
     self.analysis = lang.Analysis()
+    self.analysis_context = AnalysisContext(ureg=self.ureg)
 
     data, reader_errors, reader_warnings = reader.loads(text)
 
@@ -215,10 +229,8 @@ class FiberParser:
     # pprint(schema._attributes)
     # print(schema.get_attr("name")._label)
 
-    analysis, output = schema.analyze(data)
+    analysis, output = schema.analyze(data, self.analysis_context)
     self.analysis += analysis
-
-    self._segments = list()
 
     for parser in self._parsers:
       parser.enter_protocol(output[parser.namespace])
@@ -239,13 +251,10 @@ class FiberParser:
       print()
 
       print("<= LINEARIZATION =>")
-      linearization_analysis, linearized = entry_block.linearize(LinearizationContext())
+      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(parser=self))
       self.analysis += linearization_analysis
       pprint(linearized)
       print()
-
-    print("<= SEGMENTS =>")
-    pprint(self._segments)
 
     if entry_block is not Ellipsis:
       self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
@@ -263,7 +272,7 @@ class FiberParser:
 
 
   def parse_block(self, data_block, *, context = None) -> EllipsisType | tuple[BlockState, list[BaseTransform]]:
-    dict_analysis, block_attrs = self.segment_dict.analyze(data_block)
+    dict_analysis, block_attrs = self.segment_dict.analyze(data_block, self.analysis_context)
     self.analysis += dict_analysis
 
     if block_attrs is Ellipsis:

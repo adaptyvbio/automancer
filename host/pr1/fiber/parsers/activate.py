@@ -1,6 +1,6 @@
+from ..expr import PythonExprEvaluator
 from .. import langservice as lang
 from ..parser import BaseParser, BlockData, BlockUnitState, SegmentTransform
-# from ...units.base import BaseParser
 from ...draft import DraftGenericError
 from ...util.decorators import debug
 
@@ -23,7 +23,7 @@ class AcmeParser(BaseParser):
     'activate': lang.Attribute(
       description="Activates the prototype.",
       optional=True,
-      type=lang.PrimitiveType(int)
+      type=lang.QuantityType('meter')
     )
   }
 
@@ -42,7 +42,7 @@ class AcmeParser(BaseParser):
       if raw_value is Ellipsis:
         return lang.Analysis(), Ellipsis
 
-      value = raw_value.value
+      value = raw_value.value.m
 
       if value < 0:
         return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis

@@ -1,11 +1,12 @@
 import builtins
+import pint
 from collections import namedtuple
+from pint import Quantity, Unit
 from typing import Any, Literal, Optional
 
 from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocatedValue, LocationRange
-
 
 
 class Analysis:
@@ -138,7 +139,7 @@ class Attribute:
     self._signature = signature
     self._type = type
 
-  def analyze(self, obj, key):
+  def analyze(self, obj, key, context):
     analysis = Analysis()
     key_range = key.area.single_range()
 
@@ -152,7 +153,7 @@ class Attribute:
       # TODO: Use a deprecation flag
       analysis.warnings.append(DraftGenericError("This attribute is deprecated", ranges=[key_range]))
 
-    value_analysis, value = self._type.analyze(obj)
+    value_analysis, value = self._type.analyze(obj, context)
 
     return (analysis + value_analysis), value
 
@@ -214,10 +215,10 @@ class CompositeDict:
 
   #   return analysis
 
-  def analyze(self, obj):
+  def analyze(self, obj, context):
     analysis = Analysis()
 
-    primitive_analysis, obj = PrimitiveType(dict).analyze(obj)
+    primitive_analysis, obj = PrimitiveType(dict).analyze(obj, context)
     analysis += primitive_analysis
 
     if obj is Ellipsis:
@@ -261,7 +262,7 @@ class CompositeDict:
         continue
 
       attr = attr_entries[namespace]
-      attr_analysis, attr_values[namespace][attr_name] = attr.analyze(obj_value, obj_key)
+      attr_analysis, attr_values[namespace][attr_name] = attr.analyze(obj_value, obj_key, context)
 
       analysis += attr_analysis
 
@@ -309,8 +310,8 @@ class SimpleDict(CompositeDict):
   def __init__(self, attrs, *, foldable = False):
     super().__init__(attrs, foldable=foldable)
 
-  def analyze(self, obj):
-    analysis, output = super().analyze(obj)
+  def analyze(self, obj, context):
+    analysis, output = super().analyze(obj, context)
 
     return analysis, output[self._native_namespace]
 
@@ -323,18 +324,34 @@ class InvalidPrimitiveError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Invalid type", ranges=self.target.area.ranges)
 
+class MissingUnitError(LangServiceError):
+  def __init__(self, target, unit):
+    self.target = target
+    self.unit = unit
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Missing unit, expected '{self.unit}'", ranges=self.target.area.ranges)
+
+class InvalidUnitError(LangServiceError):
+  def __init__(self, target, unit):
+    self.unit = unit
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid unit, expected '{self.unit}'", ranges=self.target.area.ranges)
+
 class AnyType:
   def __init__(self):
     pass
 
-  def analyze(self, obj):
+  def analyze(self, obj, context):
     return Analysis(), obj
 
 class PrimitiveType:
   def __init__(self, primitive):
     self._primitive = primitive
 
-  def analyze(self, obj):
+  def analyze(self, obj, context):
     match self._primitive:
       case builtins.float | builtins.int:
         try:
@@ -348,7 +365,6 @@ class PrimitiveType:
       case _:
         return Analysis(), obj
 
-
 class LiteralOrExprType:
   def __init__(self, obj_type, /, *, field = True, static = False):
     from .expr import PythonExprKind
@@ -361,7 +377,7 @@ class LiteralOrExprType:
     if static:
       self._kinds.add(PythonExprKind.Static)
 
-  def analyze(self, obj):
+  def analyze(self, obj, context):
     from .expr import PythonExpr # TODO: improve
     result = PythonExpr.parse(obj)
 
@@ -374,4 +390,27 @@ class LiteralOrExprType:
       # if expr.kind in self._kinds:
       return analysis, PythonExprEvaluator(expr, type=self._type)
     else:
-      return self._type.analyze(obj)
+      return self._type.analyze(obj, context)
+
+class QuantityType(LiteralOrExprType):
+  def __init__(self, unit: Optional[Unit | str]):
+    self._unit = unit
+
+  def analyze(self, obj, context):
+    if isinstance(obj, str):
+      try:
+        value = context.ureg(obj.value)
+      except pint.errors.UndefinedUnitError:
+        return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+    else:
+      value = obj
+
+    match value:
+      case Quantity() if value.check(self._unit):
+        return Analysis(), LocatedValue.new(value, area=obj.area)
+      case Quantity():
+        return Analysis(errors=[InvalidUnitError(obj, self._unit)]), Ellipsis
+      case builtins.float() | builtins.int():
+        return Analysis(errors=[MissingUnitError(obj, self._unit)]), Ellipsis
+      case _:
+        return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis

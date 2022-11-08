@@ -214,19 +214,29 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     let treeMetrics = computeMetrics(this.props.tree);
 
+    let frac = (x: number) => x - Math.floor(x);
+    let offsetX = this.state.offset.x;
+    let offsetY = this.state.offset.y;
+    let scale = this.state.scale;
 
     return (
       <div className="geditor-root" ref={this.refContainer}>
-        <svg viewBox={`${this.state.offset.x} ${this.state.offset.y} ${this.state.size.width * this.state.scale} ${this.state.size.height * this.state.scale}`} className="geditor-svg">
-          {/* <g>
-            {new Array(cellCountX * cellCountY).fill(0).map((_, index) => {
-              let x = index % cellCountX;
-              let y = Math.floor(index / cellCountX);
-              return <circle cx={x * cellPixelSize} cy={y * cellPixelSize} r="1.5" fill="#d8d8d8" key={index} />;
-            })}
-          </g> */}
+        <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className="geditor-svg">
+          <defs>
+            <pattern x={settings.cellPixelSize * 0.5} y={settings.cellPixelSize * 0.5} width={settings.cellPixelSize} height={settings.cellPixelSize} patternUnits="userSpaceOnUse" id="grid">
+              <circle cx={settings.cellPixelSize * 0.5} cy={settings.cellPixelSize * 0.5} r="1.5" fill="#d8d8d8" />
+            </pattern>
+          </defs>
 
-          {render(this.props.tree, treeMetrics, { x: 1, y: 1 })}
+          <rect
+            x="0" y="0"
+            width={this.state.size.width * scale}
+            height={this.state.size.height * scale}
+            fill="url(#grid)"
+            transform={`scale(${1/scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
+          <g transform={`scale(${1 / scale}) translate(${-offsetX} ${-offsetY})`}>
+            {render(this.props.tree, treeMetrics, { x: 1, y: 1 })}
+          </g>
         </svg>
       </div>
     );

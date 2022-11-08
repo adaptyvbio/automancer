@@ -19,6 +19,13 @@ class MissingProcessError(Exception):
   def diagnostic(self):
     return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
 
+class RemainingTransformsError(Exception):
+  def __init__(self, area: LocationArea):
+    self.area = area
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Remaining transforms", ranges=self.area.ranges)
+
 
 class BlockUnitState:
   def __or__(self, other):
@@ -112,6 +119,9 @@ class SegmentTransform(BaseTransform):
     segment_state = parent_state | state
     segment_state.set_envs(envs)
 
+    if transforms:
+      return lang.Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
+
     return lang.Analysis(), SegmentBlock(Segment(
       process_namespace=self._namespace,
       state=segment_state
@@ -153,6 +163,7 @@ class SegmentBlock:
 
   def export(self):
     return {
+      "type": "segment",
       "process_namespace": self._segment.process_namespace,
       "state": {
         namespace: state and state.export() for namespace, state in self._segment.state.items()
@@ -238,7 +249,8 @@ class FiberParser:
 
     if entry_block is not Ellipsis:
       self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
-      pprint(self.protocol.export())
+    else:
+      self.protocol = None
 
   @property
   def segment_dict(self):

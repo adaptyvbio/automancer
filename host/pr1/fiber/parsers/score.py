@@ -53,7 +53,7 @@ class ScoreState(BlockUnitState):
 
   def set_envs(self, envs: list):
     for points in self.points_list:
-      if isinstance(points, PythonExprEvaluator):
+      if isinstance(points, PythonExprEvaluator) and (points.envs is None):
         points.envs = envs
 
   def assemble(self, context):
@@ -75,7 +75,7 @@ class ScoreState(BlockUnitState):
     return analysis, ScoreStateAssembled(total)
 
   def export(self):
-    return { "pointsList": self.points_list }
+    return { "pointsList": [points.export() if isinstance(points, PythonExprEvaluator) else points for points in self.points_list] }
 
 @debug
 class ScoreStateAssembled:

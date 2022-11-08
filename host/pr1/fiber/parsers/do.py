@@ -41,7 +41,9 @@ class DoTransform(BaseTransform):
     self._data_do = data_do
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms, envs):
+  def execute(self, state, parent_state, transforms, envs, *, origin_area):
+    state.set_envs(envs)
+
     result = self._parser._fiber.parse_block(self._data_do, context=self._context)
 
     if result is Ellipsis:
@@ -50,6 +52,6 @@ class DoTransform(BaseTransform):
     block_state, block_transforms = result
 
     if self._before:
-      return lang.Analysis(), self._parser._fiber.execute(state, parent_state | block_state, block_transforms + transforms, envs)
+      return lang.Analysis(), self._parser._fiber.execute(state, parent_state | block_state, block_transforms + transforms, envs, origin_area=origin_area)
     else:
-      return lang.Analysis(), self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs)
+      return lang.Analysis(), self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs, origin_area=origin_area)

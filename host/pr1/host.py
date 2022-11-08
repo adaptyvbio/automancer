@@ -151,7 +151,7 @@ class Host:
     #   # raise e
 
 
-  def compile_draft(self, draft_id, source):
+  def compile_draft(self, draft_id: str, source: str):
     from .fiber.parsers.activate import AcmeParser
     from .fiber.parsers.condition import ConditionParser
     from .fiber.parsers.do import DoParser
@@ -163,13 +163,14 @@ class Host:
     parser = FiberParser(
       source,
       host=self,
-      Parsers=[DoParser, SequenceParser, RepeatParser, ShorthandsParser, AcmeParser, ScoreParser]
+      Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
       # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )
 
     return Draft(
       id=draft_id,
-      analysis=parser.analysis
+      analysis=parser.analysis,
+      protocol=parser.protocol
     )
 
   def create_chip(self, name):
@@ -297,7 +298,7 @@ class Host:
         traceback.print_exc()
 
         from .fiber import langservice as lang
-        draft = Draft(analysis=lang.Analysis(), id=request["draftId"])
+        draft = Draft(analysis=lang.Analysis(), id=request["draftId"], protocol=None)
 
       return draft.export()
 

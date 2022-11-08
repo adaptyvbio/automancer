@@ -46,6 +46,7 @@ class SequenceTransform(BaseTransform):
 
   def execute(self, state, parent_state, transforms, envs, *, origin_area):
     children = list()
+    state.set_envs(envs)
 
     for data_action in self._data_actions:
       result = self._parser._fiber.parse_block(data_action)

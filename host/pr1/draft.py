@@ -1,7 +1,8 @@
 class Draft:
-  def __init__(self, *, id, analysis):
+  def __init__(self, *, id, analysis, protocol):
     self.analysis = analysis
     self.id = id
+    self.protocol = protocol
 
   def export(self):
     return {
@@ -13,8 +14,8 @@ class Draft:
       "folds": [fold.export() for fold in self.analysis.folds],
       "hovers": [hover.export() for hover in self.analysis.hovers],
 
-      "protocol": None, # self.protocol.export(),
-      "valid": False
+      "protocol": self.protocol.export() if self.protocol else None,
+      "valid": not self.analysis.errors
     }
 
 

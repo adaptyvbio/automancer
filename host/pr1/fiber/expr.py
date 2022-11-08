@@ -11,7 +11,7 @@ from ..reader import LocatedString
 from ..util.decorators import debug
 
 
-expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
+expr_regexp = re.compile(r"^([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}$")
 escape_regexp = re.compile(r"\\(.)")
 
 def unescape(value: LocatedString) -> LocatedString:
@@ -131,6 +131,9 @@ class PythonExprEvaluator:
       return Analysis(errors=[e]), Ellipsis
     else:
       return self._type.analyze(result)
+
+  def export(self):
+    return dict()
 
 
 if __name__ == "__main__":

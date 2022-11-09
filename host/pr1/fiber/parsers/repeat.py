@@ -19,9 +19,6 @@ class RepeatParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def enter_protocol(self, data_protocol):
-    pass
-
   def parse_block(self, block_attrs, context):
     attrs = block_attrs[self.namespace]
     transforms = list()

@@ -18,9 +18,6 @@ class ConditionParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def enter_protocol(self, data_protocol):
-    pass
-
   def parse_block_state(self, data_block, parent_state):
     return None
 

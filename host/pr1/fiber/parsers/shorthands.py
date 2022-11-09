@@ -1,9 +1,27 @@
+from ..eval import EvalEnv
 from .. import langservice as lang
 from ..expr import PythonExpr, PythonExprEvaluator
-from ..parser import BaseTransform, BlockData, BlockUnitState
+from ..parser import BaseBlock, BaseTransform, BlockData, BlockUnitState, FiberParser
 from ...units.base import BaseParser
 from ...util import schema as sc
 from ...util.decorators import debug
+
+
+class ShorthandEnv(EvalEnv):
+  pass
+
+@debug
+class ShorthandBlock(BaseBlock):
+  def __init__(self, block: BaseBlock, /, env: ShorthandEnv, *, arg):
+    self._arg = arg
+    self._block = block
+    self._env = env
+
+  def linearize(self, context):
+    return self._block.linearize(context | { self._env: { 'arg': self._arg } })
+
+  def export(self):
+    return self._block.export()
 
 
 class ShorthandsParser(BaseParser):
@@ -16,7 +34,7 @@ class ShorthandsParser(BaseParser):
     )
   }
 
-  def __init__(self, fiber):
+  def __init__(self, fiber: FiberParser):
     self._fiber = fiber
     self._shorthands = dict()
 
@@ -26,15 +44,14 @@ class ShorthandsParser(BaseParser):
 
   def enter_protocol(self, data_protocol):
     for shorthand_name, data_shorthand in data_protocol.get('shorthands', dict()).items():
-      self._shorthands[shorthand_name] = data_shorthand
+      shorthand_env = ShorthandEnv()
 
-      # self._shorthands[shorthand_name] = self._fiber.parse_block(data_shorthand, None, None)
-      # dict_analysis, block_attrs = self.parse_block_attrs(data_block)
+      parse_result = self._fiber.parse_block(data_shorthand, envs=[shorthand_env])
+      self._shorthands[shorthand_name] = (shorthand_env, parse_result.unwrap()) if parse_result is not Ellipsis else Ellipsis
 
-    # from pprint import pprint
-    # pprint(self._shorthands)
+    return lang.Analysis()
 
-  def parse_block(self, block_attrs, context):
+  def parse_block(self, block_attrs, /, context, envs):
     attrs = block_attrs[self.namespace]
 
     if attrs:
@@ -56,51 +73,62 @@ class ShorthandsParser(BaseParser):
 
 @debug
 class ShorthandTransform(BaseTransform):
-  def __init__(self, attrs, *, context, parser):
+  def __init__(self, attrs, *, context, parser: ShorthandsParser):
     self._attrs = attrs
     self._context = context
     self._parser = parser
 
-  def execute(self, block_state, parent_state, block_transforms, envs):
+  def execute(self, block_state, parent_state, block_transforms, envs, *, origin_area, stack):
     analysis = lang.Analysis()
     state = None
     transforms = list()
+    stack = stack.copy()
 
     for shorthand_name, shorthand_value in self._attrs.items():
-      data_shorthand = self._parser._shorthands[shorthand_name]
+      shorthand = self._parser._shorthands[shorthand_name]
 
-      if isinstance(shorthand_value, str):
-        expr_result = PythonExpr.parse(shorthand_value)
-
-        if expr_result:
-          expr_analysis, expr_value = expr_result
-          analysis += expr_analysis
-
-          if expr_value is Ellipsis:
-            return analysis, Ellipsis
-
-          eval_analysis, eval_value = PythonExprEvaluator(expr_value, type=lang.AnyType()).evaluate(self._context)
-          analysis += eval_analysis
-
-          if eval_value is Ellipsis:
-            return analysis, Ellipsis
-
-          arg = eval_value
-        else:
-          arg = shorthand_value
-      else:
-        arg = shorthand_value
-
-      shorthand_context = self._context + EvaluationContext(closure={
-        'arg': arg
-      })
-
-      parse_result = self._parser._fiber.parse_block(data_shorthand, context=shorthand_context)
-
-      if parse_result is Ellipsis:
+      if shorthand is Ellipsis:
         return analysis, Ellipsis
 
-      shorthand_state, shorthand_transforms = parse_result
+      shorthand_env, (shorthand_state, shorthand_transforms) = shorthand
+
+      stack[shorthand_env] = {
+        'arg': shorthand_value
+      }
+
+      # if isinstance(shorthand_value, str):
+      #   expr_result = PythonExpr.parse(shorthand_value)
+
+      #   if expr_result:
+      #     expr_analysis, expr_value = expr_result
+      #     analysis += expr_analysis
+
+      #     if expr_value is Ellipsis:
+      #       return analysis, Ellipsis
+
+      #     eval_analysis, eval_value = PythonExprEvaluator(expr_value, type=lang.AnyType()).evaluate(self._context)
+      #     analysis += eval_analysis
+
+      #     if eval_value is Ellipsis:
+      #       return analysis, Ellipsis
+
+      #     arg = eval_value
+      #   else:
+      #     arg = shorthand_value
+      # else:
+      #   arg = shorthand_value
+
+      # shorthand_context = self._context + EvaluationContext(closure={
+      #   'arg': arg
+      # })
+
+      # parse_result = self._parser._fiber.parse_block(data_shorthand, context=shorthand_context)
+
+      # if parse_result is Ellipsis:
+      #   return analysis, Ellipsis
+
+      # self._parser._fiber.execute(shorthand_state, None, shorthand_transforms, [shorthand_env], origin_area=origin_area, stack=stack)
+
       transforms += shorthand_transforms
 
       if state is not None:
@@ -108,6 +136,15 @@ class ShorthandTransform(BaseTransform):
       else:
         state = shorthand_state
 
-    transforms += block_transforms
+    block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, [], origin_area=origin_area, stack=stack)
 
-    return analysis, self._parser._fiber.execute(block_state, parent_state | state, transforms, [])
+    if block is Ellipsis:
+      return analysis, Ellipsis
+
+    for shorthand_name, shorthand_value in self._attrs.items():
+      shorthand = self._parser._shorthands[shorthand_name]
+      shorthand_env, (shorthand_state, shorthand_transforms) = shorthand
+
+      block = ShorthandBlock(block, env=shorthand_env, arg=shorthand_value)
+
+    return analysis, block

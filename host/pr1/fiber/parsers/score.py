@@ -1,7 +1,6 @@
 from .. import langservice as lang
 from ..expr import PythonExprEvaluator
-from ..parser import BlockData, BlockUnitState
-from ...units.base import BaseParser
+from ..parser import BaseParser, BlockData, BlockUnitState
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -21,10 +20,7 @@ class ScoreParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def enter_protocol(self, data_protocol):
-    pass
-
-  def parse_block(self, block_attrs, context):
+  def parse_block(self, block_attrs, /, context, envs):
     attrs = block_attrs[self.namespace]
 
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
@@ -39,7 +35,7 @@ class ScoreParser(BaseParser):
       #   analysis = lang.Analysis()
       #   score = score_raw.value
 
-      return lang.Analysis(), BlockData(state=ScoreState([score_raw]))
+      return lang.Analysis(), BlockData(state=ScoreState([score_raw if isinstance(score_raw, PythonExprEvaluator) else score_raw.value]))
     else:
       return lang.Analysis(), BlockData(state=ScoreState([0.0]))
 

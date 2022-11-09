@@ -4,10 +4,11 @@ from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocationArea
 
 
-EvalVariables = dict[str, Any]
-
 class EvalEnv(Protocol):
   pass
+
+EvalVariables = dict[str, Any]
+EvalStack = dict[EvalEnv, EvalVariables]
 
 class EvalContext:
   def __init__(self, variables: Optional[EvalVariables] = None, /):

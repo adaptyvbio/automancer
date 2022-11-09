@@ -379,18 +379,20 @@ class LiteralOrExprType:
 
   def analyze(self, obj, context):
     from .expr import PythonExpr # TODO: improve
-    result = PythonExpr.parse(obj)
 
-    if result:
-      analysis, expr = result
+    if isinstance(obj, str):
+      result = PythonExpr.parse(obj)
 
-      if expr is Ellipsis:
-        return analysis, Ellipsis
+      if result:
+        analysis, expr = result
 
-      # if expr.kind in self._kinds:
-      return analysis, PythonExprEvaluator(expr, type=self._type)
-    else:
-      return self._type.analyze(obj, context)
+        if expr is Ellipsis:
+          return analysis, Ellipsis
+
+        # if expr.kind in self._kinds:
+        return analysis, PythonExprEvaluator(expr, type=self._type)
+
+    return self._type.analyze(obj, context)
 
 class QuantityType(LiteralOrExprType):
   def __init__(self, unit: Optional[Unit | str]):

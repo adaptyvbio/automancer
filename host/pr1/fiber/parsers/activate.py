@@ -30,10 +30,7 @@ class AcmeParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def enter_protocol(self, data_protocol):
-    pass
-
-  def parse_block(self, block_attrs, context):
+  def parse_block(self, block_attrs, /, context, envs):
     attrs = block_attrs[self.namespace]
 
     if 'activate' in attrs:

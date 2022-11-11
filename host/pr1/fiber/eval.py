@@ -1,7 +1,7 @@
 from typing import Any, Optional, Protocol
 
 from ..draft import DraftDiagnostic
-from ..reader import LocatedString, LocationArea
+from ..reader import LocatedString, LocatedValue, LocationArea
 
 
 class EvalEnv(Protocol):
@@ -26,6 +26,6 @@ class EvalError(Exception):
 
 def evaluate(compiled: Any, /, contents: LocatedString, context: EvalContext):
   try:
-    return LocatedString(eval(compiled, globals(), context.variables), area=contents.area)
+    return LocatedValue.new(eval(compiled, globals(), context.variables), area=contents.area)
   except Exception as e:
     raise EvalError(contents.area) from e

@@ -19,29 +19,33 @@ class RepeatParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs, context):
+  def parse_block(self, block_attrs, /, context, envs):
     attrs = block_attrs[self.namespace]
-    transforms = list()
 
     if 'repeat' in attrs and (attrs['repeat'] is not Ellipsis):
-      transforms.append(RepeatTransform(attrs['repeat'].value, parser=self))
+      env = RepeatEnv()
 
-    return lang.Analysis(), BlockData(transforms=transforms)
+      return lang.Analysis(), BlockData(
+        envs=[env],
+        transforms=[RepeatTransform(attrs['repeat'].value, env=env, parser=self)]
+      )
+    else:
+      return lang.Analysis(), BlockData()
 
 @debug
 class RepeatTransform(BaseTransform):
-  def __init__(self, count: int, *, parser: RepeatParser):
+  def __init__(self, count: int, *, env: 'RepeatEnv', parser: RepeatParser):
     self._count = count
+    self._env = env
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms, envs, *, origin_area):
-    env = RepeatEnv()
-    block = self._parser._fiber.execute(state, parent_state, transforms, [*envs, env], origin_area=origin_area)
+  def execute(self, state, parent_state, transforms, envs, *, origin_area, stack):
+    block = self._parser._fiber.execute(state, parent_state, transforms, envs, origin_area=origin_area, stack=stack)
 
     if block is Ellipsis:
       return lang.Analysis(), Ellipsis
 
-    return lang.Analysis(), RepeatBlock(block, count=self._count, env=env)
+    return lang.Analysis(), RepeatBlock(block, count=self._count, env=self._env)
 
 @debug
 class RepeatBlock:

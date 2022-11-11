@@ -24,6 +24,9 @@ class ScoreParser(BaseParser):
     attrs = block_attrs[self.namespace]
 
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
+      if isinstance(score_raw, PythonExprEvaluator):
+        score_raw.envs = envs
+
       # if isinstance(score_raw, PythonExprEvaluator):
       #   analysis, score = score_raw.evaluate(context)
 

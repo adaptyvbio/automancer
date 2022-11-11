@@ -4,7 +4,7 @@ import re
 from enum import Enum
 from typing import Literal, Optional, cast
 
-from .eval import EvalContext, EvalEnv, EvalError, EvalVariables, evaluate as dynamic_evaluate
+from .eval import EvalContext, EvalEnv, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString
@@ -114,14 +114,14 @@ class PythonExprEvaluator:
 
     self.envs: Optional[list[EvalEnv]] = None
 
-  def evaluate(self, env_data: dict[EvalEnv, EvalVariables], context):
+  def evaluate(self, stack: EvalStack, context):
     from .langservice import Analysis
     assert self.envs is not None
 
     variables = dict()
 
     for env in self.envs:
-      variables.update(env_data[env])
+      variables.update(stack[env])
 
     context = EvalContext(variables)
 

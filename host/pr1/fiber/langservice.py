@@ -360,7 +360,7 @@ class PrimitiveType:
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
         else:
           return Analysis(), LocatedValue.new(value, area=obj.area)
-      case _ if not isinstance(obj, self._primitive):
+      case _ if not isinstance(obj.value, self._primitive):
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _:
         return Analysis(), obj

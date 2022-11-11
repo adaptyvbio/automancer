@@ -38,9 +38,16 @@ class BlockUnitState:
 
 @debug
 class BlockData:
-  def __init__(self, *, state: Optional[BlockUnitState] = None, transforms: list['BaseTransform'] = list()):
+  def __init__(
+    self,
+    *,
+    envs: Optional[list[EvalEnv]] = None,
+    state: Optional[BlockUnitState] = None,
+    transforms: Optional[list['BaseTransform']] = None
+  ):
+    self.envs = envs or list()
     self.state = state
-    self.transforms = transforms
+    self.transforms = transforms or list()
 
 class BlockState(dict):
   def __or__(self, other):
@@ -198,11 +205,19 @@ class OpaqueBlock:
 
 @debug
 class OpaqueBlockExpr(OpaqueBlock):
-  def __init__(self, expr: str):
+  def __init__(self, expr: PythonExprEvaluator):
+    from .parsers.shorthands import OpaqueValue # TODO: fix circular import
+
     self._expr = expr
+    self._expr._type = lang.PrimitiveType(OpaqueValue) # TODO: fix this
 
   def evaluate(self, stack: EvalStack):
-    return lang.Analysis(), None
+    analysis, value = self._expr.evaluate(stack, None)
+
+    if value is Ellipsis:
+      return analysis, Ellipsis
+
+    return analysis, value.value._as_block()
 
   def unwrap(self):
     raise ValueError()
@@ -279,8 +294,12 @@ class FiberParser:
     class GlobalEnv(EvalEnv):
       pass
 
+    from random import random
+
     global_env = GlobalEnv()
-    stack: EvalStack = { global_env: dict() }
+    stack: EvalStack = {
+      global_env: dict(random=random)
+    }
 
     data_actions = output['_']['steps']
     state, transforms = self.parse_block(data_actions, envs=[global_env]).unwrap()
@@ -298,7 +317,7 @@ class FiberParser:
       print()
 
       print("<= LINEARIZATION =>")
-      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(parser=self))
+      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(stack, parser=self))
       self.analysis += linearization_analysis
       pprint(linearized)
       print()
@@ -319,7 +338,11 @@ class FiberParser:
 
 
   def parse_block(self, data_block, /, envs: list[EvalEnv], *, allow_expr: bool = False) -> EllipsisType | OpaqueBlock:
-    analysis, value = lang.LiteralOrExprType(self.segment_dict).analyze(data_block, self.analysis_context)
+    if allow_expr:
+      analysis, value = lang.LiteralOrExprType(self.segment_dict).analyze(data_block, self.analysis_context)
+    else:
+      analysis, value = self.segment_dict.analyze(data_block, self.analysis_context)
+
     self.analysis += analysis
 
     if value is Ellipsis:
@@ -329,6 +352,7 @@ class FiberParser:
       value.envs = envs
       return OpaqueBlockExpr(value)
 
+    envs = envs.copy()
     state = BlockState()
     transforms = list()
 
@@ -339,6 +363,7 @@ class FiberParser:
       if unit_data is Ellipsis:
         return Ellipsis
 
+      envs += unit_data.envs
       state[parser.namespace] = unit_data.state
       transforms += unit_data.transforms
 

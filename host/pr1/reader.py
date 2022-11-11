@@ -408,7 +408,7 @@ class LocatedDict(dict, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedDict, cls).__new__(cls)
 
-  def __init__(self, value, area):
+  def __init__(self, value: dict, area: LocationArea):
     LocatedValue.__init__(self, value, area)
     self.update(value)
 

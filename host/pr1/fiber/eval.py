@@ -7,6 +7,7 @@ from ..reader import LocatedString, LocatedValue, LocationArea
 class EvalEnv(Protocol):
   pass
 
+EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]
 EvalStack = dict[EvalEnv, EvalVariables]
 

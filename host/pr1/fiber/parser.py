@@ -4,11 +4,11 @@ from types import EllipsisType
 from typing import Any, Optional, Protocol, Sequence
 
 from . import langservice as lang
-from .eval import EvalEnv, EvalStack
+from .eval import EvalEnv, EvalEnvs, EvalStack
 from .expr import PythonExpr, PythonExprEvaluator
 from .. import reader
 from ..reader import LocationArea
-from ..draft import DraftDiagnostic
+from ..draft import DraftDiagnostic, DraftGenericError
 from ..util import schema as sc
 from ..util.decorators import debug
 
@@ -35,19 +35,6 @@ class BlockUnitState:
 
   def set_envs(self, envs: list):
     pass
-
-@debug
-class BlockData:
-  def __init__(
-    self,
-    *,
-    envs: Optional[list[EvalEnv]] = None,
-    state: Optional[BlockUnitState] = None,
-    transforms: Optional[list['BaseTransform']] = None
-  ):
-    self.envs = envs or list()
-    self.state = state
-    self.transforms = transforms or list()
 
 class BlockState(dict):
   def __or__(self, other):
@@ -76,13 +63,39 @@ class BlockState(dict):
       if state:
         state.set_envs(envs)
 
+@debug
+class BlockData:
+  def __init__(
+    self,
+    *,
+    state: BlockState,
+    transforms: 'Transforms'
+  ):
+    self.state = state
+    self.transforms = transforms
+
+@debug
+class BlockUnitData:
+  def __init__(
+    self,
+    *,
+    envs: Optional[list[EvalEnv]] = None,
+    state: Optional[BlockUnitState] = None,
+    transforms: Optional[list['BaseTransform']] = None
+  ):
+    self.envs = envs or list()
+    self.state = state
+    self.transforms = transforms or list()
+
 
 class BaseBlock:
   def linearize(self, context):
-    raise NotImplementedError()
+    ...
 
   def export(self) -> str:
-    raise NotImplementedError()
+    ...
+
+BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 
 class BaseParser:
   namespace: str
@@ -96,12 +109,14 @@ class BaseParser:
   def enter_protocol(self, data_protocol: Any) -> lang.Analysis:
     return lang.Analysis()
 
-  def parse_block(self, block_attrs: Any, /, context: None, envs: list[EvalEnv]) -> tuple[lang.Analysis, BlockData | EllipsisType]:
-    return lang.Analysis(), BlockData()
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
+    return lang.Analysis(), BlockUnitData()
 
 class BaseTransform:
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list['BaseTransform'], envs: list, *, origin_area: LocationArea, stack: EvalStack) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
-    raise NotImplementedError()
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+Transforms = list[BaseTransform]
 
 
 # ----
@@ -131,9 +146,8 @@ class SegmentTransform(BaseTransform):
   def __init__(self, namespace):
     self._namespace = namespace
 
-  def execute(self, state, parent_state, transforms, envs, *, origin_area, stack):
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     segment_state = parent_state | state
-    segment_state.set_envs(envs)
 
     if transforms:
       return lang.Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
@@ -144,10 +158,11 @@ class SegmentTransform(BaseTransform):
     ))
 
 @debug
-class SegmentBlock:
-  def __init__(self, segment):
+class SegmentBlock(BaseBlock):
+  def __init__(self, segment: Segment):
     self._segment = segment
 
+  # ?
   def __getitem__(self, key):
     assert key is None
     return self._segment
@@ -156,6 +171,7 @@ class SegmentBlock:
   #   for namespace, parser in context.fiber.parsers.items():
   #     parser.evaluate_segment(self._segment.state[namespace], context)
 
+  # ?
   def get_states(self):
     return {self._segment.state}
 
@@ -192,47 +208,43 @@ class AnalysisContext:
   def __init__(self, *, ureg: UnitRegistry):
     self.ureg = ureg
 
-@debug
-class OpaqueBlock:
-  def __init__(self):
-    pass
 
-  def evaluate(self, stack: EvalStack) -> tuple[lang.Analysis, tuple[BlockState, list[BaseTransform]]]:
-    raise NotImplementedError()
-
-  def unwrap(self) -> tuple[BlockState, list[BaseTransform]]:
-    raise NotImplementedError()
+class UnresolvedBlockData:
+  def evaluate(self, stack: EvalStack) -> tuple[lang.Analysis, BlockData | EllipsisType]:
+    ...
 
 @debug
-class OpaqueBlockExpr(OpaqueBlock):
+class UnresolvedBlockDataExpr(UnresolvedBlockData):
   def __init__(self, expr: PythonExprEvaluator):
-    from .parsers.shorthands import OpaqueValue # TODO: fix circular import
+    from .opaque import OpaqueValue # TODO: fix circular import
 
     self._expr = expr
     self._expr._type = lang.PrimitiveType(OpaqueValue) # TODO: fix this
 
   def evaluate(self, stack: EvalStack):
-    analysis, value = self._expr.evaluate(stack, None)
+    from .opaque import ConsumedValueError
+
+    analysis, value = self._expr.evaluate(stack)
 
     if value is Ellipsis:
       return analysis, Ellipsis
 
-    return analysis, value.value._as_block()
-
-  def unwrap(self):
-    raise ValueError()
+    try:
+      return analysis, value.value.as_block()
+    except ConsumedValueError:
+      analysis.errors.append(DraftGenericError("Value already consumed", ranges=value.area.ranges))
+      return analysis, Ellipsis
 
 @debug
-class OpaqueBlockLiteral(OpaqueBlock):
-  def __init__(self, state: BlockState, transforms: list[BaseTransform]):
-    self._state = state
-    self._transforms = transforms
+class UnresolvedBlockDataLiteral(UnresolvedBlockData):
+  def __init__(self, data: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, fiber: 'FiberParser'):
+    self._data = data
+    self._fiber = fiber
+    self._adoption_envs = adoption_envs
+    self._runtime_envs = runtime_envs
 
   def evaluate(self, stack: EvalStack):
-    return lang.Analysis(), (self._state, self._transforms)
-
-  def unwrap(self):
-    return self._state, self._transforms
+    return lang.Analysis(), self._fiber.parse_block(self._data, adoption_envs=self._adoption_envs, adoption_stack=stack, runtime_envs=self._runtime_envs)
 
 
 # ----
@@ -297,13 +309,16 @@ class FiberParser:
     from random import random
 
     global_env = GlobalEnv()
-    stack: EvalStack = {
+
+    adoption_stack: EvalStack = {}
+    runtime_stack: EvalStack = {
       global_env: dict(random=random)
     }
 
+
     data_actions = output['_']['steps']
-    state, transforms = self.parse_block(data_actions, envs=[global_env]).unwrap()
-    entry_block = self.execute(state, None, transforms, None, origin_area=data_actions.area, stack=stack)
+    data = self.parse_block(data_actions, adoption_envs=[], adoption_stack=adoption_stack, runtime_envs=[global_env])
+    entry_block = self.execute(data.state, None, data.transforms, origin_area=data_actions.area)
 
     print()
 
@@ -317,7 +332,7 @@ class FiberParser:
       print()
 
       print("<= LINEARIZATION =>")
-      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(stack, parser=self))
+      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self))
       self.analysis += linearization_analysis
       pprint(linearized)
       print()
@@ -337,44 +352,73 @@ class FiberParser:
     return schema_dict
 
 
-  def parse_block(self, data_block, /, envs: list[EvalEnv], *, allow_expr: bool = False) -> EllipsisType | OpaqueBlock:
+  def parse_block(self, data_block: Any, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs, *, allow_expr: bool = False) -> BlockData | EllipsisType:
     if allow_expr:
-      analysis, value = lang.LiteralOrExprType(self.segment_dict).analyze(data_block, self.analysis_context)
-    else:
-      analysis, value = self.segment_dict.analyze(data_block, self.analysis_context)
+      eval_analysis, eval_value = self.parse_block_expr(data_block, adoption_envs=adoption_envs, runtime_envs=runtime_envs).evaluate(adoption_stack)
+      self.analysis += eval_analysis
+      return eval_value
 
+    analysis, attrs = self.segment_dict.analyze(data_block, self.analysis_context)
     self.analysis += analysis
 
-    if value is Ellipsis:
+    if isinstance(attrs, EllipsisType):
       return Ellipsis
 
-    if isinstance(value, PythonExprEvaluator):
-      value.envs = envs
-      return OpaqueBlockExpr(value)
-
-    envs = envs.copy()
+    runtime_envs = runtime_envs.copy()
     state = BlockState()
-    transforms = list()
+    transforms: list[BaseTransform] = list()
 
     for parser in self._parsers:
-      analysis, unit_data = parser.parse_block(value, context=None, envs=envs)
+      analysis, block_data = parser.parse_block(attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs)
       self.analysis += analysis
 
-      if unit_data is Ellipsis:
+      if isinstance(block_data, EllipsisType):
         return Ellipsis
 
-      envs += unit_data.envs
-      state[parser.namespace] = unit_data.state
-      transforms += unit_data.transforms
+      runtime_envs += block_data.envs
+      state[parser.namespace] = block_data.state
+      transforms += block_data.transforms
 
-    return OpaqueBlockLiteral(state, transforms)
+    return BlockData(state=state, transforms=transforms)
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: list[BaseTransform], envs: Optional[list] = None, *, origin_area: LocationArea, stack: EvalStack) -> BaseBlock | EllipsisType:
+  def parse_block_expr(self, data_block: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> UnresolvedBlockData | EllipsisType:
+    analysis, attrs = lang.LiteralOrExprType(lang.AnyType()).analyze(data_block, self.analysis_context)
+    self.analysis += analysis
+
+    if isinstance(attrs, EllipsisType):
+      return Ellipsis
+
+    if isinstance(attrs, PythonExprEvaluator):
+      attrs.envs = adoption_envs
+      return UnresolvedBlockDataExpr(attrs)
+
+    # if isinstance(attrs, PythonExprEvaluator):
+    #   attrs.envs = adoption_envs
+    #   eval_analysis, eval_value = attrs.evaluate(adoption_stack)
+    #   self.analysis += eval_analysis
+
+    #   if isinstance(eval_value, EllipsisType):
+    #     return Ellipsis
+
+    #   from .opaque import OpaqueValue
+    #   check_analysis, _ = lang.PrimitiveType(OpaqueValue).analyze(eval_value, self.analysis_context)
+    #   self.analysis += check_analysis
+
+    #   return eval_value.value.as_block()
+
+    # parse_result = self.parse_block(data_block, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs)
+
+    # if isinstance(parse_result, EllipsisType):
+    #   return Ellipsis
+
+    return UnresolvedBlockDataLiteral(data_block, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
+
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:
       self.analysis.errors.append(MissingProcessError(origin_area))
       return Ellipsis
 
-    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], envs or list(), origin_area=origin_area, stack=stack)
+    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], origin_area=origin_area)
     self.analysis += analysis
 
     return block

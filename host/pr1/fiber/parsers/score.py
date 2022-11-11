@@ -1,6 +1,8 @@
+from types import EllipsisType
+from ..eval import EvalEnvs, EvalStack
 from .. import langservice as lang
 from ..expr import PythonExprEvaluator
-from ..parser import BaseParser, BlockData, BlockUnitState
+from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -20,27 +22,16 @@ class ScoreParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs, /, context, envs):
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     attrs = block_attrs[self.namespace]
 
     if ('score' in attrs) and ((score_raw := attrs['score']) is not Ellipsis):
       if isinstance(score_raw, PythonExprEvaluator):
-        score_raw.envs = envs
+        score_raw.envs = runtime_envs
 
-      # if isinstance(score_raw, PythonExprEvaluator):
-      #   analysis, score = score_raw.evaluate(context)
-
-      #   if score is Ellipsis:
-      #     return analysis, Ellipsis
-
-      #   score = score.value
-      # else:
-      #   analysis = lang.Analysis()
-      #   score = score_raw.value
-
-      return lang.Analysis(), BlockData(state=ScoreState([score_raw if isinstance(score_raw, PythonExprEvaluator) else score_raw.value]))
+      return lang.Analysis(), BlockUnitData(state=ScoreState([score_raw if isinstance(score_raw, PythonExprEvaluator) else score_raw.value]))
     else:
-      return lang.Analysis(), BlockData(state=ScoreState([0.0]))
+      return lang.Analysis(), BlockUnitData(state=ScoreState([0.0]))
 
 @debug
 class ScoreState(BlockUnitState):

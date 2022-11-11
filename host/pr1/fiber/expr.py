@@ -114,7 +114,7 @@ class PythonExprEvaluator:
 
     self.envs: Optional[list[EvalEnv]] = None
 
-  def evaluate(self, stack: EvalStack, context):
+  def evaluate(self, stack: EvalStack, ctx = None):
     from .langservice import Analysis
     assert self.envs is not None
 

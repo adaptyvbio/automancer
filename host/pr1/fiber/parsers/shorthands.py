@@ -1,61 +1,14 @@
-from typing import Any, Optional
+from types import EllipsisType
+from typing import Any, Optional, cast
 
-from .. import langservice as lang
-from ..eval import EvalEnv
-from ..expr import PythonExpr, PythonExprEvaluator
-from ..parser import BaseBlock, BaseTransform, BlockData, BlockUnitState, FiberParser
-from ...units.base import BaseParser
+from ...reader import LocationArea
+from ..opaque import OpaqueValue
 from ...util import schema as sc
 from ...util.decorators import debug
-
-
-class OpaqueValue:
-  def __init__(self, data: Any, /, *, envs: list[EvalEnv], fiber: FiberParser):
-    self._data = data
-    self._envs = envs
-    self._fiber = fiber
-
-    self._block: Any = None # TODO: Improve type
-    self._value: Any = None
-
-  def _as_block(self):
-    if self._value is not None:
-      raise ValueError() # TODO: Add location info
-
-    if not self._block:
-      block = self._fiber.parse_block(self._data, envs=self._envs)
-      self._block = block.unwrap() if block is not Ellipsis else Ellipsis
-
-    return self._block
-
-  def _as_value(self):
-    if self._block is not None:
-      raise ValueError()
-
-    # def wrap_value(value):
-    #   return OpaqueValue(value, envs=self._envs, fiber=self._fiber) if isinstance(value, (dict, list)) else value
-
-    wrap_value = lambda value: self.wrap(value, envs=self._envs, fiber=self._fiber)
-
-    if self._value is None:
-      # TODO: Check for expressions
-      match self._data:
-        case dict():
-          self._value = { key: wrap_value(value) for key, value in self._data.items() }
-        case list():
-          self._value = [wrap_value(item) for item in self._data]
-
-    return self._value
-
-  # def __getattr__(self, name: str):
-  #   return getattr(self._as_value(), name)
-
-  def __getitem__(self, key: str):
-    return self._as_value()[key]
-
-  @classmethod
-  def wrap(cls, value: Any, /, *, envs: list[EvalEnv], fiber: FiberParser):
-    return cls(value, envs=envs, fiber=fiber) if isinstance(value, (dict, list)) else value
+from .. import langservice as lang
+from ..eval import EvalEnv, EvalEnvs, EvalStack
+from ..expr import PythonExpr, PythonExprEvaluator
+from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms, UnresolvedBlockData
 
 
 class ShorthandEnv(EvalEnv):
@@ -63,13 +16,13 @@ class ShorthandEnv(EvalEnv):
 
 @debug
 class ShorthandBlock(BaseBlock):
-  def __init__(self, block: BaseBlock, /, env: ShorthandEnv, *, arg):
-    self._arg = arg
+  def __init__(self, block: BaseBlock):
+    # self._arg = arg
     self._block = block
-    self._env = env
+    # self._env = env
 
   def linearize(self, context):
-    return self._block.linearize(context | { self._env: { 'arg': self._arg } })
+    return self._block.linearize(context) # | { self._env: { 'arg': self._arg } })
 
   def export(self):
     return self._block.export()
@@ -87,13 +40,13 @@ class ShorthandsParser(BaseParser):
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
-    self._shorthands = dict()
+    self._shorthands: dict[str, tuple[ShorthandEnv, UnresolvedBlockData | EllipsisType]] = dict()
 
   @property
   def segment_attributes(self):
     return { shorthand_name: lang.Attribute(optional=True, type=lang.AnyType()) for shorthand_name in self._shorthands.keys() }
 
-  def enter_protocol(self, data_protocol):
+  def enter_protocol(self, data_protocol: BlockAttrs):
     data_shorthands = data_protocol.get('shorthands', dict())
 
     if data_shorthands is Ellipsis:
@@ -101,80 +54,75 @@ class ShorthandsParser(BaseParser):
 
     for shorthand_name, data_shorthand in data_shorthands.items():
       shorthand_env = ShorthandEnv()
-
-      parse_result = self._fiber.parse_block(data_shorthand, allow_expr=True, envs=[shorthand_env])
-      self._shorthands[shorthand_name] = (shorthand_env, parse_result) if parse_result is not Ellipsis else Ellipsis
+      self._shorthands[shorthand_name] = (shorthand_env, self._fiber.parse_block_expr(data_shorthand, adoption_envs=[shorthand_env], runtime_envs=[shorthand_env]))
 
     return lang.Analysis()
 
-  def parse_block(self, block_attrs, /, context, envs):
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     attrs = block_attrs[self.namespace]
+    analysis = lang.Analysis()
+
+    shorthands_data: list[BlockData] = list()
+
+    for shorthand_name, shorthand_value in attrs.items():
+      if isinstance(shorthand_value, EllipsisType):
+        return analysis, Ellipsis
+
+      shorthand_env, shorthand_data = self._shorthands[shorthand_name]
+
+      if isinstance(shorthand_data, EllipsisType):
+        return analysis, Ellipsis
+
+      shorthand_adoption_stack: EvalStack = {
+        shorthand_env: {
+          'arg': OpaqueValue.wrap(shorthand_value, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, fiber=self._fiber)
+        }
+      }
+
+      eval_analysis, eval_data = shorthand_data.evaluate(shorthand_adoption_stack)
+      analysis += eval_analysis
+
+      if isinstance(eval_data, EllipsisType):
+        return analysis, Ellipsis
+
+      shorthands_data.append(eval_data)
 
     if attrs:
-      return lang.Analysis(), BlockData(transforms=[
-        ShorthandTransform(attrs, context=context, parser=self)
+      return lang.Analysis(), BlockUnitData(transforms=[
+        ShorthandTransform(shorthands_data, parser=self)
       ])
     else:
-      return lang.Analysis(), BlockData()
-
-  # def parse_block(self, block_attrs, block_state):
-  #   state = block_state[self.namespace]
-
-  #   if state:
-  #     # new_state = { namespace: (block_state[namespace] or dict()) | (state[namespace] or dict()) for namespace in set(block_state.keys()) | set(state.keys()) }
-  #     return self._fiber.parse_part(state)
-
-  #   return None
+      return lang.Analysis(), BlockUnitData()
 
 
 @debug
 class ShorthandTransform(BaseTransform):
-  def __init__(self, attrs, *, context, parser: ShorthandsParser):
-    self._attrs = attrs
-    self._context = context
+  def __init__(self, shorthands_data: list[BlockData], /, parser: ShorthandsParser):
     self._parser = parser
+    self._shorthands_data = shorthands_data
 
-  def execute(self, block_state, parent_state, block_transforms, envs, *, origin_area, stack):
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     analysis = lang.Analysis()
-    state = None
-    transforms = list()
+    block_state: BlockState = cast(BlockState, None)
+    block_transforms = list()
 
-    for shorthand_name, shorthand_value in self._attrs.items():
-      shorthand = self._parser._shorthands[shorthand_name]
+    for shorthand_data in self._shorthands_data:
+      transforms += shorthand_data.transforms
 
-      if shorthand is Ellipsis:
-        return analysis, Ellipsis
-
-
-      shorthand_env, shorthand_opaque = shorthand
-
-      stack = {
-        shorthand_env: { 'arg': OpaqueValue.wrap(shorthand_value, envs=[], fiber=self._parser._fiber) }
-      }
-
-      shorthand_analysis, shorthand_result = shorthand_opaque.evaluate(stack)
-      analysis += shorthand_analysis
-
-      if shorthand_result is Ellipsis:
-        return analysis, Ellipsis
-
-      shorthand_state, shorthand_transforms = shorthand_result
-      transforms += shorthand_transforms
-
-      if state is not None:
-        state = shorthand_state | state
+      if block_state is not None:
+        block_state = shorthand_data.state | block_state
       else:
-        state = shorthand_state
+        block_state = shorthand_data.state
 
-    block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, [], origin_area=origin_area, stack=stack)
+    block = self._parser._fiber.execute(state, parent_state | block_state, block_transforms + transforms, origin_area=origin_area)
 
-    if block is Ellipsis:
+    if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
-    for shorthand_name, shorthand_value in self._attrs.items():
-      shorthand = self._parser._shorthands[shorthand_name]
-      shorthand_env, _ = shorthand
+    for shorthand_data in self._shorthands_data:
+      # shorthand = self._parser._shorthands[shorthand_name]
+      # shorthand_env, _ = shorthand
 
-      block = ShorthandBlock(block, env=shorthand_env, arg=shorthand_value)
+      block = ShorthandBlock(block)
 
     return analysis, block

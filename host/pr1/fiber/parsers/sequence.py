@@ -1,10 +1,16 @@
-from typing import Any
+from types import EllipsisType
+from typing import Any, Optional
+
+from ...reader import LocationArea
+
+from ..eval import EvalEnvs, EvalStack
 from .. import langservice as lang
-from ..expr import PythonExprEvaluator
-from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState, FiberParser, OpaqueBlock
+from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from ...util import schema as sc
 from ...util.decorators import debug
 
+
+ActionInfo = tuple[BlockData, LocationArea]
 
 class SequenceParser(BaseParser):
   namespace = "sequence"
@@ -23,43 +29,44 @@ class SequenceParser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs, /, context, envs):
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
+  # def parse_block(self, block_attrs: Any, /, adoption_envs, adoption_stack, runtime_envs):
     attrs = block_attrs[self.namespace]
 
     if 'actions' in attrs:
-      block_attrs = [self._fiber.parse_block(data_action, allow_expr=True, envs=envs) for data_action in attrs['actions']]
-      block_attrs = [action_attrs for action_attrs in block_attrs if action_attrs is not Ellipsis]
+      if isinstance(attrs['actions'], EllipsisType):
+        return lang.Analysis(), Ellipsis
 
-      return lang.Analysis(), BlockData(transforms=[
-        SequenceTransform(block_attrs, parser=self)
+      actions_info: list[ActionInfo] = list()
+
+      for action_attrs in attrs['actions']:
+        action_data = self._fiber.parse_block(action_attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, allow_expr=True)
+
+        if not isinstance(action_data, EllipsisType):
+          actions_info.append((action_data, action_attrs.area))
+
+      return lang.Analysis(), BlockUnitData(transforms=[
+        SequenceTransform(actions_info, parser=self)
       ])
     else:
-      return lang.Analysis(), BlockData()
+      return lang.Analysis(), BlockUnitData()
 
 
 @debug
 class SequenceTransform(BaseTransform):
-  def __init__(self, block_attrs: list[OpaqueBlock], parser: SequenceParser):
-    self._block_attrs = block_attrs
+  def __init__(self, actions_info: list[ActionInfo], /, parser: SequenceParser):
+    self._actions_info = actions_info
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms, envs, *, origin_area, stack):
+  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea):
     analysis = lang.Analysis()
-    children = list()
-    state.set_envs(envs)
+    children: list[BaseBlock] = list()
 
-    for action_attrs in self._block_attrs:
-      action_analysis, action_result = action_attrs.evaluate(stack)
-      analysis += action_analysis
+    for action_data, action_area in self._actions_info:
+      action_block = self._parser._fiber.execute(action_data.state, parent_state | state, transforms + action_data.transforms, origin_area=action_area)
 
-      if action_result is not Ellipsis:
-        block_state, block_transforms = action_result
-        block = self._parser._fiber.execute(block_state, parent_state | state, transforms + block_transforms, envs, origin_area=None, stack=stack)
-
-        if block is Ellipsis:
-          return analysis, Ellipsis
-
-        children.append(block)
+      if not isinstance(action_block, EllipsisType):
+        children.append(action_block)
 
     return analysis, SequenceBlock(children) if children else Ellipsis
 

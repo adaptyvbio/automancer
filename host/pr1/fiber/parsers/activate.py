@@ -1,6 +1,8 @@
+from types import EllipsisType
+from ..eval import EvalEnvs, EvalStack
 from ..expr import PythonExprEvaluator
 from .. import langservice as lang
-from ..parser import BaseParser, BlockData, BlockUnitState, SegmentTransform
+from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState, SegmentTransform
 from ...draft import DraftGenericError
 from ...util.decorators import debug
 
@@ -30,7 +32,7 @@ class AcmeParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs, /, context, envs):
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     attrs = block_attrs[self.namespace]
 
     if 'activate' in attrs:
@@ -44,6 +46,6 @@ class AcmeParser(BaseParser):
       if value < 0:
         return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
 
-      return lang.Analysis(), BlockData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)])
+      return lang.Analysis(), BlockUnitData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)])
     else:
-      return lang.Analysis(), BlockData()
+      return lang.Analysis(), BlockUnitData()

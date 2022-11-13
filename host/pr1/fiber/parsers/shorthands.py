@@ -16,13 +16,13 @@ class ShorthandEnv(EvalEnv):
 
 @debug
 class ShorthandBlock(BaseBlock):
-  def __init__(self, block: BaseBlock):
+  def __init__(self, block: BaseBlock, env: ShorthandEnv):
     # self._arg = arg
     self._block = block
-    # self._env = env
+    self._env = env
 
   def linearize(self, context):
-    return self._block.linearize(context) # | { self._env: { 'arg': self._arg } })
+    return self._block.linearize(context | { self._env: {} })
 
   def export(self):
     return self._block.export()
@@ -46,7 +46,7 @@ class ShorthandsParser(BaseParser):
   def segment_attributes(self):
     return { shorthand_name: lang.Attribute(optional=True, type=lang.AnyType()) for shorthand_name in self._shorthands.keys() }
 
-  def enter_protocol(self, data_protocol: BlockAttrs):
+  def enter_protocol(self, data_protocol: BlockAttrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     data_shorthands = data_protocol.get('shorthands', dict())
 
     if data_shorthands is Ellipsis:
@@ -54,7 +54,7 @@ class ShorthandsParser(BaseParser):
 
     for shorthand_name, data_shorthand in data_shorthands.items():
       shorthand_env = ShorthandEnv()
-      self._shorthands[shorthand_name] = (shorthand_env, self._fiber.parse_block_expr(data_shorthand, adoption_envs=[shorthand_env], runtime_envs=[shorthand_env]))
+      self._shorthands[shorthand_name] = (shorthand_env, self._fiber.parse_block_expr(data_shorthand, adoption_envs=[*adoption_envs, shorthand_env], runtime_envs=[*runtime_envs, shorthand_env]))
 
     return lang.Analysis()
 
@@ -62,7 +62,7 @@ class ShorthandsParser(BaseParser):
     attrs = block_attrs[self.namespace]
     analysis = lang.Analysis()
 
-    shorthands_data: list[BlockData] = list()
+    shorthands_data: list[tuple[str, BlockData]] = list()
 
     for shorthand_name, shorthand_value in attrs.items():
       if isinstance(shorthand_value, EllipsisType):
@@ -74,6 +74,7 @@ class ShorthandsParser(BaseParser):
         return analysis, Ellipsis
 
       shorthand_adoption_stack: EvalStack = {
+        **adoption_stack,
         shorthand_env: {
           'arg': OpaqueValue.wrap(shorthand_value, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, fiber=self._fiber)
         }
@@ -85,7 +86,7 @@ class ShorthandsParser(BaseParser):
       if isinstance(eval_data, EllipsisType):
         return analysis, Ellipsis
 
-      shorthands_data.append(eval_data)
+      shorthands_data.append((shorthand_name, eval_data))
 
     if attrs:
       return lang.Analysis(), BlockUnitData(transforms=[
@@ -97,7 +98,7 @@ class ShorthandsParser(BaseParser):
 
 @debug
 class ShorthandTransform(BaseTransform):
-  def __init__(self, shorthands_data: list[BlockData], /, parser: ShorthandsParser):
+  def __init__(self, shorthands_data: list[tuple[str, BlockData]], /, parser: ShorthandsParser):
     self._parser = parser
     self._shorthands_data = shorthands_data
 
@@ -106,7 +107,7 @@ class ShorthandTransform(BaseTransform):
     block_state: BlockState = cast(BlockState, None)
     block_transforms = list()
 
-    for shorthand_data in self._shorthands_data:
+    for _, shorthand_data in self._shorthands_data:
       transforms += shorthand_data.transforms
 
       if block_state is not None:
@@ -119,10 +120,10 @@ class ShorthandTransform(BaseTransform):
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
-    for shorthand_data in self._shorthands_data:
-      # shorthand = self._parser._shorthands[shorthand_name]
-      # shorthand_env, _ = shorthand
+    for shorthand_name, _ in self._shorthands_data:
+      shorthand = self._parser._shorthands[shorthand_name]
+      shorthand_env, _ = shorthand
 
-      block = ShorthandBlock(block)
+      block = ShorthandBlock(block, env=shorthand_env)
 
     return analysis, block

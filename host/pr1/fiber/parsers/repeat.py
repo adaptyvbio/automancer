@@ -1,9 +1,10 @@
+from types import EllipsisType
 from typing import Any
 
 from .. import langservice as lang
-from ..eval import EvalEnv
+from ..eval import EvalEnv, EvalEnvs, EvalStack
 from ..expr import PythonExprEvaluator
-from ..parser import BaseParser, BaseTransform, BlockData, BlockUnitState
+from ..parser import BaseParser, BaseTransform, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -19,18 +20,18 @@ class RepeatParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs, /, context, envs):
+  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     attrs = block_attrs[self.namespace]
 
-    if 'repeat' in attrs and (attrs['repeat'] is not Ellipsis):
+    if 'repeat' in attrs and not isinstance(repeat_attr := attrs['repeat'], EllipsisType):
       env = RepeatEnv()
 
-      return lang.Analysis(), BlockData(
+      return lang.Analysis(), BlockUnitData(
         envs=[env],
         transforms=[RepeatTransform(attrs['repeat'].value, env=env, parser=self)]
       )
     else:
-      return lang.Analysis(), BlockData()
+      return lang.Analysis(), BlockUnitData()
 
 @debug
 class RepeatTransform(BaseTransform):

@@ -9,7 +9,7 @@ class EvalEnv(Protocol):
 
 EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]
-EvalStack = dict[EvalEnv, EvalVariables]
+EvalStack = dict[EvalEnv, Optional[EvalVariables]]
 
 class EvalContext:
   def __init__(self, variables: Optional[EvalVariables] = None, /):

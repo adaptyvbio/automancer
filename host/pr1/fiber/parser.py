@@ -106,7 +106,7 @@ class BaseParser:
   def __init__(self, fiber: 'FiberParser'):
     pass
 
-  def enter_protocol(self, data_protocol: Any) -> lang.Analysis:
+  def enter_protocol(self, data_protocol: BlockAttrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     return lang.Analysis()
 
   def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
@@ -237,14 +237,14 @@ class UnresolvedBlockDataExpr(UnresolvedBlockData):
 
 @debug
 class UnresolvedBlockDataLiteral(UnresolvedBlockData):
-  def __init__(self, data: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, fiber: 'FiberParser'):
-    self._data = data
+  def __init__(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, fiber: 'FiberParser'):
+    self._attrs = attrs
     self._fiber = fiber
     self._adoption_envs = adoption_envs
     self._runtime_envs = runtime_envs
 
   def evaluate(self, stack: EvalStack):
-    return lang.Analysis(), self._fiber.parse_block(self._data, adoption_envs=self._adoption_envs, adoption_stack=stack, runtime_envs=self._runtime_envs)
+    return lang.Analysis(), self._fiber.parse_block_attrs(self._attrs, adoption_envs=self._adoption_envs, adoption_stack=stack, runtime_envs=self._runtime_envs)
 
 
 # ----
@@ -298,26 +298,35 @@ class FiberParser:
     analysis, output = schema.analyze(data, self.analysis_context)
     self.analysis += analysis
 
-    for parser in self._parsers:
-      # Order is important here as enter_protocol() will also update self.analysis.
-      # TODO: Improve by making enter_protocol() return an Analysis.
-      self.analysis = parser.enter_protocol(output[parser.namespace]) + self.analysis
-
     class GlobalEnv(EvalEnv):
+      pass
+
+    class StageEnv(EvalEnv):
       pass
 
     from random import random
 
     global_env = GlobalEnv()
+    stage_env = StageEnv()
 
-    adoption_stack: EvalStack = {}
+    adoption_stack: EvalStack = {
+      global_env: dict(random=random),
+      stage_env: None
+    }
+
     runtime_stack: EvalStack = {
-      global_env: dict(random=random)
+      global_env: dict(random=random),
+      stage_env: None
     }
 
 
+    for parser in self._parsers:
+      # Order is important here as enter_protocol() will also update self.analysis.
+      # TODO: Improve by making enter_protocol() return an Analysis.
+      self.analysis = parser.enter_protocol(output[parser.namespace], adoption_envs=[global_env, stage_env], runtime_envs=[global_env]) + self.analysis
+
     data_actions = output['_']['steps']
-    data = self.parse_block(data_actions, adoption_envs=[], adoption_stack=adoption_stack, runtime_envs=[global_env])
+    data = self.parse_block(data_actions, adoption_envs=[global_env, stage_env], adoption_stack=adoption_stack, runtime_envs=[global_env, stage_env])
     entry_block = self.execute(data.state, None, data.transforms, origin_area=data_actions.area)
 
     print()
@@ -364,6 +373,9 @@ class FiberParser:
     if isinstance(attrs, EllipsisType):
       return Ellipsis
 
+    return self.parse_block_attrs(attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs)
+
+  def parse_block_attrs(self, attrs: Any, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs, *, allow_expr: bool = False) -> BlockData | EllipsisType:
     runtime_envs = runtime_envs.copy()
     state = BlockState()
     transforms: list[BaseTransform] = list()
@@ -382,15 +394,15 @@ class FiberParser:
     return BlockData(state=state, transforms=transforms)
 
   def parse_block_expr(self, data_block: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> UnresolvedBlockData | EllipsisType:
-    analysis, attrs = lang.LiteralOrExprType(lang.AnyType()).analyze(data_block, self.analysis_context)
+    analysis, data_attrs = lang.LiteralOrExprType(lang.AnyType()).analyze(data_block, self.analysis_context)
     self.analysis += analysis
 
-    if isinstance(attrs, EllipsisType):
+    if isinstance(data_attrs, EllipsisType):
       return Ellipsis
 
-    if isinstance(attrs, PythonExprEvaluator):
-      attrs.envs = adoption_envs
-      return UnresolvedBlockDataExpr(attrs)
+    if isinstance(data_attrs, PythonExprEvaluator):
+      data_attrs.envs = adoption_envs
+      return UnresolvedBlockDataExpr(data_attrs)
 
     # if isinstance(attrs, PythonExprEvaluator):
     #   attrs.envs = adoption_envs
@@ -411,7 +423,10 @@ class FiberParser:
     # if isinstance(parse_result, EllipsisType):
     #   return Ellipsis
 
-    return UnresolvedBlockDataLiteral(data_block, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
+    analysis, attrs = self.segment_dict.analyze(data_block, self.analysis_context)
+    self.analysis += analysis
+
+    return UnresolvedBlockDataLiteral(attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 
   def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:

@@ -121,7 +121,8 @@ class PythonExprEvaluator:
     variables = dict()
 
     for env in self.envs:
-      variables.update(stack[env])
+      if stack[env] is not None:
+        variables.update(stack[env])
 
     context = EvalContext(variables)
 

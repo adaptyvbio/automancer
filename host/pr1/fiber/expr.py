@@ -11,7 +11,8 @@ from ..reader import LocatedString
 from ..util.decorators import debug
 
 
-expr_regexp = re.compile(r"^([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}$")
+expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
+expr_regexp_exact = re.compile(fr"^{expr_regexp.pattern}$")
 escape_regexp = re.compile(r"\\(.)")
 
 def unescape(value: LocatedString) -> LocatedString:
@@ -50,7 +51,6 @@ class PythonExprKind(Enum):
   Binding = 3
 
 
-@debug
 class PythonExpr:
   def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression):
     self.contents = contents
@@ -68,14 +68,12 @@ class PythonExpr:
       case 'static':
         return static_evaluate(self.tree.body, self.contents, context)
 
-  @staticmethod
-  def parse(raw_str):
+  def __repr__(self):
+    return f"{self.__class__.__name__}({repr(ast.unparse(self.tree))})"
+
+  @classmethod
+  def _parse_match(cls, match: re.Match):
     from .langservice import Analysis
-
-    match = expr_regexp.search(raw_str)
-
-    if not match:
-      return None
 
     match match.group(1):
       case None:
@@ -100,11 +98,45 @@ class PythonExpr:
 
       return analysis, Ellipsis
 
-    return analysis, PythonExpr(
+    return analysis, cls(
       contents=contents,
       kind=kind,
       tree=tree
     )
+
+  @classmethod
+  def parse(cls, raw_str: LocatedString):
+    from .langservice import Analysis
+
+    match = expr_regexp_exact.search(raw_str)
+
+    if not match:
+      return None
+
+    return cls._parse_match(match)
+
+  @classmethod
+  def parse_mixed(cls, raw_str: LocatedString):
+    from .langservice import Analysis
+
+    analysis = Analysis()
+    output = list()
+
+    index = 0
+
+    for match in expr_regexp.finditer(raw_str):
+      match_start, match_end = match.span()
+
+      output.append(raw_str[index:match_start])
+      index = match_end
+
+      match_analysis, match_expr = cls._parse_match(match)
+      analysis += match_analysis
+      output.append(match_expr)
+
+    output.append(raw_str[index:])
+
+    return analysis, output
 
 
 class PythonExprEvaluator:
@@ -139,5 +171,6 @@ class PythonExprEvaluator:
 
 if __name__ == "__main__":
   from ..reader import Source
-  # print(PythonExpr.parse(Source("${{ 1 + 2 }}")))
-  print(PythonExpr.parse(Source(r"x{{ '\}}\\'xx' + 2 }}y")))
+  print(PythonExpr.parse(Source("${{ 1 + 2 }}")))
+  print(PythonExpr.parse_mixed(Source(r"x{{ '\}}\\'xx' + 2 }}y")))
+  print(PythonExpr.parse_mixed(Source("a {{ x }} b {{ y }} c")))

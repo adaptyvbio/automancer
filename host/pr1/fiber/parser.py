@@ -87,6 +87,9 @@ class BlockUnitData:
     self.state = state
     self.transforms = transforms or list()
 
+class BlockProcessData(Protocol):
+  def export(self) -> str:
+    ...
 
 class BaseBlock:
   def linearize(self, context):
@@ -137,13 +140,15 @@ class LinearizationContext(dict):
 
 @debug
 class Segment:
-  def __init__(self, process_namespace, state):
+  def __init__(self, process_data: BlockProcessData, process_namespace: str, state: BlockState):
+    self.process_data = process_data
     self.process_namespace = process_namespace
     self.state = state
 
 @debug
 class SegmentTransform(BaseTransform):
-  def __init__(self, namespace):
+  def __init__(self, namespace: str, data: BlockProcessData):
+    self._data = data
     self._namespace = namespace
 
   def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
@@ -153,6 +158,7 @@ class SegmentTransform(BaseTransform):
       return lang.Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
 
     return lang.Analysis(), SegmentBlock(Segment(
+      process_data=self._data,
       process_namespace=self._namespace,
       state=segment_state
     ))
@@ -191,14 +197,23 @@ class SegmentBlock(BaseBlock):
       else:
         state[namespace] = unit_state
 
-    return analysis, [Segment(process_namespace=self._segment.process_namespace, state=BlockState(state))]
+    return analysis, [Segment(
+      process_data=self._segment.process_data,
+      process_namespace=self._segment.process_namespace,
+      state=BlockState(state)
+    )]
 
   def export(self):
     return {
-      "type": "segment",
-      "process_namespace": self._segment.process_namespace,
-      "state": {
-        namespace: state and state.export() for namespace, state in self._segment.state.items()
+      "namespace": "segment",
+      "segment": {
+        "process": {
+          "data": self._segment.process_data.export(),
+          "namespace": self._segment.process_namespace
+        },
+        "state": {
+          namespace: state and state.export() for namespace, state in self._segment.state.items()
+        }
       }
     }
 

@@ -1,13 +1,23 @@
-import * as React from 'react';
-import { Features } from '../../unit';
-
-import { GraphNode } from '../graph-editor';
-import { BaseBlock, GraphBlockMetrics, Namespace, GraphRenderer } from '../../interfaces/graph';
+import { Features, GraphBlockMetrics, GraphNode, GraphRenderer, Point, ProtocolBlock, ProtocolSegment, React } from 'pr1';
 
 
-export default {
+export interface Block extends ProtocolBlock {
+  namespace: typeof namespace;
+  segment: ProtocolSegment;
+}
+
+export interface BlockMetrics extends GraphBlockMetrics {
+  features: Features;
+  start: Point;
+  end: Point;
+}
+
+
+const namespace = 'segment';
+
+const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
   computeMetrics(block, options) {
-    let features = options.units[block.processNamespace].createProcessFeatures?.(block.processData, {}) ?? [
+    let features = options.units[block.segment.process.namespace].createProcessFeatures?.(block.segment.process.data, {}) ?? [
       { icon: 'not_listed_location', label: 'Unknown process' }
     ];
 
@@ -30,6 +40,7 @@ export default {
       }
     };
   },
+
   render(block, metrics, position, options) {
     return (
       <GraphNode
@@ -40,7 +51,7 @@ export default {
         }}
         node={{
           id: 'a',
-          title: block.label,
+          title: null, // block.label,
           features: metrics.features,
           position
         }}
@@ -48,11 +59,10 @@ export default {
         settings={options.settings} />
     );
   }
-} as GraphRenderer<BaseBlock & {
-  label: string | null;
-  processData: unknown;
-  processNamespace: Namespace;
-  state: Record<Namespace, unknown>;
-}, GraphBlockMetrics & {
-  features: Features;
-}>;
+};
+
+
+export default {
+  graphRenderer,
+  namespace
+}

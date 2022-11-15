@@ -4,44 +4,36 @@ import * as React from 'react';
 import { Icon } from './icon';
 import * as util from '../util';
 
-import ParallelRenderer from './graph/parallel';
-import RepeatRenderer from './graph/repeat';
-import SegmentRenderer from './graph/segment';
-import SequenceRenderer from './graph/sequence';
-import { BaseBlock, BaseMetrics, Coordinates, Renderers, Size } from './graph/spec';
-
-
-const Services: Renderers = {
-  parallel: ParallelRenderer,
-  repeat: RepeatRenderer,
-  segment: SegmentRenderer,
-  sequence: SequenceRenderer
-};
+import { GraphBlockMetrics } from '../interfaces/graph';
+import { Point, Size } from '../geometry';
+import { ProtocolBlock } from '../interfaces/protocol';
+import { Host } from '../host';
 
 
 export interface GraphEditorProps {
-  tree: BaseBlock;
+  host: Host;
+  tree: ProtocolBlock;
 }
 
 export interface GraphEditorState {
-  nodes: NodeDef[];
-  selectedNodeIds: ImSet<NodeId>;
+  nodes: GraphNodeDef[];
+  selectedNodeIds: ImSet<GraphNodeId>;
   size: Size | null;
 
-  offset: Coordinates;
+  offset: Point;
   scale: number;
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
   action: {
     type: 'select';
-    singleTargetId: NodeId | null;
+    singleTargetId: GraphNodeId | null;
     startPoint: {
       x: number;
       y: number;
     };
     targets: {
-      id: NodeId;
+      id: GraphNodeId;
       startPosition: {
         x: number;
         y: number;
@@ -54,7 +46,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       y: number;
     };
     targets: {
-      id: NodeId;
+      id: GraphNodeId;
       startPosition: {
         x: number;
         y: number;
@@ -119,7 +111,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let container = this.refContainer.current!;
 
     this.setSize();
-    this.observer.observe(container);
+    // this.observer.observe(container);
 
     this.controller.signal.addEventListener('abort', () => {
       this.observer.disconnect();
@@ -130,8 +122,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
       let rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 
-      this.setState((state) => {
-
+      this.setState((state): any => {
         let mouseX = event.clientX - rect.left;
         let mouseY = event.clientY - rect.top;
 
@@ -139,16 +130,14 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           let newScale = state.scale * (1 + event.deltaY / 100);
           newScale = Math.max(0.6, Math.min(3, newScale));
 
-          let transform = new DOMMatrix()
-            .translate(state.offset.x, state.offset.y)
-            .scale(state.scale);
-
           let matrix = new DOMMatrix()
-            .multiply(transform)
+            .translate(state.offset.x, state.offset.y)
+            .scale(state.scale)
             .translate(mouseX, mouseY)
             .scale(newScale / state.scale)
             .translate(-mouseX, -mouseY)
-            .multiply(transform.inverse());
+            .scale(1 / state.scale)
+            .translate(-state.offset.x, -state.offset.y);
 
           let offset = matrix.transformPoint({
             x: state.offset.x,
@@ -156,6 +145,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           });
 
           return {
+            ...state,
             offset: {
               x: offset.x,
               y: offset.y
@@ -164,6 +154,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           };
         } else {
           return {
+            ...state,
             offset: {
               x: state.offset.x + event.deltaX * state.scale,
               y: state.offset.y + event.deltaY * state.scale
@@ -183,6 +174,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       return <div className="geditor-root" ref={this.refContainer} />;
     }
 
+    // console.log(this.props.tree);
+
     let styles = this.refContainer.current!.computedStyleMap();
     // console.log(Object.fromEntries(Array.from(styles)));
     let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
@@ -193,7 +186,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let cellCountX = Math.floor(this.state.size.width / cellPixelSize);
     let cellCountY = Math.floor(this.state.size.height / cellPixelSize);
 
-    let settings: Settings = {
+    let settings: GraphRenderSettings = {
       cellPixelSize,
       nodeBodyPaddingY,
       nodeHeaderHeight,
@@ -201,15 +194,16 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
 
 
-    let computeMetrics = (block: BaseBlock) => {
-      return Services[block.type].computeMetrics(block, {
+    let computeMetrics = (block: ProtocolBlock) => {
+      return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
         computeMetrics,
-        settings
+        settings,
+        units: this.props.host.units
       });
     };
 
-    let render = (block: BaseBlock, metrics: BaseMetrics, position: Coordinates) => {
-      return Services[block.type].render(block, metrics, position, { render, settings });
+    let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point) => {
+      return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, { render, settings });
     };
 
     let treeMetrics = computeMetrics(this.props.tree);
@@ -244,7 +238,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 }
 
 
-export interface Settings {
+export interface GraphRenderSettings {
   cellPixelSize: number;
   nodeBodyPaddingY: number;
   nodeHeaderHeight: number;
@@ -252,30 +246,30 @@ export interface Settings {
 }
 
 
-type NodeId = string;
+type GraphNodeId = string;
 
-interface NodeFeature {
+interface GraphNodeFeature {
   icon: string;
   label: string;
 }
 
-interface NodeDef {
-  id: NodeId;
+interface GraphNodeDef {
+  id: GraphNodeId;
   title: string | null;
-  features: NodeFeature[];
+  features: GraphNodeFeature[];
   position: {
     x: number;
     y: number;
   };
 }
 
-export function Node(props: {
+export function GraphNode(props: {
   autoMove: unknown;
   cellSize: Size;
-  node: NodeDef;
+  node: GraphNodeDef;
   onMouseDown?(event: React.MouseEvent): void;
   selected: unknown;
-  settings: Settings;
+  settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
 
@@ -325,19 +319,14 @@ export function Node(props: {
 }
 
 
-export interface LinkEnd {
-  x: number;
-  y: number;
+export interface GraphLinkDef {
+  start: Point;
+  end: Point;
 }
 
-export interface LinkDef {
-  start: LinkEnd;
-  end: LinkEnd;
-}
-
-export function Link(props: {
-  link: LinkDef;
-  settings: Settings;
+export function GraphLink(props: {
+  link: GraphLinkDef;
+  settings: GraphRenderSettings;
 }) {
   let { link, settings } = props;
 
@@ -372,8 +361,8 @@ export function Link(props: {
 
 export function NodeContainer(props: {
   cellSize: Size;
-  position: Coordinates;
-  settings: Settings;
+  position: Point;
+  settings: GraphRenderSettings;
   title: React.ReactNode;
 }) {
   let { settings } = props;

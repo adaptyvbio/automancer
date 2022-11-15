@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { Link } from '../graph-editor';
-import { BaseBlock, BaseMetrics, Renderer } from './spec';
+import { BaseBlock, GraphBlockMetrics, GraphRenderer } from '../../interfaces/graph';
 
 
 const horizontalGap = 2;
@@ -71,9 +71,9 @@ export default {
       </>
     );
   }
-} as Renderer<BaseBlock & {
+} as GraphRenderer<BaseBlock & {
   children: BaseBlock[];
-}, BaseMetrics & {
-  children: BaseMetrics[];
+}, GraphBlockMetrics & {
+  children: GraphBlockMetrics[];
   childrenY: number[];
 }>;

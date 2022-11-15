@@ -1,10 +1,19 @@
-import * as React from 'react';
-
-import { Link } from '../graph-editor';
-import { BaseBlock, GraphBlockMetrics, GraphRenderer } from '../../interfaces/graph';
+import { GraphBlockMetrics, GraphLink, GraphRenderer, ProtocolBlock, React } from 'pr1';
 
 
-export default {
+export interface Block extends ProtocolBlock {
+  children: ProtocolBlock[];
+}
+
+export interface BlockMetrics extends GraphBlockMetrics {
+  children: GraphBlockMetrics[];
+  childrenX: number[];
+}
+
+
+const namespace = 'sequence';
+
+const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
   computeMetrics(block, options) {
     let childrenMetrics = block.children.map((child) => options.computeMetrics(child));
 
@@ -50,7 +59,7 @@ export default {
           let endX = metrics.childrenX[index + 1];
 
           return (
-            <Link
+            <GraphLink
               link={{
                 start: { x: position.x + startX + start.x, y: position.y + start.y },
                 end: { x: position.x + endX + end.x, y: position.y + end.y }
@@ -63,9 +72,10 @@ export default {
       </>
     );
   }
-} as GraphRenderer<BaseBlock & {
-  children: BaseBlock[];
-}, GraphBlockMetrics & {
-  children: GraphBlockMetrics[];
-  childrenX: number[];
-}>;
+};
+
+
+export default {
+  graphRenderer,
+  namespace
+}

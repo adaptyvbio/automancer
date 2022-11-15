@@ -1,10 +1,11 @@
 import * as React from 'react';
 
-import type { Chip, ChipId, Protocol, ProtocolLocation, ProtocolSegment } from '../backends/common';
+import type { Chip, ChipId, ProtocolLocation } from '../backends/common';
 import type { Host } from '../host';
 import type { Draft } from '../draft';
 
 import { Route } from '../application';
+import { Protocol, ProtocolSegment } from '../interfaces/protocol';
 
 
 //> Feature
@@ -79,7 +80,7 @@ export interface SegmentData {
 
 //> Unit
 
-interface NavEntry<Props> {
+export interface NavEntry<Props> {
   id: string;
   disabled?: unknown;
   label: string;

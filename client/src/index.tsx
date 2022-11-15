@@ -18,10 +18,16 @@ export * from './host';
 export { Startup } from './startup';
 export * from './components/icon';
 export * as Form from './components/standard-form';
-export * from './units';
 export { Pool } from './util';
 export * as util from './util';
 export { React, ReactDOM };
+
+export * from './geometry';
+export * from './components/graph-editor';
+
+export * from './interfaces/graph';
+export * from './interfaces/protocol';
+export * from './interfaces/unit';
 
 
 export function createBrowserApp(element: Element) {

@@ -102,6 +102,6 @@ class SequenceBlock:
 
   def export(self):
     return {
-      "type": "sequence",
+      "namespace": "sequence",
       "children": [child.export() for child in self._children]
     }

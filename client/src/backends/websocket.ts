@@ -34,7 +34,9 @@ export default class WebsocketBackend extends MessageBackend {
 
   async loadUnit(unitInfo: UnitInfo): Promise<Unit<unknown, unknown>> {
     let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, this.info.staticUrl);
-    return await import(url.href);
+    let imported = await import(url.href);
+
+    return imported.default ?? imported;
   }
 
   protected async _send(message: unknown) {

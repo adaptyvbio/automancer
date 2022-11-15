@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { NodeContainer } from '../graph-editor';
 
-import { BaseBlock, BaseMetrics, Renderer } from './spec';
+import { BaseBlock, GraphBlockMetrics, GraphRenderer } from '../../interfaces/graph';
 
 
 export default {
@@ -39,9 +39,9 @@ export default {
       </>
     );
   }
-} as Renderer<BaseBlock & {
+} as GraphRenderer<BaseBlock & {
   child: BaseBlock;
   count: number;
-}, BaseMetrics & {
-  child: BaseMetrics;
+}, GraphBlockMetrics & {
+  child: GraphBlockMetrics;
 }>;

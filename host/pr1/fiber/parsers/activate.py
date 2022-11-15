@@ -8,24 +8,22 @@ from ...util.decorators import debug
 
 
 @debug
-class AcmeState(BlockUnitState):
-  process = True
-
-  def __init__(self, value):
+class AcmeProcessData:
+  def __init__(self, value: float):
     self._value = value
 
   def export(self):
     return { "value": self._value }
 
 class AcmeParser(BaseParser):
-  namespace = "activate"
+  namespace = "timer"
 
   root_attributes = dict()
   segment_attributes = {
     'activate': lang.Attribute(
       description="Activates the prototype.",
       optional=True,
-      type=lang.QuantityType('meter')
+      type=lang.QuantityType('second')
     )
   }
 
@@ -41,11 +39,11 @@ class AcmeParser(BaseParser):
       if raw_value is Ellipsis:
         return lang.Analysis(), Ellipsis
 
-      value = raw_value.value.m
+      value = raw_value.value.m_as('ms')
 
       if value < 0:
         return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
 
-      return lang.Analysis(), BlockUnitData(state=AcmeState(value), transforms=[SegmentTransform(self.namespace)])
+      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, data=AcmeProcessData(value))])
     else:
       return lang.Analysis(), BlockUnitData()

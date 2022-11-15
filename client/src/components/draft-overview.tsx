@@ -83,7 +83,9 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
         {protocol
           ? (
             <>
-              <GraphEditor tree={protocol.root} />
+              <GraphEditor
+                host={this.props.host}
+                tree={protocol.root} />
             </>
           )
           : (

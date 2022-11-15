@@ -2,6 +2,8 @@ import type { BaseBackend } from './base';
 import type { DraftCompilation } from '../draft';
 import type { Codes, ExecutorStates, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
+import type { Protocol } from '../interfaces/protocol';
+
 
 export abstract class BackendCommon implements BaseBackend {
   private _listeners: Set<() => void> = new Set();
@@ -125,21 +127,6 @@ export interface MasterEntry {
   processState: { progress: number; };
   segmentIndex: number;
   time: number;
-}
-
-
-export interface Protocol {
-  name: string | null;
-  root: Block;
-}
-
-export interface Block {
-  type: string;
-}
-
-export interface ProtocolSegment {
-  processNamespace: Namespace;
-  data: SegmentData;
 }
 
 

@@ -5,7 +5,7 @@ from ...reader import LocationArea
 
 from ..eval import EvalEnvs, EvalStack
 from .. import langservice as lang
-from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -70,20 +70,48 @@ class SequenceTransform(BaseTransform):
 
     return analysis, SequenceBlock(children) if children else Ellipsis
 
+
 @debug
-class SequenceBlock:
-  def __init__(self, children):
+class SequenceBlockProgram(BlockProgram):
+  def __init__(self, block: 'SequenceBlock', master, parent):
+    self._block = block
+    self._master = master
+    self._parent = parent
+
+    self._child: BlockProgram
+    self._index = 0
+
+  def enter(self):
+    self._enter_child()
+
+  def next(self, child: BlockProgram, /):
+    self._index += 1
+    self._enter_child()
+
+  def _enter_child(self):
+    if self._index < len(self._block._children):
+      child = self._block._children[self._index]
+      self._child = child.Program(block=child, master=self._master, parent=self)
+      self._child.enter()
+    else:
+      self._parent.next(self)
+
+  async def pause(self):
+    await self._child.pause()
+
+  def resume(self):
+    self._child.resume()
+
+
+@debug
+class SequenceBlock(BaseBlock):
+  Program = SequenceBlockProgram
+
+  def __init__(self, children: list[BaseBlock]):
     self._children = children
 
   def __getitem__(self, key):
     return self._children[key]
-
-  def evaluate(self, context):
-    for child in self._children:
-      child.evaluate(context)
-
-  def get_states(self):
-    return {state for child in self._children for state in child.get_states()}
 
   def linearize(self, context):
     analysis = lang.Analysis()

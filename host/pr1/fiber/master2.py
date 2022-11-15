@@ -1,5 +1,7 @@
 import asyncio
 
+from .parser import BlockProgram, FiberProtocol
+
 
 class SegExec:
   def __init__(self, *, block, master, parent):
@@ -36,41 +38,6 @@ class SegBlock:
     print("[END] " + self._name)
 
 
-class SeqExec:
-  def __init__(self, *, block, master, parent):
-    self._block = block
-    self._index = None
-    self._master = master
-    self._parent = parent
-
-  def create(self):
-    self._index = 0
-
-    child = self._block._children[self._index]
-    self._child = child.Exec(block=child, master=self._master, parent=self)
-    self._child.create()
-
-  def enter(self):
-    self._child.enter()
-
-  def next(self, exec):
-    self._index += 1
-
-    if self._index < len(self._block._children):
-      child = self._block._children[self._index]
-      self._child = child.Exec(block=child, master=self._master, parent=self)
-      self._child.create()
-      self._child.enter()
-    else:
-      self._parent.next(self)
-
-class SeqBlock:
-  Exec = SeqExec
-
-  def __init__(self, children, /):
-    self._children = children
-
-
 class ParExec:
   def __init__(self, *, block, master, parent):
     self._block = block
@@ -105,36 +72,70 @@ class ParBlock:
 
 
 class Master:
-  def __init__(self):
+  def __init__(self, protocol: FiberProtocol, /):
+    self.protocol = protocol
+
     self._heads = set()
-    self._root = SeqBlock([
-      SegBlock(name="a"),
-      SegBlock(name="b"),
-      ParBlock([
-        SegBlock(2, name="c"),
-        SegBlock(1, name="d")
-      ]),
-      SegBlock(name="e")
-    ])
+
+    # self._root = SeqBlock([
+    #   SegBlock(name="a"),
+    #   SegBlock(name="b"),
+    #   ParBlock([
+    #     SegBlock(2, name="c"),
+    #     SegBlock(1, name="d")
+    #   ]),
+    #   SegBlock(name="e")
+    # ])
 
   def start(self):
-    exec = self._root.Exec(block=self._root, master=self, parent=self)
-    exec.create()
-    exec.enter()
+    program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
+    program.enter()
 
-  def next(self, exec):
+  def next(self, program: BlockProgram):
     print("Done")
 
 
-async def main():
-  m = Master()
-  m.start()
+# async def main():
+#   m = Master()
+#   m.start()
 
-  while m._heads:
-    await next(iter(m._heads))
+#   while m._heads:
+#     await next(iter(m._heads))
 
 
-asyncio.run(main())
+# asyncio.run(main())
 
 
 # asyncio.get_event_loop().run_forever()
+
+
+if __name__ == "__main__":
+  from .parser import FiberParser
+  from ..fiber.parsers.activate import AcmeParser
+  from ..fiber.parsers.condition import ConditionParser
+  from ..fiber.parsers.do import DoParser
+  from ..fiber.parsers.repeat import RepeatParser
+  from ..fiber.parsers.score import ScoreParser
+  from ..fiber.parsers.sequence import SequenceParser
+  from ..fiber.parsers.shorthands import ShorthandsParser
+
+  parser = FiberParser(
+    """name: Foobar
+
+steps:
+  actions:
+    - activate: 28 s
+    - activate: 34 s
+""",
+    host=None,
+    # Parsers=[SequenceParser, RepeatParser, ShorthandsParser, AcmeParser, ScoreParser]
+    Parsers=[SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+    # Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+    # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
+  )
+
+  from pprint import pprint
+  pprint(parser.protocol.export())
+
+  if parser.protocol:
+    m = Master(parser.protocol)

@@ -1,8 +1,10 @@
 from types import EllipsisType
+
+from ..segment import SegmentTransform
 from ..eval import EvalEnvs, EvalStack
 from ..expr import PythonExprEvaluator
 from .. import langservice as lang
-from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState, SegmentTransform
+from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
 from ...draft import DraftGenericError
 from ...util.decorators import debug
 

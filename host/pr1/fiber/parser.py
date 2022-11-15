@@ -21,13 +21,6 @@ class MissingProcessError(Exception):
   def diagnostic(self):
     return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
 
-class RemainingTransformsError(Exception):
-  def __init__(self, area: LocationArea):
-    self.area = area
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Remaining transforms", ranges=self.area.ranges)
-
 
 class BlockUnitState:
   def __or__(self, other):
@@ -91,12 +84,24 @@ class BlockProcessData(Protocol):
   def export(self) -> str:
     ...
 
-class BaseBlock:
-  def linearize(self, context):
+class BlockProgram(Protocol):
+  def __init__(self, block: 'BaseBlock', master: Any, parent: 'BlockProgram' | Any):
     ...
 
-  def export(self) -> str:
+  def enter(self):
     ...
+
+  def next(self, child: 'BlockProgram', /):
+    pass
+
+class BaseBlock(Protocol):
+  def linearize(self, context) -> Any:
+    ...
+
+  def export(self):
+    ...
+
+  Program: type[BlockProgram]
 
 BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 
@@ -136,86 +141,6 @@ class LinearizationContext(dict):
 
   def __or__(self, other):
     return LinearizationContext({ **self, **other }, parser=self.parser)
-
-
-@debug
-class Segment:
-  def __init__(self, process_data: BlockProcessData, process_namespace: str, state: BlockState):
-    self.process_data = process_data
-    self.process_namespace = process_namespace
-    self.state = state
-
-@debug
-class SegmentTransform(BaseTransform):
-  def __init__(self, namespace: str, data: BlockProcessData):
-    self._data = data
-    self._namespace = namespace
-
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
-    segment_state = parent_state | state
-
-    if transforms:
-      return lang.Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
-
-    return lang.Analysis(), SegmentBlock(Segment(
-      process_data=self._data,
-      process_namespace=self._namespace,
-      state=segment_state
-    ))
-
-@debug
-class SegmentBlock(BaseBlock):
-  def __init__(self, segment: Segment):
-    self._segment = segment
-
-  # ?
-  def __getitem__(self, key):
-    assert key is None
-    return self._segment
-
-  # def evaluate(self, context):
-  #   for namespace, parser in context.fiber.parsers.items():
-  #     parser.evaluate_segment(self._segment.state[namespace], context)
-
-  # ?
-  def get_states(self):
-    return {self._segment.state}
-
-  def linearize(self, context):
-    analysis = lang.Analysis()
-    state = dict()
-
-    for namespace, unit_state in self._segment.state.items():
-      if unit_state and hasattr(unit_state, 'assemble'):
-        unit_analysis, unit_state_assembled = unit_state.assemble(context)
-        analysis += unit_analysis
-
-        if unit_state_assembled is Ellipsis:
-          return analysis, Ellipsis
-
-        state[namespace] = unit_state_assembled
-      else:
-        state[namespace] = unit_state
-
-    return analysis, [Segment(
-      process_data=self._segment.process_data,
-      process_namespace=self._segment.process_namespace,
-      state=BlockState(state)
-    )]
-
-  def export(self):
-    return {
-      "namespace": "segment",
-      "segment": {
-        "process": {
-          "data": self._segment.process_data.export(),
-          "namespace": self._segment.process_namespace
-        },
-        "state": {
-          namespace: state and state.export() for namespace, state in self._segment.state.items()
-        }
-      }
-    }
 
 
 @debug
@@ -266,7 +191,7 @@ class UnresolvedBlockDataLiteral(UnresolvedBlockData):
 
 
 class FiberProtocol:
-  def __init__(self, *, name: Optional[str], root):
+  def __init__(self, *, name: Optional[str], root: BaseBlock):
     self.name = name
     self.root = root
 
@@ -361,7 +286,7 @@ class FiberParser:
       pprint(linearized)
       print()
 
-    if entry_block is not Ellipsis:
+    if not isinstance(entry_block, EllipsisType):
       self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
     else:
       self.protocol = None

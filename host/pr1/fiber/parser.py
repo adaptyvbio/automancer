@@ -1,7 +1,7 @@
 from collections import namedtuple
 from pint import UnitRegistry
 from types import EllipsisType
-from typing import Any, Optional, Protocol, Sequence
+from typing import Any, AsyncIterator, Optional, Protocol, Sequence
 
 from . import langservice as lang
 from .eval import EvalEnv, EvalEnvs, EvalStack
@@ -88,11 +88,11 @@ class BlockProgram(Protocol):
   def __init__(self, block: 'BaseBlock', master: Any, parent: 'BlockProgram' | Any):
     ...
 
-  def enter(self):
+  def pause(self):
     ...
 
-  def next(self, child: 'BlockProgram', /):
-    pass
+  def run(self, child: Any, /) -> AsyncIterator[Any]:
+    ...
 
 class BaseBlock(Protocol):
   def linearize(self, context) -> Any:
@@ -267,7 +267,11 @@ class FiberParser:
 
     data_actions = output['_']['steps']
     data = self.parse_block(data_actions, adoption_envs=[global_env, stage_env], adoption_stack=adoption_stack, runtime_envs=[global_env, stage_env])
-    entry_block = self.execute(data.state, None, data.transforms, origin_area=data_actions.area)
+
+    if not isinstance(data, EllipsisType):
+      entry_block = self.execute(data.state, None, data.transforms, origin_area=data_actions.area)
+    else:
+      entry_block = Ellipsis
 
     print()
 

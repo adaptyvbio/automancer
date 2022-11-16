@@ -1,7 +1,7 @@
 import asyncio
 
 from .parser import BlockProgram, FiberProtocol
-
+from ..chip import Chip
 
 class SegExec:
   def __init__(self, *, block, master, parent):
@@ -72,10 +72,12 @@ class ParBlock:
 
 
 class Master:
-  def __init__(self, protocol: FiberProtocol, /):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip):
+    self.chip = chip
     self.protocol = protocol
 
     self._heads = set()
+    self._program: BlockProgram
 
     # self._root = SeqBlock([
     #   SegBlock(name="a"),
@@ -87,12 +89,14 @@ class Master:
     #   SegBlock(name="e")
     # ])
 
-  def start(self):
-    program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
-    program.enter()
+  async def pause(self):
+    self._program.pause()
 
-  def next(self, program: BlockProgram):
-    print("Done")
+  async def run(self):
+    self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
+
+    async for info in self._program.run(None):
+      yield info
 
 
 # async def main():
@@ -107,35 +111,3 @@ class Master:
 
 
 # asyncio.get_event_loop().run_forever()
-
-
-if __name__ == "__main__":
-  from .parser import FiberParser
-  from ..fiber.parsers.activate import AcmeParser
-  from ..fiber.parsers.condition import ConditionParser
-  from ..fiber.parsers.do import DoParser
-  from ..fiber.parsers.repeat import RepeatParser
-  from ..fiber.parsers.score import ScoreParser
-  from ..fiber.parsers.sequence import SequenceParser
-  from ..fiber.parsers.shorthands import ShorthandsParser
-
-  parser = FiberParser(
-    """name: Foobar
-
-steps:
-  actions:
-    - activate: 28 s
-    - activate: 34 s
-""",
-    host=None,
-    # Parsers=[SequenceParser, RepeatParser, ShorthandsParser, AcmeParser, ScoreParser]
-    Parsers=[SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
-    # Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
-    # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
-  )
-
-  from pprint import pprint
-  pprint(parser.protocol.export())
-
-  if parser.protocol:
-    m = Master(parser.protocol)

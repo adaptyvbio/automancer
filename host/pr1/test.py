@@ -1,15 +1,81 @@
-from .units import control
-from .units.timer import parser as timer
-from .protocol import LocatedError, Protocol
-
+import asyncio
+import appdirs
+import logging
 from pathlib import Path
 from pprint import pprint
 
-try:
-  p = Protocol(Path("../test.yml").resolve(), parsers={ "control": control.Parser, "timer": timer.Parser })
+from .host import Host
 
-  pprint(p.stages)
-  pprint(p.segments)
-except LocatedError as e:
-  print(e)
-  e.display()
+class ColoredFormatter(logging.Formatter):
+  def format(self, record):
+    reset = "\x1b[0m"
+    color = {
+      logging.CRITICAL: "\x1b[31;1m",
+      logging.INFO: "\x1b[34;20m",
+      logging.ERROR: "\x1b[31;20m",
+      logging.WARNING: "\x1b[33;20m"
+    }.get(record.levelno, str())
+
+    formatter = logging.Formatter(f"{color}%(levelname)-8s{reset} :: %(name)-18s :: %(message)s")
+    return formatter.format(record)
+
+ch = logging.StreamHandler()
+ch.setFormatter(ColoredFormatter())
+
+logging.getLogger().addHandler(ch)
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger("pr1").setLevel(logging.DEBUG)
+
+
+logger = logging.getLogger("pr1.test")
+
+class Backend:
+  def __init__(self) -> None:
+    self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
+    logger.debug(f"Storing data in '{self.data_dir}'")
+
+
+def callback(data):
+  print("Update ->", data)
+
+
+host = Host(backend=Backend(), update_callback=callback)
+
+
+async def main():
+  await host.initialize()
+
+  from .fiber.parser import FiberParser
+  from .fiber.parsers.activate import AcmeParser
+  from .fiber.parsers.condition import ConditionParser
+  from .fiber.parsers.do import DoParser
+  from .fiber.parsers.repeat import RepeatParser
+  from .fiber.parsers.score import ScoreParser
+  from .fiber.parsers.sequence import SequenceParser
+  from .fiber.parsers.shorthands import ShorthandsParser
+
+  parser = FiberParser("""
+name: Foobar
+
+steps:
+  actions:
+    - activate: 500 ms
+    - activate: 1 s
+""",
+    host=host,
+    Parsers=[SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+  )
+
+
+  from .fiber.master2 import Master
+
+  chip = next(iter(host.chips.values()))
+
+  if parser.protocol:
+    master = Master(parser.protocol, chip=chip)
+
+    async for info in master.run():
+      print(info.state.export())
+
+
+asyncio.run(main())

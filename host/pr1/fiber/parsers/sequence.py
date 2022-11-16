@@ -1,6 +1,8 @@
 from types import EllipsisType
 from typing import Any, Optional
 
+from ..process import ProgramExecInfo
+
 from ...reader import LocationArea
 
 from ..eval import EvalEnvs, EvalStack
@@ -72,40 +74,60 @@ class SequenceTransform(BaseTransform):
 
 
 @debug
-class SequenceBlockProgram(BlockProgram):
+class SequenceProgramState:
+  def __init__(self, child: Optional[Any] = None, index: int = 0):
+    self.child = child
+    self.index = index
+
+  def export(self):
+    return {
+      "child": self.child and self.child.export(),
+      "index": self.index
+    }
+
+@debug
+class SequenceProgram(BlockProgram):
   def __init__(self, block: 'SequenceBlock', master, parent):
     self._block = block
     self._master = master
     self._parent = parent
 
-    self._child: BlockProgram
-    self._index = 0
+    self._child_program: BlockProgram
+    self._child_index = 0
+    self._paused = False
 
-  def enter(self):
-    self._enter_child()
+  def pause(self):
+    self._child_program.pause()
+    self._paused = True
 
-  def next(self, child: BlockProgram, /):
-    self._index += 1
-    self._enter_child()
+  async def run(self, initial_state: Optional[SequenceProgramState]):
+    start_state = initial_state or SequenceProgramState()
 
-  def _enter_child(self):
-    if self._index < len(self._block._children):
-      child = self._block._children[self._index]
-      self._child = child.Program(block=child, master=self._master, parent=self)
-      self._child.enter()
-    else:
-      self._parent.next(self)
+    for child_index, child_block in enumerate(self._block._children):
+      if child_index < start_state.index:
+        continue
 
-  async def pause(self):
-    await self._child.pause()
+      if self._paused:
+        yield ProgramExecInfo(
+          stopped=True,
+          state=SequenceProgramState(child=None, index=child_index)
+        )
 
-  def resume(self):
-    self._child.resume()
+      self._child_program = child_block.Program(child_block, self._master, self)
+
+      async for info in self._child_program.run(start_state.child if child_index == start_state.index else None):
+        yield ProgramExecInfo(
+          state=SequenceProgramState(
+            index=child_index,
+            child=info.state
+          ),
+          time=info.time
+        )
 
 
 @debug
 class SequenceBlock(BaseBlock):
-  Program = SequenceBlockProgram
+  Program = SequenceProgram
 
   def __init__(self, children: list[BaseBlock]):
     self._children = children

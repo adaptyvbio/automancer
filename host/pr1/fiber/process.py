@@ -2,6 +2,8 @@ import datetime
 from typing import AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
+from ..util.decorators import debug
+
 if TYPE_CHECKING:
   from .segment import SegmentProgram
 
@@ -12,7 +14,7 @@ DurationLike = datetime.timedelta | float
 def transform_duration(value: DurationLike, /) -> float:
   return value.total_seconds() if isinstance(value, datetime.timedelta) else value
 
-class ProcessExecDuration:
+class ProgramExecDuration:
   def __init__(self, value: DurationLike, /, resolution: DurationLike = 0.0):
     self.resolution = resolution
     self.value = value
@@ -24,16 +26,17 @@ class ProcessExecDuration:
     }
 
 
-class BaseProcessState(Protocol):
+class ProgramState(Protocol):
   def export(self) -> dict:
     ...
 
-T = TypeVar('T', bound=BaseProcessState)
+T = TypeVar('T', bound=ProgramState)
 
-class ProcessExecInfo(Generic[T]):
+@debug
+class ProgramExecInfo(Generic[T]):
   def __init__(
     self,
-    duration: Optional[ProcessExecDuration | DurationLike] = None,
+    duration: Optional[ProgramExecDuration | DurationLike] = None,
     error: Optional[Exception] = None,
     state: Optional[T] = None,
     stopped: bool = False,
@@ -45,17 +48,6 @@ class ProcessExecInfo(Generic[T]):
     self.stopped = stopped
     self.time = time
 
-class ProcessExecStatus:
-  def __init__(self, program: 'SegmentProgram', /):
-    self._program = program
-
-  @property
-  def paused(self):
-    pass
-
-  async def wait(self):
-    pass
-
 
 class Process(Protocol[T]):
   def cancel(self):
@@ -64,5 +56,5 @@ class Process(Protocol[T]):
   def pause(self):
     ...
 
-  def run(self, status: ProcessExecStatus, initial_state: Optional[T]) -> AsyncIterator[ProcessExecInfo[T]]:
+  def run(self, initial_state: Optional[T]) -> AsyncIterator[ProgramExecInfo[T]]:
     ...

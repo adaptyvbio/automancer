@@ -3,12 +3,16 @@ import traceback
 from types import EllipsisType
 from typing import Any, Optional, Protocol, Sequence
 
-from .process import Process, ProcessExecStatus
+from .process import Process, ProgramExecInfo
 from .langservice import Analysis
 from .parser import BaseBlock, BaseTransform, BlockProcessData, BlockProgram, BlockState, Transforms
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
 from ..util.decorators import debug
+from ..host import logger
+
+
+logger = logger.getChild("segment")
 
 
 class RemainingTransformsError(Exception):
@@ -45,53 +49,44 @@ class SegmentTransform(BaseTransform):
     ))
 
 @debug
+class SegmentProgramState:
+  def __init__(self, process: Optional[object] = None):
+    self.process = process
+
+  def export(self):
+    return {
+      "process": self.process.export()
+    }
+
+@debug
 class SegmentProgram(BlockProgram):
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
     self._master = master
     self._parent = parent
 
-    self._pause_future: Optional[asyncio.Future] = None
-    self._resume_future: Optional[asyncio.Future] = None
-
     self._process: Process
-    self._status: ProcessExecStatus
 
-  def enter(self):
-    runner = self._master.chip.runners[self._block._segment.process_namespace]
-
-    self._process = runner.Process(self._block._segment.process_data)
-    self._status = ProcessExecStatus(self)
-
-    async def process_loop():
-      try:
-        async for info in self._process.run(self._status, initial_state=None):
-          print(">", info)
-
-          if self._pause_future and info.stopped:
-            self._pause_future.set_result(None)
-            self._pause_future = None
-
-            self._resume_future = asyncio.Future()
-            await self._resume_future
-        else:
-          pass
-      except Exception:
-        traceback.print_exc()
-
-    asyncio.create_task(process_loop())
-
-  async def pause(self):
-    self._pause_future = asyncio.Future()
+  def pause(self):
     self._process.pause()
 
-    await self._pause_future
+  async def run(self, initial_state: Optional[SegmentProgramState]):
+    runner = self._master.chip.runners[self._block._segment.process_namespace]
+    self._process = runner.Process(self._block._segment.process_data)
 
-  def resume(self):
-    assert self._resume_future
+    try:
+      async for info in self._process.run(initial_state.process if initial_state else None):
+        yield ProgramExecInfo(
+          duration=info.duration,
+          error=info.error,
+          state=SegmentProgramState(process=info.state),
+          time=info.time
+        )
+    except Exception as e:
+      logger.error("Uncaught error raised in process")
+      logger.error(e)
 
-    self._resume_future.set_result(None)
-    self._resume_future = None
+      yield ProgramExecInfo(error=e)
 
 
 @debug

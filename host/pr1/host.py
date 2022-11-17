@@ -164,7 +164,7 @@ class Host:
       source,
       host=self,
       # Parsers=[SequenceParser, RepeatParser, ShorthandsParser, AcmeParser, ScoreParser]
-      Parsers=[SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+      Parsers=[DoParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
       # Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
       # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )

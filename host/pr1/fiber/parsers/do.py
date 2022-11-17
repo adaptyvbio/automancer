@@ -53,8 +53,8 @@ class DoTransform(BaseTransform):
     self._data = data
     self._parser = parser
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea):
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     if self._before:
-      return lang.Analysis(), self._parser._fiber.execute(state, parent_state | self._data.state, self._data.transforms + transforms, origin_area=origin_area)
+      return lang.Analysis(), self._parser._fiber.execute(self._data.state | state, self._data.transforms + transforms, origin_area=origin_area)
     else:
-      return lang.Analysis(), self._parser._fiber.execute(self._data.state, parent_state | state, transforms + self._data.transforms, origin_area=origin_area)
+      return lang.Analysis(), self._parser._fiber.execute(state | self._data.state, transforms + self._data.transforms, origin_area=origin_area)

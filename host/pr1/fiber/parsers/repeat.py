@@ -40,8 +40,8 @@ class RepeatTransform(BaseTransform):
     self._env = env
     self._parser = parser
 
-  def execute(self, state, parent_state, transforms, envs, *, origin_area, stack):
-    block = self._parser._fiber.execute(state, parent_state, transforms, envs, origin_area=origin_area, stack=stack)
+  def execute(self, state, transforms, envs, *, origin_area, stack):
+    block = self._parser._fiber.execute(state, transforms, envs, origin_area=origin_area, stack=stack)
 
     if block is Ellipsis:
       return lang.Analysis(), Ellipsis

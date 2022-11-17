@@ -46,6 +46,6 @@ class AcmeParser(BaseParser):
       if value < 0:
         return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
 
-      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, data=AcmeProcessData(value))])
+      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, AcmeProcessData(value))])
     else:
       return lang.Analysis(), BlockUnitData()

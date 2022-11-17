@@ -1,16 +1,18 @@
 import asyncio
+from dataclasses import dataclass
 import time
 import traceback
 from types import EllipsisType
 from typing import Any, Optional, Protocol, Sequence
 
+from ..host import logger
 from .process import Process, ProgramExecEvent
 from .langservice import Analysis
-from .parser import BaseBlock, BaseTransform, BlockProcessData, BlockProgram, BlockState, Transforms
+from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
 from ..util.decorators import debug
-from ..host import logger
+from ..util.misc import Exportable
 
 
 logger = logger.getChild("segment")
@@ -24,30 +26,30 @@ class RemainingTransformsError(Exception):
     return DraftDiagnostic(f"Remaining transforms", ranges=self.area.ranges)
 
 
-@debug
-class Segment:
-  def __init__(self, process_data: BlockProcessData, process_namespace: str, state: BlockState):
-    self.process_data = process_data
-    self.process_namespace = process_namespace
-    self.state = state
+@dataclass
+class SegmentProcessData:
+  data: Exportable
+  namespace: str
+
+  def export(self):
+    return {
+      "data": self.data.export(),
+      "namespace": self.namespace
+    }
 
 @debug
 class SegmentTransform(BaseTransform):
-  def __init__(self, namespace: str, data: BlockProcessData):
-    self._data = data
-    self._namespace = namespace
+  def __init__(self, namespace: str, process_data: Exportable):
+    self._process = SegmentProcessData(process_data, namespace)
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[Analysis, BaseBlock | EllipsisType]:
-    segment_state = parent_state | state
-
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> tuple[Analysis, BaseBlock | EllipsisType]:
     if transforms:
       return Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
 
-    return Analysis(), SegmentBlock(Segment(
-      process_data=self._data,
-      process_namespace=self._namespace,
-      state=segment_state
-    ))
+    return Analysis(), SegmentBlock(
+      process=self._process,
+      state=state
+    )
 
 @debug
 class SegmentProgramState:
@@ -100,50 +102,48 @@ class SegmentProgram(BlockProgram):
       yield ProgramExecEvent(error=e)
 
 
+@dataclass
+class LinearSegment:
+  process: SegmentProcessData
+  state: BlockState
+
 @debug
 class SegmentBlock(BaseBlock):
   Program = SegmentProgram
 
-  def __init__(self, segment: Segment):
-    self._segment = segment
+  def __init__(self, process: SegmentProcessData, state: BlockState):
+    self._process = process
+    self.state = state
 
-  # # ?
-  # def __getitem__(self, key):
-  #   assert key is None
-  #   return self._segment
+  def linearize(self, context, parent_state):
+    return Analysis(), [LinearSegment(self._process, parent_state | self.state)]
 
-  def linearize(self, context):
-    analysis = Analysis()
-    state = dict()
+    # analysis = Analysis()
+    # state = dict()
 
-    for namespace, unit_state in self._segment.state.items():
-      if unit_state and hasattr(unit_state, 'assemble'):
-        unit_analysis, unit_state_assembled = unit_state.assemble(context)
-        analysis += unit_analysis
+    # for namespace, unit_state in self._segment.state.items():
+    #   if unit_state and hasattr(unit_state, 'assemble'):
+    #     unit_analysis, unit_state_assembled = unit_state.assemble(context)
+    #     analysis += unit_analysis
 
-        if unit_state_assembled is Ellipsis:
-          return analysis, Ellipsis
+    #     if unit_state_assembled is Ellipsis:
+    #       return analysis, Ellipsis
 
-        state[namespace] = unit_state_assembled
-      else:
-        state[namespace] = unit_state
+    #     state[namespace] = unit_state_assembled
+    #   else:
+    #     state[namespace] = unit_state
 
-    return analysis, [Segment(
-      process_data=self._segment.process_data,
-      process_namespace=self._segment.process_namespace,
-      state=BlockState(state)
-    )]
+    # return analysis, [Segment(
+    #   process_data=self._segment.process_data,
+    #   process_namespace=self._segment.process_namespace,
+    #   state=BlockState(state)
+    # )]
 
   def export(self):
     return {
       "namespace": "segment",
       "segment": {
-        "process": {
-          "data": self._segment.process_data.export(),
-          "namespace": self._segment.process_namespace
-        },
-        "state": {
-          namespace: state and state.export() for namespace, state in self._segment.state.items()
-        }
+        "process": self._process.export(),
+        "state": self.state.export()
       }
     }

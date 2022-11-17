@@ -26,10 +26,10 @@ class BlockUnitState:
   def __or__(self, other):
     return other
 
-  def set_envs(self, envs: list):
-    pass
+  def export(self) -> object:
+    ...
 
-class BlockState(dict):
+class BlockState(dict[str, Optional[BlockUnitState]]):
   def __or__(self, other):
     return other.__ror__(self)
 
@@ -51,10 +51,9 @@ class BlockState(dict):
 
       return BlockState(result)
 
-  def set_envs(self, envs: list):
-    for state in self.values():
-      if state:
-        state.set_envs(envs)
+  def export(self):
+    return { namespace: state and state.export() for namespace, state in self.items() if state }
+
 
 @debug
 class BlockData:
@@ -80,10 +79,6 @@ class BlockUnitData:
     self.state = state
     self.transforms = transforms or list()
 
-class BlockProcessData(Protocol):
-  def export(self) -> str:
-    ...
-
 class BlockProgram(Protocol):
   def __init__(self, block: 'BaseBlock', master: Any, parent: 'BlockProgram' | Any):
     ...
@@ -95,7 +90,10 @@ class BlockProgram(Protocol):
     ...
 
 class BaseBlock(Protocol):
-  def linearize(self, context) -> Any:
+  def __init__(self):
+    self.state: Optional[BlockState]
+
+  def linearize(self, context, parent_state) -> Any:
     ...
 
   def export(self):
@@ -121,7 +119,7 @@ class BaseParser:
     return lang.Analysis(), BlockUnitData()
 
 class BaseTransform:
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def execute(self, state: BlockState, transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     ...
 
 Transforms = list[BaseTransform]
@@ -269,7 +267,7 @@ class FiberParser:
     data = self.parse_block(data_actions, adoption_envs=[global_env, stage_env], adoption_stack=adoption_stack, runtime_envs=[global_env, stage_env])
 
     if not isinstance(data, EllipsisType):
-      entry_block = self.execute(data.state, None, data.transforms, origin_area=data_actions.area)
+      entry_block = self.execute(data.state, data.transforms, origin_area=data_actions.area)
     else:
       entry_block = Ellipsis
 
@@ -279,13 +277,14 @@ class FiberParser:
     print("Errors >", self.analysis.errors)
     print()
 
-    if entry_block is not Ellipsis:
+    if not isinstance(entry_block, EllipsisType):
       print("<= ENTRY =>")
       print(entry_block)
+      pprint(entry_block.export())
       print()
 
       print("<= LINEARIZATION =>")
-      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self))
+      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self), None)
       self.analysis += linearization_analysis
       pprint(linearized)
       print()
@@ -370,14 +369,17 @@ class FiberParser:
     analysis, attrs = self.segment_dict.analyze(data_block, self.analysis_context)
     self.analysis += analysis
 
+    if isinstance(attrs, EllipsisType):
+      return Ellipsis
+
     return UnresolvedBlockDataLiteral(attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:
       self.analysis.errors.append(MissingProcessError(origin_area))
       return Ellipsis
 
-    analysis, block = transforms[0].execute(state, parent_state, transforms[1:], origin_area=origin_area)
+    analysis, block = transforms[0].execute(state, transforms[1:], origin_area=origin_area)
     self.analysis += analysis
 
     return block

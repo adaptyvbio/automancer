@@ -41,11 +41,6 @@ class ScoreState(BlockUnitState):
   def __or__(self, other: 'ScoreState'):
     return ScoreState(self.points_list + other.points_list)
 
-  def set_envs(self, envs: list):
-    for points in self.points_list:
-      if isinstance(points, PythonExprEvaluator) and (points.envs is None):
-        points.envs = envs
-
   def assemble(self, context):
     analysis = lang.Analysis()
     total = 0.0

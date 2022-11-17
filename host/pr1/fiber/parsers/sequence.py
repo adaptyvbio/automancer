@@ -60,17 +60,17 @@ class SequenceTransform(BaseTransform):
     self._actions_info = actions_info
     self._parser = parser
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea):
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     analysis = lang.Analysis()
     children: list[BaseBlock] = list()
 
     for action_data, action_area in self._actions_info:
-      action_block = self._parser._fiber.execute(action_data.state, parent_state | state, transforms + action_data.transforms, origin_area=action_area)
+      action_block = self._parser._fiber.execute(action_data.state, transforms + action_data.transforms, origin_area=action_area)
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)
 
-    return analysis, SequenceBlock(children) if children else Ellipsis
+    return analysis, SequenceBlock(children, state=state) if children else Ellipsis
 
 
 class SequenceProgramMode(IntEnum):
@@ -152,18 +152,19 @@ class SequenceProgram(BlockProgram):
 class SequenceBlock(BaseBlock):
   Program = SequenceProgram
 
-  def __init__(self, children: list[BaseBlock]):
+  def __init__(self, children: list[BaseBlock], state: BlockState):
     self._children = children
+    self.state = state
 
   def __getitem__(self, key):
     return self._children[key]
 
-  def linearize(self, context):
+  def linearize(self, context, parent_state):
     analysis = lang.Analysis()
     output = list()
 
     for block in self._children:
-      item_analysis, item = block.linearize(context)
+      item_analysis, item = block.linearize(context, parent_state | self.state)
       analysis += item_analysis
 
       if item is Ellipsis:
@@ -176,5 +177,7 @@ class SequenceBlock(BaseBlock):
   def export(self):
     return {
       "namespace": "sequence",
+      "state": self.state.export(),
+
       "children": [child.export() for child in self._children]
     }

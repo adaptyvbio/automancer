@@ -16,13 +16,15 @@ class ShorthandEnv(EvalEnv):
 
 @debug
 class ShorthandBlock(BaseBlock):
+  state = None
+
   def __init__(self, block: BaseBlock, env: ShorthandEnv):
     # self._arg = arg
     self._block = block
     self._env = env
 
-  def linearize(self, context):
-    return self._block.linearize(context | { self._env: {} })
+  def linearize(self, context, parent_state):
+    return self._block.linearize(context, parent_state)
 
   def export(self):
     return self._block.export()
@@ -102,7 +104,7 @@ class ShorthandTransform(BaseTransform):
     self._parser = parser
     self._shorthands_data = shorthands_data
 
-  def execute(self, state: BlockState, parent_state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     analysis = lang.Analysis()
     block_state: BlockState = cast(BlockState, None)
     block_transforms = list()
@@ -115,7 +117,7 @@ class ShorthandTransform(BaseTransform):
       else:
         block_state = shorthand_data.state
 
-    block = self._parser._fiber.execute(state, parent_state | block_state, block_transforms + transforms, origin_area=origin_area)
+    block = self._parser._fiber.execute(state | block_state, block_transforms + transforms, origin_area=origin_area)
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis

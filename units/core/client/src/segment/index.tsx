@@ -12,10 +12,14 @@ export interface BlockMetrics extends GraphBlockMetrics {
   end: Point;
 }
 
+export interface State {
+  process: unknown;
+}
+
 
 const namespace = 'segment';
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
+const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   computeMetrics(block, options) {
     let features = options.units[block.segment.process.namespace].createProcessFeatures?.(block.segment.process.data, {}) ?? [
       { icon: 'not_listed_location', label: 'Unknown process' }
@@ -41,9 +45,10 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
     };
   },
 
-  render(block, metrics, position, options) {
+  render(block, metrics, position, state, options) {
     return (
       <GraphNode
+        active={state !== null}
         autoMove={false}
         cellSize={{
           width: metrics.size.width,
@@ -55,7 +60,6 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
           features: metrics.features,
           position
         }}
-        selected={false}
         settings={options.settings} />
     );
   }

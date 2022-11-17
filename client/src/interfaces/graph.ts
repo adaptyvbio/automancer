@@ -13,9 +13,9 @@ export interface GraphBlockMetrics {
   size: Size;
 }
 
-export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends GraphBlockMetrics> {
+export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends GraphBlockMetrics, State = unknown> {
   computeMetrics(block: Block, options: GraphRendererComputeSizeOptions): Metrics;
-  render(block: Block, metrics: Metrics, position: Point, options: RendererRenderOptions): React.ReactNode;
+  render(block: Block, metrics: Metrics, position: Point, state: State | null, options: RendererRenderOptions): React.ReactNode;
 }
 
 export interface GraphRendererComputeSizeOptions {
@@ -25,6 +25,6 @@ export interface GraphRendererComputeSizeOptions {
 }
 
 export interface RendererRenderOptions {
-  render(block: unknown, metrics: unknown, position: Point): React.ReactNode;
+  render(block: unknown, metrics: unknown, position: Point, state: unknown | null): React.ReactNode;
   settings: GraphRenderSettings;
 }

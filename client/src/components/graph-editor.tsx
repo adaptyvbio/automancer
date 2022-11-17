@@ -8,16 +8,16 @@ import { GraphBlockMetrics } from '../interfaces/graph';
 import { Point, Size } from '../geometry';
 import { ProtocolBlock } from '../interfaces/protocol';
 import { Host } from '../host';
+import { ContextMenuArea } from './context-menu-area';
 
 
 export interface GraphEditorProps {
   host: Host;
+  state?: unknown;
   tree: ProtocolBlock;
 }
 
 export interface GraphEditorState {
-  nodes: GraphNodeDef[];
-  selectedNodeIds: ImSet<GraphNodeId>;
   size: Size | null;
 
   offset: Point;
@@ -25,37 +25,7 @@ export interface GraphEditorState {
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
-  action: {
-    type: 'select';
-    singleTargetId: GraphNodeId | null;
-    startPoint: {
-      x: number;
-      y: number;
-    };
-    targets: {
-      id: GraphNodeId;
-      startPosition: {
-        x: number;
-        y: number;
-      };
-    }[];
-  } | {
-    type: 'move';
-    startPoint: {
-      x: number;
-      y: number;
-    };
-    targets: {
-      id: GraphNodeId;
-      startPosition: {
-        x: number;
-        y: number;
-      };
-    }[];
-  } | null = null;
-
   controller = new AbortController();
-  mouseDown = false;
   refContainer = React.createRef<HTMLDivElement>();
 
   observer = new ResizeObserver((_entries) => {
@@ -65,29 +35,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
   constructor(props: GraphEditorProps) {
     super(props);
 
-    let repeat = (child: any) => ({
-      id: crypto.randomUUID(),
-      type: 'repeat',
-      child
-    });
-
-    let duplicate = (child: any) => ({
-      id: crypto.randomUUID(),
-      type: 'sequence',
-      children: [child, child].map((c) => ({ ...c, id: crypto.randomUUID() }))
-    });
-
-    let parallel = (child: any) => ({
-      id: crypto.randomUUID(),
-      type: 'parallel',
-      children: [child, child].map((c) => ({ ...c, id: crypto.randomUUID() }))
-    });
-
-    // this.tree = this.tree.children[0];
-
     this.state = {
-      nodes: [],
-      selectedNodeIds: ImSet(),
       size: null,
 
       scale: 1,
@@ -202,8 +150,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       });
     };
 
-    let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point) => {
-      return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, { render, settings });
+    let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
+      return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
     };
 
     let treeMetrics = computeMetrics(this.props.tree);
@@ -227,9 +175,9 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             width={this.state.size.width * scale}
             height={this.state.size.height * scale}
             fill="url(#grid)"
-            transform={`scale(${1/scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
+            transform={`scale(${1 / scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
           <g transform={`scale(${1 / scale}) translate(${-offsetX} ${-offsetY})`}>
-            {render(this.props.tree, treeMetrics, { x: 1, y: 1 })}
+            {render(this.props.tree, treeMetrics, { x: 1, y: 1 }, this.props.state ?? null)}
           </g>
         </svg>
       </div>
@@ -264,11 +212,11 @@ interface GraphNodeDef {
 }
 
 export function GraphNode(props: {
+  active?: unknown;
   autoMove: unknown;
   cellSize: Size;
   node: GraphNodeDef;
   onMouseDown?(event: React.MouseEvent): void;
-  selected: unknown;
   settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
@@ -283,21 +231,30 @@ export function GraphNode(props: {
         width={settings.cellPixelSize * props.cellSize.width}
         height={settings.cellPixelSize * props.cellSize.height}
         className="geditor-nodeobject">
-        <div
-          className={util.formatClass('geditor-node', { '_selected': props.selected })}
-          onMouseDown={props.onMouseDown}>
-          <div className="geditor-header">
-            <div className="geditor-title">{node.title ? node.title : <i>Untitled</i>}</div>
+        <ContextMenuArea
+          createMenu={() => [
+            { id: 'jump', name: 'Jump', icon: 'move_down', disabled: props.active },
+            { id: 'pause', name: 'Pause process', icon: 'pause_circle', disabled: !props.active }
+          ]}
+          onSelect={(path) => {
+
+          }}>
+          <div
+            className={util.formatClass('geditor-node', { '_active': props.active })}
+            onMouseDown={props.onMouseDown}>
+            <div className="geditor-header">
+              <div className="geditor-title">{node.title ? node.title : <i>Untitled</i>}</div>
+            </div>
+            <div className="geditor-body">
+              {node.features.map((feature, index) => (
+                <div className="geditor-feature" key={index}>
+                  <Icon name={feature.icon} />
+                  <div className="geditor-featurelabel">{feature.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="geditor-body">
-            {node.features.map((feature, index) => (
-              <div className="geditor-feature" key={index}>
-                <Icon name={feature.icon} />
-                <div className="geditor-featurelabel">{feature.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </ContextMenuArea>
       </foreignObject>
 
       <circle

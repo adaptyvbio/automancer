@@ -10,10 +10,15 @@ export interface BlockMetrics extends GraphBlockMetrics {
   childrenX: number[];
 }
 
+export interface State {
+  child: unknown;
+  index: number;
+}
+
 
 const namespace = 'sequence';
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
+const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   computeMetrics(block, options) {
     let childrenMetrics = block.children.map((child) => options.computeMetrics(child));
 
@@ -38,13 +43,17 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics> = {
       }
     };
   },
-  render(block, metrics, position, options) {
+  render(block, metrics, position, state, options) {
     let children = block.children.map((child, index) => {
+      let childState = (state?.index === index)
+        ? state.child
+        : null;
+
       let childSize = metrics.children[index];
       let el = options.render(child, childSize, {
         x: position.x + metrics.childrenX[index],
         y: position.y
-      });
+      }, childState);
 
       return <React.Fragment key={index}>{el}</React.Fragment>;
     });

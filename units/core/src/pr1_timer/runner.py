@@ -1,9 +1,9 @@
 import asyncio
 from dataclasses import dataclass
 import time
-from typing import Any
+from typing import Any, Optional
 
-from pr1.fiber.process import ProgramExecInfo
+from pr1.fiber.process import ProgramExecEvent
 from pr1.units.base import BaseProcessRunner
 
 from . import namespace
@@ -22,10 +22,52 @@ class Process:
   def __init__(self, data: Any):
     self._data = data
 
-  async def run(self, initial_state: Any):
-    yield ProgramExecInfo(state=ProcessState(progress=0.0))
-    await asyncio.sleep(self._data._value / 1000)
-    yield ProgramExecInfo(state=ProcessState(progress=1.0))
+    self._task: Any
+    self._task_time: Any
+
+  def pause(self):
+    self._task.cancel()
+
+  async def run(self, initial_state: Optional[ProcessState]):
+    progress = initial_state.progress if initial_state else 0.0
+    remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0
+
+    while True:
+      self._task_time = time.time()
+
+      yield ProgramExecEvent(
+        duration=remaining_duration,
+        state=ProcessState(progress),
+        time=self._task_time
+      )
+
+      self._task = asyncio.create_task(asyncio.sleep(remaining_duration))
+
+      try:
+        await self._task
+      except asyncio.CancelledError:
+        self._task = None
+
+        current_time = time.time()
+        elapsed_time = current_time - self._task_time
+
+        progress += elapsed_time / remaining_duration
+        remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0
+
+        yield ProgramExecEvent(
+          duration=remaining_duration,
+          state=ProcessState(progress),
+          stopped=True,
+          time=current_time
+        )
+      else:
+        self._task = None
+        break
+
+    yield ProgramExecEvent(
+      duration=0.0,
+      state=ProcessState(1.0)
+    )
 
 class Runner(BaseProcessRunner):
   Process = Process

@@ -1,7 +1,7 @@
 from types import EllipsisType
 from typing import Any, Optional
 
-from ..process import ProgramExecInfo
+from ..process import ProgramExecEvent
 
 from ...reader import LocationArea
 
@@ -94,11 +94,9 @@ class SequenceProgram(BlockProgram):
 
     self._child_program: BlockProgram
     self._child_index = 0
-    self._paused = False
 
   def pause(self):
     self._child_program.pause()
-    self._paused = True
 
   async def run(self, initial_state: Optional[SequenceProgramState]):
     start_state = initial_state or SequenceProgramState()
@@ -107,16 +105,20 @@ class SequenceProgram(BlockProgram):
       if child_index < start_state.index:
         continue
 
-      if self._paused:
-        yield ProgramExecInfo(
-          stopped=True,
-          state=SequenceProgramState(child=None, index=child_index)
-        )
+      # if self._paused:
+      #   self._paused = False
+      #
+      #   yield ProgramExecEvent(
+      #     stopped=True,
+      #     state=SequenceProgramState(child=None, index=child_index)
+      #   )
+
 
       self._child_program = child_block.Program(child_block, self._master, self)
 
       async for info in self._child_program.run(start_state.child if child_index == start_state.index else None):
-        yield ProgramExecInfo(
+        yield ProgramExecEvent(
+          pausable=info.pausable,
           state=SequenceProgramState(
             index=child_index,
             child=info.state

@@ -22,3 +22,9 @@ export interface ProtocolProcess {
 }
 
 export type ProtocolState = Record<UnitNamespace, unknown>;
+
+
+export interface Master {
+  protocol: Protocol;
+  state: unknown;
+}

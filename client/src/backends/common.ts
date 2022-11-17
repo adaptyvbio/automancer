@@ -2,7 +2,7 @@ import type { BaseBackend } from './base';
 import type { DraftCompilation } from '../draft';
 import type { Codes, ExecutorStates, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
-import type { Protocol } from '../interfaces/protocol';
+import type { Master, Protocol } from '../interfaces/protocol';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -43,10 +43,9 @@ export abstract class BackendCommon implements BaseBackend {
   abstract resume(chipId: ChipId): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
-  abstract startPlan(options: {
+  abstract startDraft(options: {
     chipId: ChipId;
-    data: Codes;
-    location: ProtocolLocation;
+    draftId: DraftId;
     source: string;
   }): Promise<void>;
 
@@ -113,20 +112,6 @@ export interface Draft {
   }[];
   protocol: Protocol | null;
   source: string;
-}
-
-
-export interface Master {
-  entries: MasterEntry[];
-  protocol: Protocol;
-}
-
-export interface MasterEntry {
-  error: string | null;
-  paused: boolean;
-  processState: { progress: number; };
-  segmentIndex: number;
-  time: number;
 }
 
 

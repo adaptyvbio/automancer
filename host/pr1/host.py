@@ -8,7 +8,7 @@ from . import logger, reader
 from .chip import Chip, ChipCondition, CorruptedChip
 from .draft import Draft
 from .fiber.parser import FiberParser
-from .master import Master
+from .fiber.master2 import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
@@ -187,39 +187,6 @@ class Host:
 
     return chip
 
-  def start_plan(self, chip, codes, location, protocol):
-    if chip.master:
-      raise Exception("Already running")
-
-    def done_callback():
-      chip.master = None
-      self.update_callback()
-
-    chip.master = Master(
-      chip=chip,
-      codes=codes,
-      location=location,
-      protocol=protocol,
-      done_callback=done_callback,
-      update_callback=self.update_callback
-    )
-
-    chip.master.start()
-
-
-    async def a():
-      # await asyncio.sleep(1.5)
-      # chip.master.pause()
-      # await asyncio.sleep(1)
-      await asyncio.sleep(5)
-      chip.master.resume()
-
-    loop = asyncio.get_event_loop()
-    # loop.create_task(a())
-
-    # import asyncio
-    # asyncio.run(chip.master.wait())
-
   async def reload_units(self):
     logger.info("Reloading development units")
 
@@ -351,21 +318,23 @@ class Host:
         segment_index=request["segmentIndex"]
       )
 
-    if request["type"] == "startPlan":
+    if request["type"] == "startDraft":
       chip = self.chips[request["chipId"]]
 
-      protocol = Protocol(
-        request["source"],
-        host=self,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
-      )
+      if chip.master:
+        raise Exception("Already running")
 
-      location = {
-        'state': None, # request["location"]["state"]
-        'segment_index': request["location"]["segmentIndex"]
-      }
+      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      assert draft.protocol
 
-      self.start_plan(chip=chip, codes=request["data"], location=location, protocol=protocol)
+      def done_callback():
+        chip.master = None
+
+      def update_callback():
+        self.update_callback()
+
+      chip.master = Master(draft.protocol, chip)
+      await chip.master.start(done_callback, update_callback)
 
     self.update_callback()
 

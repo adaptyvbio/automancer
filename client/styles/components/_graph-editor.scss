@@ -66,13 +66,23 @@
     height: 100%;
 
     background-color: #fff;
+    border: 2px solid transparent;
     border-radius: 6px;
     box-shadow: 2px 3px 2px #0001;
 
     user-select: none;
 
-    &._selected {
+    &:hover {
+      // TODO: Replace with an outline to avoid the gap between the border and the node's edge.
+      border-color: #999;
+    }
+
+    &._active {
       border-color: $app-blue;
+    }
+
+    &._context {
+      border-color: rgb(90, 0, 120);
     }
   }
 

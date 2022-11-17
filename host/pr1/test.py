@@ -59,7 +59,9 @@ name: Foobar
 
 steps:
   actions:
-    - activate: 500 ms
+    # - activate: 500 ms
+    - activate: 1 s
+    - activate: 1 s
     - activate: 1 s
 """,
     host=host,
@@ -74,8 +76,24 @@ steps:
   if parser.protocol:
     master = Master(parser.protocol, chip=chip)
 
-    async for info in master.run():
-      print(info.state.export())
+    async def a():
+      async for info in master.run():
+        print("[Info]")
+        print("  Raw:", info)
+        print("  Exported:", info.state.export())
+        print()
+
+    async def b():
+      await asyncio.sleep(1.5)
+      print("[Pausing]")
+      master.pause()
+      await asyncio.sleep(1)
+      print("[Resuming]")
+      master.resume()
+
+    await asyncio.gather(a(), b())
+    # await a()
+
 
 
 asyncio.run(main())

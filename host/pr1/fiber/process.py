@@ -33,17 +33,19 @@ class ProgramState(Protocol):
 T = TypeVar('T', bound=ProgramState)
 
 @debug
-class ProgramExecInfo(Generic[T]):
+class ProgramExecEvent(Generic[T]):
   def __init__(
     self,
     duration: Optional[ProgramExecDuration | DurationLike] = None,
     error: Optional[Exception] = None,
+    pausable: Optional[bool] = None,
     state: Optional[T] = None,
     stopped: bool = False,
     time: Optional[DateLike] = None
   ):
     self.duration = duration
     self.error = error
+    self.pausable = pausable
     self.state = state
     self.stopped = stopped
     self.time = time
@@ -56,5 +58,5 @@ class Process(Protocol[T]):
   def pause(self):
     ...
 
-  def run(self, initial_state: Optional[T]) -> AsyncIterator[ProgramExecInfo[T]]:
+  def run(self, initial_state: Optional[T]) -> AsyncIterator[ProgramExecEvent[T]]:
     ...

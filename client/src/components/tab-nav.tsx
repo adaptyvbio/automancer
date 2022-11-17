@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { ExpandableText } from './expandable-text';
 import * as util from '../util';
 
 import styles from '../../styles/components/tab-nav.module.scss';
@@ -39,7 +40,9 @@ export class TabNav extends React.Component<TabNavProps, TabNavState> {
               onClick={() => {
                 this.setState({ activeEntryId: entry.id });
               }}
-              key={entry.id}>{entry.label}</button>
+              key={entry.id}>
+              <ExpandableText>{entry.label}</ExpandableText>
+            </button>
           ))}
         </nav>
         <div className={styles.contents}>

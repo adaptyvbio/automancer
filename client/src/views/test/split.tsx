@@ -8,6 +8,7 @@ import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
+import diagnosticsStyles from '../../../styles/components/diagnostics.module.scss';
 import formStyles from '../../../styles/components/form.module.scss';
 import editorStyles from '../../../styles/components/editor.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
@@ -117,6 +118,65 @@ console.log(animals);
                 </div>
                 <div className={util.formatClass({ '_dragging': this.state.dragging })} {...getGutterProps('column', 1)} />
                 <TabNav entries={[
+                  { id: 'report',
+                    label: 'Report',
+                    contents: () => (
+                      <div className={util.formatClass(formStyles.main2, descriptionStyles.root)}>
+                        <div className={diagnosticsStyles.list}>
+                          <div className={util.formatClass(diagnosticsStyles.entryRoot, diagnosticsStyles.entryRootError)}>
+                            <Icon name="report" className={diagnosticsStyles.entryIcon} />
+                            <div className={diagnosticsStyles.entryTitle}>Invalid line</div>
+                            <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button>
+                            <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p>
+                          </div>
+                          <div className={util.formatClass(diagnosticsStyles.entryRoot, diagnosticsStyles.entryRootError)}>
+                            <Icon name="report" className={diagnosticsStyles.entryIcon} />
+                            <div className={diagnosticsStyles.entryTitle}>Invalid line</div>
+                            <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button>
+                            <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p>
+                            <p className={diagnosticsStyles.entrySource}>Source: Parsers › Shorthands</p>
+                          </div>
+                          <div className={util.formatClass(diagnosticsStyles.entryRoot, diagnosticsStyles.entryRootWarning)}>
+                            <Icon name="warning" className={diagnosticsStyles.entryIcon} />
+                            <div className={diagnosticsStyles.entryTitle}>Invalid line</div>
+                            <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button>
+                            <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p>
+                            <p className={diagnosticsStyles.entrySource}>Source: Parsers › Shorthands</p>
+                          </div>
+                        </div>
+
+                        <div className={util.formatClass(diagnosticsStyles.reportRoot)}>
+                          <Icon name="pending" className={diagnosticsStyles.reportIcon} />
+                          <div className={diagnosticsStyles.reportTitle}>Compiling...</div>
+                        </div>
+
+                        <div className={util.formatClass(diagnosticsStyles.reportRoot, diagnosticsStyles.reportRootError)}>
+                          <Icon name="report" className={diagnosticsStyles.reportIcon} />
+                          <div className={diagnosticsStyles.reportTitle}>2 errors and 1 warning</div>
+                          <p className={diagnosticsStyles.reportDescription}>Ready to start</p>
+                        </div>
+
+                        <div className={util.formatClass(diagnosticsStyles.reportRoot, diagnosticsStyles.reportRootSuccess)}>
+                          <Icon name="new_releases" className={diagnosticsStyles.reportIcon} />
+                          <div className={diagnosticsStyles.reportTitle}>All tests passed</div>
+                          <p className={diagnosticsStyles.reportDescription}>Ready to start</p>
+                          <button type="button" className={diagnosticsStyles.reportActionRoot}>
+                            <Icon name="play_circle" className={diagnosticsStyles.reportActionIcon} />
+                            <div className={diagnosticsStyles.reportActionLabel}>Run</div>
+                          </button>
+                        </div>
+
+                        <div className={util.formatClass(diagnosticsStyles.reportRoot, diagnosticsStyles.reportRootSuccess)}>
+                          <Icon name="new_releases" className={diagnosticsStyles.reportIcon} />
+                          <div className={diagnosticsStyles.reportTitle}>All tests passed long long long long long long long long long long long long long long</div>
+                          <p className={diagnosticsStyles.reportDescription}>Ready to start long long long long long long long long long long long long long long long</p>
+                          <button type="button" className={diagnosticsStyles.reportActionRoot}>
+                            <Icon name="play_circle" className={diagnosticsStyles.reportActionIcon} />
+                            <div className={diagnosticsStyles.reportActionLabel}>Run</div>
+                          </button>
+                        </div>
+                      </div>
+                    ) },
                   { id: 'parameters',
                     label: 'Parameters',
                     contents: () => (

@@ -7,11 +7,11 @@ import { TabNav } from '../../components/tab-nav';
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 
+import descriptionStyles from '../../../styles/components/description.module.scss';
 import formStyles from '../../../styles/components/form.module.scss';
-import tabNavStyles from '../../../styles/components/tab-nav.module.scss';
 import editorStyles from '../../../styles/components/editor.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
-
+import { Icon } from '../../components/icon';
 
 
 export class ViewSplit extends React.Component<any, any> {
@@ -50,6 +50,7 @@ console.log(animals);
       renderWhitespace: 'trailing',
       scrollBeyondLastLine: true,
       selectionHighlight: false,
+      suggestLineHeight: 24,
       tabSize: 2,
       readOnly: false,
       padding: {
@@ -69,6 +70,8 @@ console.log(animals);
     editor.onDidFocusEditorText(() => {
       this.setState({ cursorPosition: editor.getPosition() });
     });
+
+    // editor.trigger('source - use any string you like', 'editor.action.triggerSuggest', {});
   }
 
   render() {
@@ -117,8 +120,89 @@ console.log(animals);
                   { id: 'parameters',
                     label: 'Parameters',
                     contents: () => (
-                      <div className={formStyles.main2}>
-                        <div className={formStyles.header}>
+                      <div className={util.formatClass(formStyles.main2, descriptionStyles.root)}>
+                        <div className={descriptionStyles.header}>
+                          <h2>Hamilton</h2>
+                        </div>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>384 head tip type</div>
+                          <div className={formStyles.fieldSelect}>
+                            <select>
+                              <option value="">Axygen</option>
+                              <option value="">Hamilton</option>
+                            </select>
+                            <Icon name="expand_more" />
+                          </div>
+                        </label>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" placeholder="Enter name here" className={formStyles.fieldTextfield} />
+                        </label>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <textarea className={formStyles.fieldTextarea}></textarea>
+                        </label>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" className={formStyles.fieldTextfield} />
+                        </label>
+
+                        <div className={formStyles.fieldGroup}>
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" className={formStyles.fieldTextfield} />
+                          </label>
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" className={formStyles.fieldTextfield} />
+                          </label>
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" className={formStyles.fieldTextfield} />
+                          </label>
+                        </div>
+
+                        <div className={formStyles.fieldGroup}>
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" className={formStyles.fieldTextfield} />
+                          </label>
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" className={formStyles.fieldTextfield} />
+                          </label>
+                        </div>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" className={formStyles.fieldTextfield} />
+                        </label>
+
+                        <h3>Something</h3>
+
+                        <label className={formStyles.fieldControl}>
+                          <div className={formStyles.fieldLabel}>Setup name</div>
+                          <input type="text" className={formStyles.fieldTextfield} />
+                        </label>
+
+                        <h2>Okolab settings long long long long long long long long long long</h2>
+
+                        <h3>Something</h3>
+
+                        <div className={descriptionStyles.header}>
+                          <h2>Okolab settings long long long long long long long long long long</h2>
+                        </div>
+
+                        <div className={descriptionStyles.header}>
+                          <h2>Okolab settings long long long long long long long long long long</h2>
+                          <button type="button" className={formStyles.btn}>New</button>
+                        </div>
+
+                        <div className={descriptionStyles.header}>
                           <h2>Okolab settings</h2>
                         </div>
 
@@ -156,7 +240,22 @@ console.log(animals);
                     )
                   },
                   { id: 'help',
-                    label: 'Help' },
+                    label: 'Help',
+                    contents: () => (
+                      <div className={util.formatClass(formStyles.main2, descriptionStyles.root)}>
+                        <div className={formStyles.header}>
+                          <h2>Help</h2>
+                        </div>
+
+                        <p>The <code>actions</code> attribute groups a <a href="#">list of actions</a>.</p>
+                        <p>Proin eget mauris vel nisl sagittis finibus. Quisque nisi ante, dignissim ut dolor sed, accumsan congue tortor. In in porta <code>libero</code>, sed pharetra nibh. Nunc eget risus sagittis, semper magna id, consequat orci. Nullam pharetra, nibh nec aliquam condimentum, elit ligula ullamcorper urna, faucibus tempor orci magna ut massa.</p>
+                        <p>Proin eget mauris vel nisl <code>sagittis</code> finibus. Quisque nisi ante, dignissim ut dolor sed, accumsan congue tortor. In in porta <code>libero</code>, sed pharetra nibh. Nunc eget risus sagittis, semper magna id, consequat orci. Nullam pharetra, nibh nec aliquam condimentum, elit ligula ullamcorper urna, faucibus tempor orci magna ut massa.</p>
+                        <p>Proin eget mauris vel nisl sagittis finibus. Quisque nisi ante, dignissim ut dolor sed, accumsan congue tortor. In in porta <code>libero</code>, sed pharetra nibh. Nunc eget risus sagittis, semper magna id, consequat orci. Nullam pharetra, nibh nec aliquam condimentum, elit ligula ullamcorper urna, faucibus tempor orci magna ut massa.</p>
+
+                        <h3>Syntax</h3>
+                        <p>Proin eget mauris vel nisl sagittis finibus. Quisque nisi ante, dignissim ut dolor sed, accumsan congue tortor. In in porta libero, sed pharetra nibh. Nunc eget risus sagittis, semper magna id, consequat orci. Nullam pharetra, nibh nec aliquam condimentum, elit ligula ullamcorper urna, faucibus tempor orci magna ut massa.</p>
+                      </div>
+                    ) },
                   { id: 'output',
                     label: 'Output' }
                 ]} />

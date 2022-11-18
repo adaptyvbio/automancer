@@ -12,6 +12,7 @@ $box-shadow: rgba($main-color, 8%) 0 2px 5px;
 $focus-shadow: #{$highlight-blue} 0 0 0 1px, #{$highlight-shadow};
 $hor-padding: 0.6rem;
 $height: 2rem;
+$field-hgap: 0.8rem;
 
 
 .main {
@@ -30,7 +31,20 @@ $height: 2rem;
 
 .field {
   &Control {
-    margin: 1rem 0;
+    margin: $field-hgap 0;
+  }
+
+  &Group {
+    display: grid;
+    gap: $field-hgap 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+    margin: $field-hgap 0;
+
+    > * {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
   }
 
   &Label {
@@ -41,7 +55,7 @@ $height: 2rem;
     font-weight: 500;
   }
 
-  &-action, &-durationfield, &-select select, &-textarea, &Textfield {
+  &-action, &-durationfield, &Select select, &Textarea, &Textfield {
     padding-left: $hor-padding;
     padding-right: $hor-padding;
 
@@ -62,7 +76,7 @@ $height: 2rem;
     }
   }
 
-  &-durationfield, &-select select, &Textfield {
+  &-durationfield, &Select select, &Textfield {
     height: $height;
     padding: 0 $hor-padding;
   }
@@ -126,7 +140,7 @@ $height: 2rem;
     }
   }
 
-  &-select {
+  &Select {
     @include superimposed-children();
     align-items: center;
 
@@ -135,14 +149,14 @@ $height: 2rem;
       box-shadow: var(--focus-shadow), $keyline-bottom-shadow, $keyline-shadow, $box-shadow;
     }
 
-    .icon {
+    :global(.icon) {
       margin-right: 0.4rem;
       justify-self: end;
       transform: scale(0.8);
     }
   }
 
-  &-textarea, &Textfield {
+  &Textarea, &Textfield {
     box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
 
     &::placeholder {
@@ -150,7 +164,7 @@ $height: 2rem;
     }
   }
 
-  &-textarea {
+  &Textarea {
     min-height: 50px;
     padding: calc((#{$height} - 1.2em) * 0.5) $hor-padding;
     resize: vertical;
@@ -225,6 +239,12 @@ $height: 2rem;
 }
 
 
+.actions {
+  display: flex;
+  column-gap: 0.4rem;
+}
+
+
 .btn {
   height: $height;
   padding: 0 $hor-padding * 1.4;
@@ -242,36 +262,14 @@ $height: 2rem;
   &:hover {
     background-color: darken(#f6f8fa, 1%);
   }
-}
 
-.actions {
-  display: flex;
-  column-gap: 0.4rem;
-}
-
-
-.header {
-  display: grid;
-  align-items: center;
-  column-gap: 4rem;
-  grid-template-columns: 1fr auto;
-
-  &:has(h2) {
-    margin-bottom: 1.2rem;
-
-    &:not(:first-child) {
-      margin-top: 2.4rem;
-    }
+  &:active {
+    background-color: darken(#f6f8fa, 2.4%);
+    box-shadow: none;
   }
 
-  h2 {
-    @include text-ellipsis();
-
-    font-weight: 600;
+  &:focus-visible {
+    border-color: $highlight-blue;
+    box-shadow: $highlight-shadow;
   }
-}
-
-
-.paragraph {
-  margin: 1rem 0;
 }

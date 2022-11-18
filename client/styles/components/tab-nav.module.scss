@@ -45,15 +45,17 @@
   &:not(:last-child)::after {
     content: "";
 
+    width: 1px;
+    height: 100%;
+
     position: absolute;
     right: -0.8rem;
     top: 0;
 
-    width: 1px;
-    height: 100%;
-
     background-color: #ddd;
     translate: 50% 0;
+
+    pointer-events: none;
   }
 }
 

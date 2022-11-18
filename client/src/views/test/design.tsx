@@ -3,6 +3,7 @@ import * as React from 'react';
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 
+import descriptionStyles from '../../../styles/components/description.module.scss';
 import formStyles from '../../../styles/components/form.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
 
@@ -22,8 +23,8 @@ export class ViewDesign extends React.Component<any, any> {
         <TitleBar title="Design" />
 
         <div className={viewStyles.contents}>
-          <div className={formStyles.main}>
-            <div className={formStyles.header}>
+          <div className={util.formatClass(descriptionStyles.root, formStyles.main)}>
+            <div className={descriptionStyles.header}>
               <h2>Settings super super long super super long super super long</h2>
               <div className={formStyles.actions}>
                 <button type="button" className={formStyles.btn}>New experiment</button>
@@ -42,9 +43,7 @@ export class ViewDesign extends React.Component<any, any> {
               <input type="text" className={formStyles.fieldTextfield} />
             </label>
 
-            <div className={formStyles.header}>
-              <h2>Settings super super long super super long super super long</h2>
-            </div>
+            <h2>Settings super super long super super long super super long</h2>
 
             <label className={formStyles.checkRoot}>
               <input type="checkbox" />
@@ -80,9 +79,7 @@ export class ViewDesign extends React.Component<any, any> {
               </label>
             </div>
 
-            <div className={formStyles.header}>
-              <h2>Editor</h2>
-            </div>
+            <h2>Editor</h2>
 
             <label className={formStyles.checkRoot}>
               <input type="checkbox" />

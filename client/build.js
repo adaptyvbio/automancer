@@ -32,6 +32,21 @@ esbuild.build({
 	outdir: path.join(__dirname, 'dist')
 });
 
+
+let plugin = {
+	name: 'monaco-layer',
+	setup(build) {
+		build.onLoad({ filter: /node_modules\/monaco-editor\/.*\.css/ }, async (args) => {
+			let text = await fs.promises.readFile(args.path, 'utf8');
+
+			return {
+				contents: `@layer monaco {\n${text}\n}`,
+				loader: 'css'
+			};
+		});
+	}
+};
+
 esbuild.build({
 	entryPoints: ['src/index.tsx'],
 	bundle: true,
@@ -54,6 +69,7 @@ esbuild.build({
 		}),
 		sassPlugin({
 			filter: /\.scss/
-		})
+		}),
+		plugin
 	]
 });

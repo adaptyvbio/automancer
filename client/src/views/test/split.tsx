@@ -1,6 +1,5 @@
 import * as monaco from 'monaco-editor';
 import * as React from 'react';
-import seqOrd from 'seq-ord';
 import Split from 'react-split-grid';
 
 import { TabNav } from '../../components/tab-nav';
@@ -9,9 +8,11 @@ import * as util from '../../util';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
 import diagnosticsStyles from '../../../styles/components/diagnostics.module.scss';
-import formStyles from '../../../styles/components/form.module.scss';
 import editorStyles from '../../../styles/components/editor.module.scss';
+import formStyles from '../../../styles/components/form.module.scss';
+import spotlightStyles from '../../../styles/components/spotlight.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
+import { ContextMenuArea } from '../../components/context-menu-area';
 import { Icon } from '../../components/icon';
 
 
@@ -118,6 +119,99 @@ console.log(animals);
                 </div>
                 <div className={util.formatClass({ '_dragging': this.state.dragging })} {...getGutterProps('column', 1)} />
                 <TabNav entries={[
+                  { id: 'spotlight',
+                    label: 'Spotlight',
+                    contents: () => (
+                      <div className={util.formatClass(formStyles.main2, spotlightStyles.root)}>
+                        <div className={spotlightStyles.breadcrumbRoot}>
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Root</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          {/* <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} /> */}
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Block</button>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          {/* <button type="button" className={util.formatClass(spotlightStyles.breadcrumbEntry, '_context', '_active')}>Repeat twice</button> */}
+                          <ContextMenuArea
+                            createMenu={() => [
+                              { id: 'header', name: 'Repeat block', type: 'header' },
+                              { id: 'pause', name: 'Pause', icon: 'pause_circle' },
+                              { id: 'divider', type: 'divider' },
+                              { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool' }
+                            ]}
+                            onSelect={(_path) => {}}>
+                            <button type="button" className={util.formatClass(spotlightStyles.breadcrumbEntry, '_active')}>Repeat twice</button>
+                          </ContextMenuArea>
+                          <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />
+                          <button type="button" className={spotlightStyles.breadcrumbEntry}>Parallel</button>
+                        </div>
+                        <div className={spotlightStyles.header}>
+                          <h2 className={spotlightStyles.title}>Wash everything</h2>
+                          <div className={spotlightStyles.navigationRoot}>
+                            <button type="button" className={spotlightStyles.navigationButton} disabled>
+                              <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
+                            </button>
+                            <button type="button" className={spotlightStyles.navigationButton}>
+                              <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className={spotlightStyles.timepanel}>
+
+                        </div>
+
+                        <div className={spotlightStyles.featureList}>
+                          <div className={spotlightStyles.featureGroup}>
+                            <div className={spotlightStyles.featureEntry}>
+                              <Icon name="hourglass_empty" className={spotlightStyles.featureIcon} />
+                              <div className={spotlightStyles.featureLabel}>10 min</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={descriptionStyles.root}>
+                          <p>Morbi nec dolor justo. Maecenas et mauris urna. Donec urna ante, tincidunt sed ligula sed, tristique vestibulum massa. Nunc arcu nibh, tempus non cursus quis, ornare sit amet eros. Sed vel orci vitae sapien interdum iaculis. Morbi semper, quam pharetra convallis ullamcorper, orci lacus ornare lacus, non dapibus tellus nisi sed est. Suspendisse eleifend tempus sagittis.</p>
+
+                          <label className={formStyles.fieldControl}>
+                            <div className={formStyles.fieldLabel}>Setup name</div>
+                            <input type="text" placeholder="Enter name here" className={formStyles.fieldTextfield} />
+                          </label>
+
+                          <div className={spotlightStyles.featureList}>
+                            <div className={spotlightStyles.featureGroup}>
+                              <div className={spotlightStyles.featureEntry}>
+                                <Icon name="valve" className={spotlightStyles.featureIcon} />
+                                <div className={spotlightStyles.featureLabel}>General input, Biotin BSA</div>
+                              </div>
+                            </div>
+                            <div className={spotlightStyles.featureGroup}>
+                              <div className={spotlightStyles.featureEntry}>
+                                <Icon name="thermostat" className={spotlightStyles.featureIcon} />
+                                <div className={spotlightStyles.featureLabel}>37ºC</div>
+                              </div>
+                              <div className={spotlightStyles.featureEntry}>
+                                <Icon name="download" className={spotlightStyles.featureIcon} />
+                                <div className={spotlightStyles.featureLabel}>Button</div>
+                              </div>
+                            </div>
+                            <div className={spotlightStyles.featureGroup}>
+                              <div className={spotlightStyles.featureEntry}>
+                                <Icon name="valve" className={spotlightStyles.featureIcon} />
+                                <div className={spotlightStyles.featureLabel}>General input</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  },
                   { id: 'report',
                     label: 'Report',
                     contents: () => (

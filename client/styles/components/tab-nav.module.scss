@@ -10,7 +10,7 @@
 .nav {
   display: flex;
   column-gap: 1.6rem;
-  justify-content: center;
+  justify-content: /* safe */ center;
 
   padding: 0.4rem 1rem;
   overflow-x: auto;

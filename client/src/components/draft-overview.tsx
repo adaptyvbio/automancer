@@ -86,6 +86,35 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
               <GraphEditor
                 host={this.props.host}
                 tree={protocol.root} />
+              <div className="header header--2">
+                <h2>Start protocol</h2>
+                <div className="superimposed-root">
+                  <select className="superimposed-target" onInput={(event) => {
+                    let chipId = event.currentTarget.value;
+                    let _chip = this.props.host.state.chips[chipId] as Chip;
+
+                    this.props.host.backend.startDraft({
+                      chipId,
+                      draftId: crypto.randomUUID(),
+                      source: this.props.draft.item.source!,
+                    });
+                  }}>
+                    {!chip && <option value="">–</option>}
+                    {chips.map((chip) => (
+                      <option
+                        value={chip.id}
+                        key={chip.id}
+                        disabled={(Object.values(this.props.host.units).some((unit) => unit.canChipRunProtocol && !unit.canChipRunProtocol(protocol!, chip))) || (chip.master !== null)}>
+                        {getChipMetadata(chip).title}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="btn illustrated-root superimposed-visible">
+                    <div>{chip ? `Chip: ${getChipMetadata(chip).title}` : 'Select experiment'}</div>
+                    <div className="btn-icon"><Icon name="expand_more" /></div>
+                  </div>
+                </div>
+              </div>
             </>
           )
           : (

@@ -2,6 +2,7 @@ import * as React from 'react';
 import seqOrd from 'seq-ord';
 
 import { analyzeProtocol } from '../analysis';
+import { GraphEditor } from './graph-editor';
 import { Host } from '../host';
 import { Chip, ChipId } from '../backends/common';
 import { formatAbsoluteTime } from '../format';
@@ -17,7 +18,11 @@ export interface ChipProtocolProps {
   host: Host;
 }
 
-export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
+export interface ChipProtocolState {
+
+}
+
+export class ChipProtocol extends React.Component<ChipProtocolProps, ChipProtocolState> {
   pool = new Pool();
 
   get chip() {
@@ -33,53 +38,19 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
     }
 
     let protocol = master.protocol;
-    let analysis = analyzeProtocol(protocol, master.entries);
-    let lastEntry = master.entries.at(-1);
-
-    let currentSegmentIndex = analysis.current!.segmentIndex;
-    let currentSegment = protocol.segments[currentSegmentIndex];
-
-    let currentStage = protocol.stages.find((stage) => (stage.seq[0] <= currentSegmentIndex) && (stage.seq[1] > currentSegmentIndex))!;
-    let currentStep = currentStage.steps.find((step) => (step.seq[0] <= currentSegmentIndex) && (step.seq[1] > currentSegmentIndex))!;
-
-    let firstSegmentAnalysis = analysis.segments[currentStep.seq[0]];
-    let lastSegmentAnalysis = analysis.segments[currentStep.seq[1] - 1];
-    let currentSegmentAnalysis = analysis.segments[lastEntry.segmentIndex];
-
-    let currentSegmentEndTime = currentSegmentAnalysis.timeRange![1];
-    let currentProgress = lastEntry.processState.progress + (
-      !lastEntry.paused
-        ? (Date.now() - lastEntry.time) / (currentSegment.data.timer?.duration ?? 0)
-        : 0
-    );
-
-    let features = Object.values(this.props.host.units)
-      .sort(seqOrd(function* (a, b, rules) {
-        yield rules.binary(
-          b.namespace === currentSegment.processNamespace,
-          a.namespace === currentSegment.processNamespace
-        );
-      }))
-      .flatMap((unit) => {
-        return unit.createFeatures?.({
-          protocol,
-          segment: currentSegment,
-          segmentIndex: currentSegmentIndex
-        }) ?? [];
-      });
-
 
     return (
       <div className="blayout-contents">
         <div className="pstatus-root">
-          <div className="pstatus-subtitle">Current step ({currentSegmentIndex - currentStep.seq[0] + 1}/{currentStep.seq[1] - currentStep.seq[0]})</div>
+          {/* <div className="pstatus-subtitle">Current step ({currentSegmentIndex - currentStep.seq[0] + 1}/{currentStep.seq[1] - currentStep.seq[0]})</div> */}
           <div className="pstatus-header">
-            <h2 className="pstatus-title">{currentStep.name}</h2>
+            <h2 className="pstatus-title">Untitled step</h2>
             <div className="pstatus-time">
-              {firstSegmentAnalysis.timeRange && formatAbsoluteTime(firstSegmentAnalysis.timeRange[0])} &ndash; {formatAbsoluteTime(lastSegmentAnalysis.timeRange![1])}
+              {/* {firstSegmentAnalysis.timeRange && formatAbsoluteTime(firstSegmentAnalysis.timeRange[0])} &ndash; {formatAbsoluteTime(lastSegmentAnalysis.timeRange![1])} */}
+              23:15
             </div>
           </div>
-
+{/*
           <div className="pstatus-features">
             {features.map((feature, featureIndex) => (
               <React.Fragment key={featureIndex}>
@@ -87,9 +58,9 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
                 <div className="pstatus-feature-label" title={feature.label}>{feature.label}</div>
               </React.Fragment>
             ))}
-          </div>
+          </div> */}
 
-          <ProgressBar
+          {/* <ProgressBar
             paused={lastEntry.paused}
             value={currentProgress}
             setValue={(progress) => {
@@ -101,10 +72,10 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
                 });
               });
             }}
-            targetEndTime={currentSegmentEndTime} />
+            targetEndTime={currentSegmentEndTime} /> */}
 
           <div className="pstatus-actions">
-            {lastEntry.paused
+            {/* {lastEntry.paused
               ? (
                 <button type="button" className="pstatus-button" onClick={() => {
                   this.pool.add(() => this.props.host.backend.resume(this.chip.id));
@@ -118,10 +89,10 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
                     this.pool.add(() => this.props.host.backend.pause(this.chip.id, { neutral: true }));
                   }}>Pause (neutral)</button>
                 </>
-              )}
-            <button type="button" className="pstatus-button" onClick={() => {
+              )} */}
+            {/* <button type="button" className="pstatus-button" onClick={() => {
               this.pool.add(() => this.props.host.backend.skipSegment(this.chip.id, currentSegmentIndex + 1));
-            }}>Skip</button>
+            }}>Skip</button> */}
           </div>
         </div>
 
@@ -129,17 +100,11 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, {}> {
           <h2>Sequence</h2>
         </header>
 
-        <ProtocolOverview
-          analysis={analysis}
+        <GraphEditor
           host={this.props.host}
-          master={master}
-          protocol={master.protocol}
-          setLocation={(location) => {
-            this.pool.add(async () => {
-              await this.props.host.backend.setLocation(this.chip.id, location);
-            });
-          }} />
+          state={master.state}
+          tree={protocol.root} />
       </div>
-    )
+    );
   }
 }

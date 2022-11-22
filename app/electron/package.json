@@ -22,11 +22,11 @@
     "which": "^2.0.2"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^6.0.0-beta.64",
-    "@electron-forge/maker-squirrel": "^6.0.0-beta.65",
-    "@electron-forge/maker-zip": "^6.0.0-beta.64",
-    "electron": "^20.0.0",
+    "@electron-forge/cli": "^6.0.0",
+    "@electron-forge/maker-squirrel": "^6.0.0",
+    "@electron-forge/maker-zip": "^6.0.0",
+    "electron": "^21.0.0",
     "electron-packager-languages": "^0.5.0",
-    "esbuild": "^0.14.48"
+    "esbuild": "^0.15.0"
   }
 }

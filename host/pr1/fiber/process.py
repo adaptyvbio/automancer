@@ -1,7 +1,9 @@
 import datetime
+from enum import IntEnum
 from typing import AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
+from .parser import BlockState
 from ..util.decorators import debug
 
 if TYPE_CHECKING:
@@ -26,6 +28,13 @@ class ProgramExecDuration:
     }
 
 
+# class ProgramExecMode(IntEnum):
+#   Normal = 0
+#   Paused = 1
+#   Halted = 2
+#   # Done = 5
+
+
 class ProgramState(Protocol):
   def export(self) -> dict:
     ...
@@ -41,7 +50,8 @@ class ProgramExecEvent(Generic[T]):
     pausable: Optional[bool] = None,
     state: Optional[T] = None,
     stopped: bool = False,
-    time: Optional[DateLike] = None
+    time: Optional[DateLike] = None,
+    **kwargs
   ):
     self.duration = duration
     self.error = error
@@ -58,5 +68,5 @@ class Process(Protocol[T]):
   def pause(self):
     ...
 
-  def run(self, initial_state: Optional[T]) -> AsyncIterator[ProgramExecEvent[T]]:
+  def run(self, block_state: BlockState, initial_state: Optional[T]) -> AsyncIterator[ProgramExecEvent[T]]:
     ...

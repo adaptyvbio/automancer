@@ -26,14 +26,20 @@ class BlockUnitState:
   def __or__(self, other):
     return other
 
+  def __and__(self, other):
+    ...
+
+  def __rand__(self, other):
+    ...
+
   def export(self) -> object:
     ...
 
 class BlockState(dict[str, Optional[BlockUnitState]]):
-  def __or__(self, other):
+  def __or__(self, other: Optional['BlockState']):
     return other.__ror__(self)
 
-  def __ror__(self, other):
+  def __ror__(self, other: Optional['BlockState']):
     if other is None:
       return self
     else:
@@ -50,6 +56,19 @@ class BlockState(dict[str, Optional[BlockUnitState]]):
           result[key] = other_value | value
 
       return BlockState(result)
+
+  def __and__(self, other: 'BlockState'):
+    result = dict()
+
+    for key, value in self.items():
+      other_value = other[key]
+
+      if (value is not None) or (other_value is not None):
+        result[key] = value & other_value # type: ignore
+      else:
+        result[key] = None
+
+    return BlockState(result)
 
   def export(self):
     return { namespace: state and state.export() for namespace, state in self.items() if state }
@@ -86,7 +105,7 @@ class BlockProgram(Protocol):
   def pause(self):
     ...
 
-  def run(self, child: Any, /) -> AsyncIterator[Any]:
+  def run(self, child: Any, /, symbol) -> AsyncIterator[Any]:
     ...
 
 class BaseBlock(Protocol):

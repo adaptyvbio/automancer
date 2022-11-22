@@ -2,8 +2,29 @@ import asyncio
 import traceback
 from typing import Any, Callable, Optional
 
-from .parser import BlockProgram, FiberProtocol
+from .parser import BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
+
+
+class BlockMesh(dict[str, object]):
+  pass
+
+class ClaimSymbol:
+  def __init__(self, parent: Optional['ClaimSymbol'] = None):
+    self.parent = parent
+
+  # other > self => other is a descendant of self
+  def __gt__(self, other: 'ClaimSymbol') -> bool:
+    other_symbol = other.parent
+
+    while other_symbol:
+      if other_symbol == self:
+        return True
+
+      other_symbol = other_symbol.parent
+
+    return False
+
 
 class SegExec:
   def __init__(self, *, block, master, parent):
@@ -110,9 +131,11 @@ class Master:
     self._resume_future = None
 
   async def run(self, initial_state = None):
+    symbol = ClaimSymbol()
+
     self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
 
-    async for event in self._program.run(initial_state):
+    async for event in self._program.run(initial_state, symbol):
       yield event
 
       if self._pause_future:
@@ -149,6 +172,21 @@ class Master:
 
   # def stop(self):
   #   self._task.cancel()
+
+  # def enter_state(self, state: BlockState, parent_mesh: BlockMesh, symbol: ClaimSymbol) -> BlockMesh:
+  #   mesh = dict()
+
+  #   for namespace, runner in self.chip.runners.items():
+  #     mesh[namespace] = runner.enter_state(state[namespace], parent_mesh=parent_mesh, symbol=symbol)
+
+  #   return BlockMesh(mesh)
+
+  # def exit_state(self, mesh: BlockMesh):
+  #   for namespace, runner in self.chip.runners.items():
+  #     runner.exit_state(mesh[namespace])
+
+  async def hold(self, state: BlockState, symbol: ClaimSymbol):
+    await asyncio.gather(*[runner.hold(state[namespace], symbol) for namespace, runner in self.chip.runners.items() if state.get(namespace)])
 
   def export(self):
     return {

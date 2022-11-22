@@ -8,6 +8,7 @@ from typing import Any, Optional, Protocol, Sequence
 from ..host import logger
 from .process import Process, ProgramExecEvent
 from .langservice import Analysis
+from .master2 import BlockMesh, ClaimSymbol
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
@@ -73,10 +74,13 @@ class SegmentProgram(BlockProgram):
   def pause(self):
     self._process.pause()
 
-  async def run(self, initial_state: Optional[SegmentProgramState]):
+  async def run(self, initial_state: Optional[SegmentProgramState], symbol: ClaimSymbol):
+    loop = asyncio.get_running_loop()
+    hold = loop.create_task(self._master.hold(self._block.state, symbol))
+
     last_info: Optional[ProgramExecEvent] = None
-    runner = self._master.chip.runners[self._block._segment.process_namespace]
-    self._process = runner.Process(self._block._segment.process_data)
+    runner = self._master.chip.runners[self._block._process.namespace]
+    self._process = runner.Process(self._block._process.data)
 
     try:
       async for info in self._process.run(initial_state.process if initial_state else None):
@@ -100,6 +104,8 @@ class SegmentProgram(BlockProgram):
       logger.error(e)
 
       yield ProgramExecEvent(error=e)
+
+    hold.cancel()
 
 
 @dataclass

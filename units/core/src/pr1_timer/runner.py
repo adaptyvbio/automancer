@@ -21,11 +21,16 @@ class ProcessState:
 class Process:
   def __init__(self, data: Any):
     self._data = data
+    self._pausing = False
 
     self._task: Any
-    self._task_time: Any
+
+  def halt(self):
+    if not self._pausing:
+      self._task.cancel()
 
   def pause(self):
+    self._pausing = True
     self._task.cancel()
 
   async def run(self, initial_state: Optional[ProcessState]):
@@ -33,12 +38,12 @@ class Process:
     remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0
 
     while True:
-      self._task_time = time.time()
+      task_time = time.time()
 
       yield ProgramExecEvent(
         duration=remaining_duration,
         state=ProcessState(progress),
-        time=self._task_time
+        time=task_time
       )
 
       self._task = asyncio.create_task(asyncio.sleep(remaining_duration))
@@ -46,10 +51,11 @@ class Process:
       try:
         await self._task
       except asyncio.CancelledError:
+        self._pausing = False
         self._task = None
 
         current_time = time.time()
-        elapsed_time = current_time - self._task_time
+        elapsed_time = current_time - task_time
 
         progress += elapsed_time / remaining_duration
         remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0

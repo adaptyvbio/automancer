@@ -1,10 +1,12 @@
+import asyncio
 from dataclasses import dataclass
 from enum import IntEnum
 from types import EllipsisType
 from typing import Any, Optional
 
-from ..eval import EvalEnvs, EvalStack
 from .. import langservice as lang
+from ..eval import EvalEnvs, EvalStack
+from ..master2 import BlockMesh, ClaimSymbol
 from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from ..process import ProgramExecEvent
 from ...reader import LocationArea
@@ -116,8 +118,13 @@ class SequenceProgram(BlockProgram):
   def set_interrupt(self, value: bool, /):
     self._interrupting = value
 
-  async def run(self, initial_state: Optional[SequenceProgramState]):
+  async def run(self, initial_state: Optional[SequenceProgramState], symbol: ClaimSymbol):
     start_state = initial_state or SequenceProgramState(mode=SequenceProgramMode.Normal)
+
+    loop = asyncio.get_running_loop()
+    hold = loop.create_task(self._master.hold(self._block.state, symbol))
+
+    # Enter state
 
     for child_index, child_block in enumerate(self._block._children):
       if child_index < start_state.index:
@@ -136,7 +143,10 @@ class SequenceProgram(BlockProgram):
 
       self._child_program = child_block.Program(child_block, self._master, self)
 
-      async for info in self._child_program.run(start_state.child if child_index == start_state.index else None):
+      async for info in self._child_program.run(start_state.child if child_index == start_state.index else None, ClaimSymbol(symbol)):
+        if info.stopped:
+          pass # Re-enter state
+
         yield ProgramExecEvent(
           state=SequenceProgramState(
             child=info.state,
@@ -147,6 +157,8 @@ class SequenceProgram(BlockProgram):
           time=info.time
         )
 
+    hold.cancel()
+
 
 @debug
 class SequenceBlock(BaseBlock):
@@ -154,7 +166,7 @@ class SequenceBlock(BaseBlock):
 
   def __init__(self, children: list[BaseBlock], state: BlockState):
     self._children = children
-    self.state = state
+    self.state: BlockState = state
 
   def __getitem__(self, key):
     return self._children[key]

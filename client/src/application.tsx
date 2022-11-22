@@ -14,6 +14,7 @@ import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
 import { ViewSplit } from './views/test/split';
+import { ViewSplit2 } from './views/test/split2';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 
@@ -431,6 +432,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
           case 'test.split': return (
             <ViewSplit />
+          );
+
+          case 'test.split2': return (
+            <ViewSplit2 />
           );
         }
       } else if (route.length === 3) {

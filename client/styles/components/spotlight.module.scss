@@ -112,7 +112,7 @@
   &Group {
     display: flex;
     flex-direction: column;
-    row-gap: 0.2rem;
+    row-gap: 0.4rem;
 
     padding: 0.6rem 1rem;
 
@@ -122,9 +122,12 @@
   }
 
   &Entry {
-    display: flex;
+    display: grid;
     align-items: center;
     column-gap: 0.8rem;
+    grid-template-columns: auto 1fr;
+
+    height: 30px;
   }
 
   &Icon {
@@ -142,12 +145,29 @@
       'opsz' 20;
   }
 
+  &Entry:has(&Description) &Icon {
+    grid-row: 1 / span 2;
+  }
+
   &Group:nth-child(1) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
   &Group:nth-child(2) &Entry:nth-child(1) &Icon { background-color: $app-purple; }
   &Group:nth-child(2) &Entry:nth-child(2) &Icon { background-color: $app-red; }
   &Group:nth-child(3) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
 
+  &Description {
+    align-self: start;
+
+    color: #999;
+    font-size: 0.85rem;
+    line-height: 1.15;
+  }
+
   &Label {
     font-weight: 500;
+    line-height: 1.15;
+  }
+
+  &Entry:has(&Description) &Label {
+    align-self: end;
   }
 }

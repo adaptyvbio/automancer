@@ -10,6 +10,14 @@ export interface TitleBarProps {
   subtitle?: string | null;
   subtitleVisible?: unknown;
   title: string;
+
+  tools?: {
+    id: string;
+    active?: unknown;
+    icon: string;
+    label?: string;
+    onClick?(): void;
+  }[];
 }
 
 export interface TitleBarState {
@@ -63,17 +71,20 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
           <div className={styles.titleSub}>{this.lastSubtitle}</div>
         </div>
         <div className={styles.right}>
-          <div className={styles.toolsRoot}>
-            <button type="button" className={styles.toolsItem}>
-              <Icon name="help" style="sharp" />
-            </button>
-            <button type="button" className={styles.toolsItem}>
-              <Icon name="assistant_navigation" style="sharp" />
-            </button>
-            <button type="button" className={styles.toolsItem}>
-              <Icon name="sync" style="sharp" />
-            </button>
-          </div>
+          {((this.props.tools?.length ?? 0) > 0) && (
+            <div className={styles.toolsRoot}>
+              {this.props.tools!.map((tool) => (
+                <button
+                  type="button"
+                  className={util.formatClass(styles.toolsItem, { '_active': tool.active })}
+                  title={tool.label}
+                  onClick={tool.onClick}
+                  key={tool.id}>
+                  <Icon name={tool.icon} style="sharp" className={styles.toolsIcon} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

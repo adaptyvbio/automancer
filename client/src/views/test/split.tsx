@@ -194,11 +194,13 @@ console.log(animals);
                             <div className={spotlightStyles.featureGroup}>
                               <div className={spotlightStyles.featureEntry}>
                                 <Icon name="thermostat" className={spotlightStyles.featureIcon} />
-                                <div className={spotlightStyles.featureLabel}>37ºC</div>
+                                <div className={spotlightStyles.featureDescription}>Temp. controller › Temperature</div>
+                                <div className={spotlightStyles.featureLabel}>37°C</div>
                               </div>
                               <div className={spotlightStyles.featureEntry}>
                                 <Icon name="download" className={spotlightStyles.featureIcon} />
-                                <div className={spotlightStyles.featureLabel}>Button</div>
+                                <div className={spotlightStyles.featureDescription}>Onghjyl</div>
+                                <div className={spotlightStyles.featureLabel}>Onghjyl</div>
                               </div>
                             </div>
                             <div className={spotlightStyles.featureGroup}>

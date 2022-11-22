@@ -67,27 +67,27 @@
     padding: 2px;
     border-radius: 4px;
 
-    :global(.icon) {
-      display: flex;
-      color: #666;
-
-      font-variation-settings:
-        'FILL' 0,
-        'wght' 400,
-        'GRAD' 0,
-        'opsz' 24;
-    }
-
     &:hover {
       background-color: #ddd;
     }
 
-    // &:first-child {
-    //   border-radius: 4px 0 0 4px;
-    // }
+    &:global(._active) {
+      background-color: #ddd;
+    }
+  }
 
-    // &:last-child {
-    //   border-radius: 0 4px 4px 0;
-    // }
+  &Icon {
+    display: flex;
+    color: #666;
+
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 300,
+      'GRAD' 0,
+      'opsz' 24;
+  }
+
+  &Item:global(._active) &Icon {
+    color: $app-blue;
   }
 }

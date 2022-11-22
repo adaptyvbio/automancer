@@ -127,6 +127,10 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               label: 'Settings',
               icon: 'settings',
               route: ['test.split'] },
+            { id: 'settings2',
+              label: 'Settings',
+              icon: 'settings',
+              route: ['test.split2'] },
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',

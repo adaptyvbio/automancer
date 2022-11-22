@@ -226,7 +226,6 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: ContextM
                             props.onClose(true);
                             setMenu(null);
                           })}>
-
                           {entry.icon && <div className="cmenu-icon"><Icon name={entry.icon} style="sharp" /></div>}
                           <div className="cmenu-name">{entry.name}</div>
                           {entry.shortcut && <div className="cmenu-shortcut">{entry.shortcut}</div>}

@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client';
 
 import { BrowserApp } from './browser-app';
 
-import '../lib/styles/index.css';
+import '../styles/main.scss';
 import 'material-symbols';
 
 export { Application } from './application';

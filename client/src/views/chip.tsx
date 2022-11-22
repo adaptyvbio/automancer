@@ -7,8 +7,11 @@ import { BarNav } from '../components/bar-nav';
 import { ChipProtocol } from '../components/chip-protocol';
 import { ChipSettings } from '../components/chip-settings';
 import { ErrorBoundary } from '../components/error-boundary';
+import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import * as util from '../util';
+
+import viewStyles from '../../styles/components/view.module.scss';
 
 
 export interface ViewChipProps {
@@ -96,23 +99,26 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     })();
 
     return (
-      <main className="blayout-container">
-        <div className="blayout-header">
-          <h1>{metadata.title}</h1>
-          <BarNav
-            entries={[
-              { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
-              { id: 'settings', label: 'Settings', icon: 'settings' },
-              { id: 'history', label: 'History', icon: 'history', disabled: true },
-              ...unitEntries
-            ]}
-            selectEntry={(tab) => {
-              this.props.setRoute(['chip', this.props.chipId, tab]);
-            }}
-            selectedEntryId={this.props.tab} />
-        </div>
+      <main className={viewStyles.root}>
+        <TitleBar title="Modules" />
+        <div className={util.formatClass(viewStyles.contents, viewStyles.legacy, 'blayout-container')}>
+          <div className="blayout-header">
+            <h1>{metadata.title}</h1>
+            <BarNav
+              entries={[
+                { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
+                { id: 'settings', label: 'Settings', icon: 'settings' },
+                { id: 'history', label: 'History', icon: 'history', disabled: true },
+                ...unitEntries
+              ]}
+              selectEntry={(tab) => {
+                this.props.setRoute(['chip', this.props.chipId, tab]);
+              }}
+              selectedEntryId={this.props.tab} />
+          </div>
 
-        {component}
+          {component}
+        </div>
       </main>
     );
   }

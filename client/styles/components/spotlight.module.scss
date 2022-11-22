@@ -1,0 +1,173 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  max-width: 500px;
+}
+
+.breadcrumb {
+  &Root {
+    display: flex;
+    align-items: center;
+
+    margin-left: -0.6rem;
+    overflow-x: auto;
+  }
+
+  &Entry {
+    width: auto;
+    flex-shrink: 0;
+
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+
+    color: #666;
+
+    &:global(._active) {
+      font-weight: 600;
+    }
+
+    &:global(._context) {
+      background-color: lighten($highlight-blue, 50%);
+    }
+
+    // &:not(:last-child) {
+    //   margin-right: 0.4rem;
+
+    //   &::after {
+    //     content: "›";
+
+    //     margin-left: 0.4rem;
+    //     pointer-events: none;
+    //   }
+    // }
+  }
+
+  // &Root:has(&Entry:hover) &Entry {
+  &Entry:is(:hover, :global(._active)) ~ :is(&Entry, &Icon) {
+    color: #bbb;
+  }
+
+  &Icon {
+    color: #666;
+    font-size: 14px;
+  }
+}
+
+
+.header {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 1fr auto;
+
+  margin-bottom: 1rem;
+}
+
+.title {
+  @include text-ellipsis();
+
+  font-size: 1.6rem;
+}
+
+.navigation {
+  &Root {
+    display: flex;
+  }
+
+  &Button {
+    display: flex;
+    position: relative;
+
+    &:disabled {
+      color: #999;
+    }
+
+    &::after {
+      content: "";
+
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+
+      background-color: #eee;
+      border-radius: 50%;
+    }
+
+    &:nth-child(1)::after { translate: 1px 0; }
+    &:nth-child(2)::after { translate: -1px 0; }
+
+    &:not(:hover)::after {
+      opacity: 0;
+    }
+  }
+}
+
+
+.feature {
+  &List {
+    margin: 1rem 0;
+  }
+
+  &Group {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.4rem;
+
+    padding: 0.6rem 1rem;
+
+    &:not(:last-child) {
+      border-bottom: 1px solid #ddd;
+    }
+  }
+
+  &Entry {
+    display: grid;
+    align-items: center;
+    column-gap: 0.8rem;
+    grid-template-columns: auto 1fr;
+
+    height: 30px;
+  }
+
+  &Icon {
+    padding: 4px;
+
+    background-color: $icon-grey;
+    border-radius: 4px;
+
+    color: #fff;
+    font-size: 20px;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 20;
+  }
+
+  &Entry:has(&Description) &Icon {
+    grid-row: 1 / span 2;
+  }
+
+  &Group:nth-child(1) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
+  &Group:nth-child(2) &Entry:nth-child(1) &Icon { background-color: $app-purple; }
+  &Group:nth-child(2) &Entry:nth-child(2) &Icon { background-color: $app-red; }
+  &Group:nth-child(3) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
+
+  &Description {
+    align-self: start;
+
+    color: #999;
+    font-size: 0.85rem;
+    line-height: 1.15;
+  }
+
+  &Label {
+    font-weight: 500;
+    line-height: 1.15;
+  }
+
+  &Entry:has(&Description) &Label {
+    align-self: end;
+  }
+}

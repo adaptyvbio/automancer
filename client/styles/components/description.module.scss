@@ -1,0 +1,65 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  h2, h3 {
+    @include text-ellipsis();
+
+    font-weight: 600;
+  }
+
+  h2 {
+    font-size: 1.6rem;
+  }
+
+  h3 {
+    margin: 1.6rem 0 0.8rem 0;
+    font-size: 1.2rem;
+  }
+
+  a {
+    display: inline;
+    color: #06c;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  > p {
+    margin: 0.8rem 0;
+  }
+
+  code {
+    padding: 0.2em 0.4em;
+
+    background-color: #0074d933;
+    border-radius: 6px;
+
+    color: #0059a6;
+    font-family: $monospace-font;
+    font-size: 0.9em;
+  }
+}
+
+
+.header {
+  display: grid;
+  align-items: center;
+  column-gap: 4rem;
+
+  &:has(:nth-child(2)) {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+
+:is(.header:has(h2), .root > h2) {
+  margin-bottom: 1.2rem;
+
+  &:not(:first-child) {
+    margin-top: 2.4rem;
+  }
+}

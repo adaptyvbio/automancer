@@ -1,0 +1,275 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+$main-color: #404452;
+$background-color: #fff;
+$placeholder-color: #aaa;
+$border-color: rgba($main-color, 16%);
+$keyline-shadow: $border-color 0 0 0 1px;
+$keyline-bottom-shadow: #0000001f 0 1px 1px;
+$box-shadow: rgba($main-color, 8%) 0 2px 5px;
+$focus-shadow: #{$highlight-blue} 0 0 0 1px, #{$highlight-shadow};
+$hor-padding: 0.6rem;
+$height: 2rem;
+$field-hgap: 0.8rem;
+
+
+.main {
+  width: 800px;
+
+  margin: 0 auto;
+  padding: 30px;
+}
+
+.main2 {
+  height: 100%;
+  padding: 1rem 1.4rem;
+  overflow-y: auto;
+}
+
+
+.field {
+  &Control {
+    margin: $field-hgap 0;
+  }
+
+  &Group {
+    display: grid;
+    gap: $field-hgap 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+    margin: $field-hgap 0;
+
+    > * {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+  }
+
+  &Label {
+    margin-left: 0.6rem;
+    margin-bottom: 0.2rem;
+
+    color: #666;
+    font-weight: 500;
+  }
+
+  &-action, &-durationfield, &Select select, &Textarea, &Textfield {
+    padding-left: $hor-padding;
+    padding-right: $hor-padding;
+
+    background-color: $background-color;
+    border-radius: 4px;
+
+    color: $main-color;
+
+    --focus-shadow: 0 0 transparent;
+    transition: box-shadow 150ms;
+
+    &:disabled {
+      opacity: 0.5;
+    }
+
+    &:focus-within {
+      --focus-shadow: #{$focus-shadow};
+    }
+  }
+
+  &-durationfield, &Select select, &Textfield {
+    height: $height;
+    padding: 0 $hor-padding;
+  }
+
+
+  &-checkboxlist {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.2rem;
+  }
+
+  &-checkbox {
+    display: grid;
+    align-items: center;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.4rem;
+
+    input {
+      width: auto;
+      appearance: auto;
+
+      &:focus-visible {
+        outline: 2px solid $highlight-blue;
+        outline-offset: 1px;
+      }
+    }
+
+    div {
+      color: $main-color;
+      font-weight: 500;
+    }
+  }
+
+  &-durationfield {
+    display: flex;
+    align-items: center;
+    column-gap: 0.6rem;
+
+    width: max-content;
+    box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
+
+    label {
+      display: flex;
+      align-items: baseline;
+      column-gap: 0.2rem;
+    }
+
+    input {
+      width: 2ch;
+
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+
+      &::placeholder {
+        color: $placeholder-color;
+      }
+
+      &:placeholder-shown + * {
+        color: $placeholder-color;
+      }
+    }
+  }
+
+  &Select {
+    @include superimposed-children();
+    align-items: center;
+
+    select {
+      padding-right: calc(#{$hor-padding} + 0.8 * #{$icon-size} + 0.6rem);
+      box-shadow: var(--focus-shadow), $keyline-bottom-shadow, $keyline-shadow, $box-shadow;
+    }
+
+    :global(.icon) {
+      margin-right: 0.4rem;
+      justify-self: end;
+      transform: scale(0.8);
+    }
+  }
+
+  &Textarea, &Textfield {
+    box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
+
+    &::placeholder {
+      color: $placeholder-color;
+    }
+  }
+
+  &Textarea {
+    min-height: 50px;
+    padding: calc((#{$height} - 1.2em) * 0.5) $hor-padding;
+    resize: vertical;
+  }
+
+  &-actions {
+    display: flex;
+    justify-content: end;
+    column-gap: 0.6rem;
+
+    margin-top: 1rem;
+  }
+
+  &-actions &-action {
+    width: auto;
+  }
+
+  &-action {
+    padding: calc((#{$height} - 1.2em) * 0.5) ($hor-padding * 1.2);
+    box-shadow: var(--focus-shadow), $keyline-shadow, $box-shadow;
+
+    text-align: center;
+  }
+}
+
+
+.check {
+  &Group {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1rem;
+
+    margin: 1rem 0;
+    padding: 1.2rem 1.4rem;
+
+    border: 1px solid $border-color;
+    border-radius: 4px;
+  }
+
+  &Root {
+    display: grid;
+    column-gap: 0.8rem;
+    grid-template: auto auto / auto 1fr;
+
+    &:has(:focus-visible) {
+      box-shadow: $highlight-shadow;
+    }
+
+    input {
+      accent-color: $app-blue;
+      appearance: auto;
+
+      align-self: start;
+      margin-top: 4px;
+    }
+  }
+
+  :not(&Group) > &Root {
+    margin: 1rem 0;
+  }
+
+  &Title {
+    font-size: 1.1rem;
+    font-weight: 500;
+  }
+
+  &Description {
+    grid-column: 2;
+
+    color: #666;
+  }
+}
+
+
+.actions {
+  display: flex;
+  column-gap: 0.4rem;
+}
+
+
+.btn {
+  height: $height;
+  padding: 0 $hor-padding * 1.4;
+
+  background-color: #f6f8fa;
+  border: 1px solid $border-color;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 #0000000f;
+
+  font-size: 0.9rem;
+  font-weight: 500;
+
+  width: auto;
+
+  &:hover {
+    background-color: darken(#f6f8fa, 1%);
+  }
+
+  &:active {
+    background-color: darken(#f6f8fa, 2.4%);
+    box-shadow: none;
+  }
+
+  &:focus-visible {
+    border-color: $highlight-blue;
+    box-shadow: $highlight-shadow;
+  }
+}

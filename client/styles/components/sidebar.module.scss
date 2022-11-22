@@ -1,0 +1,164 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  padding: 1rem 0;
+
+  grid-column: 1;
+  grid-row: 1 / -1;
+
+  background-color: #fcfcfc;
+  border-right: 1px solid #ddd;
+
+  &:global(._context) {
+    background-color: #eee;
+  }
+
+
+  &Collapsed {
+    display: grid;
+    grid-template-rows: 1fr auto 1fr;
+    justify-items: center;
+
+    width: 60px;
+
+    .headerRoot {
+      display: none;
+    }
+
+    .navRoot {
+      &:nth-last-child(2) {
+        grid-row: 2;
+      }
+
+      &:last-child {
+        align-self: end;
+        grid-row: 3;
+      }
+    }
+
+    .navEntryLabel {
+      display: none;
+    }
+  }
+
+  &:not(&Collapsed) {
+    display: flex;
+    flex-direction: column;
+    row-gap: 2rem;
+
+    .navRoot:last-child {
+      margin-top: auto;
+    }
+
+    .navGroup {
+      margin: 0 1rem;
+    }
+  }
+}
+
+
+
+.header {
+  &Root {
+    @include superimposed-children();
+
+    margin-top: $titlebar-height;
+
+    &:hover {
+      background-color: #f0f0f0;
+    }
+  }
+
+  &Value {
+    &Root {
+      display: grid;
+      align-items: center;
+      gap: 0 1rem;
+      grid-template: auto auto / 40px 1fr auto;
+
+      padding: 0.6rem 1rem;
+    }
+
+    &Icon {
+      grid-row: 1 / -1;
+      padding: 4px;
+    }
+
+    &Title {
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    &Subtitle {
+      color: #666;
+    }
+
+    &Expand {
+      display: flex;
+
+      grid-column: 3;
+      grid-row: 1 / -1;
+    }
+  }
+
+  &Root:not(:hover) &ValueExpand {
+    color: #666;
+  }
+
+  &Select {
+    opacity: 0;
+  }
+}
+
+
+.nav {
+  &Root {
+    display: flex;
+    flex-direction: column;
+    row-gap: 2.4rem;
+  }
+
+  &Group {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.8rem;
+  }
+
+  &Entry {
+    &Root {
+      display: flex;
+      align-items: center;
+      column-gap: 1rem;
+    }
+
+    &Root:hover &Icon {
+      background-color: #ddd;
+    }
+
+    &Root:global(._selected) &Icon {
+      background-color: #0074d9;
+      color: #fff;
+    }
+
+    &Label {
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    &Icon {
+      display: flex;
+      padding: 4px;
+
+      background-color: #eee;
+      border-radius: 4px;
+
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 200,
+        'GRAD' 200,
+        'opsz' 24;
+    }
+  }
+}

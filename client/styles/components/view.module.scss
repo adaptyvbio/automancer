@@ -1,0 +1,17 @@
+@use "../constants" as *;
+
+
+.root {
+  display: contents;
+}
+
+.contents {
+  grid-column: 2;
+  grid-row: 2;
+
+  overflow-y: auto;
+}
+
+.legacy {
+  padding: 1.4rem 3rem;
+}

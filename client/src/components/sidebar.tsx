@@ -7,6 +7,12 @@ import { ChipCondition, Chip, HostId } from '../backends/common';
 import type { Draft, DraftId } from '../draft';
 import * as util from '../util';
 
+import styles from '../../styles/components/sidebar.module.scss';
+import { ContextMenuArea } from './context-menu-area';
+
+
+const CollapsedStorageKey = 'sidebarCollapsed';
+
 
 export interface SidebarProps {
   currentRoute: Route | null;
@@ -22,7 +28,27 @@ export interface SidebarProps {
   openDraftIds: ImSet<DraftId>;
 }
 
-export class Sidebar extends React.Component<SidebarProps> {
+export interface SidebarState {
+  collapsed: boolean;
+}
+
+export class Sidebar extends React.Component<SidebarProps, SidebarState> {
+  constructor(props: SidebarProps) {
+    super(props);
+
+    let collapsed;
+
+    try {
+      collapsed = JSON.parse(window.sessionStorage[CollapsedStorageKey]);
+    } catch (_err) {
+      collapsed = false;
+    }
+
+    this.state = {
+      collapsed
+    };
+  }
+
   render() {
     let hostSettings = this.props.hostSettingsRecord[this.props.selectedHostSettingsId!];
     let hostSettingsRecord = Object.values(this.props.hostSettingsRecord);
@@ -88,10 +114,22 @@ export class Sidebar extends React.Component<SidebarProps> {
           : []),
         { id: 'last',
           entries: [
-            { id: 'settings',
+            { id: 'units',
               label: 'Modules',
               icon: 'extension',
               route: ['settings'] },
+            { id: 'design',
+              label: 'Design',
+              icon: 'design_services',
+              route: ['design'] },
+            { id: 'settings',
+              label: 'Settings',
+              icon: 'settings',
+              route: ['test.split'] },
+            { id: 'settings2',
+              label: 'Settings',
+              icon: 'settings',
+              route: ['test.split2'] },
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',
@@ -101,19 +139,20 @@ export class Sidebar extends React.Component<SidebarProps> {
                   onClick: () => void this.props.setStartup?.()
                 }]
                 : [])
-          ] },
+          ] }
       ]
       : [];
 
     return (
-      <aside className="sidebar-root">
-        <div className="sidebar-header">
-          <div className="sidebar-host-logo">
-            <span className="material-symbols-rounded">developer_board</span>
-          </div>
-          <div className="sidebar-host-select">
+      <ContextMenuArea
+        createMenu={(_event) => [
+          { id: 'devices', name: 'Devices', selected: true }
+        ]}
+        onSelect={() => {}}>
+        <aside className={util.formatClass(styles.root, { [styles.rootCollapsed]: this.state.collapsed })}>
+          <div className={styles.headerRoot}>
             {(hostSettingsRecord.length > 0) && (
-              <select className="sidebar-host-input" value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
+              <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
                 this.props.onSelectHost(event.currentTarget.value || null);
               }}>
                 {!this.props.host && <option value="">–</option>}
@@ -122,67 +161,60 @@ export class Sidebar extends React.Component<SidebarProps> {
                 ))}
               </select>
             )}
-            <div className="sidebar-host-selected">
-              <div className="sidebar-host-subtitle">Host</div>
-              <div className="sidebar-host-title">{this.props.host?.state.info.name ?? '–'}</div>
+            <div className={styles.headerValueRoot}>
+              <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
+              <div className={styles.headerValueTitle}>Setup Alpha 1</div>
+              {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
+              <div className={styles.headerValueSubtitle}>localhost:4567</div>
               {(hostSettingsRecord.length > 0) && (
-                <div className="sidebar-host-expand">
-                  <span className="material-symbols-rounded">unfold_more</span>
+                <div className={styles.headerValueExpand}>
+                  <span className="material-symbols-sharp">unfold_more</span>
                 </div>
               )}
             </div>
           </div>
-        </div>
-        <nav className="sidebar-nav">
-          {groups.map((group) => (
-            <div className="sidebar-group" key={group.id}>
-              {group.entries.map((entry) => {
-                let item = (
-                  <button
-                    type="button"
-                    className={util.formatClass('sidebar-item', {
-                      '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
-                      '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
-                    })}
-                    key={entry.id}
-                    onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
-                      this.props.setRoute(entry.route!);
-                    }))}>
-                    <div className="sidebar-item-icon">
-                      <span className="material-symbols-rounded">{entry.icon}</span>
-                    </div>
-                    <div className="sidebar-item-label">{entry.label}</div>
-                  </button>
-                );
-
-                return ((entry.children?.length ?? 0) > 0)
-                  ? (
-                    <div className="sidebar-grouping" key={entry.id}>
-                      {item}
-                      <div className="sidebar-children">
-                        {entry.children?.map((child) => {
-                          let routeRef = child.routeRef ?? child.route;
-
-                          return (
-                            <button type="button"
-                              className={util.formatClass('sidebar-child', { '_selected': routeRef && currentRoute && isSuperset(currentRoute, routeRef) })}
-                              key={child.id}
-                              onClick={(child.route ?? undefined) && (() => {
-                                this.props.setRoute(child.route!);
-                              })}>
-                                {child.label}
-                            </button>
-                          );
-                        })}
+          <nav className={styles.navRoot}>
+            {groups.map((group) => (
+              <div className={styles.navGroup} key={group.id}>
+                {group.entries.map((entry) => {
+                  return (
+                    <button
+                      type="button"
+                      className={util.formatClass(styles.navEntryRoot, {
+                        '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
+                        '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
+                      })}
+                      key={entry.id}
+                      onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
+                        this.props.setRoute(entry.route!);
+                      }))}>
+                      {/* <span className={util.formatClass(styles.entryIcon, 'material-symbols-rounded')}>{entry.icon}</span> */}
+                      <div className={styles.navEntryIcon}>
+                        <div className="material-symbols-sharp">{entry.icon}</div>
                       </div>
-                    </div>
-                  )
-                  : item;
-              })}
+                      <div className={styles.navEntryLabel}>{entry.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <div className={styles.navRoot}>
+            <div className={styles.navGroup}>
+              <button type="button" className={util.formatClass(styles.navEntryRoot)} onClick={() => {
+                let collapsed = !this.state.collapsed;
+                window.sessionStorage[CollapsedStorageKey] = JSON.stringify(collapsed);
+                this.setState({ collapsed });
+              }}>
+                <div className={styles.navEntryIcon}>
+                  <div className="material-symbols-sharp">{this.state.collapsed ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left'}</div>
+                </div>
+                {/* <div className={styles.navEntryLabel}>Collapse</div> */}
+              </button>
             </div>
-          ))}
-        </nav>
-      </aside>
+          </div>
+        </aside>
+      </ContextMenuArea>
     );
   }
 }

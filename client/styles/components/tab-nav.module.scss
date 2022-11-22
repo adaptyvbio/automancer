@@ -1,0 +1,88 @@
+@use "../constants" as *;
+
+
+.root {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow-y: hidden;
+}
+
+.nav {
+  display: flex;
+  column-gap: 1.6rem;
+  justify-content: /* safe */ center;
+
+  padding: 0.4rem 1rem;
+  overflow-x: auto;
+
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #ddd;
+}
+
+.entry {
+  width: auto;
+  position: relative;
+
+  color: #666;
+  font-size: 0.95rem;
+
+  &:not(:global(._active)):hover {
+    color: #333;
+  }
+
+  &[disabled] {
+    color: #aaa;
+  }
+
+  &:focus-visible {
+    box-shadow: $highlight-shadow;
+  }
+
+  &:global(._active) {
+    font-weight: 600;
+  }
+
+  &:not(:last-child)::after {
+    content: "";
+
+    width: 1px;
+    height: 100%;
+
+    position: absolute;
+    right: -0.8rem;
+    top: 0;
+
+    background-color: #ddd;
+    translate: 50% 0;
+
+    pointer-events: none;
+  }
+}
+
+.contents {
+  overflow-y: hidden;
+}
+
+// .entry {
+//   &Root {
+//     display: flex;
+//     align-items: center;
+//     column-gap: 0.4rem;
+
+//     width: auto;
+//     padding: 0 1rem;
+
+//     &:not(:last-child) {
+//       border-right: 1px solid #ddd;
+//     }
+//   }
+
+//   &Icon {
+//     display: flex;
+//     display: none;
+//   }
+
+//   &Label {
+//     font-weight: 500;
+//   }
+// }

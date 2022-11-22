@@ -9,11 +9,16 @@ import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, 
 import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
+import { ViewDesign } from './views/test/design';
 import { ViewDraft, ViewDraftMode } from './views/draft';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
+import { ViewSplit } from './views/test/split';
+import { ViewSplit2 } from './views/test/split2';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
+
+import styles from '../styles/components/application.module.scss';
 
 
 export type Route = (number | string)[];
@@ -406,19 +411,31 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setRoute={setRoute} />
           );
 
+          case 'design': return (
+            <ViewDesign />
+          );
+
           case 'protocol': return (
             <ViewProtocols
               app={this}
               drafts={this.state.drafts}
               host={this.state.host}
               setRoute={setRoute} />
-          )
+          );
 
           case 'settings': return (
             <ViewSettings
               app={this}
               host={this.state.host}
               setRoute={setRoute} />
+          );
+
+          case 'test.split': return (
+            <ViewSplit />
+          );
+
+          case 'test.split2': return (
+            <ViewSplit2 />
           );
         }
       } else if (route.length === 3) {
@@ -473,7 +490,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     })();
 
     return (
-      <div className="app">
+      <div className={styles.root}>
         <Sidebar
           currentRoute={this.state.currentRoute}
           setRoute={setRoute}

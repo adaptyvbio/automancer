@@ -4,9 +4,12 @@ import seqOrd from 'seq-ord';
 import { Application, Route } from '../application';
 import { Icon } from '../components/icon';
 import * as Form from '../components/standard-form';
+import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
 import { UnitInfo, UnitNamespace } from '../units';
 import * as util from '../util';
+
+import viewStyles from '../../styles/components/view.module.scss';
 
 
 export interface ViewSettingsProps {
@@ -33,59 +36,62 @@ export class ViewSettings extends React.Component<ViewSettingsProps, ViewSetting
     let selectedUnitInfo = this.state.selectedUnitNamespace && unitsInfo[this.state.selectedUnitNamespace];
 
     return (
-      <main className="slayout">
-        <div className="header header--1">
-          <h1>Modules</h1>
-        </div>
-
-        <div className="usettings-root">
-          <div className="usettings-list">
-            {Object.values(unitsInfo)
-              .sort(seqOrd(function* (a, b, rules) {
-                if (a.metadata.title && b.metadata.title) {
-                  yield rules.text(a.metadata.title, b.metadata.title);
-                }
-              }))
-              .map((unitInfo) => (
-                <UnitInfoEntry
-                  unitInfo={unitInfo}
-                  onClick={() => {
-                    this.setState({ selectedUnitNamespace: unitInfo.namespace });
-                  }}
-                  selected={selectedUnitInfo === unitInfo}
-                  key={unitInfo.namespace} />
-              ))}
+      <main className={viewStyles.root}>
+        <TitleBar title="Modules" />
+        <div className={util.formatClass(viewStyles.contents, viewStyles.legacy, 'slayout')}>
+          <div className="header header--1">
+            <h1>Modules</h1>
           </div>
-          {selectedUnitInfo && (
-            <div className="usettings-panel upanel-root">
-              <div className="upanel-header">
-                <h2 className="upanel-title">{selectedUnitInfo.metadata.title ?? selectedUnitInfo.namespace}</h2>
-                <label className="upanel-checkbox">
-                  <input type="checkbox" checked={selectedUnitInfo.enabled} readOnly />
-                  <div>Enabled</div>
-                </label>
-              </div>
 
-              <div className="upanel-info">
-                {selectedUnitInfo.metadata.description && <p className="upanel-description">{selectedUnitInfo.metadata.description}</p>}
-                <dl className="upanel-data">
-                  <dt>Namespace</dt>
-                  <dd><code>{selectedUnitInfo.namespace}</code></dd>
-                  {/* <dt>Author</dt>
-                  <dd>{selectedUnitInfo.metadata.author ?? 'Unknown'}</dd>
-                  <dt>License</dt>
-                  <dd>{selectedUnitInfo.metadata.license ?? 'Unknown'}</dd> */}
-                  <dt>Version</dt>
-                  <dd>{selectedUnitInfo.metadata.version ?? 'Unknown'}</dd>
-                </dl>
-              </div>
-
-              {/* <div className="upanel-settings">
-                <h3>Settings</h3>
-                <div className="upanel-status">This module's settings can only be edited in the setup configuration file.</div>
-              </div> */}
+          <div className="usettings-root">
+            <div className="usettings-list">
+              {Object.values(unitsInfo)
+                .sort(seqOrd(function* (a, b, rules) {
+                  if (a.metadata.title && b.metadata.title) {
+                    yield rules.text(a.metadata.title, b.metadata.title);
+                  }
+                }))
+                .map((unitInfo) => (
+                  <UnitInfoEntry
+                    unitInfo={unitInfo}
+                    onClick={() => {
+                      this.setState({ selectedUnitNamespace: unitInfo.namespace });
+                    }}
+                    selected={selectedUnitInfo === unitInfo}
+                    key={unitInfo.namespace} />
+                ))}
             </div>
-          )}
+            {selectedUnitInfo && (
+              <div className="usettings-panel upanel-root">
+                <div className="upanel-header">
+                  <h2 className="upanel-title">{selectedUnitInfo.metadata.title ?? selectedUnitInfo.namespace}</h2>
+                  <label className="upanel-checkbox">
+                    <input type="checkbox" checked={selectedUnitInfo.enabled} readOnly />
+                    <div>Enabled</div>
+                  </label>
+                </div>
+
+                <div className="upanel-info">
+                  {selectedUnitInfo.metadata.description && <p className="upanel-description">{selectedUnitInfo.metadata.description}</p>}
+                  <dl className="upanel-data">
+                    <dt>Namespace</dt>
+                    <dd><code>{selectedUnitInfo.namespace}</code></dd>
+                    {/* <dt>Author</dt>
+                    <dd>{selectedUnitInfo.metadata.author ?? 'Unknown'}</dd>
+                    <dt>License</dt>
+                    <dd>{selectedUnitInfo.metadata.license ?? 'Unknown'}</dd> */}
+                    <dt>Version</dt>
+                    <dd>{selectedUnitInfo.metadata.version ?? 'Unknown'}</dd>
+                  </dl>
+                </div>
+
+                {/* <div className="upanel-settings">
+                  <h3>Settings</h3>
+                  <div className="upanel-status">This module's settings can only be edited in the setup configuration file.</div>
+                </div> */}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     );

@@ -10,6 +10,7 @@ import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
 import { getChipMetadata } from '../backends/misc';
+import * as util from '../util';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -42,8 +43,8 @@ export class ViewChips extends React.Component<ViewChipsProps> {
 
     return (
       <main className={viewStyles.root}>
-        <TitleBar title="Experiments" subtitle="Foo" />
-        <div className={viewStyles.contents}>
+        <TitleBar title="Experiments" />
+        <div className={util.formatClass(viewStyles.contents, viewStyles.legacy)}>
           <header className="header header--1">
             <h1>Experiments</h1>
           </header>

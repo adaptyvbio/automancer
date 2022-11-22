@@ -20,7 +20,7 @@ export abstract class RawMessageBackend extends BackendCommon {
     draftId: DraftId;
     source: string;
   }) {
-    console.log('[FS] Compile');
+    // console.log('[FS] Compile');
 
     return await this._request({
       type: 'compileDraft',
@@ -117,17 +117,15 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
-  async startPlan(options: {
+  async startDraft(options: {
     chipId: string;
-    data: Codes;
-    location: ProtocolLocation;
+    draftId: DraftId;
     source: string;
   }) {
     await this._request({
-      type: 'startPlan',
+      type: 'startDraft',
       chipId: options.chipId,
-      data: options.data,
-      location: options.location,
+      draftId: options.draftId,
       source: options.source
     });
   }

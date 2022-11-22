@@ -8,7 +8,7 @@ setup(
 
   install_requires=[
     "appdirs==1.4.4",
-    "pyserial==3.5",
+    "pint==0.20.1",
     "regex==2022.8.17"
   ]
 )

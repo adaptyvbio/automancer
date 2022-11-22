@@ -1,6 +1,9 @@
 from collections import namedtuple
 import functools
 import pickle
+from typing import Any
+
+from ..fiber.langservice import Attribute
 
 from .. import logger as root_logger
 
@@ -16,50 +19,7 @@ logger = root_logger.getChild("unit")
 
 
 class BaseParser:
-  priority = 0
-  protocol_keys = set()
-
-  def __init__(self, protocol):
-    self._master = protocol
-
-  def enter_protocol(self, data_protocol):
-    pass
-
-  def leave_protocol(self, data_protocol):
-    pass
-
-  def enter_stage(self, stage_index, data_stage):
-    pass
-
-  def leave_stage(self, stage_index, data_stage):
-    pass
-
-
-  def parse_block(self, data_block):
-    return None
-
-  def enter_block(self, data_block):
-    pass
-
-  def leave_block(self, data_block):
-    pass
-
-
-  def handle_segment(self, data_segment):
-    return None
-
-
-  def export_protocol(self):
-    return dict()
-
-  def export_segment(data):
-    return None
-
-
-  # Return value:
-  #  { data: { ... }, role: 'process' }
-  def parse_action(self, data_action):
-    return None
+  pass
 
 
 class BaseRunner:

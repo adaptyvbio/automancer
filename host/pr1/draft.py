@@ -1,19 +1,21 @@
 class Draft:
-  def __init__(self, *, id, errors, protocol, source, warnings):
+  def __init__(self, *, id, analysis, protocol):
+    self.analysis = analysis
     self.id = id
-    self.errors = errors
     self.protocol = protocol
-    self.source = source
-    self.warnings = warnings
 
   def export(self):
     return {
+      "completions": [completion.export() for completion in self.analysis.completions],
       "diagnostics": [
-        *[{ "kind": "error", **error.diagnostic().export() } for error in self.errors],
-        *[{ "kind": "warning", **warning.diagnostic().export() } for warning in self.warnings]
+        *[{ "kind": "error", **error.diagnostic().export() } for error in self.analysis.errors],
+        *[{ "kind": "warning", **warning.diagnostic().export() } for warning in self.analysis.warnings]
       ],
-      "protocol": self.protocol.export(),
-      "valid": self.protocol.valid
+      "folds": [fold.export() for fold in self.analysis.folds],
+      "hovers": [hover.export() for hover in self.analysis.hovers],
+
+      "protocol": self.protocol.export() if self.protocol else None,
+      "valid": not self.analysis.errors
     }
 
 

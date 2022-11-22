@@ -23,11 +23,13 @@ export interface ViewDraftProps {
 
 export interface ViewDraftState {
   compilation: DraftCompilation | null;
+  compiling: boolean;
   requesting: boolean;
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
-  compilationTime: number | null = null;
+  compilationController: AbortController | null = null;
+  compilationPromise: Promise<DraftCompilation> | null = null;
   controller = new AbortController();
   pool = new Pool();
 
@@ -35,7 +37,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     super(props);
 
     this.state = {
-      compilation: props.draft.compilation,
+      compilation: null,
+      compiling: false,
       requesting: !props.draft.readable
     };
   }
@@ -44,7 +47,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     this.pool.add(async () => {
       // This immediately updates item.readable, item.writable and item.lastModified
       // and calls setState() to update the analoguous properties on draft.
-      // await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
       await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
 
       if (!this.props.draft.item.readable) {
@@ -55,27 +57,26 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         this.setState({ requesting: false });
       }
 
-      // Trigger a compilation if the last compilation is outdated.
       if (this.props.draft.item.readable) {
-        await this.compile({ global: true });
+        await this.getCompilation();
       }
     });
   }
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
     // Trigger a compilation if the external revision changed.
-    if (prevProps.draft.revision && (this.props.draft.revision !== prevProps.draft.revision)) {
-      this.pool.add(async () => {
-        await this.compile({ global: true });
-      });
-    }
+    // if (prevProps.draft.revision && (this.props.draft.revision !== prevProps.draft.revision)) {
+    //   this.pool.add(async () => {
+    //     await this.compile({ global: true });
+    //   });
+    // }
 
     // TODO: Handle unsaved drafts
-    if (this.props.host.state.info.instanceRevision !== prevProps.host.state.info.instanceRevision) {
-      this.pool.add(async () => {
-        await this.compile({ global: true });
-      });
-    }
+    // if (this.props.host.state.info.instanceRevision !== prevProps.host.state.info.instanceRevision) {
+    //   this.pool.add(async () => {
+    //     await this.compile({ global: true });
+    //   });
+    // }
   }
 
   componentWillUnmount() {
@@ -83,26 +84,60 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  async compile(options: { global: boolean; source?: string; }) {
-    let compilationTime = Date.now();
-    this.compilationTime = compilationTime;
+  async getCompilation(options?: { global?: boolean; source?: string; }) {
+    let source;
 
-    let compilation = await this.props.host.backend.compileDraft({
+    if (options?.source === undefined) {
+      if (this.compilationPromise) {
+        return this.compilationPromise;
+      }
+
+      if (this.state.compilation) {
+        return this.state.compilation;
+      }
+
+      source = this.props.draft.item.source!;
+    } else {
+      source = options.source;
+    }
+
+    if (this.compilationController) {
+      this.compilationController.abort();
+    }
+
+    let compilationController = new AbortController();
+    this.compilationController = compilationController;
+
+    this.setState((state) => !state.compiling ? { compiling: true } : null);
+
+    let promise = this.props.host.backend.compileDraft({
       draftId: this.props.draft.id,
-      source: options.source ?? this.props.draft.item.source!
+      source
     });
 
-    if (compilationTime === this.compilationTime) {
-      this.setState({ compilation });
+    this.compilationPromise = promise;
 
-      if (options.global) {
-        await this.props.app.saveDraftCompilation(this.props.draft, compilation);
-      }
+    let compilation = await promise;
+
+    if (!compilationController.signal.aborted) {
+      this.compilationController = null;
+      this.compilationPromise = null;
+
+      this.setState({
+        compilation,
+        compiling: false
+      });
+
+      // if (options.global) {
+      //   await this.props.app.saveDraftCompilation(this.props.draft, compilation);
+      // }
     }
+
+    return compilation;
   }
 
   render() {
-    console.log('Render', this.props.draft);
+    // console.log('Render', this.props.draft);
 
     let component = (() => {
       if (!this.props.draft.readable && !this.state.requesting) {
@@ -125,7 +160,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             </div>
           </div>
         );
-      } else if (this.state.requesting) {
+      } else if (this.state.requesting || (this.props.draft.revision === 0)) {
         return (
           <div className="blayout-contents" />
         );
@@ -143,18 +178,22 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
         case 'text': return (
           <TextEditor
-            autoSave={true}
+            autoSave={false}
             compilation={this.state.compilation}
             draft={this.props.draft}
+            compile={async (source: string) => {
+              return await this.compile({ global: false, source });
+            }}
+            getCompilation={this.getCompilation.bind(this)}
             onChange={(source) => {
-              console.log('[TX] Change');
+              // console.log('[TX] Change');
 
               this.pool.add(async () => {
                 await this.compile({ global: false, source });
               });
             }}
             onChangeSave={(source) => {
-              console.log('[TX] Change+save');
+              // console.log('[TX] Change+save');
 
               this.pool.add(async () => {
                 await Promise.all([
@@ -164,7 +203,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               });
             }}
             onSave={(source) => {
-              console.log('[TX] Save');
+              // console.log('[TX] Save');
               this.pool.add(async () => {
                 if (this.state.compilation) {
                   // TODO: Fix this
@@ -186,7 +225,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return (
       <main className="blayout-container">
         <header className="blayout-header">
-          <h1>{this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}</h1>
+          <h1>{this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'} {this.state.compiling ? '(compiling)' : ''}</h1>
           <BarNav
             entries={[
               { id: 'overview',

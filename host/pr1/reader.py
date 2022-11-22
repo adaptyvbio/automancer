@@ -1,9 +1,13 @@
 from collections import namedtuple
+from enum import Enum
+import ast
+import functools
 import math
 import sys
-from enum import Enum
+from typing import Any
 
 from .draft import DraftDiagnostic
+from .util.decorators import deprecated
 
 
 Position = namedtuple("Position", ["line", "column"])
@@ -44,6 +48,7 @@ class LocationRange:
       end=(self.start + end)
     )
 
+  @deprecated
   def __add__(self, other):
     return LocationRange(
       source=self.source,
@@ -51,8 +56,11 @@ class LocationRange:
       end=max(self.end, other.end)
     )
 
+  def __lt__(self, other):
+    return (self.start < other.start) or ((self.start == other.start) and (self.end < other.end))
+
   def __repr__(self):
-    return f"Range({self.start} -> {self.end})"
+    return f"LocationRange({self.start} -> {self.end})"
 
   @property
   def start_position(self):
@@ -66,8 +74,123 @@ class LocationRange:
     assert self.start == self.end
     return Location(self.source, offset=self.start)
 
-  def full_string(source, value):
-    return LocationRange(source, 0, len(value))
+  @classmethod
+  def full_string(cls, source, value):
+    return cls(source, 0, len(value))
+
+class LocationArea:
+  def __init__(self, ranges = list()):
+    self.ranges = ranges
+
+  @property
+  def source(self):
+    return self.ranges[0].source if self.ranges else None
+
+  def enclosing_range(self):
+    return LocationRange(
+      source=self.ranges[0].source,
+      start=self.ranges[0].start,
+      end=self.ranges[-1].end
+    )
+
+  def single_range(self):
+    assert len(self.ranges) == 1
+    return self.ranges[0]
+
+  def location(self):
+    assert len(self.ranges) == 1
+    return self.ranges[0].location()
+
+  def format(self):
+    output = str()
+
+    if not self.ranges:
+      return output
+
+    source = self.ranges[0].source
+    lines_source = source.splitlines()
+
+    lines_ranges = dict()
+
+    for locrange in self.ranges:
+      start = locrange.start_position
+      end = locrange.end_position
+
+      for line_index in range(start.line, end.line + (1 if end.column > 0 else 0)):
+        if not (line_index in lines_ranges):
+          lines_ranges[line_index] = list()
+
+        lines_ranges[line_index].append(range(
+          start.column if line_index == start.line else 0,
+          end.column if line_index == end.line else len(lines_source[line_index]) + 1
+        ))
+
+    lines_list = sorted(lines_ranges.keys())
+
+    width_line = math.ceil(math.log(lines_list[-1] + 2, 10))
+
+    for index, line_index in enumerate(lines_list):
+      line_source = lines_source[line_index]
+
+      if (index > 0) and (line_index != (lines_list[index - 1] + 1)):
+        output += "\n"
+
+      output += f" {str(line_index + 1).rjust(width_line, ' ')} | {line_source}\n"
+
+      if line_index in lines_ranges:
+        line_ranges = lines_ranges[line_index]
+
+        output += f" {' ' * width_line} | " + "".join(
+          [("-" if column_index == len(line_source) else "^") if any(
+            [column_index in line_range for line_range in line_ranges]
+          ) else " " for column_index in range(0, len(line_source) + 1)
+        ]) + "\n"
+
+    return output
+
+  def __add__(self, other):
+    ranges = (self.ranges + [other]) if isinstance(other, LocationRange) else (self.ranges + other.ranges)
+    output = list()
+
+    for range in sorted(ranges):
+      if output and (output[-1].end >= range.start):
+        output[-1].end = max(output[-1].end, range.end)
+      else:
+        output.append(LocationRange(range.source, range.start, range.end))
+
+    # print(self, '+', other, '->', output)
+    return LocationArea(output)
+
+  def __mod__(self, offset):
+    start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
+
+    index = 0
+    output = list()
+
+    for range in self.ranges:
+      range_start = index
+      range_end = index + (range.end - range.start)
+
+      delta_start = 0
+      delta_end = 0
+
+      if (start > range_start) and (start <= range_end):
+        delta_start = range_start - start
+
+      if (end >= range_start) and (end < range_end):
+        delta_end = range_end - end
+
+      if not ((end < range_start) or (start > range_end)):
+        output.append(LocationRange(range.source, range.start - delta_start, range.end - delta_end))
+
+      index += (range.end - range.start)
+
+    # print(self.ranges, '->', output, start, end)
+
+    return LocationArea(output)
+
+  def __repr__(self):
+    return "LocationArea(" + ", ".join([f"{range.start} -> {range.end}" for range in self.ranges]) + ")"
 
 
 class LocatedError(Exception):
@@ -125,12 +248,31 @@ class LocatedError(Exception):
 
 
 class LocatedValue:
-  def __init__(self, value, locrange):
-    self.locrange = locrange
+  def __init__(self, value, area):
+    self.area = area
     self.value = value
 
+  # @deprecated
   def error(self, message):
-    return LocatedError(message, self.locrange)
+    return LocatedError(message, self.area.ranges[0])
+
+  @property
+  def source(self):
+    return self.area.source
+
+  @classmethod
+  def new(cls, obj, area):
+    match obj:
+      case LocatedValue():
+        return obj
+      case dict():
+        return LocatedDict(obj, area)
+      case list():
+        return LocatedList(obj, area)
+      case str():
+        return LocatedString(obj, area, absolute=False)
+      case _:
+        return LocatedValueContainer(obj, area)
 
   def create_error(message, object):
     if isinstance(object, LocatedValue):
@@ -144,38 +286,57 @@ class LocatedValue:
     else:
       return object
 
-  def locate(object, locrange):
+  def locate(object, area):
     if isinstance(object, dict):
-      return LocatedDict(object, locrange)
+      return LocatedDict(object, area)
     elif isinstance(object, list):
-      return LocatedList(object, locrange)
+      return LocatedList(object, area)
     elif isinstance(object, str):
-      return LocatedString(object, locrange)
+      return LocatedString(object, area)
     else:
       return LocatedValue(object, locrange)
 
   def transfer(dest, source):
     if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
-      return LocatedValue.locate(dest, source.locrange)
+      return LocatedValue.locate(dest, source.area)
 
     return dest
+
+
+class LocatedValueContainer(LocatedValue):
+  def __repr__(self):
+    return repr(self.value)
 
 
 class LocatedString(str, LocatedValue):
   def __new__(cls, value, *args, **kwargs):
     return super(LocatedString, cls).__new__(cls, value)
 
-  def __init__(self, value, locrange, *, symbolic = False):
-    LocatedValue.__init__(self, value, locrange)
-    self.symbolic = symbolic
-    # str.__init__(self)
+  def __init__(self, value, area, *, absolute = True):
+    LocatedValue.__init__(self, value, area)
+    self.absolute = absolute
+
+  def __add__(self, other):
+    other_located = isinstance(other, LocatedString)
+
+    return LocatedString(
+      self.value + str(other),
+      self.area + other.area if other_located else self.area,
+      absolute=(self.absolute and ((other_located and other.absolute) or (not other)))
+    )
+
+  def __radd__(self, other):
+    return self + other
 
   def __getitem__(self, key):
     if isinstance(key, slice):
-      start, stop, step = key.indices(len(self))
-      return LocatedString(self.value[key], (self.locrange % (start, stop)) if not self.symbolic else self.locrange)
+      if self.absolute:
+        start, stop, step = key.indices(len(self))
+        return LocatedString(self.value[key], self.area % (start, stop))
+      else:
+        return LocatedString(self.value[key], self.area, absolute=False)
     else:
-      return self[key:(key + 1)]
+      return self[key:(key + 1)] if key >= 0 else self[key:((key - 1) if key < -1 else None)]
 
   def split(self, sep, maxsplit = -1):
     if sep is None:
@@ -193,9 +354,9 @@ class LocatedString(str, LocatedValue):
     fragments = self.value.split(sep, maxsplit)
     return [it(frag) for frag in fragments]
 
-  def splitlines(self):
+  def splitlines(self, keepends = False):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]
-    return [self[((a + 1) if a is not None else a):b] for a, b in zip([None, *indices], [*indices, None])]
+    return [self[((a + 1) if a is not None else a):((b + 1) if keepends and (b is not None) else b)] for a, b in zip([None, *indices], [*indices, None])]
 
   def strip(self, chars = None):
     return self.lstrip(chars).rstrip(chars)
@@ -208,22 +369,59 @@ class LocatedString(str, LocatedValue):
     stripped = self.value.rstrip(chars)
     return self[0:len(stripped)]
 
+  @functools.cached_property
+  def _line_cumlengths(self):
+    lengths = [0]
+
+    for line in self.splitlines(keepends=True):
+      lengths.append(lengths[-1] + len(line))
+
+    return lengths
+
+  def compute_location(self, position):
+    return self._line_cumlengths[position.line] + position.column
+
+  def compute_ast_node_area(self, node):
+    assert self.absolute
+
+    start = self.compute_location(Position(node.lineno - 1, node.col_offset))
+    end = self.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
+
+    return self.area % (start, end)
+
+  def index_ast_node(self, node):
+    return LocatedString(self.value, area=self.compute_ast_node_area(node), absolute=False)
+
+  def index_syntax_error(self, err):
+    start = self.compute_location(Position(err.lineno - 1, err.offset - 1))
+    end = self.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
+
+    return self[start:end]
+
+  @staticmethod
+  def from_match_group(match, group):
+    span = match.span(group)
+    return match.string[span[0]:span[1]]
+
 
 class LocatedDict(dict, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedDict, cls).__new__(cls)
 
-  def __init__(self, value, locrange):
-    LocatedValue.__init__(self, value, locrange)
+  def __init__(self, value: dict, area: LocationArea):
+    LocatedValue.__init__(self, value, area)
     self.update(value)
+
+  def get_key(self, target):
+    return next(key for key in self.keys() if key == target)
 
 
 class LocatedList(list, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
-  def __init__(self, value, locrange):
-    LocatedValue.__init__(self, value, locrange)
+  def __init__(self, value, area):
+    LocatedValue.__init__(self, value, area)
     self += value
 
 
@@ -232,8 +430,7 @@ class Source(LocatedString):
   #   return super(Source, cls).__new__(cls, value)
 
   def __init__(self, value):
-    super().__init__(value, LocationRange.full_string(self, value))
-    # print(">>", self.range)
+    super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
 
   def offset_position(self, offset):
     line = self.value[:offset].count("\n")
@@ -242,27 +439,60 @@ class Source(LocatedString):
     return Position(line, column)
 
 
+class ReliableLocatedDict(LocatedDict):
+  def __init__(self, value, /, area, *, completion_ranges = None):
+    super().__init__(value, area)
+    self.completion_ranges = completion_ranges or set()
+
+
 ## Tokenization
 
+# Valid
 # a: b      key: 'a',   value: 'b',   kind: Default
 # a:        key: 'a',   value: None,  kind: Default
 # - a:      key: 'a',   value: None,  kind: List
 # - a: b    key: 'a',   value: 'b',   kind: List
 # - b       key: None,  value: 'b',   kind: List
-# | a       key: None, value: 'a',    kind: String
+# | a       key: None,  value: 'a',   kind: String
+#
+# Invalid
+#           key: None,  value: None,  kind: Default,  raw_value: '    '
+# a         key: None,  value: 'a',   kind: Default
+# -         key: None,  value: None,  kind: List,     raw_value: ' '
 
+
+## Completion cases
+
+# a: b
+#  ^
+#
+# <whitespace>
+# ^
+#
+# : b
+# ^
+#
+# -
+#   ^
+#
+# a
+#  ^
+
+
+IndentationWidth = 2
 Whitespace = " "
 
 class Token:
-  def __init__(self, *, data, depth, key, kind, value):
+  def __init__(self, *, data, depth, key, kind, raw_value, value):
     self.data = data
     self.depth = depth
     self.key = key
     self.kind = kind
+    self.raw_value = raw_value
     self.value = value
 
   def __repr__(self):
-    return f"Token(depth={repr(self.depth)}, kind={repr(self.kind)}, key={repr(self.key)}, value={repr(self.value)})"
+    return f"Token(depth={repr(self.depth)}, kind={repr(self.kind)}, key={repr(self.key)}, raw_value={repr(self.raw_value)}, value={repr(self.value)})"
 
 class TokenKind(Enum):
   Default = 0
@@ -279,7 +509,7 @@ class UnreadableIndentationError(ReaderError):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic("Unreadable indentation", ranges=[self.target.locrange])
+    return DraftDiagnostic("Unreadable indentation", ranges=self.target.area.ranges)
 
 class MissingKeyError(ReaderError):
   def __init__(self, location):
@@ -293,14 +523,14 @@ class InvalidLineError(ReaderError):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic("Invalid line", ranges=[self.target.locrange])
+    return DraftDiagnostic("Invalid line", ranges=self.target.area.ranges)
 
 class InvalidCharacterError(ReaderError):
   def __init__(self, target):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic("Invalid character", ranges=[self.target.locrange])
+    return DraftDiagnostic("Invalid character", ranges=self.target.area.ranges)
 
 
 def tokenize(raw_source):
@@ -331,42 +561,52 @@ def tokenize(raw_source):
 
 
   # Iterate over all lines
-  for line in source.splitlines():
+  for full_line in source.splitlines(keepends=True):
+    if full_line[-1] == "\n":
+      line = full_line[:-1]
+      line_break = full_line[-1]
+    else:
+      line = full_line
+      line_break = str()
+
     # Remove the comment on the line, if any
     comment_offset = line.find("#")
 
     if comment_offset >= 0:
       line = line[0:comment_offset]
 
-    # Remove whitespace on the right of the line
-    line = line.rstrip(Whitespace)
-
-    # Add an error if there is an odd number of whitespace on the left of the line
+    # Calculate the indentation
     indent_offset = len(line) - len(line.lstrip(Whitespace))
 
-    if indent_offset % 2 > 0:
-      errors.append(UnreadableIndentationError(line[indent_offset:]))
-      continue
+    # Remove whitespace on the right of the line
+    unstripped_line = line
+    line = line.rstrip(Whitespace)
 
-    # Go to the next line if this one is empty
-    if len(line) == indent_offset:
+    # Raise an error if there is an odd whitespace count on the left of the line and it is not empty
+    if (indent_offset % IndentationWidth > 0) and line:
+      errors.append(UnreadableIndentationError(line[indent_offset:]))
       continue
 
     # Initialize a token instance
     offset = indent_offset
     token = Token(
       data=line[offset:],
-      depth=(indent_offset // 2),
+      depth=(indent_offset // IndentationWidth),
       key=None,
       kind=TokenKind.Default,
+      raw_value=None,
       value=None
     )
 
+    # Skip this line if empty
+    if not line:
+      token.raw_value = unstripped_line
+
     # If the line starts with a '|', then the token is a string and this iteration ends
-    if line[offset] == "|":
+    elif line[offset] == "|":
       offset = get_offset(line, offset)
       token.kind = TokenKind.String
-      token.value = line[offset:]
+      token.value = line[offset:] + line_break
 
     # Otherwise, continue
     else:
@@ -383,21 +623,28 @@ def tokenize(raw_source):
         value_offset = get_offset(line, colon_offset)
         value = line[value_offset:]
 
-        if len(key) < 1:
-          errors.append(MissingKeyError(location=key.locrange.location()))
-          continue
+        if key:
+          token.key = key
+        else:
+          errors.append(MissingKeyError(location=key.area.location()))
+          token.key = None
 
-        token.key = key
         token.value = value if value else None
 
       # If the token is a list, then it is just a value
       elif token.kind == TokenKind.List:
-        token.value = line[offset:]
+        value = line[offset:]
+
+        if value:
+          token.value = value
+        else:
+          token.raw_value = unstripped_line[offset:]
+          token.value = None
 
       # Otherwise the line is invalid
       else:
         errors.append(InvalidLineError(token.data))
-        continue
+        token.value = line[offset:]
 
     tokens.append(token)
 
@@ -414,11 +661,15 @@ def is_basic_ascii(text):
 ## Static analysis
 
 class StackEntry:
-  def __init__(self, *, key = None, location = None, mode = None, value = None):
+  def __init__(self, *, key = None, area = None, mode = None, token = None, value = None):
     self.key = key
-    self.location = location
+    self.area = area
     self.mode = mode
+    self.token = token
     self.value = value
+
+    self.dict_ranges = set()
+    self.list_ranges = set()
 
 class StackEntryMode(Enum):
   Dict = 0
@@ -432,21 +683,21 @@ class DuplicateKeyError(ReaderError):
     self.duplicate = duplicate
 
   def diagnostic(self):
-    return DraftDiagnostic("Duplicate key", ranges=[self.original.locrange, self.duplicate.locrange])
+    return DraftDiagnostic("Duplicate key", ranges=(self.original.area + self.duplicate.area).ranges)
 
 class InvalidIndentationError(ReaderError):
   def __init__(self, target):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic("Invalid indentation", ranges=[self.target.locrange])
+    return DraftDiagnostic("Invalid indentation", ranges=self.target.area.ranges)
 
 class InvalidTokenError(ReaderError):
   def __init__(self, target):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic("Invalid token", ranges=[self.target.locrange])
+    return DraftDiagnostic("Invalid token", ranges=self.target.area.ranges)
 
 
 def analyze(tokens):
@@ -454,45 +705,79 @@ def analyze(tokens):
   warnings = list()
 
   stack = [StackEntry()]
+  whitespace_tokens = set()
 
-  def descend(new_depth):
+  def descend(new_depth, check = True):
+    depth = len(stack) - 1
+
+    if check:
+      check_diff(depth, new_depth)
+
     while len(stack) - 1 > new_depth:
       entry = stack.pop()
-      entry_value = add_location(entry)
       head = stack[-1]
 
-      if head.mode == StackEntryMode.Dict:
-        head.value[entry.key] = entry_value
-      elif head.mode == StackEntryMode.List:
-        head.value.append(entry_value)
+      if entry.mode is None:
+        entry.area = entry.key.area
 
-      if entry.location:
-        if not head.location:
-          head.location = entry.location
-        else:
-          head.location += entry.location
+      entry_value = add_location(entry)
+
+      match head.mode:
+        case StackEntryMode.Dict:
+          head.value[entry.key] = entry_value
+        case StackEntryMode.List:
+          head.value.append(entry_value)
+
+  def check_diff(old_depth, new_depth):
+    # print("!", old_depth, "<->", new_depth)
+
+    for depth in range(min(old_depth, new_depth), max(old_depth, new_depth) + 1):
+      entry = stack[depth]
+
+      for whitespace_token in whitespace_tokens:
+        if whitespace_token.depth >= depth:
+          offset = depth * IndentationWidth
+          entry.dict_ranges.add(whitespace_token.raw_value[offset:offset].area.single_range())
+
+    whitespace_tokens.clear()
+
 
   for token in tokens:
     depth = len(stack) - 1
+    head = stack[-1]
+
+    match token.kind:
+      case TokenKind.Default if token.key is None:
+        # If the token is an empty line, we can only process the completion range
+        # when we reach the next valid and meaningful token.
+        if token.value is None:
+          whitespace_tokens.add(token)
+        # Otherwise the token is a single string.
+        else:
+          head.dict_ranges.add(token.value.area.single_range())
+
+        continue
 
     if token.depth > depth:
       errors.append(InvalidIndentationError(token.data))
       continue
-    if token.depth < depth:
-      descend(token.depth)
 
+    descend(token.depth)
     head = stack[-1]
 
     if not head.mode:
-      if token.kind == TokenKind.List:
-        head.mode = StackEntryMode.List
-        head.value = list()
-      elif token.kind == TokenKind.String:
-        head.mode = StackEntryMode.String
-        head.value = str()
-      else:
-        head.mode = StackEntryMode.Dict
-        head.value = dict()
+      head.area = LocationArea()
+
+      match token.kind:
+        case TokenKind.Default:
+          head.mode = StackEntryMode.Dict
+          head.value = dict()
+        case TokenKind.List:
+          head.mode = StackEntryMode.List
+          head.value = list()
+        case TokenKind.String:
+          head.mode = StackEntryMode.String
+          head.value = str()
 
     if head.mode == StackEntryMode.Dict:
       if token.kind != TokenKind.Default:
@@ -506,45 +791,49 @@ def analyze(tokens):
       if token.value is not None:
         head.value[token.key] = token.value
       else:
-        stack.append(StackEntry(key=token.key))
+        stack.append(StackEntry(key=token.key, token=token))
+        check_diff(len(stack) - 2, len(stack) - 1)
 
     elif head.mode == StackEntryMode.List:
       if token.kind != TokenKind.List:
         errors.append(InvalidTokenError(token.data))
         continue
 
+      # - a: ...
       if token.key:
+        # - a: b
         if token.value is not None:
           stack.append(StackEntry(
             mode=StackEntryMode.Dict,
-            location=(token.key.locrange + token.value.locrange),
             value={ token.key: token.value }
           ))
+
+          check_diff(len(stack) - 2, len(stack) - 1)
+
+        # - a:
+        #     ...
         else:
           stack.append(StackEntry(
             mode=StackEntryMode.Dict,
-            location=token.key.locrange,
             value=dict()
           ))
 
-          stack.append(StackEntry(key=token.key))
+          stack.append(StackEntry(key=token.key, token=token))
+          check_diff(len(stack) - 3, len(stack) - 1)
+
+      # - a
       else:
         head.value.append(token.value)
+
+      head.area += token.data.area
 
     elif head.mode == StackEntryMode.String:
       if token.kind != TokenKind.String:
         errors.append(InvalidTokenError(token.data))
         continue
 
-      if head.value:
-        head.value += "\n"
-
+      head.area += token.value.area
       head.value += token.value
-
-    if not head.location:
-      head.location = token.data.locrange
-    else:
-      head.location += token.data.locrange
 
   descend(0)
 
@@ -552,13 +841,26 @@ def analyze(tokens):
 
 
 def add_location(entry):
-  if entry.location:
-    if entry.mode == StackEntryMode.Dict:
-      return LocatedDict(entry.value, entry.location)
-    if entry.mode == StackEntryMode.List:
-      return LocatedList(entry.value, entry.location)
+  match entry.mode:
+    case StackEntryMode.Dict:
+      area = LocationArea()
 
-  return entry.value
+      for key, value in entry.value.items():
+        if isinstance(value, str):
+          area += LocationArea([(key.area + value.area).enclosing_range()])
+        else:
+          area += key.area
+
+      return ReliableLocatedDict(entry.value, area, completion_ranges=entry.dict_ranges)
+
+    case StackEntryMode.List:
+      return LocatedList(entry.value, entry.area)
+
+    case StackEntryMode.String:
+      return LocatedString(entry.value, entry.area).rstrip("\n")
+
+    case None:
+      return LocatedValueContainer(None, entry.area)
 
 
 ## Exported functions
@@ -616,7 +918,7 @@ def parse(raw_source):
   return result
 
 
-def loads(raw_source):
+def loads(raw_source) -> tuple[Any, list[ReaderError], list[ReaderError]]:
   tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
   result, analysis_errors, analysis_warnings = analyze(tokens)
 
@@ -626,42 +928,107 @@ def loads(raw_source):
 ## Tests
 
 if __name__ == "__main__":
+  from pprint import pprint
+
+  # tokens, errors, warnings = tokenize(f"""x:
+  # y: 3
+  # h:
+
+  # e: 3""")
+
+  source = f"""a:
+  x: 4
+  y: 5
+  #
+    #
+"""
+
+  tokens, errors, warnings = tokenize(source)
+  source = Source(source)
+
+  pprint(errors)
+  pprint(tokens)
+
+  value, errors, warnings = analyze(tokens)
+  pprint(errors)
+  pprint(value['a'].completion_ranges)
+  print(len(source))
+
+  for r in value['a'].completion_ranges:
+    # print(repr(source[r.start]))
+    print(source[r.start-1:r.start].area.format())
+
+
+if __name__ == "_main__":
   # | yy😀🤶🏻
   #   - bar: é34
 
-  tokens, errors, warnings = tokenize(f"""
-foo:
-  | x
+  tokens, errors, warnings = tokenize(f"""fooo:
+  | foo   \n
+  | aa
   | y
-  """)
+foox:
+  bar: 34
+  norf:
+    - x
+    - y
+    - z
+  xx: 35
+fooy:
+  - x
+  - y: 34
+  - z:
+      a: b
+      c: d
+  - e
+x:
+s:
+foo:
+baz:
+y:
+  | a""")
 
   from pprint import pprint
 
-  pprint(tokens)
-  # print()
+
   if errors: pprint(errors)
   if warnings: pprint(warnings)
 
   value, errors, warnings = analyze(tokens)
 
-  value = ([
-    "foo",
-    { "baz": "34", "a": "b" },
-    "plouf",
-    { "baz": "34", "a": { "x": ["a", "b"], "p": None, "y": "5" } }
-  ])
-
-  print(">>", repr(value))
-  print("\n".join(f"`{line}`" for line in dumps(value).split("\n")))
-
-  # print(errors[1].original.locrange)
-  # print(errors[1].duplicate.locrange)
-
   if errors: pprint(errors)
   if warnings: pprint(warnings)
 
-  # print(errors[0].target.locrange)
-  # print(format_source(errors[0].target.locrange))
+  # print(value.area.ranges)
+  print(repr(value['foo']))
+  print(value['foo'].area)
+  print(value['foo'].area.format())
+
+
+  # key = next(k for k in value.keys() if k == 'foo')
+  key = value.get_key('x')
+  print(key.area.format())
+
+  # print(value['foo'])
+  # print(value['foo'].area)
+  # print(type(value['foo']))
+  # print(type(value['bar']))
+
+  # value = ([
+  #   "foo",
+  #   { "baz": "34", "a": "b" },
+  #   "plouf",
+  #   { "baz": "34", "a": { "x": ["a", "b"], "p": None, "y": "5" } }
+  # ])
+
+  # print(">>", repr(value))
+  # print("\n".join(f"`{line}`" for line in dumps(value).split("\n")))
+
+  # print(errors[1].original.area)
+  # print(errors[1].duplicate.area)
+
+  # print(errors[0].target.area)
+  # print(format_source(errors[0].target.area))
   # print(format_source(errors[0].location))
 
   # LocatedError("Error", x.location).display()

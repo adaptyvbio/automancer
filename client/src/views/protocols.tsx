@@ -69,7 +69,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
             <div className="lproto-list">
               {drafts.map((draft) => {
-                let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
+                // let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
 
                 return (
                   <DraftEntry
@@ -81,11 +81,11 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                       ...(draft.item.lastModified
                         ? [{ id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.item.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' }]
                         : []),
-                      ...(draft.compilation
-                        ? [analysis
-                          ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }
-                          : { id: 'status', label: 'Error', icon: 'error' }]
-                        : [])
+                      // ...(draft.compilation
+                      //   ? [analysis
+                      //     ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }
+                      //     : { id: 'status', label: 'Error', icon: 'error' }]
+                      //   : [])
                     ]}
                     createMenu={() => [
                       // { id: 'chip', name: 'Open chip', icon: 'memory' },

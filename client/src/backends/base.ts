@@ -29,10 +29,9 @@ export interface BaseBackend {
   revealChipDirectory(chipId: ChipId): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
-  startPlan(options: {
+  startDraft(options: {
     chipId: ChipId;
-    data: Codes;
-    location: ProtocolLocation;
+    draftId: DraftId;
     source: string;
   }): Promise<void>;
   upgradeChip(chipId: ChipId): Promise<void>;

@@ -14,7 +14,13 @@ declare global {
     adoptedStyleSheets: CSSStyleSheet[];
   }
 
+  interface Element {
+    computedStyleMap(): StylePropertyMapReadOnly;
+  }
+
   interface Window {
     MonacoEnvironment?: monaco.Environment | undefined;
   }
+
+  const CSSNumericValue: any;
 }

@@ -10,20 +10,19 @@ setup(
 
   entry_points={
     'pr1.units': [
-      "builtin_constructs = pr1_builtin_constructs",
-      "devices = pr1_devices",
-      "idle = pr1_idle",
+      # "builtin_constructs = pr1_builtin_constructs",
+      # "idle = pr1_idle",
       "metadata = pr1_metadata",
       *(["say = pr1_say"] if sys.platform == "darwin" else list()),
-      "timer = pr1_timer"
+      # "timer = pr1_timer"
     ]
   },
   package_data={
-    "pr1_devices.client": ["*"],
-    "pr1_idle.client": ["*"],
+    # "pr1_builtin_constructs.client": ["*"],
+    # "pr1_idle.client": ["*"],
     "pr1_metadata.client": ["*"],
-    "pr1_say.client": ["*"],
-    "pr1_timer.client": ["*"]
+    # "pr1_say.client": ["*"],
+    # "pr1_timer.client": ["*"]
   },
 
   install_requires=[

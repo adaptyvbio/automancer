@@ -10,7 +10,8 @@ from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.node import CollectionNode, DeviceNode
 from .draft import Draft
-from .master import Master
+from .fiber.parser import FiberParser
+from .fiber.master2 import Master
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
@@ -164,24 +165,29 @@ class Host:
     #   # raise e
 
 
-  def compile_draft(self, draft_id, source):
-    protocol = None
+  def compile_draft(self, draft_id: str, source: str):
+    from .fiber.parsers.activate import AcmeParser
+    from .fiber.parsers.condition import ConditionParser
+    from .fiber.parsers.do import DoParser
+    from .fiber.parsers.repeat import RepeatParser
+    from .fiber.parsers.score import ScoreParser
+    from .fiber.parsers.sequence import SequenceParser
+    from .fiber.parsers.shorthands import ShorthandsParser
 
-    protocol = Protocol(
+    parser = FiberParser(
       source,
       host=self,
-      parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
+      # Parsers=[SequenceParser, RepeatParser, ShorthandsParser, AcmeParser, ScoreParser]
+      Parsers=[DoParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+      # Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, ScoreParser]
+      # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )
 
-    draft = Draft(
+    return Draft(
       id=draft_id,
-      errors=protocol.errors,
-      protocol=protocol,
-      source=source,
-      warnings=protocol.warnings
+      analysis=parser.analysis,
+      protocol=parser.protocol
     )
-
-    return draft
 
   def create_chip(self):
     chip = Chip.create(
@@ -193,39 +199,6 @@ class Host:
     logger.info(f"Created chip '{chip.id}'")
 
     return chip
-
-  def start_plan(self, chip, codes, location, protocol):
-    if chip.master:
-      raise Exception("Already running")
-
-    def done_callback():
-      chip.master = None
-      self.update_callback()
-
-    chip.master = Master(
-      chip=chip,
-      codes=codes,
-      location=location,
-      protocol=protocol,
-      done_callback=done_callback,
-      update_callback=self.update_callback
-    )
-
-    chip.master.start()
-
-
-    async def a():
-      # await asyncio.sleep(1.5)
-      # chip.master.pause()
-      # await asyncio.sleep(1)
-      await asyncio.sleep(5)
-      chip.master.resume()
-
-    loop = asyncio.get_event_loop()
-    # loop.create_task(a())
-
-    # import asyncio
-    # asyncio.run(chip.master.wait())
 
   async def reload_units(self):
     logger.info("Reloading development units")
@@ -323,7 +296,15 @@ class Host:
 
   async def process_request(self, request, *, client):
     if request["type"] == "compileDraft":
-      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      try:
+        draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      except:
+        import traceback
+        traceback.print_exc()
+
+        from .fiber import langservice as lang
+        draft = Draft(analysis=lang.Analysis(), id=request["draftId"], protocol=None)
+
       return draft.export()
 
     if request["type"] == "command":
@@ -369,21 +350,59 @@ class Host:
         segment_index=request["segmentIndex"]
       )
 
-    if request["type"] == "startPlan":
+    if request["type"] == "startDraft":
       chip = self.chips[request["chipId"]]
 
-      protocol = Protocol(
-        request["source"],
-        host=self,
-        parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
-      )
+      if chip.master:
+        raise Exception("Already running")
 
-      location = {
-        'state': None, # request["location"]["state"]
-        'segment_index': request["location"]["segmentIndex"]
-      }
+      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
+      assert draft.protocol
 
-      self.start_plan(chip=chip, codes=request["data"], location=location, protocol=protocol)
+      def done_callback():
+        chip.master = None
+
+      def update_callback():
+        self.update_callback()
+
+      chip.master = Master(draft.protocol, chip)
+      await chip.master.start(done_callback, update_callback)
+
+    match request["type"]:
+      case "deleteChip":
+        chip = self.chips[request["chipId"]]
+
+        # TODO: checks
+
+        if request["trash"]:
+          self.backend.trash(chip.dir)
+        else:
+          shutil.rmtree(chip.dir)
+
+        del self.chips[request["chipId"]]
+
+      case "duplicateChip":
+        chip = self.chips[request["chipId"]]
+        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self, template=request["template"])
+
+        self.chips[duplicated.id] = duplicated
+        logger.info(f"Duplicated chip '{chip.id}' into '{duplicated.id}'")
+
+        self.update_callback()
+        return { "chipId": duplicated.id }
+
+      case "revealChipDirectory":
+        if client.remote:
+          return
+
+        chip = self.chips[request["chipId"]]
+        self.backend.reveal(chip.dir)
+
+      case "upgradeChip":
+        chip = self.chips[request["chipId"]]
+        chip.upgrade(host=self)
+
+        logger.info(f"Upgraded chip '{chip.id}'")
 
     match request["type"]:
       case "deleteChip":

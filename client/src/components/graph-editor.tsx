@@ -4,101 +4,46 @@ import * as React from 'react';
 import { Icon } from './icon';
 import * as util from '../util';
 
+import { GraphBlockMetrics } from '../interfaces/graph';
+import { Point, Size } from '../geometry';
+import { ProtocolBlock } from '../interfaces/protocol';
+import { Host } from '../host';
+import { ContextMenuArea } from './context-menu-area';
+
 
 export interface GraphEditorProps {
-
+  host: Host;
+  state?: unknown;
+  tree: ProtocolBlock;
 }
 
 export interface GraphEditorState {
-  nodes: NodeDef[];
-  selectedNodeIds: ImSet<NodeId>;
-  size: {
-    width: number;
-    height: number;
-  } | null;
+  size: Size | null;
+
+  offset: Point;
+  scale: number;
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
-  action: {
-    type: 'select';
-    singleTargetId: NodeId | null;
-    startPoint: {
-      x: number;
-      y: number;
-    };
-    targets: {
-      id: NodeId;
-      startPosition: {
-        x: number;
-        y: number;
-      };
-    }[];
-  } | {
-    type: 'move';
-    startPoint: {
-      x: number;
-      y: number;
-    };
-    targets: {
-      id: NodeId;
-      startPosition: {
-        x: number;
-        y: number;
-      };
-    }[];
-  } | null = null;
-
-  mouseDown = false;
+  controller = new AbortController();
   refContainer = React.createRef<HTMLDivElement>();
+
+  observer = new ResizeObserver((_entries) => {
+    this.setSize();
+  });
 
   constructor(props: GraphEditorProps) {
     super(props);
 
     this.state = {
-      nodes: [
-        {
-          id: '0',
-          title: 'Alpha',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 3,
-            y: 5
-          }
-        },
-        {
-          id: '1',
-          title: 'Beta',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 18,
-            y: 2
-          }
-        },
-        {
-          id: '2',
-          title: 'Gamma',
-          features: [
-            { icon: 'hourglass_empty', label: '10 min' },
-            { icon: 'air', label: 'Neutravidin' }
-          ],
-          position: {
-            x: 18,
-            y: 8
-          }
-        }
-      ],
-      selectedNodeIds: ImSet(),
-      size: null
+      size: null,
+
+      scale: 1,
+      offset: { x: 0, y: 0 }
     };
   }
 
-  componentDidMount() {
+  setSize() {
     let container = this.refContainer.current!;
     let rect = container.getBoundingClientRect();
 
@@ -110,203 +55,130 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     });
   }
 
+  componentDidMount() {
+    let container = this.refContainer.current!;
+
+    this.setSize();
+    // this.observer.observe(container);
+
+    this.controller.signal.addEventListener('abort', () => {
+      this.observer.disconnect();
+    });
+
+    container.addEventListener('wheel', (event) => {
+      event.preventDefault();
+
+      let rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+
+      this.setState((state): any => {
+        let mouseX = event.clientX - rect.left;
+        let mouseY = event.clientY - rect.top;
+
+        if (event.ctrlKey) {
+          let newScale = state.scale * (1 + event.deltaY / 100);
+          newScale = Math.max(0.6, Math.min(3, newScale));
+
+          let matrix = new DOMMatrix()
+            .translate(state.offset.x, state.offset.y)
+            .scale(state.scale)
+            .translate(mouseX, mouseY)
+            .scale(newScale / state.scale)
+            .translate(-mouseX, -mouseY)
+            .scale(1 / state.scale)
+            .translate(-state.offset.x, -state.offset.y);
+
+          let offset = matrix.transformPoint({
+            x: state.offset.x,
+            y: state.offset.y
+          });
+
+          return {
+            ...state,
+            offset: {
+              x: offset.x,
+              y: offset.y
+            },
+            scale: newScale
+          };
+        } else {
+          return {
+            ...state,
+            offset: {
+              x: state.offset.x + event.deltaX * state.scale,
+              y: state.offset.y + event.deltaY * state.scale
+            }
+          };
+        }
+      });
+    }, { passive: false, signal: this.controller.signal });
+  }
+
+  componentWillUnmount() {
+    this.controller.abort();
+  }
+
   render() {
     if (!this.state.size) {
       return <div className="geditor-root" ref={this.refContainer} />;
     }
 
+    // console.log(this.props.tree);
+
     let styles = this.refContainer.current!.computedStyleMap();
     // console.log(Object.fromEntries(Array.from(styles)));
-    let cellSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
+    let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
     let nodeHeaderHeight = CSSNumericValue.parse(styles.get('--node-header-height')!).value;
     let nodePadding = CSSNumericValue.parse(styles.get('--node-padding')!).value;
+    let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
 
-    let cellCountX = Math.floor(this.state.size.width / cellSize);
-    let cellCountY = Math.floor(this.state.size.height / cellSize);
+    let cellCountX = Math.floor(this.state.size.width / cellPixelSize);
+    let cellCountY = Math.floor(this.state.size.height / cellPixelSize);
 
-    let nodeWidth = Math.round((220 + nodePadding * 2) / cellSize);
-    let nodeHeight = Math.ceil((nodeHeaderHeight + 80 + nodePadding * 2) / cellSize);
-
-    // let link = {
-    //   start: { x: 11, y: 6 },
-    //   end: { x: 18, y: 3 }
-    // };
-
-    let settings = {
-      cellSize,
+    let settings: GraphRenderSettings = {
+      cellPixelSize,
+      nodeBodyPaddingY,
       nodeHeaderHeight,
-      nodePadding,
-      nodeWidth,
-      nodeHeight
+      nodePadding
     };
 
+
+    let computeMetrics = (block: ProtocolBlock) => {
+      return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
+        computeMetrics,
+        settings,
+        units: this.props.host.units
+      });
+    };
+
+    let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
+      return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
+    };
+
+    let treeMetrics = computeMetrics(this.props.tree);
+
+    let frac = (x: number) => x - Math.floor(x);
+    let offsetX = this.state.offset.x;
+    let offsetY = this.state.offset.y;
+    let scale = this.state.scale;
+
     return (
-      <div className="geditor-root" ref={this.refContainer}
-        onMouseMove={(event) => {
-          if (this.action?.type === 'select') {
-            this.action = {
-              type: 'move',
-              startPoint: this.action.startPoint,
-              targets: this.action.targets
-            };
-          }
-
-          if (this.action?.type === 'move') {
-            let dx = event.clientX - this.action.startPoint.x;
-            let dy = event.clientY - this.action.startPoint.y;
-
-            this.setState((state) => {
-              if (!this.action) {
-                return null;
-              }
-
-              return {
-                nodes: state.nodes.map((node) => {
-                  let target = this.action!.targets.find((target) => target.id === node.id);
-
-                  if (!target) {
-                    return node;
-                  }
-
-                  return {
-                    ...node,
-                    position: {
-                      x: target.startPosition.x + dx / settings.cellSize,
-                      y: target.startPosition.y + dy / settings.cellSize
-                    }
-                  };
-                })
-              };
-            });
-          }
-        }}
-        onMouseUp={(event) => {
-          if ((this.action?.type === 'select') && (this.action.singleTargetId)) {
-            this.setState({
-              selectedNodeIds: ImSet.of(this.action.singleTargetId)
-            });
-          }
-
-          if (this.action?.type === 'move') {
-            let dx = event.clientX - this.action.startPoint.x;
-            let dy = event.clientY - this.action.startPoint.y;
-
-            let action = this.action;
-
-            this.setState((state) => {
-              return {
-                nodes: state.nodes.map((node) => {
-                  let target = action.targets.find((target) => target.id === node.id);
-
-                  if (!target) {
-                    return node;
-                  }
-
-                  return {
-                    ...node,
-                    position: {
-                      x: target.startPosition.x + Math.round(dx / settings.cellSize),
-                      y: target.startPosition.y + Math.round(dy / settings.cellSize)
-                    }
-                  };
-                })
-              };
-            });
-          }
-
-          this.action = null;
-        }}>
+      <div className="geditor-root" ref={this.refContainer}>
         <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className="geditor-svg">
-          <g>
-            {new Array(cellCountX * cellCountY).fill(0).map((_, index) => {
-              let x = index % cellCountX;
-              let y = Math.floor(index / cellCountX);
-              return <circle cx={x * cellSize} cy={y * cellSize} r="1.5" fill="#d8d8d8" key={index} />;
-            })}
+          <defs>
+            <pattern x={settings.cellPixelSize * 0.5} y={settings.cellPixelSize * 0.5} width={settings.cellPixelSize} height={settings.cellPixelSize} patternUnits="userSpaceOnUse" id="grid">
+              <circle cx={settings.cellPixelSize * 0.5} cy={settings.cellPixelSize * 0.5} r="1.5" fill="#d8d8d8" />
+            </pattern>
+          </defs>
+
+          <rect
+            x="0" y="0"
+            width={this.state.size.width * scale}
+            height={this.state.size.height * scale}
+            fill="url(#grid)"
+            transform={`scale(${1 / scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
+          <g transform={`scale(${1 / scale}) translate(${-offsetX} ${-offsetY})`}>
+            {render(this.props.tree, treeMetrics, { x: 1, y: 1 }, this.props.state ?? null)}
           </g>
-
-          <Link
-            autoMove={this.action?.type !== 'move'}
-            link={{
-              start: {
-                x: this.state.nodes[0].position.x + nodeWidth,
-                y: this.state.nodes[0].position.y + 1
-              },
-              end: {
-                x: this.state.nodes[1].position.x,
-                y: this.state.nodes[1].position.y + 1
-              }
-            }}
-            settings={settings} />
-
-          {this.state.nodes.map((node) => (
-            <Node
-              autoMove={this.action?.type !== 'move'}
-              node={node}
-              onMouseDown={(event) => {
-                event.preventDefault();
-
-                // let selectedNodeIds = event.metaKey
-                //   ? util.toggleSet(this.state.selectedNodeIds, node.id)
-                //   : ImSet.of(node.id);
-
-                // this.setState({ selectedNodeIds });
-
-                let singleTargetId: NodeId | null = null;
-                let selectedNodeIds;
-                let targetNodeIds: ImSet<NodeId>;
-
-                if (event.metaKey) {
-                  selectedNodeIds = util.toggleSet(this.state.selectedNodeIds, node.id);
-                  targetNodeIds = selectedNodeIds.has(node.id)
-                    ? selectedNodeIds
-                    : ImSet();
-                } else {
-                  selectedNodeIds = this.state.selectedNodeIds.has(node.id)
-                    ? this.state.selectedNodeIds
-                    : ImSet.of(node.id);
-                  targetNodeIds = selectedNodeIds;
-
-                  if (this.state.selectedNodeIds.has(node.id)) {
-                    singleTargetId = node.id;
-                  }
-                }
-
-                this.setState({ selectedNodeIds });
-
-                // this.setState((state) => {
-                //   if (event.metaKey) {
-                //     return { selectedNodeIds: util.toggleSet(state.selectedNodeIds, node.id) };
-                //   } else if ((state.selectedNodeIds.size > 1) || !state.selectedNodeIds.has(node.id)) {
-                //     return { selectedNodeIds: ImSet([node.id]) };
-                //   } else {
-                //     return null; // return { selectedNodeIds: ImSet() };
-                //   }
-                // });
-
-                if (!targetNodeIds.isEmpty()) {
-                  this.action = {
-                    type: 'select',
-                    singleTargetId,
-                    startPoint: {
-                      x: event.clientX,
-                      y: event.clientY
-                    },
-                    targets: targetNodeIds.toArray().map((nodeId) => {
-                      let node = this.state.nodes.find((node) => node.id === nodeId)!;
-
-                      return {
-                        id: nodeId,
-                        startPosition: node.position
-                      };
-                    })
-                  };
-                }
-              }}
-              selected={this.state.selectedNodeIds.has(node.id)}
-              settings={settings}
-              key={node.id} />
-          ))}
         </svg>
       </div>
     );
@@ -314,64 +186,75 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 }
 
 
-interface Settings {
-  cellSize: number;
+export interface GraphRenderSettings {
+  cellPixelSize: number;
+  nodeBodyPaddingY: number;
   nodeHeaderHeight: number;
   nodePadding: number;
-  nodeWidth: number;
-  nodeHeight: number;
 }
 
 
-type NodeId = string;
+type GraphNodeId = string;
 
-interface NodeDef {
-  id: NodeId;
-  title: string;
-  features: {
-    icon: string;
-    label: string;
-  }[];
+interface GraphNodeFeature {
+  icon: string;
+  label: string;
+}
+
+interface GraphNodeDef {
+  id: GraphNodeId;
+  title: string | null;
+  features: GraphNodeFeature[];
   position: {
     x: number;
     y: number;
   };
 }
 
-function Node(props: {
+export function GraphNode(props: {
+  active?: unknown;
   autoMove: unknown;
-  node: NodeDef;
+  cellSize: Size;
+  node: GraphNodeDef;
   onMouseDown?(event: React.MouseEvent): void;
-  selected: unknown;
-  settings: Settings;
+  settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
 
   return (
     <g
       className={util.formatClass('geditor-noderoot', { '_automove': props.autoMove })}
-      transform={`translate(${settings.cellSize * node.position.x} ${settings.cellSize * node.position.y})`}>
+      transform={`translate(${settings.cellPixelSize * node.position.x} ${settings.cellPixelSize * node.position.y})`}>
       <foreignObject
         x="0"
         y="0"
-        width={settings.cellSize * settings.nodeWidth}
-        height={settings.cellSize * settings.nodeHeight}
+        width={settings.cellPixelSize * props.cellSize.width}
+        height={settings.cellPixelSize * props.cellSize.height}
         className="geditor-nodeobject">
-        <div
-          className={util.formatClass('geditor-node', { '_selected': props.selected })}
-          onMouseDown={props.onMouseDown}>
-          <div className="geditor-header">
-            <div className="geditor-title">{node.title}</div>
+        <ContextMenuArea
+          createMenu={() => [
+            { id: 'jump', name: 'Jump', icon: 'move_down', disabled: props.active },
+            { id: 'pause', name: 'Pause process', icon: 'pause_circle', disabled: !props.active }
+          ]}
+          onSelect={(path) => {
+
+          }}>
+          <div
+            className={util.formatClass('geditor-node', { '_active': props.active })}
+            onMouseDown={props.onMouseDown}>
+            <div className="geditor-header">
+              <div className="geditor-title">{node.title ? node.title : <i>Untitled</i>}</div>
+            </div>
+            <div className="geditor-body">
+              {node.features.map((feature, index) => (
+                <div className="geditor-feature" key={index}>
+                  <Icon name={feature.icon} />
+                  <div className="geditor-featurelabel">{feature.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="geditor-body">
-            {node.features.map((feature, index) => (
-              <div className="geditor-feature" key={index}>
-                <Icon name={feature.icon} />
-                <div className="geditor-featurelabel">{feature.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </ContextMenuArea>
       </foreignObject>
 
       <circle
@@ -382,7 +265,7 @@ function Node(props: {
         stroke="#000"
         strokeWidth="2" />
       <circle
-        cx={settings.cellSize * settings.nodeWidth - settings.nodePadding}
+        cx={settings.cellPixelSize * props.cellSize.width - settings.nodePadding}
         cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
         r="5"
         fill="#fff"
@@ -393,23 +276,22 @@ function Node(props: {
 }
 
 
-interface LinkDef {
-  start: { x: number; y: number; };
-  end: { x: number; y: number; };
+export interface GraphLinkDef {
+  start: Point;
+  end: Point;
 }
 
-function Link(props: {
-  autoMove: unknown;
-  link: LinkDef;
-  settings: Settings;
+export function GraphLink(props: {
+  link: GraphLinkDef;
+  settings: GraphRenderSettings;
 }) {
   let { link, settings } = props;
 
-  let startX = settings.cellSize * link.start.x - settings.nodePadding;
-  let startY = settings.cellSize * link.start.y;
+  let startX = settings.cellPixelSize * link.start.x - settings.nodePadding;
+  let startY = settings.cellPixelSize * link.start.y;
 
-  let endX = settings.cellSize * link.end.x + settings.nodePadding;;
-  let endY = settings.cellSize * link.end.y;
+  let endX = settings.cellPixelSize * link.end.x + settings.nodePadding;
+  let endY = settings.cellPixelSize * link.end.y;
 
   let d = `M${startX} ${startY}`;
 
@@ -417,18 +299,43 @@ function Link(props: {
     let dir = (link.start.y < link.end.y) ? 1 : -1;
 
     let midCellX = Math.round((link.start.x + link.end.x) * 0.5);
-    let midX = settings.cellSize * midCellX;
+    let midX = settings.cellPixelSize * midCellX;
 
-    let midStartX = settings.cellSize * (midCellX - 1);
-    let midEndX = settings.cellSize * (midCellX + 1);
+    let midStartX = settings.cellPixelSize * (midCellX - 1);
+    let midEndX = settings.cellPixelSize * (midCellX + 1);
 
-    let curveStartY = settings.cellSize * (link.start.y + 1 * dir);
-    let curveEndY = settings.cellSize * (link.end.y - 1 * dir);
+    let curveStartY = settings.cellPixelSize * (link.start.y + 1 * dir);
+    let curveEndY = settings.cellPixelSize * (link.end.y - 1 * dir);
 
     d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
   }
 
   d += `L${endX} ${endY}`;
 
-  return <path d={d} className={util.formatClass('geditor-link', { '_automove': props.autoMove })} />
+  return <path d={d} className={util.formatClass('geditor-link', { '_automove': false })} />
+}
+
+
+export function NodeContainer(props: {
+  cellSize: Size;
+  position: Point;
+  settings: GraphRenderSettings;
+  title: React.ReactNode;
+}) {
+  let { settings } = props;
+
+  return (
+    <g className="geditor-group">
+      <foreignObject
+        x={settings.cellPixelSize * props.position.x}
+        y={settings.cellPixelSize * props.position.y}
+        width={settings.cellPixelSize * props.cellSize.width}
+        height={settings.cellPixelSize * props.cellSize.height}
+        className="geditor-groupobject">
+          <div className="geditor-group">
+            <div className="geditor-grouplabel">{props.title}</div>
+          </div>
+        </foreignObject>
+    </g>
+  );
 }

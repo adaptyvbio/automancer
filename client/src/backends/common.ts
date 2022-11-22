@@ -2,6 +2,8 @@ import type { BaseBackend } from './base';
 import type { DraftCompilation } from '../draft';
 import type { Codes, ExecutorStates, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
+import type { Master, Protocol } from '../interfaces/protocol';
+
 
 export abstract class BackendCommon implements BaseBackend {
   private _listeners: Set<() => void> = new Set();
@@ -43,10 +45,9 @@ export abstract class BackendCommon implements BaseBackend {
   abstract revealChipDirectory(chipId: ChipId): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
-  abstract startPlan(options: {
+  abstract startDraft(options: {
     chipId: ChipId;
-    data: Codes;
-    location: ProtocolLocation;
+    draftId: DraftId;
     source: string;
   }): Promise<void>;
   abstract upgradeChip(chipId: ChipId): Promise<void>;
@@ -115,46 +116,9 @@ export interface Draft {
 }
 
 
-export interface Master {
-  entries: MasterEntry[];
-  protocol: Protocol;
-}
-
-export interface MasterEntry {
-  error: string | null;
-  paused: boolean;
-  processState: { progress: number; };
-  segmentIndex: number;
-  time: number;
-}
-
-
-export interface Protocol {
-  name: string | null;
-  segments: ProtocolSegment[];
-  stages: ProtocolStage[];
-  data: ProtocolData;
-}
-
-export interface ProtocolStage {
-  name: string;
-  seq: ProtocolSeq;
-  steps: ProtocolStep[];
-}
-
-export interface ProtocolStep {
-  name: string;
-  seq: ProtocolSeq;
-}
-
-export interface ProtocolSegment {
-  processNamespace: Namespace;
-  data: SegmentData;
-}
-
-export type ProtocolSeq = [number, number];
-
-
+/**
+ * @deprecated
+ */
 export interface ProtocolLocation {
   segmentIndex: number;
   state: any;

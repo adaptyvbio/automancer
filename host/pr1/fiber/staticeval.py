@@ -87,7 +87,7 @@ if __name__ == "__main__":
   # text = '123 + 0x24 + abs(5 * 6)'
   # TODO: fix errors with zero-length range
   text = 'abs(-5.4 * (x[2 + 1]) + 1)'
-  text = '---\n{"a": "b"+"c"[0] + e, "B": 34*cos(2)*.5, "C": [1, -2, foo]}'
+  text = '---\n{"a": "b"+"c"[0], "B": 34*cos(2)*.5, "C": [1, -2, foo]}'
   source = Source(text)
   input = source[4:]
 

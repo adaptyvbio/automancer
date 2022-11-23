@@ -22,10 +22,10 @@ window.MonacoEnvironment = {
 export interface TextEditorProps {
   autoSave: boolean;
   compilation: DraftCompilation | null;
-  compiling: boolean;
   draft: Draft;
   getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
   save(compilation: DraftCompilation, source: string): void;
+  summary: React.ReactNode;
 }
 
 export interface TextEditorState {
@@ -316,54 +316,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           })
           : undefined} />
         {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
-        <div className={textEditorStyles.summary}>
-          {(() => {
-            if (this.props.compiling) {
-              return <DraftSummary status="default" title="Compiling" />;
-            }
-
-            let compilation = this.props.compilation!;
-
-            let [errorCount, warningCount] = compilation.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
-              switch (diagnostic.kind) {
-                case 'error': return [errorCount + 1, warningCount];
-                case 'warning': return [errorCount, warningCount + 1];
-              }
-            }, [0, 0]);
-
-            let onStart = compilation.valid
-              ? () => {}
-              : undefined;
-
-            let warningText = warningCount > 0
-              ? `${warningCount} warning${warningCount > 1 ? 's' : ''}`
-              : null;
-
-            if (errorCount > 0) {
-              return (
-                <DraftSummary
-                  description={warningText}
-                  onStart={onStart}
-                  status="error"
-                  title={`${errorCount} error${errorCount > 1 ? 's' : ''}`} />
-              );
-            } else if (warningText) {
-              return (
-                <DraftSummary
-                  onStart={onStart}
-                  status="warning"
-                  title={warningText} />
-              );
-            } else {
-              return (
-                <DraftSummary
-                  onStart={onStart}
-                  status="success"
-                  title="Ready" />
-              );
-            }
-          })()}
-        </div>
+        {this.props.summary && (
+          <div className={textEditorStyles.summary}>
+            {this.props.summary}
+          </div>
+        )}
       </div>
     );
   }

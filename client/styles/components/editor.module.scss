@@ -12,7 +12,7 @@ $border-color: #ddd;
 
 .panels {
   display: grid;
-  grid-template-columns: 1fr 1px 1fr 1px 300px;
+  grid-template-columns: 1fr 1px 1fr 1px 0px;
 
   height: 100%;
   overflow: hidden;
@@ -25,6 +25,7 @@ $border-color: #ddd;
     cursor: col-resize;
     pointer-events: initial;
     position: relative;
+    z-index: 1;
 
     &::before, &::after {
       content: "";

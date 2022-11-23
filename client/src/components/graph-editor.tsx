@@ -16,6 +16,7 @@ import graphEditorStyles from '../../styles/components/graph-editor.module.scss'
 export interface GraphEditorProps {
   host: Host;
   state?: unknown;
+  summary: React.ReactNode;
   tree: ProtocolBlock | null;
 }
 
@@ -30,6 +31,7 @@ export interface GraphEditorState {
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
   controller = new AbortController();
   initialized = false;
+  offsetBoundaries!: { min: Point; max: Point; };
   refContainer = React.createRef<HTMLDivElement>();
   settings: GraphRenderSettings | null = null;
 
@@ -123,6 +125,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     });
   }
 
+  getBoundOffset(point: Point): Point {
+    return {
+      x: Math.min(Math.max(point.x, this.offsetBoundaries.min.x), this.offsetBoundaries.max.x),
+      y: Math.min(Math.max(point.y, this.offsetBoundaries.min.y), this.offsetBoundaries.max.y)
+    };
+  }
+
   componentDidMount() {
     let container = this.refContainer.current!;
 
@@ -148,16 +157,16 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           return {
             ...state,
-            offset: this.getOffsetForScale(newScale, { x: mouseX, y: mouseY }, state),
+            offset: this.getBoundOffset(this.getOffsetForScale(newScale, { x: mouseX, y: mouseY }, state)),
             scale: newScale
           };
         } else {
           return {
             ...state,
-            offset: {
+            offset: this.getBoundOffset({
               x: state.offset.x + event.deltaX * state.scale,
               y: state.offset.y + event.deltaY * state.scale
-            }
+            })
           };
         }
       });
@@ -187,8 +196,6 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }
 
-    // console.log(this.props.tree);
-
     let settings = this.settings!;
     let renderedTree!: React.ReactNode | null;
 
@@ -205,8 +212,24 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
       };
 
+      let origin = { x: 1, y: 2 };
       let treeMetrics = computeMetrics(this.props.tree);
-      renderedTree = render(this.props.tree, treeMetrics, { x: 1, y: 2 }, this.props.state ?? null);
+      renderedTree = render(this.props.tree, treeMetrics, origin, this.props.state ?? null);
+
+      let margin = { x: 1, y: 2 };
+
+      let min = {
+        x: (origin.x - margin.x) * settings.cellPixelSize,
+        y: (origin.y - margin.y) * settings.cellPixelSize
+      };
+
+      this.offsetBoundaries = {
+        min,
+        max: {
+          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.x) * settings.cellPixelSize - this.state.size.width * this.state.scale),
+          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.y) * settings.cellPixelSize - this.state.size.height) * this.state.scale
+        }
+      };
     } else {
       renderedTree = null;
     }
@@ -261,6 +284,11 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             }}>Reset</button>
           </div>
         </div>
+        {this.props.summary && (
+          <div className={graphEditorStyles.summary}>
+            {this.props.summary}
+          </div>
+        )}
       </div>
     );
   }

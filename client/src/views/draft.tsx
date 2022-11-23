@@ -10,9 +10,11 @@ import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
 import { Host } from '../host';
 import { Pool } from '../util';
 import { BarNav } from '../components/bar-nav';
+import { SplitPanels } from '../components/split-panels';
 import { TitleBar } from '../components/title-bar';
 import { Button } from '../components/button';
 import * as util from '../util';
+import { DraftSummary } from '../components/draft-summary';
 import { GraphEditor } from '../components/graph-editor';
 import viewStyles from '../../styles/components/view.module.scss';
 import { TabNav } from '../components/tab-nav';
@@ -36,6 +38,7 @@ export interface ViewDraftState {
   requesting: boolean;
 
   draggedTrack: number | null;
+  graphOpen: boolean;
   inspectorOpen: boolean;
 }
 
@@ -56,6 +59,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       requesting: !props.draft.readable,
 
       draggedTrack: null,
+      graphOpen: true,
       inspectorOpen: false
     };
   }
@@ -151,23 +155,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  getGridTemplate() {
-    return this.refSplit.current!.computedStyleMap().get('grid-template-columns').toString().split(' ').map((item) => CSSNumericValue.parse(item));
-  }
-
-  setGridTemplate(template: CSSNumericValue[]) {
-    this.refSplit.current!.style.setProperty('grid-template-columns', template.map((item) => item.toString()).join(' '));
-  }
-
-  updateInspectorOpen() {
-    let gridTemplate = this.getGridTemplate();
-    let inspectorOpen = gridTemplate[4].value > 1e-9;
-
-    if (this.state.inspectorOpen !== inspectorOpen) {
-      this.setState({ inspectorOpen });
-    }
-  }
-
   render() {
     let component;
     let subtitle: string | null = null;
@@ -203,26 +190,21 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         <div className={viewStyles.contents} />
       );
     } else {
+      let summary = (
+        <FilledDraftSummary
+          compiling={this.state.compiling}
+          compilation={this.state.compilation} />
+      );
+
       component = (
         <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
-          <Split
-            onDragStart={(_direction, track) => {
-              this.setState({ draggedTrack: track });
-            }}
-            onDragEnd={() => {
-              this.setState({ draggedTrack: null });
-              this.updateInspectorOpen();
-            }}
-            snapOffset={200}
-            render={({
-              getGridProps,
-              getGutterProps,
-            }) => (
-              <div className={editorStyles.panels} {...getGridProps()} ref={this.refSplit}>
+          <SplitPanels
+            className={editorStyles.panels}
+            panels={[
+              { component: (
                 <TextEditor
                   autoSave={false}
                   compilation={this.state.compilation}
-                  compiling={this.state.compiling}
                   draft={this.props.draft}
                   getCompilation={this.getCompilation.bind(this)}
                   save={(compilation, source) => {
@@ -232,42 +214,51 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
                       this.refTitleBar.current!.notify();
                     });
-                  }} />
-                <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 1 })} {...getGutterProps('column', 1)} />
-                <GraphEditor
-                  host={this.props.host}
-                  tree={this.state.compilation?.protocol?.root ?? null} />
-                <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 3 })} {...getGutterProps('column', 3)} />
-                <div>
-                  <TabNav entries={[
-                    { id: 'report',
-                      label: 'Report',
-                      contents: () => (
-                        <div className={util.formatClass(formStyles.main2)}>
-                          {this.state.compilation && (
-                            <div className={diagnosticsStyles.list}>
-                              {this.state.compilation.diagnostics.map((diagnostic, index) => (
-                                <div className={util.formatClass(diagnosticsStyles.entryRoot, {
-                                  error: diagnosticsStyles.entryRootError,
-                                  warning: diagnosticsStyles.entryRootWarning
-                                }[diagnostic.kind])} key={index}>
-                                  <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
-                                  <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
-                                  {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
-                                  {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ) },
-                    { id: 'parameters',
-                      label: 'Parameters',
-                      contents: () => <div /> }
-                  ]} />
-                </div>
-              </div>
-            )} />
+                  }}
+                  summary={!this.state.graphOpen ? summary : null} />
+              ) },
+              { onToggle: (graphOpen) => void this.setState({ graphOpen }),
+                open: this.state.graphOpen,
+                component: (
+                  <GraphEditor
+                    host={this.props.host}
+                    summary={summary}
+                    tree={this.state.compilation?.protocol?.root ?? null} />
+                ) },
+              { nominalSize: CSSNumericValue.parse('300px'),
+                onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
+                open: this.state.inspectorOpen,
+                component: (
+                  <div>
+                    <TabNav entries={[
+                      { id: 'report',
+                        label: 'Report',
+                        contents: () => (
+                          <div className={util.formatClass(formStyles.main2)}>
+                            {this.state.compilation && (
+                              <div className={diagnosticsStyles.list}>
+                                {this.state.compilation.diagnostics.map((diagnostic, index) => (
+                                  <div className={util.formatClass(diagnosticsStyles.entryRoot, {
+                                    error: diagnosticsStyles.entryRootError,
+                                    warning: diagnosticsStyles.entryRootWarning
+                                  }[diagnostic.kind])} key={index}>
+                                    <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
+                                    <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
+                                    {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
+                                    {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) },
+                      { id: 'parameters',
+                        label: 'Parameters',
+                        contents: () => <div /> }
+                    ]} />
+                  </div>
+                ) }
+            ]} />
           <div className={editorStyles.infobarRoot}>
             <div className={editorStyles.infobarLeft}>
               {/* {this.state.cursorPosition && (
@@ -307,18 +298,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             active: this.state.inspectorOpen,
             icon: 'view_week',
             onClick: () => {
-              let inspectorOpen = !this.state.inspectorOpen;
-              this.setState({ inspectorOpen });
-
-              let gridTemplate = this.getGridTemplate();
-
-              if (inspectorOpen) {
-                gridTemplate[4] = CSSNumericValue.parse('300px');
-              } else {
-                gridTemplate[4] = CSSNumericValue.parse('0px');
-              }
-
-              this.setGridTemplate(gridTemplate);
+              this.setState({ inspectorOpen: !this.state.inspectorOpen });
             }
           }]}
           ref={this.refTitleBar} />
@@ -326,118 +306,55 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       </main>
     );
   }
+}
 
 
-/*   _render() {
-    // console.log('Render', this.props.draft);
+export function FilledDraftSummary(props: {
+  compilation: DraftCompilation | null;
+  compiling: boolean;
+}) {
+  if (props.compiling) {
+    return <DraftSummary status="default" title="Compiling" />;
+  }
 
-    let component = (() => {
-      if (!this.props.draft.readable && !this.state.requesting) {
-        return (
-          <div className="blayout-contents">
-            <div className="blayout-blank-outer">
-              <div className="blayout-blank-inner">
-                <button type="button" className="btn" onClick={() => {
-                  this.pool.add(async () => {
-                    await this.props.draft.item.request!();
+  let compilation = props.compilation!;
 
-                    if (this.props.draft.item.readable) {
-                      this.pool.add(async () => {
-                        await this.compile({ global: true });
-                      });
-                    }
-                  });
-                }}>Open protocol</button>
-              </div>
-            </div>
-          </div>
-        );
-      } else if (this.state.requesting || (this.props.draft.revision === 0)) {
-        return (
-          <div className="blayout-contents" />
-        );
-      }
+  let [errorCount, warningCount] = compilation.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
+    switch (diagnostic.kind) {
+      case 'error': return [errorCount + 1, warningCount];
+      case 'warning': return [errorCount, warningCount + 1];
+    }
+  }, [0, 0]);
 
+  let onStart = compilation.valid
+    ? () => { }
+    : undefined;
 
-      switch (this.props.mode) {
-        case 'overview': return (
-          <DraftOverview
-            compilation={this.state.compilation}
-            draft={this.props.draft}
-            host={this.props.host}
-            setRoute={this.props.setRoute} />
-        );
+  let warningText = warningCount > 0
+    ? `${warningCount} warning${warningCount > 1 ? 's' : ''}`
+    : null;
 
-        case 'text': return (
-          <TextEditor
-            autoSave={false}
-            compilation={this.state.compilation}
-            draft={this.props.draft}
-            compile={async (source: string) => {
-              return await this.compile({ global: false, source });
-            }}
-            getCompilation={this.getCompilation.bind(this)}
-            onChange={(source) => {
-              // console.log('[TX] Change');
-
-              this.pool.add(async () => {
-                await this.compile({ global: false, source });
-              });
-            }}
-            onChangeSave={(source) => {
-              // console.log('[TX] Change+save');
-
-              this.pool.add(async () => {
-                await Promise.all([
-                  await this.props.app.saveDraftSource(this.props.draft, source),
-                  await this.compile({ global: true, source })
-                ]);
-              });
-            }}
-            onSave={(source) => {
-              // console.log('[TX] Save');
-              this.pool.add(async () => {
-                if (this.state.compilation) {
-                  // TODO: Fix this
-                  await this.props.app.saveDraftCompilation(this.props.draft, this.state.compilation);
-                }
-
-                await this.props.app.saveDraftSource(this.props.draft, source);
-              });
-            }} />
-        );
-
-        case 'visual': return (
-          <VisualEditor
-            draft={this.props.draft} />
-        );
-      }
-    })();
-
+  if (errorCount > 0) {
     return (
-      <main className="blayout-container">
-        <header className="blayout-header">
-          <h1>{this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'} {this.state.compiling ? '(compiling)' : ''}</h1>
-          <BarNav
-            entries={[
-              { id: 'overview',
-                label: 'Overview',
-                icon: 'hexagon' },
-              { id: 'text',
-                label: 'Code editor',
-                icon: 'code' }
-              // { id: 'visual',
-              //   label: 'Visual editor',
-              //   icon: 'imagesearch_roller' }
-            ]}
-            selectEntry={(mode) => {
-              this.props.setRoute(['protocol', this.props.draft.id, mode]);
-            }}
-            selectedEntryId={this.props.mode} />
-        </header>
-
-        {component}
-      </main>
+      <DraftSummary
+        description={warningText}
+        onStart={onStart}
+        status="error"
+        title={`${errorCount} error${errorCount > 1 ? 's' : ''}`} />
     );
-  } */
+  } else if (warningText) {
+    return (
+      <DraftSummary
+        onStart={onStart}
+        status="warning"
+        title={warningText} />
+    );
+  } else {
+    return (
+      <DraftSummary
+        onStart={onStart}
+        status="success"
+        title="Ready" />
+    );
+  }
 }

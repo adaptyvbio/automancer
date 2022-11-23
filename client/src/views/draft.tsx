@@ -1,4 +1,5 @@
 import * as React from 'react';
+import Split from 'react-split-grid';
 
 import type { Application, Route } from '../application';
 import { Icon } from '../components/icon';
@@ -9,15 +10,19 @@ import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
 import { Host } from '../host';
 import { Pool } from '../util';
 import { BarNav } from '../components/bar-nav';
+import { TitleBar } from '../components/title-bar';
+import { Button } from '../components/button';
+import * as util from '../util';
 
+import editorStyles from '../../styles/components/editor.module.scss';
+import formStyles from '../../styles/components/form.module.scss';
+import viewStyles from '../../styles/components/view.module.scss';
 
-export type ViewDraftMode = 'overview' | 'text' | 'visual';
 
 export interface ViewDraftProps {
   app: Application;
   draft: Draft;
   host: Host;
-  mode: ViewDraftMode;
   setRoute(route: Route): void;
 }
 
@@ -25,6 +30,9 @@ export interface ViewDraftState {
   compilation: DraftCompilation | null;
   compiling: boolean;
   requesting: boolean;
+
+  draggedTrack: number | null;
+  inspectorOpen: boolean;
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
@@ -32,6 +40,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   compilationPromise: Promise<DraftCompilation> | null = null;
   controller = new AbortController();
   pool = new Pool();
+  refSplit = React.createRef<HTMLDivElement>();
 
   constructor(props: ViewDraftProps) {
     super(props);
@@ -39,7 +48,10 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     this.state = {
       compilation: null,
       compiling: false,
-      requesting: !props.draft.readable
+      requesting: !props.draft.readable,
+
+      draggedTrack: null,
+      inspectorOpen: false
     };
   }
 
@@ -61,6 +73,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         await this.getCompilation();
       }
     });
+
+    // this.updateInspectorOpen();
   }
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
@@ -136,7 +150,161 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return compilation;
   }
 
+
+  getGridTemplate() {
+    return this.refSplit.current!.computedStyleMap().get('grid-template-columns').toString().split(' ').map((item) => CSSNumericValue.parse(item));
+  }
+
+  setGridTemplate(template: CSSNumericValue[]) {
+    this.refSplit.current!.style.setProperty('grid-template-columns', template.map((item) => item.toString()).join(' '));
+  }
+
+  updateInspectorOpen() {
+    let gridTemplate = this.getGridTemplate();
+    let inspectorOpen = gridTemplate[4].value > 1e-9;
+
+    if (this.state.inspectorOpen !== inspectorOpen) {
+      this.setState({ inspectorOpen });
+    }
+  }
+
   render() {
+    let component;
+    let subtitle: string | null = null;
+
+    if (!this.props.draft.readable && !this.state.requesting) {
+      component = (
+        <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
+          <div className={viewStyles.blankInner}>
+            <p>Please grant the read and write permissions on this file to continue.</p>
+
+            <div className={viewStyles.blankActions}>
+              <Button onClick={() => {
+                this.pool.add(async () => {
+                  await this.props.draft.item.request!();
+
+                  // if (this.props.draft.item.readable) {
+                  //   this.pool.add(async () => {
+                  //     await this.compile({ global: true });
+                  //   });
+                  // }
+                });
+              }}>Open protocol</Button>
+            </div>
+          </div>
+        </div>
+      );
+
+      subtitle = 'Permission required';
+    } else if (this.state.requesting || (this.props.draft.revision === 0)) {
+      component = (
+        <div className={viewStyles.contents} />
+      );
+    } else {
+      component = (
+        <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
+          <Split
+            onDragStart={(_direction, track) => {
+              this.setState({ draggedTrack: track });
+            }}
+            onDragEnd={() => {
+              this.setState({ draggedTrack: null });
+              this.updateInspectorOpen();
+            }}
+            snapOffset={200}
+            render={({
+              getGridProps,
+              getGutterProps,
+            }) => (
+              <div className={editorStyles.panels} {...getGridProps()} ref={this.refSplit}>
+                <TextEditor
+                  autoSave={false}
+                  compilation={this.state.compilation}
+                  draft={this.props.draft}
+                  compile={async (source: string) => {
+                    return await this.compile({ global: false, source });
+                  }}
+                  getCompilation={this.getCompilation.bind(this)}
+                  onChange={(source) => {
+                    // console.log('[TX] Change');
+
+                    this.pool.add(async () => {
+                      await this.compile({ global: false, source });
+                    });
+                  }}
+                  onChangeSave={(source) => {
+                    // console.log('[TX] Change+save');
+
+                    this.pool.add(async () => {
+                      await Promise.all([
+                        await this.props.app.saveDraftSource(this.props.draft, source),
+                        await this.compile({ global: true, source })
+                      ]);
+                    });
+                  }}
+                  onSave={(source) => {
+                    // console.log('[TX] Save');
+                    this.pool.add(async () => {
+                      if (this.state.compilation) {
+                        // TODO: Fix this
+                        await this.props.app.saveDraftCompilation(this.props.draft, this.state.compilation);
+                      }
+
+                      await this.props.app.saveDraftSource(this.props.draft, source);
+                    });
+                  }} />
+                <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 1 })} {...getGutterProps('column', 1)} />
+                <div><p>Panel 2</p></div>
+                <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 3 })} {...getGutterProps('column', 3)} />
+                <div><p>Panel 3</p></div>
+              </div>
+            )} />
+          <div className={editorStyles.infobarRoot}>
+            <div className={editorStyles.infobarLeft}>
+              {/* {this.state.cursorPosition && (
+                  <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
+                )} */}
+            </div>
+            <div className={editorStyles.infobarRight}>
+              <div>Foo</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <main className={viewStyles.root}>
+        <TitleBar
+          title={this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}
+          subtitle={subtitle}
+          subtitleVisible={subtitle}
+          tools={[{
+            id: 'inspector',
+            active: this.state.inspectorOpen,
+            icon: 'view_week',
+            onClick: () => {
+              let inspectorOpen = !this.state.inspectorOpen;
+              this.setState({ inspectorOpen });
+
+              let gridTemplate = this.getGridTemplate();
+
+              if (inspectorOpen) {
+                gridTemplate[4] = CSSNumericValue.parse('300px');
+              } else {
+                gridTemplate[4] = CSSNumericValue.parse('0px');
+              }
+
+              this.setGridTemplate(gridTemplate);
+            }
+          }]} />
+        {component}
+      </main>
+    );
+  }
+
+
+/*   _render() {
     // console.log('Render', this.props.draft);
 
     let component = (() => {
@@ -247,5 +415,5 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         {component}
       </main>
     );
-  }
+  } */
 }

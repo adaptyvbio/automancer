@@ -1,3 +1,4 @@
+import { Range } from 'immutable';
 import * as monaco from 'monaco-editor';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
@@ -6,7 +7,9 @@ import { Icon } from './icon';
 import { Draft, DraftCompilation, DraftCompletion, DraftRange } from '../draft';
 import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
-import { Range } from 'immutable';
+import { DraftSummary } from '../components/draft-summary';
+
+import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
 
 window.MonacoEnvironment = {
@@ -81,6 +84,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       renderWhitespace: 'trailing',
       scrollBeyondLastLine: true,
       selectionHighlight: false,
+      suggestLineHeight: 24,
       tabSize: 2,
       overflowWidgetsDomNode: this.refWidgetContainer.current!,
       fixedOverflowWidgets: true,
@@ -294,52 +298,24 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   render() {
     return (
-      <div className="teditor-outer">
-        <div className="teditor-inner">
-          <div ref={this.ref} onKeyDown={!this.props.autoSave
-            ? ((event) => {
-              if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
+      <div className={textEditorStyles.root}>
+        <div ref={this.ref} onKeyDown={!this.props.autoSave
+          ? ((event) => {
+            if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
 
-                if (this.startMarkerUpdateTimeout.isActive()) {
-                  this.startMarkerUpdateTimeout.cancel();
-                  this.props.onChangeSave(this.model.getValue());
-                } else {
-                  this.props.onSave(this.model.getValue());
-                }
+              if (this.startMarkerUpdateTimeout.isActive()) {
+                this.startMarkerUpdateTimeout.cancel();
+                this.props.onChangeSave(this.model.getValue());
+              } else {
+                this.props.onSave(this.model.getValue());
               }
-            })
-            : undefined} />
-          {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
-        </div>
-        {((this.props.compilation?.diagnostics.length ?? 0) > 0) && <div className="teditor-views-root">
-          <div className="teditor-views-nav-root">
-            <nav className="teditor-views-nav-list">
-              <button className="teditor-views-nav-entry _selected">Problems</button>
-            </nav>
-          </div>
-          <div className="teditor-views-problem-list">
-            {this.props.compilation?.diagnostics.map((diagnostic, index) => (
-              <button type="button" className="teditor-views-problem-entry" key={index} onClick={() => {
-                if (this.props.compilation?.diagnostics.length === 1) {
-                  this.editor.trigger('anystring', 'editor.action.marker.next', {});
-                }
-              }}>
-                <Icon name={{ 'error': 'error', 'warning': 'warning' }[diagnostic.kind]} />
-                <div className="teditor-views-problem-label">{diagnostic.message}</div>
-              </button>
-            ))}
-          </div>
-        </div>}
-        <div className="teditor-infobar-root">
-          <div className="teditor-infobar-list">
-            <div className="teditor-infobar-item">{this.state.changeTime ? 'Not saved' : 'Saved'}</div>
-          </div>
-          <div className="teditor-infobar-list">
-            {this.props.draft.lastModified && (
-              <div className="teditor-infobar-item">Last saved: {new Date(this.props.draft.lastModified).toLocaleTimeString()}</div>
-            )}
-          </div>
+            }
+          })
+          : undefined} />
+        {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
+        <div className={textEditorStyles.summary}>
+          <DraftSummary status="success" title="Hello" />
         </div>
       </div>
     );

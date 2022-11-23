@@ -10,7 +10,7 @@ import type { Host, HostSettings, HostSettingsRecord } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
-import { ViewDraft, ViewDraftMode } from './views/draft';
+import { ViewDraft } from './views/draft';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
 import { ViewSplit } from './views/test/split';
@@ -468,7 +468,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
                 app={this}
                 draft={draft}
                 host={this.state.host}
-                mode={route[2] as ViewDraftMode}
                 setRoute={setRoute} />
             );
           }

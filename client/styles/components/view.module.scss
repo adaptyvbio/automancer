@@ -15,3 +15,28 @@
 .legacy {
   padding: 1.4rem 3rem;
 }
+
+
+.blank {
+  &Outer {
+    display: flex;
+  }
+
+  &Inner {
+    margin: auto;
+    max-width: 350px;
+
+    p {
+      margin: 1rem 0;
+      text-align: center;
+    }
+  }
+
+  &Actions {
+    display: flex;
+    column-gap: 0.6rem;
+    justify-content: center;
+
+    margin: 1rem 0;
+  }
+}

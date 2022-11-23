@@ -12,8 +12,7 @@ $border-color: #ddd;
 
 .panels {
   display: grid;
-  grid-template-columns: 1fr 1px 1fr;
-  // grid-template-columns: 1fr 1px 1fr 1px 300px;
+  grid-template-columns: 1fr 1px 1fr 1px 300px;
 
   height: 100%;
   overflow: hidden;

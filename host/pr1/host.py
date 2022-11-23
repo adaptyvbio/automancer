@@ -404,42 +404,6 @@ class Host:
 
         logger.info(f"Upgraded chip '{chip.id}'")
 
-    match request["type"]:
-      case "deleteChip":
-        chip = self.chips[request["chipId"]]
-
-        # TODO: checks
-
-        if request["trash"]:
-          self.backend.trash(chip.dir)
-        else:
-          shutil.rmtree(chip.dir)
-
-        del self.chips[request["chipId"]]
-
-      case "duplicateChip":
-        chip = self.chips[request["chipId"]]
-        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self, template=request["template"])
-
-        self.chips[duplicated.id] = duplicated
-        logger.info(f"Duplicated chip '{chip.id}' into '{duplicated.id}'")
-
-        self.update_callback()
-        return { "chipId": duplicated.id }
-
-      case "revealChipDirectory":
-        if client.remote:
-          return
-
-        chip = self.chips[request["chipId"]]
-        self.backend.reveal(chip.dir)
-
-      case "upgradeChip":
-        chip = self.chips[request["chipId"]]
-        chip.upgrade(host=self)
-
-        logger.info(f"Upgraded chip '{chip.id}'")
-
     self.update_callback()
 
     return None

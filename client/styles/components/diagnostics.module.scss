@@ -73,9 +73,10 @@
     min-height: 62px;
     padding: 0 1rem;
 
+    background-color: #fff;
     border: 1px solid #eee;
     border-radius: 6px;
-    box-shadow: 2px 2px 4px #0002;
+    box-shadow: 1px 1px 1px #0002;
   }
 
   &Root:has(&ActionRoot) {

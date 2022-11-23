@@ -1,0 +1,19 @@
+.root {
+  position: relative;
+
+  > :first-child {
+    height: 100%;
+  }
+}
+
+.summary {
+  $scrollbar-width: 14px;
+  // scrollbar width = 14px
+
+  width: 400px;
+  max-width: calc(100% - #{$scrollbar-width} - 2 * 6px);
+
+  position: absolute;
+  right: $scrollbar-width + 6px;
+  bottom: 8px;
+}

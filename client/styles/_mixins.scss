@@ -1,3 +1,25 @@
+@mixin border-radius($top: -1, $right: -1, $bottom: -1, $left: -1) {
+  @if $top >= 0 and $bottom >= 0 {
+    border-radius: $top $top $bottom $bottom;
+  } @else if $top >= 0 {
+    border-top-left-radius: $top;
+    border-top-right-radius: $top;
+  } @else if $bottom >= 0 {
+    border-bottom-left-radius: $bottom;
+    border-bottom-right-radius: $bottom;
+  }
+
+  @if $left >= 0 and $right >= 0 {
+    border-radius: $left $right $right $left;
+  } @else if $left >= 0 {
+    border-top-left-radius: $left;
+    border-bottom-left-radius: $left;
+  } @else if $right >= 0 {
+    border-top-right-radius: $right;
+    border-bottom-right-radius: $right;
+  }
+}
+
 @mixin no-scrollbar() {
   & {
     scrollbar-width: none;

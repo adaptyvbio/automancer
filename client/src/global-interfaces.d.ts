@@ -16,7 +16,7 @@ declare global {
 
   interface Element {
     computedStyleMap(): {
-      get(property: string): { toString(): string; };
+      get(property: string): CSSUnparsedValue;
     };
   }
 
@@ -28,6 +28,10 @@ declare global {
     unit: string;
     value: number;
 
-    static parse(cssText: string): CSSNumericValue;
+    static parse(cssText: CSSUnparsedValue | string): CSSNumericValue;
+  }
+
+  class CSSUnparsedValue {
+    toString(): string;
   }
 }

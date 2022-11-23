@@ -10,14 +10,17 @@ import { ProtocolBlock } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
 
+import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
+
 
 export interface GraphEditorProps {
   host: Host;
   state?: unknown;
-  tree: ProtocolBlock;
+  tree: ProtocolBlock | null;
 }
 
 export interface GraphEditorState {
+  animatingView: boolean;
   size: Size | null;
 
   offset: Point;
@@ -26,21 +29,38 @@ export interface GraphEditorState {
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
   controller = new AbortController();
+  initialized = false;
   refContainer = React.createRef<HTMLDivElement>();
+  settings: GraphRenderSettings | null = null;
 
   observer = new ResizeObserver((_entries) => {
-    this.setSize();
+    if (!this.initialized) {
+      this.initialized = true;
+      this.setSize();
+    } else {
+      this.clearSize();
+      this.observerDebounced();
+    }
   });
+
+  observerDebounced = util.debounce(150, () => {
+    this.setSize();
+  }, { signal: this.controller.signal });
 
   constructor(props: GraphEditorProps) {
     super(props);
 
     this.state = {
+      animatingView: false,
       size: null,
 
       scale: 1,
       offset: { x: 0, y: 0 }
     };
+  }
+
+  clearSize() {
+    this.setState((state) => state.size ? { size: null } : null);
   }
 
   setSize() {
@@ -55,11 +75,59 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     });
   }
 
+  reveal() {
+    let settings = this.settings!;
+
+    this.setState({
+      offset: {
+        x: settings.cellPixelSize * 10,
+        y: settings.cellPixelSize * 0
+      }
+    });
+
+    // this.setState((state) => {
+    //   let metrics = this.props.host.getGraphMetrics(this.props.tree!);
+    //   let { width, height } = this.state.size;
+
+    //   let scale = Math.min(
+    //     width / metrics.width,
+    //     height / metrics.height
+    //   );
+
+    //   let offset = {
+    //     x: (width - metrics.width * scale) / 2,
+    //     y: (height - metrics.height * scale) / 2
+    //   };
+
+    //   return {
+    //     ...state,
+    //     offset,
+    //     scale
+    //   };
+    // });
+  }
+
+  getOffsetForScale(newScale: number, refPoint: Point, state: GraphEditorState): Point {
+    let matrix = new DOMMatrix()
+      .translate(state.offset.x, state.offset.y)
+      .scale(state.scale)
+      .translate(refPoint.x, refPoint.y)
+      .scale(newScale / state.scale)
+      .translate(-refPoint.x, -refPoint.y)
+      .scale(1 / state.scale)
+      .translate(-state.offset.x, -state.offset.y);
+
+    return matrix.transformPoint({
+      x: state.offset.x,
+      y: state.offset.y
+    });
+  }
+
   componentDidMount() {
     let container = this.refContainer.current!;
 
-    this.setSize();
-    // this.observer.observe(container);
+    // This will immediately call setSize()
+    this.observer.observe(container);
 
     this.controller.signal.addEventListener('abort', () => {
       this.observer.disconnect();
@@ -78,26 +146,9 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           let newScale = state.scale * (1 + event.deltaY / 100);
           newScale = Math.max(0.6, Math.min(3, newScale));
 
-          let matrix = new DOMMatrix()
-            .translate(state.offset.x, state.offset.y)
-            .scale(state.scale)
-            .translate(mouseX, mouseY)
-            .scale(newScale / state.scale)
-            .translate(-mouseX, -mouseY)
-            .scale(1 / state.scale)
-            .translate(-state.offset.x, -state.offset.y);
-
-          let offset = matrix.transformPoint({
-            x: state.offset.x,
-            y: state.offset.y
-          });
-
           return {
             ...state,
-            offset: {
-              x: offset.x,
-              y: offset.y
-            },
+            offset: this.getOffsetForScale(newScale, { x: mouseX, y: mouseY }, state),
             scale: newScale
           };
         } else {
@@ -111,6 +162,20 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         }
       });
     }, { passive: false, signal: this.controller.signal });
+
+
+    let styles = this.refContainer.current!.computedStyleMap();
+    let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
+    let nodeHeaderHeight = CSSNumericValue.parse(styles.get('--node-header-height')!).value;
+    let nodePadding = CSSNumericValue.parse(styles.get('--node-padding')!).value;
+    let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
+
+    this.settings = {
+      cellPixelSize,
+      nodeBodyPaddingY,
+      nodeHeaderHeight,
+      nodePadding
+    };
   }
 
   componentWillUnmount() {
@@ -119,42 +184,32 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
   render() {
     if (!this.state.size) {
-      return <div className="geditor-root" ref={this.refContainer} />;
+      return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }
 
     // console.log(this.props.tree);
 
-    let styles = this.refContainer.current!.computedStyleMap();
-    // console.log(Object.fromEntries(Array.from(styles)));
-    let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
-    let nodeHeaderHeight = CSSNumericValue.parse(styles.get('--node-header-height')!).value;
-    let nodePadding = CSSNumericValue.parse(styles.get('--node-padding')!).value;
-    let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
+    let settings = this.settings!;
+    let renderedTree!: React.ReactNode | null;
 
-    let cellCountX = Math.floor(this.state.size.width / cellPixelSize);
-    let cellCountY = Math.floor(this.state.size.height / cellPixelSize);
+    if (this.props.tree) {
+      let computeMetrics = (block: ProtocolBlock) => {
+        return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
+          computeMetrics,
+          settings,
+          units: this.props.host.units
+        });
+      };
 
-    let settings: GraphRenderSettings = {
-      cellPixelSize,
-      nodeBodyPaddingY,
-      nodeHeaderHeight,
-      nodePadding
-    };
+      let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
+        return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
+      };
 
-
-    let computeMetrics = (block: ProtocolBlock) => {
-      return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
-        computeMetrics,
-        settings,
-        units: this.props.host.units
-      });
-    };
-
-    let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
-      return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
-    };
-
-    let treeMetrics = computeMetrics(this.props.tree);
+      let treeMetrics = computeMetrics(this.props.tree);
+      renderedTree = render(this.props.tree, treeMetrics, { x: 1, y: 2 }, this.props.state ?? null);
+    } else {
+      renderedTree = null;
+    }
 
     let frac = (x: number) => x - Math.floor(x);
     let offsetX = this.state.offset.x;
@@ -162,8 +217,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let scale = this.state.scale;
 
     return (
-      <div className="geditor-root" ref={this.refContainer}>
-        <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className="geditor-svg">
+      <div className={graphEditorStyles.root} ref={this.refContainer}>
+        <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}>
           <defs>
             <pattern x={settings.cellPixelSize * 0.5} y={settings.cellPixelSize * 0.5} width={settings.cellPixelSize} height={settings.cellPixelSize} patternUnits="userSpaceOnUse" id="grid">
               <circle cx={settings.cellPixelSize * 0.5} cy={settings.cellPixelSize * 0.5} r="1.5" fill="#d8d8d8" />
@@ -172,14 +227,40 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           <rect
             x="0" y="0"
-            width={this.state.size.width * scale}
-            height={this.state.size.height * scale}
+            width={(this.state.size.width + settings.cellPixelSize) * scale}
+            height={(this.state.size.height + settings.cellPixelSize) * scale}
             fill="url(#grid)"
             transform={`scale(${1 / scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
-          <g transform={`scale(${1 / scale}) translate(${-offsetX} ${-offsetY})`}>
-            {render(this.props.tree, treeMetrics, { x: 1, y: 1 }, this.props.state ?? null)}
+          <g transform={`translate(${-offsetX / scale} ${-offsetY / scale}) scale(${1 / scale})`} onTransitionEnd={() => {
+            this.setState({ animatingView: false });
+          }}>
+            {renderedTree}
           </g>
         </svg>
+        <div className={graphEditorStyles.actionsRoot}>
+          <div className={graphEditorStyles.actionsGroup}>
+            <button type="button" className={graphEditorStyles.actionsButton}><Icon name="center_focus_strong" className={graphEditorStyles.actionsIcon} /></button>
+          </div>
+          <div className={graphEditorStyles.actionsGroup}>
+            <button type="button" className={graphEditorStyles.actionsButton}><Icon name="add" className={graphEditorStyles.actionsIcon} /></button>
+            <button type="button" className={graphEditorStyles.actionsButton} disabled><Icon name="remove" className={graphEditorStyles.actionsIcon} /></button>
+          </div>
+          <div className={graphEditorStyles.actionsGroup}>
+            <button type="button" className={graphEditorStyles.actionsButton} disabled={this.state.scale === 1} onClick={() => {
+              this.setState((state) => {
+                let centerX = this.state.size!.width * 0.5;
+                let centerY = this.state.size!.height * 0.5;
+
+                return {
+                  animatingView: true,
+
+                  offset: this.getOffsetForScale(1, { x: centerX, y: centerY }, state),
+                  scale: 1
+                };
+              });
+            }}>Reset</button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -223,14 +304,14 @@ export function GraphNode(props: {
 
   return (
     <g
-      className={util.formatClass('geditor-noderoot', { '_automove': props.autoMove })}
+      className={util.formatClass(graphEditorStyles.noderoot, { '_automove': props.autoMove })}
       transform={`translate(${settings.cellPixelSize * node.position.x} ${settings.cellPixelSize * node.position.y})`}>
       <foreignObject
         x="0"
         y="0"
         width={settings.cellPixelSize * props.cellSize.width}
         height={settings.cellPixelSize * props.cellSize.height}
-        className="geditor-nodeobject">
+        className={graphEditorStyles.nodeobject}>
         <ContextMenuArea
           createMenu={() => [
             { id: 'jump', name: 'Jump', icon: 'move_down', disabled: props.active },
@@ -240,16 +321,16 @@ export function GraphNode(props: {
 
           }}>
           <div
-            className={util.formatClass('geditor-node', { '_active': props.active })}
+            className={util.formatClass(graphEditorStyles.node, { '_active': props.active })}
             onMouseDown={props.onMouseDown}>
-            <div className="geditor-header">
-              <div className="geditor-title">{node.title ? node.title : <i>Untitled</i>}</div>
+            <div className={graphEditorStyles.header}>
+              <div className={graphEditorStyles.title}>{node.title ? node.title : <i>Untitled</i>}</div>
             </div>
-            <div className="geditor-body">
+            <div className={graphEditorStyles.body}>
               {node.features.map((feature, index) => (
-                <div className="geditor-feature" key={index}>
+                <div className={graphEditorStyles.feature} key={index}>
                   <Icon name={feature.icon} />
-                  <div className="geditor-featurelabel">{feature.label}</div>
+                  <div className={graphEditorStyles.featurelabel}>{feature.label}</div>
                 </div>
               ))}
             </div>
@@ -312,7 +393,7 @@ export function GraphLink(props: {
 
   d += `L${endX} ${endY}`;
 
-  return <path d={d} className={util.formatClass('geditor-link', { '_automove': false })} />
+  return <path d={d} className={util.formatClass(graphEditorStyles.link, { '_automove': false })} />
 }
 
 
@@ -325,15 +406,15 @@ export function NodeContainer(props: {
   let { settings } = props;
 
   return (
-    <g className="geditor-group">
+    <g className={graphEditorStyles.group}>
       <foreignObject
         x={settings.cellPixelSize * props.position.x}
         y={settings.cellPixelSize * props.position.y}
         width={settings.cellPixelSize * props.cellSize.width}
         height={settings.cellPixelSize * props.cellSize.height}
-        className="geditor-groupobject">
-          <div className="geditor-group">
-            <div className="geditor-grouplabel">{props.title}</div>
+        className={graphEditorStyles.groupobject}>
+          <div className={graphEditorStyles.group}>
+            <div className={graphEditorStyles.grouplabel}>{props.title}</div>
           </div>
         </foreignObject>
     </g>

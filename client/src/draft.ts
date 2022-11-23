@@ -1,5 +1,5 @@
 import { DraftItem } from './app-backends/base';
-import { Protocol } from './backends/common';
+import { Protocol } from './interfaces/protocol';
 
 
 export type DraftId = string;

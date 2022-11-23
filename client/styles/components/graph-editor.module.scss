@@ -1,0 +1,210 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  --cell-size: 30px;
+  --node-header-height: 40px;
+  --node-body-padding-y: #{0.8 * 14px};
+  --node-padding: 10px;
+
+  // nodePadding + nodeHeaderHeight * 0.5 == cellSize
+  height: 100%;
+
+  background-color: #f1f1f1;
+
+  position: relative;
+}
+
+.svg {
+  &:global(._animatingView) > * {
+    transition: transform $dur-short;
+  }
+}
+
+.actions {
+  $height: 2rem;
+
+  &Root {
+    display: flex;
+    column-gap: 0.4rem;
+
+    position: absolute;
+    right: 6px;
+    top: 6px;
+  }
+
+  &Group {
+    display: flex;
+    height: $height;
+  }
+
+  &Button {
+    width: auto;
+    padding: 0 0.6rem;
+
+    background-color: #fff;
+    border: 1px solid #ddd;
+    box-shadow: 0 1px 2px #0001;
+
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+
+    &:disabled {
+      background-color: #fafafa;
+      box-shadow: none;
+
+      color: #999;
+    }
+
+    &:hover {
+      background-color: #fafafa;
+    }
+
+    &:active {
+      background-color: #f6f6f6;
+      box-shadow: none;
+    }
+
+    &:first-child {
+      @include border-radius($left: 4px);
+    }
+
+    &:last-child {
+      @include border-radius($right: 4px);
+    }
+
+    &:not(:last-child) {
+      border-right: none;
+    }
+  }
+
+  &Button:has(&Icon) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+    width: $height;
+  }
+
+  &Icon {
+    font-size: 20px;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 20;
+  }
+}
+
+
+.grouproot {
+
+}
+
+.groupobject {
+  padding: var(--node-padding);
+}
+
+.group {
+  height: 100%;
+
+  background-color: rgba($app-orange, 10%);
+  border: 2px solid $app-orange;
+  border-radius: 8px;
+}
+
+.grouplabel {
+  width: max-content;
+  padding: 0.4rem 1rem;
+
+  background-color: $app-orange;
+  border-bottom: 2px solid transparent;
+  border-right: 2px solid transparent;
+  border-radius: 2px 0 8px 0;
+
+  color: #fff;
+  font-weight: 500;
+}
+
+
+.noderoot {
+  &._automove {
+    transition: transform 150ms;
+  }
+}
+
+.nodeobject {
+  padding: var(--node-padding);
+}
+
+.node {
+  display: grid;
+  grid-template-rows: var(--node-header-height) 1fr;
+  height: 100%;
+
+  background-color: #fff;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  box-shadow: 2px 3px 2px #0001;
+
+  user-select: none;
+
+  &:hover {
+    // TODO: Replace with an outline to avoid the gap between the border and the node's edge.
+    border-color: #999;
+  }
+
+  &:global(._active) {
+    border-color: $app-blue;
+  }
+
+  &:global(._context) {
+    border-color: rgb(90, 0, 120);
+  }
+}
+
+
+.header {
+  display: flex;
+  align-items: center;
+
+  padding: 0 1.6rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.4rem;
+
+  align-self: center;
+  padding: var(--node-body-padding-y) 1.6rem;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  column-gap: 0.8rem;
+}
+
+.featurelabel {
+  font-weight: 500;
+}
+
+
+.link {
+  fill: none;
+  stroke: #000;
+  stroke-linecap: round;
+  stroke-width: 2px;
+
+  // &._automove { transition: d 150ms; }
+}

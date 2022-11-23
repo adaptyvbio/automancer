@@ -13,13 +13,14 @@ import { BarNav } from '../components/bar-nav';
 import { TitleBar } from '../components/title-bar';
 import { Button } from '../components/button';
 import * as util from '../util';
-import formStyles from '../../styles/components/form.module.scss';
+import { GraphEditor } from '../components/graph-editor';
 import viewStyles from '../../styles/components/view.module.scss';
 import { TabNav } from '../components/tab-nav';
 import * as format from '../format';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
+import formStyles from '../../styles/components/form.module.scss';
 
 
 export interface ViewDraftProps {
@@ -233,7 +234,9 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                     });
                   }} />
                 <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 1 })} {...getGutterProps('column', 1)} />
-                <div><p>Panel 2</p></div>
+                <GraphEditor
+                  host={this.props.host}
+                  tree={this.state.compilation?.protocol?.root ?? null} />
                 <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 3 })} {...getGutterProps('column', 3)} />
                 <div>
                   <TabNav entries={[

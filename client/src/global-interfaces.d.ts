@@ -15,7 +15,9 @@ declare global {
   }
 
   interface Element {
-    computedStyleMap(): StylePropertyMapReadOnly;
+    computedStyleMap(): {
+      get(property: string): { toString(): string; };
+    };
   }
 
   interface Window {

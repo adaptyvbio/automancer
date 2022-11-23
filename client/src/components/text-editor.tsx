@@ -22,12 +22,10 @@ window.MonacoEnvironment = {
 export interface TextEditorProps {
   autoSave: boolean;
   compilation: DraftCompilation | null;
-  compile(source: string): Promise<DraftCompilation>;
+  compiling: boolean;
   draft: Draft;
   getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
-  onChange(source: string): void;
-  onChangeSave(source: string): void;
-  onSave(source: string): void;
+  save(compilation: DraftCompilation, source: string): void;
 }
 
 export interface TextEditorState {
@@ -109,8 +107,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     });
 
 
-    // ...
-
     this.model.onDidChangeContent(() => {
       if (!this.isModelContentChangeExternal) {
         this.modelChanged = true;
@@ -130,6 +126,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.markerManager = new MarkerManager(this.model, {
       provideMarkers: async (token) => {
         let compilation = await this.getCompilation();
+
         if (token.isCancellationRequested) {
           return null;
         }
@@ -304,18 +301,68 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
 
-              if (this.startMarkerUpdateTimeout.isActive()) {
-                this.startMarkerUpdateTimeout.cancel();
-                this.props.onChangeSave(this.model.getValue());
-              } else {
-                this.props.onSave(this.model.getValue());
-              }
+              this.pool.add(async () => {
+                if (this.startMarkerUpdateTimeout.isActive()) {
+                  this.startMarkerUpdateTimeout.cancel();
+                  await this.markerManager.update();
+                }
+
+                let source = this.model.getValue();
+                let compilation = await this.getCompilation();
+
+                this.props.save(compilation, source);
+              });
             }
           })
           : undefined} />
         {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         <div className={textEditorStyles.summary}>
-          <DraftSummary status="success" title="Hello" />
+          {(() => {
+            if (this.props.compiling) {
+              return <DraftSummary status="default" title="Compiling" />;
+            }
+
+            let compilation = this.props.compilation!;
+
+            let [errorCount, warningCount] = compilation.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
+              switch (diagnostic.kind) {
+                case 'error': return [errorCount + 1, warningCount];
+                case 'warning': return [errorCount, warningCount + 1];
+              }
+            }, [0, 0]);
+
+            let onStart = compilation.valid
+              ? () => {}
+              : undefined;
+
+            let warningText = warningCount > 0
+              ? `${warningCount} warning${warningCount > 1 ? 's' : ''}`
+              : null;
+
+            if (errorCount > 0) {
+              return (
+                <DraftSummary
+                  description={warningText}
+                  onStart={onStart}
+                  status="error"
+                  title={`${errorCount} error${errorCount > 1 ? 's' : ''}`} />
+              );
+            } else if (warningText) {
+              return (
+                <DraftSummary
+                  onStart={onStart}
+                  status="warning"
+                  title={warningText} />
+              );
+            } else {
+              return (
+                <DraftSummary
+                  onStart={onStart}
+                  status="success"
+                  title="Ready" />
+              );
+            }
+          })()}
         </div>
       </div>
     );

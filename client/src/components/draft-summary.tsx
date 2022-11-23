@@ -9,7 +9,7 @@ import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
 export function DraftSummary(props: {
   description?: string | null;
   onStart?(): void;
-  status: 'default' | 'error' | 'success';
+  status: 'default' | 'error' | 'success' | 'warning';
   title: string;
 }) {
   return (
@@ -17,11 +17,13 @@ export function DraftSummary(props: {
       default: {},
       error: diagnosticsStyles.reportRootError,
       success: diagnosticsStyles.reportRootSuccess,
+      warning: diagnosticsStyles.reportRootWarning
     }[props.status])}>
       <Icon name={{
         default: 'pending',
         error: 'report',
-        success: 'new_releases'
+        success: 'new_releases',
+        warning: 'warning'
       }[props.status]} className={diagnosticsStyles.reportIcon} />
       <div className={diagnosticsStyles.reportTitle}>{props.title}</div>
       {props.description && <p className={diagnosticsStyles.reportDescription}>{props.description}</p>}

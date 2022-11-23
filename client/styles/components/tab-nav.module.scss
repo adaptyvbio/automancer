@@ -4,6 +4,8 @@
 .root {
   display: grid;
   grid-template-rows: auto 1fr;
+
+  height: 100%;
   overflow-y: hidden;
 }
 
@@ -17,6 +19,7 @@
 
   background-color: #f9f9f9;
   border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 3px #0001;
 }
 
 .entry {

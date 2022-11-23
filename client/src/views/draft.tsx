@@ -13,10 +13,13 @@ import { BarNav } from '../components/bar-nav';
 import { TitleBar } from '../components/title-bar';
 import { Button } from '../components/button';
 import * as util from '../util';
-
-import editorStyles from '../../styles/components/editor.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
+import { TabNav } from '../components/tab-nav';
+import * as format from '../format';
+
+import editorStyles from '../../styles/components/editor.module.scss';
+import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
 
 
 export interface ViewDraftProps {
@@ -41,13 +44,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   controller = new AbortController();
   pool = new Pool();
   refSplit = React.createRef<HTMLDivElement>();
+  refTitleBar = React.createRef<TitleBar>();
 
   constructor(props: ViewDraftProps) {
     super(props);
 
     this.state = {
       compilation: null,
-      compiling: false,
+      compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
 
       draggedTrack: null,
@@ -103,11 +107,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
     if (options?.source === undefined) {
       if (this.compilationPromise) {
-        return this.compilationPromise;
-      }
-
-      if (this.state.compilation) {
-        return this.state.compilation;
+        return await this.compilationPromise;
       }
 
       source = this.props.draft.item.source!;
@@ -135,7 +135,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
     if (!compilationController.signal.aborted) {
       this.compilationController = null;
-      this.compilationPromise = null;
 
       this.setState({
         compilation,
@@ -171,6 +170,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   render() {
     let component;
     let subtitle: string | null = null;
+    let subtitleVisible = false;
 
     if (!this.props.draft.readable && !this.state.requesting) {
       component = (
@@ -196,6 +196,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       );
 
       subtitle = 'Permission required';
+      subtitleVisible = true;
     } else if (this.state.requesting || (this.props.draft.revision === 0)) {
       component = (
         <div className={viewStyles.contents} />
@@ -220,43 +221,48 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 <TextEditor
                   autoSave={false}
                   compilation={this.state.compilation}
+                  compiling={this.state.compiling}
                   draft={this.props.draft}
-                  compile={async (source: string) => {
-                    return await this.compile({ global: false, source });
-                  }}
                   getCompilation={this.getCompilation.bind(this)}
-                  onChange={(source) => {
-                    // console.log('[TX] Change');
-
+                  save={(compilation, source) => {
                     this.pool.add(async () => {
-                      await this.compile({ global: false, source });
-                    });
-                  }}
-                  onChangeSave={(source) => {
-                    // console.log('[TX] Change+save');
-
-                    this.pool.add(async () => {
-                      await Promise.all([
-                        await this.props.app.saveDraftSource(this.props.draft, source),
-                        await this.compile({ global: true, source })
-                      ]);
-                    });
-                  }}
-                  onSave={(source) => {
-                    // console.log('[TX] Save');
-                    this.pool.add(async () => {
-                      if (this.state.compilation) {
-                        // TODO: Fix this
-                        await this.props.app.saveDraftCompilation(this.props.draft, this.state.compilation);
-                      }
-
                       await this.props.app.saveDraftSource(this.props.draft, source);
+                      await this.props.app.saveDraftCompilation(this.props.draft, compilation);
+
+                      this.refTitleBar.current!.notify();
                     });
                   }} />
                 <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 1 })} {...getGutterProps('column', 1)} />
                 <div><p>Panel 2</p></div>
                 <div className={util.formatClass({ '_dragging': this.state.draggedTrack === 3 })} {...getGutterProps('column', 3)} />
-                <div><p>Panel 3</p></div>
+                <div>
+                  <TabNav entries={[
+                    { id: 'report',
+                      label: 'Report',
+                      contents: () => (
+                        <div className={util.formatClass(formStyles.main2)}>
+                          {this.state.compilation && (
+                            <div className={diagnosticsStyles.list}>
+                              {this.state.compilation.diagnostics.map((diagnostic, index) => (
+                                <div className={util.formatClass(diagnosticsStyles.entryRoot, {
+                                  error: diagnosticsStyles.entryRootError,
+                                  warning: diagnosticsStyles.entryRootWarning
+                                }[diagnostic.kind])} key={index}>
+                                  <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
+                                  <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
+                                  {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
+                                  {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) },
+                    { id: 'parameters',
+                      label: 'Parameters',
+                      contents: () => <div /> }
+                  ]} />
+                </div>
               </div>
             )} />
           <div className={editorStyles.infobarRoot}>
@@ -264,6 +270,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               {/* {this.state.cursorPosition && (
                   <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
                 )} */}
+              <div>Last saved: {this.props.draft.lastModified ? new Date(this.props.draft.lastModified).toLocaleTimeString() : '–'}</div>
             </div>
             <div className={editorStyles.infobarRight}>
               <div>Foo</div>
@@ -271,6 +278,19 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           </div>
         </div>
       );
+
+
+      if (this.props.draft.lastModified) {
+        let delta = Date.now() - this.props.draft.lastModified;
+
+        if (delta < 5e3) {
+          subtitle = 'Just saved';
+        } else {
+          subtitle = `Last saved ${format.formatRelativeDate(this.props.draft.lastModified)}`;
+        }
+      } else {
+        subtitle = null;
+      }
     }
 
     return (
@@ -278,7 +298,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         <TitleBar
           title={this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}
           subtitle={subtitle}
-          subtitleVisible={subtitle}
+          subtitleVisible={subtitleVisible}
           tools={[{
             id: 'inspector',
             active: this.state.inspectorOpen,
@@ -297,7 +317,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
               this.setGridTemplate(gridTemplate);
             }
-          }]} />
+          }]}
+          ref={this.refTitleBar} />
         {component}
       </main>
     );

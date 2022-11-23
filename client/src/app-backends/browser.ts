@@ -187,6 +187,9 @@ export class BrowserAppBackend implements AppBackend {
     await idb.del(draftId, this.#store);
   }
 
+  /**
+   * Returns an array of draft items.
+   */
   async listDrafts() {
     let mainEntry = (await idb.get<MainEntry>('main', this.#store))!;
     let draftEntries = await idb.getMany<DraftEntry>(mainEntry.draftIds, this.#store);
@@ -335,6 +338,12 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     this._entry = draftEntry;
   }
 
+  /**
+   * Initializes the draft item without triggering any user action. Called by the app backend.
+   *
+   * 1. Query for the permission status, set this.readable and this.writable.
+   * 2. If the item is readable, set this.lastModified.
+   */
   async _initialize() {
     let location = this._entry.location;
 
@@ -409,41 +418,12 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     return this._entry.name; // Not kept up to date
   }
 
-  // Deprecated
-  async getFiles() {
-    let location = this._entry.location;
-
-    switch (location.type) {
-      case 'app': {
-        return {
-          '/': new Blob([location.source], { type: 'text/yaml' })
-        };
-      }
-
-      case 'private-filesystem':
-      case 'user-filesystem': {
-        switch (location.handle.kind) {
-          case 'directory': {
-            let files: Record<string, Blob> = {};
-
-            for await (let entry of location.handle.values()) {
-              if (entry.kind === 'file') {
-                let file = await entry.getFile();
-                files[entry.name] = file;
-              }
-            }
-
-            return files;
-          }
-
-          case 'file': {
-            return { [this.mainFilePath]: await location.handle.getFile() };
-          }
-        }
-      }
-    }
-  }
-
+  /**
+   * Requests read and possibly write permission by triggering user action. If the
+   * user grants permission, this.readable and this.writable are updated. Furthermore,
+   * if the draft is being watched, this.lastModified, this.revision and this.source
+   * are set.
+   */
   async request() {
     if (this._entry.location.type === 'user-filesystem') {
       try {
@@ -465,6 +445,18 @@ export class BrowserAppBackendDraftItem implements DraftItem {
     }
   }
 
+  /**
+   * Starts watching the draft. The handler is called in the following situations.
+   *
+   * 1. When calling watch() provided that the draft is already readable,
+   *    before the function returns.
+   * 2. When the draft's source changes.
+   * 3. When the draft's readability or writability changes, before request()
+   *    returns if it is it that caused the change.
+   *
+   * The properties this.lastModified, this.revision and this.source are updated
+   * prior to calling the handler. Only one handler can exist at a time.
+   */
   async watch(handler: () => void, options: { signal: AbortSignal; }) {
     let intervalId: number | null = null;
     let updateWatchListener = async () => {

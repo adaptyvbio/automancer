@@ -10,7 +10,6 @@ T = TypeVar('T')
 
 NodePath = tuple[str]
 
-
 # Base nodes
 
 class Cancelable:
@@ -21,10 +20,14 @@ class NodeUnavailableError(Exception):
   pass
 
 class BaseNode:
+  icon = None
+
   def __init__(self):
     self.connected: bool
     self.id: str
     self.label: Optional[str]
+
+    self.icon: Optional[str]
 
   # Called by the producer
 
@@ -37,6 +40,7 @@ class BaseNode:
   def export(self):
     return {
       "id": self.id,
+      "icon": self.icon,
       "connected": self.connected,
       "label": self.label
     }

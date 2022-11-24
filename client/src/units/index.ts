@@ -61,13 +61,6 @@ export interface MatrixEditorProps {
 }
 
 
-//> ExecutorState
-
-export interface ExecutorStates {
-
-}
-
-
 //> ProtocolData & SegmentData
 
 export interface ProtocolData {

@@ -4,6 +4,7 @@ import type { ProtocolBlock } from './protocol';
 import type { Point, Size } from '../geometry';
 import type { Units } from './unit';
 import type { GraphRenderSettings } from '../components/graph-editor';
+import type { Host } from '../host';
 
 
 export interface GraphBlockMetrics {
@@ -20,8 +21,8 @@ export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends Grap
 
 export interface GraphRendererComputeSizeOptions {
   computeMetrics(block: unknown): GraphBlockMetrics;
+  host: Host;
   settings: GraphRenderSettings;
-  units: Units;
 }
 
 export interface RendererRenderOptions {

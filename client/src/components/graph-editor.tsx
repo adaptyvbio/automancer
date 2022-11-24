@@ -206,8 +206,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       let computeMetrics = (block: ProtocolBlock) => {
         return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
           computeMetrics,
-          settings,
-          units: this.props.host.units
+          host: this.props.host,
+          settings
         });
       };
 
@@ -354,7 +354,7 @@ export function GraphNode(props: {
             onMouseDown={props.onMouseDown}>
             {node.title && (
               <div className={graphEditorStyles.header}>
-                <div className={graphEditorStyles.title}>{node.title.alternate ? <i>{node.title.value}</i> : node.title.value}</div>
+                <div className={graphEditorStyles.title} title={node.title.value}>{node.title.alternate ? <i>{node.title.value}</i> : node.title.value}</div>
               </div>
             )}
             <div className={graphEditorStyles.body}>
@@ -419,7 +419,7 @@ export function GraphLink(props: {
 
   d += `L${endX} ${endY}`;
 
-  return <path d={d} className={util.formatClass(graphEditorStyles.link, { '_automove': false })} />
+  return <path d={d} className={graphEditorStyles.link} />
 }
 
 

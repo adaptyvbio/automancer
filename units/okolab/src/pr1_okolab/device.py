@@ -48,6 +48,8 @@ class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
   id = "setpoint"
   label = "Temperature setpoint"
 
+  icon = "thermostat"
+
   def __init__(self, *, index: int, master: 'MasterDevice'):
     ScalarWritableNode.__init__(self, range=(25.0, 60.0), unit="degC")
     BiWritableNode.__init__(self)

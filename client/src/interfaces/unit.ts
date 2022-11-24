@@ -25,7 +25,7 @@ export type FeatureListDef = FeatureGroupDef[];
 //> Unit
 
 export interface CreateFeaturesOptions {
-
+  host: Host;
 }
 
 export interface Unit {
@@ -33,7 +33,7 @@ export interface Unit {
   styleSheets?: CSSStyleSheet[];
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
-  createStateFeatures?(stateData: ProtocolState, options: CreateFeaturesOptions): FeatureGroupDef;
+  createStateFeatures?(state: ProtocolState, options: CreateFeaturesOptions): FeatureGroupDef;
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): unknown;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];

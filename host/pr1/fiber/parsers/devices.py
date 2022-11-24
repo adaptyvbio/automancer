@@ -77,7 +77,7 @@ class DevicesState(BlockUnitState):
     def export_value(value):
       match value:
         case Quantity():
-          return { "magnitude": value.magnitude, "unit": str(value.units) }
+          return f"{value:.2fP~}"
         case _:
           return value
 

@@ -1,6 +1,6 @@
 import type { BaseBackend } from './base';
 import type { DraftCompilation } from '../draft';
-import type { Codes, ExecutorStates, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
+import type { Codes, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 import type { Master, Protocol } from '../interfaces/protocol';
 
@@ -114,6 +114,8 @@ export interface Draft {
   protocol: Protocol | null;
   source: string;
 }
+
+export type ExecutorStates = Record<UnitNamespace, unknown>;
 
 
 /**

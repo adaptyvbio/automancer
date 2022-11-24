@@ -9,6 +9,7 @@ setup(
 
   entry_points={
     'pr1.units': [
+      "devices = pr1_devices",
       "repeat = pr1_repeat",
       "segment = pr1_segment",
       "sequence = pr1_sequence",
@@ -16,6 +17,7 @@ setup(
     ]
   },
   package_data={
+    "pr1_devices.client": ["*"],
     "pr1_repeat.client": ["*"],
     "pr1_segment.client": ["*"],
     "pr1_sequence.client": ["*"],

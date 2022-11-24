@@ -159,12 +159,16 @@
   &Description {
     align-self: start;
 
+    @include text-ellipsis();
+
     color: #999;
     font-size: 0.85rem;
     line-height: 1.15;
   }
 
   &Label {
+    @include text-ellipsis();
+
     font-weight: 500;
     line-height: 1.15;
   }

@@ -160,6 +160,7 @@ class Attribute:
 
 class CompositeDict:
   _native_namespace = "_"
+  _separator = "/"
 
   def __init__(self, attrs: dict[str, Attribute] = dict(), *, foldable = False):
     self._foldable = foldable
@@ -180,11 +181,11 @@ class CompositeDict:
       self._attributes[attr_name][namespace] = attr
 
   def get_attr(self, attr_name):
-    segments = attr_name.split(".")
+    segments = attr_name.split(self._separator)
 
     if len(segments) > 1:
       namespace = segments[0]
-      attr_name = ".".join(segments[1:])
+      attr_name = self._separator.join(segments[1:])
     else:
       namespace = None
 
@@ -232,28 +233,28 @@ class CompositeDict:
     for obj_key, obj_value in obj.items():
       namespace, attr_name, attr_entries = self.get_attr(obj_key)
 
-      # e.g. 'invalid.bar'
+      # e.g. 'invalid/bar'
       if namespace and not (namespace in self._namespaces):
         analysis.errors.append(ExtraneousKeyError(namespace, obj))
         continue
 
-      # e.g. 'foo.invalid' or 'invalid'
+      # e.g. 'foo/invalid' or 'invalid'
       if not attr_entries:
         analysis.errors.append(ExtraneousKeyError(obj_key, obj))
         continue
 
       if not namespace:
-        # e.g. 'bar' where '_.bar' exists
+        # e.g. 'bar' where '_/bar' exists
         if self._native_namespace in attr_entries:
           namespace = self._native_namespace
-        # e.g. 'bar' where only 'a.bar' exists
+        # e.g. 'bar' where only 'a/bar' exists
         elif len(attr_entries) == 1:
           namespace = next(iter(attr_entries.keys()))
-        # e.g. 'bar' where 'a.bar' and 'b.bar' both exist, but not '_.bar'
+        # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
           analysis.errors.append(AmbiguousKeyError(obj_key, obj))
           continue
-      # e.g. 'foo.bar'
+      # e.g. 'foo/bar'
       else:
         pass
 
@@ -269,7 +270,7 @@ class CompositeDict:
     for attr_name, attr_entries in self._attributes.items():
       for namespace, attr in attr_entries.items():
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError(f"{namespace}.{attr_name}", obj))
+          analysis.errors.append(MissingKeyError(f"{namespace}{self._separator}{attr_name}", obj))
 
 
     completion_items = list()
@@ -287,7 +288,7 @@ class CompositeDict:
           namespace=(namespace if not native else None),
           signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
           sublabel=attr._label,
-          text=(f"{namespace}.{attr_name}" if ambiguous and (not native) else attr_name)
+          text=(f"{namespace}{self._separator}{attr_name}" if ambiguous and (not native) else attr_name)
         ))
 
     analysis.completions.append(Completion(
@@ -409,7 +410,7 @@ class QuantityType(LiteralOrExprType):
 
     match value:
       case Quantity() if value.check(self._unit):
-        return Analysis(), LocatedValue.new(value, area=obj.area)
+        return Analysis(), LocatedValue.new(value.to(self._unit), area=obj.area)
       case Quantity():
         return Analysis(errors=[InvalidUnitError(obj, self._unit)]), Ellipsis
       case builtins.float() | builtins.int():

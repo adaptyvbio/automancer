@@ -49,7 +49,7 @@ class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
   label = "Temperature setpoint"
 
   def __init__(self, *, index: int, master: 'MasterDevice'):
-    ScalarWritableNode.__init__(self, range=(25.0, 60.0))
+    ScalarWritableNode.__init__(self, range=(25.0, 60.0), unit="degC")
     BiWritableNode.__init__(self)
 
     self._index = index

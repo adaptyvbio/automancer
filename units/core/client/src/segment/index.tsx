@@ -22,8 +22,12 @@ const namespace = 'segment';
 const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   computeMetrics(block, options) {
     let name = (block.state['name'] as { value: string | null; }).value;
-    let features = options.units[block.process.namespace].createProcessFeatures?.(block.process.data, {}) ?? [
-      { icon: 'not_listed_location', label: 'Unknown process' }
+    let features = [
+      ...(options.units[block.process.namespace].createProcessFeatures?.(block.process.data, {})
+        ?? [{ icon: 'not_listed_location', label: 'Unknown process' }]),
+      ...Object.values(options.units).flatMap((unit) => {
+        return unit?.createStateFeatures?.(block.state, {}) ?? [];
+      })
     ];
 
     let featureCount = features.length;

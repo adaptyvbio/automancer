@@ -2,7 +2,7 @@ import type { Chip } from '../backends/common';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
 import type { GraphBlockMetrics, GraphRenderer } from './graph';
-import type { Protocol, ProtocolBlock } from './protocol';
+import type { Protocol, ProtocolBlock, ProtocolState } from './protocol';
 
 
 //> General
@@ -28,14 +28,12 @@ export interface CreateFeaturesOptions {
 
 }
 
-export type BlockState = Record<UnitNamespace, unknown>;
-
 export interface Unit {
   namespace: UnitNamespace;
   styleSheets?: CSSStyleSheet[];
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
-  createStateFeatures?(stateData: BlockState, options: CreateFeaturesOptions): FeatureGroupDef;
+  createStateFeatures?(stateData: ProtocolState, options: CreateFeaturesOptions): FeatureGroupDef;
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): unknown;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];

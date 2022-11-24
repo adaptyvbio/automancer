@@ -2,7 +2,7 @@ import * as monaco from 'monaco-editor';
 
 
 export const LanguageName = 'prl';
-export const ThemeName = 'prl-theme'
+export const ThemeName = 'prl-theme';
 
 export type LanguageService = monaco.languages.CompletionItemProvider
   & monaco.languages.FoldingRangeProvider
@@ -65,7 +65,7 @@ monaco.languages.setMonarchTokensProvider(LanguageName, {
       { include: '@whitespace' },
       { include: '@comment' },
 
-      { regex: /([^.]*\.)([^_]*)( *)(:)/, action: [{ token: 'namespace' }, { token: 'key' }, { token: 'white' }, { token: 'key', next: '@content' }] },
+      { regex: /([^/]*\/)([^_]*)( *)(:)/, action: [{ token: 'namespace' }, { token: 'key' }, { token: 'white' }, { token: 'key', next: '@content' }] },
       { regex: /(.*)( *)(:)/, action: [{ token: 'key' }, { token: 'white' }, { token: 'string', next: '@content' }] },
     ],
 

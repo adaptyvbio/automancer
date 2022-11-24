@@ -223,7 +223,8 @@ class FiberParser:
   def __init__(self, text: str, *, Parsers: Sequence[type[BaseParser]], host):
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
-    self.ureg = UnitRegistry()
+    self.host = host
+    self.ureg = UnitRegistry(autoconvert_offset_to_baseunit=True)
 
     self.analysis = lang.Analysis()
     self.analysis_context = AnalysisContext(ureg=self.ureg)

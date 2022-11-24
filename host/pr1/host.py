@@ -168,6 +168,7 @@ class Host:
   def compile_draft(self, draft_id: str, source: str):
     from .fiber.parsers.activate import AcmeParser
     from .fiber.parsers.condition import ConditionParser
+    from .fiber.parsers.devices import DevicesParser
     from .fiber.parsers.do import DoParser
     from .fiber.parsers.name import NameParser
     from .fiber.parsers.repeat import RepeatParser
@@ -178,7 +179,7 @@ class Host:
     parser = FiberParser(
       source,
       host=self,
-      Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, NameParser, ScoreParser]
+      Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, NameParser, DevicesParser, ScoreParser]
       # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )
 

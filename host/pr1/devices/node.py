@@ -1,9 +1,14 @@
 import asyncio
 import traceback
+from pint import Unit
 from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
 
 
 T = TypeVar('T')
+
+# Misc
+
+NodePath = tuple[str]
 
 
 # Base nodes
@@ -225,12 +230,12 @@ class EnumWritableNode(BaseWritableNode[int]):
     }
 
 class ScalarWritableNode(BaseWritableNode[float]):
-  def __init__(self, *, range: Optional[tuple[float, float]] = None):
+  def __init__(self, *, range: Optional[tuple[float, float]] = None, unit: Optional[Unit | str] = None):
     super().__init__()
 
     self.range = range
     self.resolution = None
-    self.unit = None
+    self.unit = unit
 
   async def write_import(self, value: float):
     await self.write(value)

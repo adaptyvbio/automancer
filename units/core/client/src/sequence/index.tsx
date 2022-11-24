@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphLink, GraphRenderer, ProtocolBlock, React } from 'pr1';
+import { GraphBlockMetrics, GraphLink, GraphRenderer, ProtocolBlock, ProtocolBlockPath, React } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -43,14 +43,14 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
       }
     };
   },
-  render(block, metrics, position, state, options) {
+  render(block, path: ProtocolBlockPath, metrics, position, state, options) {
     let children = block.children.map((child, index) => {
       let childState = (state?.index === index)
         ? state.child
         : null;
 
       let childSize = metrics.children[index];
-      let el = options.render(child, childSize, {
+      let el = options.render(child, [...path, index], childSize, {
         x: position.x + metrics.childrenX[index],
         y: position.y
       }, childState);
@@ -83,8 +83,13 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   }
 };
 
+function getChildBlock(block: Block, key: number) {
+  return block.children[key];
+}
+
 
 export default {
+  getChildBlock,
   graphRenderer,
   namespace
 }

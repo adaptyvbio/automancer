@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphLink, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolState, React } from 'pr1';
+import { getBlockExplicitLabel, GraphBlockMetrics, GraphLink, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, ProtocolState, React } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -42,12 +42,9 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
       }
     };
   },
-  render(block, metrics, position, state, options) {
-    let formattedCount = {
-      1: 'once',
-      2: 'twice'
-    }[block.count] ?? `${block.count} times`;
-    let name = (block.state['name'] as { value: string | null; }).value;
+  render(block, path: ProtocolBlockPath, metrics, position, state, options) {
+    // let label = (block.state['name'] as { value: string | null; }).value;
+    let label = getBlockExplicitLabel(block, options.host);
 
     return (
       <>
@@ -55,8 +52,8 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
           cellSize={{ width: metrics.size.width, height: metrics.size.height }}
           position={position}
           settings={options.settings}
-          title={name ?? `Repeat ${formattedCount}`} />
-        {options.render(block.child, metrics.child, {
+          title={label ?? getBlockDefaultLabel(block)} />
+        {options.render(block.child, [...path, null], metrics.child, {
           x: position.x + 1,
           y: position.y + 2
         }, state?.child ?? null)}
@@ -65,8 +62,21 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   }
 };
 
+function getBlockDefaultLabel(block: Block) {
+  return 'Repeat ' + ({
+    1: 'once',
+    2: 'twice'
+  }[block.count] ?? `${block.count} times`);
+}
+
+function getChildBlock(block: Block, _key: never) {
+  return block.child;
+}
+
 
 export default {
+  getBlockDefaultLabel,
+  getChildBlock,
   graphRenderer,
   namespace
 }

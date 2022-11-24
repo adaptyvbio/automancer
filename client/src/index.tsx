@@ -25,6 +25,7 @@ export { React, ReactDOM };
 
 export * from './geometry';
 export * from './components/graph-editor';
+export * from './unit';
 
 export * from './interfaces/graph';
 export * from './interfaces/protocol';

@@ -1,10 +1,9 @@
-import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, ProtocolBlock, ProtocolProcess, ProtocolState, React } from 'pr1';
+import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
   namespace: typeof namespace;
-  process: ProtocolProcess,
-  state: ProtocolState;
+  process: ProtocolProcess;
 }
 
 export interface BlockMetrics extends GraphBlockMetrics {
@@ -56,7 +55,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
     };
   },
 
-  render(block, metrics, position, state, options) {
+  render(block, path: ProtocolBlockPath, metrics, position, state, options) {
     return (
       <GraphNode
         active={state !== null}
@@ -71,6 +70,8 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
           features: metrics.features,
           position
         }}
+        path={path}
+        selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
         settings={options.settings} />
     );
   }

@@ -8,8 +8,11 @@ export interface Protocol {
 
 export interface ProtocolBlock {
   namespace: UnitNamespace;
+  state: ProtocolState;
   [key: string]: unknown;
 }
+
+export type ProtocolBlockPath = unknown[];
 
 export interface ProtocolProcess {
   data: unknown;

@@ -6,7 +6,7 @@ import * as util from '../util';
 
 import { GraphBlockMetrics } from '../interfaces/graph';
 import { Point, Size } from '../geometry';
-import { ProtocolBlock } from '../interfaces/protocol';
+import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
 import { FeatureGroup } from '../components/features';
@@ -18,6 +18,8 @@ import { FeatureGroupDef } from '../interfaces/unit';
 
 export interface GraphEditorProps {
   host: Host;
+  selectBlock(path: ProtocolBlockPath | null): void;
+  selectedBlockPath: ProtocolBlockPath | null;
   state?: unknown;
   summary: React.ReactNode;
   tree: ProtocolBlock | null;
@@ -135,6 +137,10 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
   }
 
+  selectBlock(path: ProtocolBlockPath | null) {
+    this.props.selectBlock(path);
+  }
+
   componentDidMount() {
     let container = this.refContainer.current!;
 
@@ -183,6 +189,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
 
     this.settings = {
+      editor: this,
+
       cellPixelSize,
       nodeBodyPaddingY,
       nodeHeaderHeight,
@@ -211,13 +219,17 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         });
       };
 
-      let render = (block: ProtocolBlock, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
-        return this.props.host.units[block.namespace].graphRenderer!.render(block, metrics, position, state, { render, settings });
+      let render = (block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
+        return this.props.host.units[block.namespace].graphRenderer!.render(block, path, metrics, position, state, {
+          host: this.props.host,
+          render,
+          settings
+        });
       };
 
       let origin = { x: 1, y: 2 };
       let treeMetrics = computeMetrics(this.props.tree);
-      renderedTree = render(this.props.tree, treeMetrics, origin, this.props.state ?? null);
+      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null);
 
       let margin = { x: 1, y: 2 };
 
@@ -244,7 +256,12 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     return (
       <div className={graphEditorStyles.root} ref={this.refContainer}>
-        <svg viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`} className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}>
+        <svg
+          viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`}
+          className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}
+          onClick={() => {
+            this.props.selectBlock(null);
+          }}>
           <defs>
             <pattern x={settings.cellPixelSize * 0.5} y={settings.cellPixelSize * 0.5} width={settings.cellPixelSize} height={settings.cellPixelSize} patternUnits="userSpaceOnUse" id="grid">
               <circle cx={settings.cellPixelSize * 0.5} cy={settings.cellPixelSize * 0.5} r="1.5" fill="#d8d8d8" />
@@ -299,6 +316,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
 
 export interface GraphRenderSettings {
+  editor: GraphEditor,
+
   cellPixelSize: number;
   nodeBodyPaddingY: number;
   nodeHeaderHeight: number;
@@ -327,6 +346,8 @@ export function GraphNode(props: {
   cellSize: Size;
   node: GraphNodeDef;
   onMouseDown?(event: React.MouseEvent): void;
+  path: ProtocolBlockPath;
+  selected?: unknown;
   settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
@@ -350,7 +371,11 @@ export function GraphNode(props: {
 
           }}>
           <div
-            className={util.formatClass(graphEditorStyles.node, { '_active': props.active })}
+            className={util.formatClass(graphEditorStyles.node, { '_active': props.active || props.selected })}
+            onClick={(event) => {
+              event.stopPropagation();
+              settings.editor.selectBlock(props.path);
+            }}
             onMouseDown={props.onMouseDown}>
             {node.title && (
               <div className={graphEditorStyles.header}>

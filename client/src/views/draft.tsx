@@ -16,13 +16,16 @@ import { Button } from '../components/button';
 import * as util from '../util';
 import { DraftSummary } from '../components/draft-summary';
 import { GraphEditor } from '../components/graph-editor';
-import viewStyles from '../../styles/components/view.module.scss';
 import { TabNav } from '../components/tab-nav';
+import { BlockInspector } from '../components/block-inspector';
 import * as format from '../format';
+import { ProtocolBlockPath } from '../interfaces/protocol';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
+import spotlightStyles from '../../styles/components/spotlight.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
+import viewStyles from '../../styles/components/view.module.scss';
 
 
 export interface ViewDraftProps {
@@ -36,6 +39,7 @@ export interface ViewDraftState {
   compilation: DraftCompilation | null;
   compiling: boolean;
   requesting: boolean;
+  selectedBlockPath: ProtocolBlockPath | null;
 
   draggedTrack: number | null;
   graphOpen: boolean;
@@ -57,10 +61,11 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       compilation: null,
       compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
+      selectedBlockPath: [0, null], // TODO: Change
 
       draggedTrack: null,
       graphOpen: true,
-      inspectorOpen: false
+      inspectorOpen: true // TODO: Change
     };
   }
 
@@ -154,6 +159,10 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return compilation;
   }
 
+  selectBlock(path: ProtocolBlockPath | null) {
+    this.setState({ selectedBlockPath: path });
+  }
+
 
   render() {
     let component;
@@ -222,15 +231,30 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 component: (
                   <GraphEditor
                     host={this.props.host}
+                    selectBlock={this.selectBlock.bind(this)}
+                    selectedBlockPath={this.state.selectedBlockPath}
                     summary={summary}
                     tree={this.state.compilation?.protocol?.root ?? null} />
                 ) },
-              { nominalSize: CSSNumericValue.parse('300px'),
+              { nominalSize: CSSNumericValue.parse('400px'),
                 onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
                 open: this.state.inspectorOpen,
                 component: (
                   <div>
                     <TabNav entries={[
+                      { id: 'inspector',
+                        label: 'Inspector',
+                        contents: () => (
+                          this.state.compilation?.protocol
+                            ? (
+                              <BlockInspector
+                                blockPath={this.state.selectedBlockPath}
+                                host={this.props.host}
+                                protocol={this.state.compilation!.protocol}
+                                selectBlock={this.selectBlock.bind(this)} />
+                            )
+                            : <div />
+                        ) },
                       { id: 'report',
                         label: 'Report',
                         contents: () => (
@@ -251,10 +275,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                               </div>
                             )}
                           </div>
-                        ) },
-                      { id: 'parameters',
-                        label: 'Parameters',
-                        contents: () => <div /> }
+                        ) }
                     ]} />
                   </div>
                 ) }

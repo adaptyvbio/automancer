@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { ProtocolBlock } from './protocol';
+import type { ProtocolBlock, ProtocolBlockPath } from './protocol';
 import type { Point, Size } from '../geometry';
 import type { Units } from './unit';
 import type { GraphRenderSettings } from '../components/graph-editor';
@@ -16,7 +16,7 @@ export interface GraphBlockMetrics {
 
 export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends GraphBlockMetrics, State = unknown> {
   computeMetrics(block: Block, options: GraphRendererComputeSizeOptions): Metrics;
-  render(block: Block, metrics: Metrics, position: Point, state: State | null, options: RendererRenderOptions): React.ReactNode;
+  render(block: Block, path: ProtocolBlockPath, metrics: Metrics, position: Point, state: State | null, options: RendererRenderOptions): React.ReactNode;
 }
 
 export interface GraphRendererComputeSizeOptions {
@@ -26,6 +26,7 @@ export interface GraphRendererComputeSizeOptions {
 }
 
 export interface RendererRenderOptions {
-  render(block: unknown, metrics: unknown, position: Point, state: unknown | null): React.ReactNode;
+  host: Host;
+  render(block: unknown, path: ProtocolBlockPath, metrics: unknown, position: Point, state: unknown | null): React.ReactNode;
   settings: GraphRenderSettings;
 }

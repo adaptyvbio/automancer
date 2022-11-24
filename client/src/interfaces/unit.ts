@@ -36,6 +36,8 @@ export interface Unit {
   createStateFeatures?(state: ProtocolState, options: CreateFeaturesOptions): FeatureGroupDef;
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): unknown;
+  getBlockDefaultLabel?(block: ProtocolBlock): string | null;
+  getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;

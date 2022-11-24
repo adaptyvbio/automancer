@@ -7,7 +7,6 @@ from ...util import schema as sc
 from ...util.decorators import debug
 
 
-
 class ScoreParser(BaseParser):
   namespace = "score"
   root_attributes = dict()

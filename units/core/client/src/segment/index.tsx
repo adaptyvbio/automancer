@@ -56,7 +56,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
         }}
         node={{
           id: 'a',
-          title: null, // block.label,
+          title: (block.segment.state['name'] as { value: string | null; }).value,
           features: metrics.features,
           position
         }}

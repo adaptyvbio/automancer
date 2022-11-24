@@ -9,12 +9,14 @@ setup(
 
   entry_points={
     'pr1.units': [
+      "repeat = pr1_repeat",
       "segment = pr1_segment",
       "sequence = pr1_sequence",
       "timer = pr1_timer"
     ]
   },
   package_data={
+    "pr1_repeat.client": ["*"],
     "pr1_segment.client": ["*"],
     "pr1_sequence.client": ["*"],
     "pr1_timer.client": ["*"]

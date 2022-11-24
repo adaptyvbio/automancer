@@ -9,8 +9,11 @@ import { Point, Size } from '../geometry';
 import { ProtocolBlock } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
+import { FeatureGroup } from '../components/features';
+import { OverflowableText } from '../components/overflowable-text';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
+import { FeatureGroupDef } from '../interfaces/unit';
 
 
 export interface GraphEditorProps {
@@ -305,15 +308,13 @@ export interface GraphRenderSettings {
 
 type GraphNodeId = string;
 
-interface GraphNodeFeature {
-  icon: string;
-  label: string;
-}
-
 interface GraphNodeDef {
   id: GraphNodeId;
-  title: string | null;
-  features: GraphNodeFeature[];
+  title: {
+    alternate?: boolean;
+    value: string;
+  } | null;
+  features: FeatureGroupDef;
   position: {
     x: number;
     y: number;
@@ -351,16 +352,13 @@ export function GraphNode(props: {
           <div
             className={util.formatClass(graphEditorStyles.node, { '_active': props.active })}
             onMouseDown={props.onMouseDown}>
-            <div className={graphEditorStyles.header}>
-              <div className={graphEditorStyles.title}>{node.title ? node.title : <i>Untitled</i>}</div>
-            </div>
+            {node.title && (
+              <div className={graphEditorStyles.header}>
+                <div className={graphEditorStyles.title}>{node.title.alternate ? <i>{node.title.value}</i> : node.title.value}</div>
+              </div>
+            )}
             <div className={graphEditorStyles.body}>
-              {node.features.map((feature, index) => (
-                <div className={graphEditorStyles.feature} key={index}>
-                  <Icon name={feature.icon} />
-                  <div className={graphEditorStyles.featurelabel}>{feature.label}</div>
-                </div>
-              ))}
+              <FeatureGroup group={node.features} />
             </div>
           </div>
         </ContextMenuArea>
@@ -442,7 +440,9 @@ export function NodeContainer(props: {
         height={settings.cellPixelSize * props.cellSize.height}
         className={graphEditorStyles.groupobject}>
           <div className={graphEditorStyles.group}>
-            <div className={graphEditorStyles.grouplabel}>{props.title}</div>
+            <OverflowableText>
+              <div className={graphEditorStyles.grouplabel}>{props.title}</div>
+            </OverflowableText>
           </div>
         </foreignObject>
     </g>

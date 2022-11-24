@@ -114,11 +114,13 @@
     flex-direction: column;
     row-gap: 0.4rem;
 
-    padding: 0.6rem 1rem;
-
     &:not(:last-child) {
       border-bottom: 1px solid #ddd;
     }
+  }
+
+  &List &Group {
+    padding: 0.6rem 1rem;
   }
 
   &Entry {

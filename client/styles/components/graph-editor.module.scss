@@ -127,6 +127,8 @@
 
 .grouplabel {
   width: max-content;
+  max-width: 100%;
+
   padding: 0.4rem 1rem;
 
   background-color: $app-orange;
@@ -134,8 +136,14 @@
   border-right: 2px solid transparent;
   border-radius: 2px 0 8px 0;
 
+  @include text-ellipsis();
+
   color: #fff;
   font-weight: 500;
+
+  &:global(._ellipsis) {
+    border-bottom-right-radius: 0;
+  }
 }
 
 
@@ -151,7 +159,8 @@
 
 .node {
   display: grid;
-  grid-template-rows: var(--node-header-height) 1fr;
+  grid-template-columns: 100%;
+
   height: 100%;
 
   background-color: #fff;
@@ -160,6 +169,10 @@
   box-shadow: 2px 3px 2px #0001;
 
   user-select: none;
+
+  &:has(.header) {
+    grid-template-rows: var(--node-header-height) 1fr;
+  }
 
   &:hover {
     // TODO: Replace with an outline to avoid the gap between the border and the node's edge.
@@ -185,6 +198,8 @@
 }
 
 .title {
+  @include text-ellipsis();
+
   font-size: 1.1rem;
   font-weight: 600;
 }

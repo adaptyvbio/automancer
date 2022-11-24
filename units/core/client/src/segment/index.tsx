@@ -1,15 +1,15 @@
-import { Features, GraphBlockMetrics, GraphNode, GraphRenderer, Point, ProtocolBlock, ProtocolSegment, React } from 'pr1';
+import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, ProtocolBlock, ProtocolProcess, ProtocolState, React } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
   namespace: typeof namespace;
-  segment: ProtocolSegment;
+  process: ProtocolProcess,
+  state: ProtocolState;
 }
 
 export interface BlockMetrics extends GraphBlockMetrics {
-  features: Features;
-  start: Point;
-  end: Point;
+  features: FeatureGroupDef;
+  name: string | null;
 }
 
 export interface State {
@@ -21,7 +21,8 @@ const namespace = 'segment';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   computeMetrics(block, options) {
-    let features = options.units[block.segment.process.namespace].createProcessFeatures?.(block.segment.process.data, {}) ?? [
+    let name = (block.state['name'] as { value: string | null; }).value;
+    let features = options.units[block.process.namespace].createProcessFeatures?.(block.process.data, {}) ?? [
       { icon: 'not_listed_location', label: 'Unknown process' }
     ];
 
@@ -30,13 +31,15 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
 
     return {
       features,
+      name,
+
       start: { x: 0, y: 1 },
       end: { x: width, y: 1 },
       size: {
         width,
         height: Math.ceil((
-          options.settings.nodeHeaderHeight
-          + (24 * featureCount)
+          ((name !== null) ? options.settings.nodeHeaderHeight : 0)
+          + (30 * featureCount)
           + (5.6 * (featureCount - 1))
           + (options.settings.nodeBodyPaddingY * 2)
           + (options.settings.nodePadding * 2)
@@ -56,7 +59,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
         }}
         node={{
           id: 'a',
-          title: (block.segment.state['name'] as { value: string | null; }).value,
+          title: (metrics.name !== null) ? { value: metrics.name } : null,
           features: metrics.features,
           position
         }}

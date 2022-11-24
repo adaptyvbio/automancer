@@ -5,7 +5,7 @@ import type { Host } from '../host';
 import type { Draft } from '../draft';
 
 import { Route } from '../application';
-import { Protocol, ProtocolSegment } from '../interfaces/protocol';
+import { Protocol } from '../interfaces/protocol';
 
 
 //> Feature

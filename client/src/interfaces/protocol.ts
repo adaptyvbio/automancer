@@ -11,11 +11,6 @@ export interface ProtocolBlock {
   [key: string]: unknown;
 }
 
-export interface ProtocolSegment {
-  process: ProtocolProcess;
-  state: ProtocolState;
-}
-
 export interface ProtocolProcess {
   data: unknown;
   namespace: UnitNamespace;

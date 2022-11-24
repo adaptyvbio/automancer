@@ -36,7 +36,7 @@ class BlockUnitState:
     ...
 
 class BlockState(dict[str, Optional[BlockUnitState]]):
-  def __or__(self, other: Optional['BlockState']):
+  def __or__(self, other: 'BlockState'):
     return other.__ror__(self)
 
   def __ror__(self, other: Optional['BlockState']):

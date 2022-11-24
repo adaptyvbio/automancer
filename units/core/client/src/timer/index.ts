@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, Features, formatDuration } from 'pr1';
+import { CreateFeaturesOptions, FeatureGroupDef, formatDuration } from 'pr1';
 
 
 // export interface ProcessLocationData {
@@ -13,7 +13,7 @@ export interface ProcessData {
 
 const namespace = 'timer';
 
-function createProcessFeatures(processData: ProcessData, options: CreateFeaturesOptions): Features {
+function createProcessFeatures(processData: ProcessData, options: CreateFeaturesOptions): FeatureGroupDef {
   return [{
     icon: 'hourglass_empty',
     label: formatDuration(processData.value)

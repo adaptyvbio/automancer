@@ -148,8 +148,6 @@ class SegmentBlock(BaseBlock):
   def export(self):
     return {
       "namespace": "segment",
-      "segment": {
-        "process": self._process.export(),
-        "state": self.state.export()
-      }
+      "process": self._process.export(),
+      "state": self.state.export()
     }

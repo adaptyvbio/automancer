@@ -13,11 +13,13 @@ export type UnitNamespace = string;
 //> Feature
 
 export interface Feature {
+  description?: string | null;
   icon: string;
   label: string;
 }
 
-export type Features = Feature[];
+export type FeatureGroupDef = Feature[];
+export type FeatureListDef = FeatureGroupDef[];
 
 
 //> Unit
@@ -32,8 +34,8 @@ export interface Unit {
   namespace: UnitNamespace;
   styleSheets?: CSSStyleSheet[];
 
-  createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): Features;
-  createStateFeatures?(stateData: BlockState, options: CreateFeaturesOptions): Features;
+  createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
+  createStateFeatures?(stateData: BlockState, options: CreateFeaturesOptions): FeatureGroupDef;
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): unknown;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];

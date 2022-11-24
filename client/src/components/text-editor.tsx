@@ -13,7 +13,11 @@ import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
 
 window.MonacoEnvironment = {
-	getWorkerUrl: function (_moduleId, _label) {
+	getWorkerUrl: function (_moduleId, label) {
+    if (label !== 'editorWorkerService') {
+      throw new Error('Invalid worker');
+    }
+
 		return new URL('./vs/editor/editor.worker.js', import.meta.url).href;
 	}
 };

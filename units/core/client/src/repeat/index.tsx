@@ -3,7 +3,7 @@ import { getBlockExplicitLabel, GraphBlockMetrics, GraphLink, GraphRenderer, Nod
 
 export interface Block extends ProtocolBlock {
   namespace: typeof namespace;
-  state: ProtocolState;
+  state: null;
 
   child: ProtocolBlock;
   count: number;

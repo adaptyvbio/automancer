@@ -119,7 +119,7 @@ class SegmentBlock(BaseBlock):
 
   def __init__(self, process: SegmentProcessData, state: BlockState):
     self._process = process
-    self.state = state
+    self.state: BlockState = state
 
   def linearize(self, context, parent_state):
     return Analysis(), [LinearSegment(self._process, parent_state | self.state)]

@@ -303,11 +303,11 @@ class FiberParser:
       pprint(entry_block.export())
       print()
 
-      print("<= LINEARIZATION =>")
-      linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self), None)
-      self.analysis += linearization_analysis
-      pprint(linearized)
-      print()
+      # print("<= LINEARIZATION =>")
+      # linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self), None)
+      # self.analysis += linearization_analysis
+      # pprint(linearized)
+      # print()
 
     if not isinstance(entry_block, EllipsisType):
       self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
@@ -394,7 +394,7 @@ class FiberParser:
 
     return UnresolvedBlockDataLiteral(attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 
-  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
+  def execute(self, state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:
       self.analysis.errors.append(MissingProcessError(origin_area))
       return Ellipsis

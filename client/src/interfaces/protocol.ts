@@ -8,7 +8,7 @@ export interface Protocol {
 
 export interface ProtocolBlock {
   namespace: UnitNamespace;
-  state: ProtocolState;
+  state: ProtocolState | null;
   [key: string]: unknown;
 }
 

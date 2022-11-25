@@ -1,5 +1,5 @@
 from types import EllipsisType
-from typing import Any
+from typing import Any, Optional
 
 from ...reader import LocationArea
 
@@ -48,12 +48,12 @@ class RepeatTransform(BaseTransform):
     if isinstance(block, EllipsisType):
       return lang.Analysis(), Ellipsis
 
-    return lang.Analysis(), RepeatBlock(block, count=self._count, env=self._env, state=state)
+    return lang.Analysis(), RepeatBlock(block, count=self._count, env=self._env)
 
 @debug
 class RepeatBlock:
-  def __init__(self, block: BaseBlock, count: int, env: 'RepeatEnv', state: BlockState):
-    self.state = state
+  def __init__(self, block: BaseBlock, count: int, env: 'RepeatEnv'):
+    self.state = None
 
     self._block = block
     self._count = count
@@ -79,7 +79,7 @@ class RepeatBlock:
       "namespace": "repeat",
       "count": self._count,
       "child": self._block.export(),
-      "state": self.state.export()
+      "state": None
     }
 
 @debug

@@ -62,12 +62,12 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       compilation: null,
       compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
-      selectedBlockPath: [0, null], // TODO: Change
+      selectedBlockPath: null,
 
       draggedTrack: null,
       graphOpen: true,
       inspectorEntryId: 'inspector',
-      inspectorOpen: true // TODO: Change
+      inspectorOpen: false
     };
   }
 
@@ -152,6 +152,25 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         compilation,
         compiling: false
       });
+
+      // TODO: Improve
+      if (this.state.selectedBlockPath) {
+        let block = compilation.protocol?.root;
+
+        for (let key of this.state.selectedBlockPath) {
+          if (!block) {
+            this.setState({ selectedBlockPath: null });
+            break;
+          }
+
+          let unit = this.props.host.units[block.namespace];
+          block = unit.getChildBlock?.(block, key);
+        }
+
+        if (!block) {
+          this.setState({ selectedBlockPath: null });
+        }
+      }
 
       // if (options.global) {
       //   await this.props.app.saveDraftCompilation(this.props.draft, compilation);

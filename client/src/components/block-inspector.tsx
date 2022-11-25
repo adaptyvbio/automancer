@@ -5,7 +5,7 @@ import * as util from '../util';
 
 import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
-import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
+import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockExplicitLabel, getBlockProcess } from '../unit';
 import { FeatureGroup, FeatureList } from './features';
@@ -91,10 +91,19 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           }).map((feature) => ({ ...feature, accent: true }))]} />
         )}
 
-        <FeatureList list={family.map((block, index) => {
-          return Object.values(this.props.host.units).flatMap((unit) => {
-            return unit?.createStateFeatures?.(block.state, family.slice(index + 1).map((b) => b.state), { host: this.props.host }) ?? [];
-          });
+        <FeatureList list={family.flatMap((block, index) => {
+          return block.state
+            ? [Object.values(this.props.host.units).flatMap((unit) => {
+              return unit?.createStateFeatures?.(
+                block.state!,
+                (family
+                  .slice(index + 1)
+                  .map((b) => b.state)
+                  .filter((s) => s)) as ProtocolState[],
+                { host: this.props.host }
+              ) ?? [];
+            })]
+            : [];
         }).reverse()} />
       </div>
     );

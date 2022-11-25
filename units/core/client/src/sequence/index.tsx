@@ -19,8 +19,8 @@ export interface State {
 const namespace = 'sequence';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
-  computeMetrics(block, options) {
-    let childrenMetrics = block.children.map((child) => options.computeMetrics(child));
+  computeMetrics(block, ancestors, options) {
+    let childrenMetrics = block.children.map((child, index) => options.computeMetrics(child, [...ancestors, block]));
 
     let xs = 0;
     let childrenX = childrenMetrics.map((childMetrics) => {

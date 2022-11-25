@@ -15,18 +15,18 @@ export interface GraphBlockMetrics {
 }
 
 export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends GraphBlockMetrics, State = unknown> {
-  computeMetrics(block: Block, options: GraphRendererComputeSizeOptions): Metrics;
+  computeMetrics(block: Block, ancestors: ProtocolBlock[], options: GraphRendererComputeSizeOptions): Metrics;
   render(block: Block, path: ProtocolBlockPath, metrics: Metrics, position: Point, state: State | null, options: RendererRenderOptions): React.ReactNode;
 }
 
 export interface GraphRendererComputeSizeOptions {
-  computeMetrics(block: unknown): GraphBlockMetrics;
+  computeMetrics(block: ProtocolBlock, ancestors: ProtocolBlock[]): GraphBlockMetrics;
   host: Host;
   settings: GraphRenderSettings;
 }
 
 export interface RendererRenderOptions {
   host: Host;
-  render(block: unknown, path: ProtocolBlockPath, metrics: unknown, position: Point, state: unknown | null): React.ReactNode;
+  render(block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null): React.ReactNode;
   settings: GraphRenderSettings;
 }

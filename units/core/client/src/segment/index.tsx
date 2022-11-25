@@ -19,7 +19,7 @@ export interface State {
 const namespace = 'segment';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
-  computeMetrics(block, options) {
+  computeMetrics(block, ancestors, options) {
     let createFeaturesOptions = {
       host: options.host
     };
@@ -27,9 +27,10 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
     let name = (block.state['name'] as { value: string | null; }).value;
     let features = [
       ...(options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, createFeaturesOptions)
-        ?? [{ icon: 'not_listed_location', label: 'Unknown process' }]),
+        ?? [{ icon: 'not_listed_location', label: 'Unknown process' }])
+        .map((feature) => ({ ...feature, accent: true })),
       ...Object.values(options.host.units).flatMap((unit) => {
-        return unit?.createStateFeatures?.(block.state, createFeaturesOptions) ?? [];
+        return unit?.createStateFeatures?.(block.state, null, createFeaturesOptions) ?? [];
       })
     ];
 
@@ -55,7 +56,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
     };
   },
 
-  render(block, path: ProtocolBlockPath, metrics, position, state, options) {
+  render(block, path, metrics, position, state, options) {
     return (
       <GraphNode
         active={state !== null}

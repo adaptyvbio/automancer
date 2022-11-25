@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, ProtocolState } from 'pr1';
+import { CreateFeaturesOptions, ProtocolState, util } from 'pr1';
 
 
 export type NodePath = string[];
@@ -50,7 +50,7 @@ export interface UnitProtocolState {
 
 const namespace = 'devices';
 
-function createStateFeatures(state: ProtocolState, options: CreateFeaturesOptions) {
+function createStateFeatures(state: ProtocolState, descendantStates: ProtocolState[] | null, options: CreateFeaturesOptions) {
   let executor = options.host.state.executors[namespace] as ExecutorState;
   let unitStateData = state[namespace] as UnitProtocolState;
 
@@ -63,6 +63,10 @@ function createStateFeatures(state: ProtocolState, options: CreateFeaturesOption
     let node = findNode(executor.root, path);
 
     return {
+      disabled: descendantStates?.some((descendantState) => {
+        let unitDescendantState = descendantState[namespace] as UnitProtocolState;
+        return unitDescendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
+      }),
       description: node.label ?? node.id,
       icon: node.icon ?? 'settings_input_hdmi',
       label: value

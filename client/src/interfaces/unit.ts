@@ -13,7 +13,9 @@ export type UnitNamespace = string;
 //> Feature
 
 export interface Feature {
+  accent?: unknown;
   description?: string | null;
+  disabled?: unknown;
   icon: string;
   label: string;
 }
@@ -33,7 +35,7 @@ export interface Unit {
   styleSheets?: CSSStyleSheet[];
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
-  createStateFeatures?(state: ProtocolState, options: CreateFeaturesOptions): FeatureGroupDef;
+  createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, options: CreateFeaturesOptions): FeatureGroupDef;
   canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
   createCode?(protocol: Protocol): unknown;
   getBlockDefaultLabel?(block: ProtocolBlock): string | null;

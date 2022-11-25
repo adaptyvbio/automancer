@@ -18,7 +18,7 @@ import { FeatureGroupDef } from '../interfaces/unit';
 
 export interface GraphEditorProps {
   host: Host;
-  selectBlock(path: ProtocolBlockPath | null): void;
+  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
   state?: unknown;
   summary: React.ReactNode;
@@ -137,8 +137,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
   }
 
-  selectBlock(path: ProtocolBlockPath | null) {
-    this.props.selectBlock(path);
+  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
+    this.props.selectBlock(path, options);
   }
 
   componentDidMount() {
@@ -211,8 +211,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let renderedTree!: React.ReactNode | null;
 
     if (this.props.tree) {
-      let computeMetrics = (block: ProtocolBlock) => {
-        return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, {
+      let computeMetrics = (block: ProtocolBlock, ancestors: ProtocolBlock[]) => {
+        return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, ancestors, {
           computeMetrics,
           host: this.props.host,
           settings
@@ -228,7 +228,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       };
 
       let origin = { x: 1, y: 2 };
-      let treeMetrics = computeMetrics(this.props.tree);
+      let treeMetrics = computeMetrics(this.props.tree, []);
       renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null);
 
       let margin = { x: 1, y: 2 };
@@ -375,6 +375,9 @@ export function GraphNode(props: {
             onClick={(event) => {
               event.stopPropagation();
               settings.editor.selectBlock(props.path);
+            }}
+            onDoubleClick={() => {
+              settings.editor.selectBlock(props.path, { showInspector: true });
             }}
             onMouseDown={props.onMouseDown}>
             {node.title && (

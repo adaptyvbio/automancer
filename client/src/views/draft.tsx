@@ -43,6 +43,7 @@ export interface ViewDraftState {
 
   draggedTrack: number | null;
   graphOpen: boolean;
+  inspectorEntryId: string | null;
   inspectorOpen: boolean;
 }
 
@@ -65,6 +66,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
       draggedTrack: null,
       graphOpen: true,
+      inspectorEntryId: 'inspector',
       inspectorOpen: true // TODO: Change
     };
   }
@@ -159,8 +161,17 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return compilation;
   }
 
-  selectBlock(path: ProtocolBlockPath | null) {
-    this.setState({ selectedBlockPath: path });
+  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown }) {
+    this.setState({
+      selectedBlockPath: path
+    });
+
+    if (options?.showInspector) {
+      this.setState({
+        inspectorEntryId: 'inspector',
+        inspectorOpen: true
+      });
+    }
   }
 
 
@@ -241,42 +252,45 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 open: this.state.inspectorOpen,
                 component: (
                   <div>
-                    <TabNav entries={[
-                      { id: 'inspector',
-                        label: 'Inspector',
-                        contents: () => (
-                          this.state.compilation?.protocol
-                            ? (
-                              <BlockInspector
-                                blockPath={this.state.selectedBlockPath}
-                                host={this.props.host}
-                                protocol={this.state.compilation!.protocol}
-                                selectBlock={this.selectBlock.bind(this)} />
-                            )
-                            : <div />
-                        ) },
-                      { id: 'report',
-                        label: 'Report',
-                        contents: () => (
-                          <div className={util.formatClass(formStyles.main2)}>
-                            {this.state.compilation && (
-                              <div className={diagnosticsStyles.list}>
-                                {this.state.compilation.diagnostics.map((diagnostic, index) => (
-                                  <div className={util.formatClass(diagnosticsStyles.entryRoot, {
-                                    error: diagnosticsStyles.entryRootError,
-                                    warning: diagnosticsStyles.entryRootWarning
-                                  }[diagnostic.kind])} key={index}>
-                                    <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
-                                    <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
-                                    {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
-                                    {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) }
-                    ]} />
+                    <TabNav
+                      activeEntryId={this.state.inspectorEntryId}
+                      setActiveEntryId={(id) => void this.setState({ inspectorEntryId: id })}
+                      entries={[
+                        { id: 'inspector',
+                          label: 'Inspector',
+                          contents: () => (
+                            this.state.compilation?.protocol
+                              ? (
+                                <BlockInspector
+                                  blockPath={this.state.selectedBlockPath}
+                                  host={this.props.host}
+                                  protocol={this.state.compilation!.protocol}
+                                  selectBlock={this.selectBlock.bind(this)} />
+                              )
+                              : <div />
+                          ) },
+                        { id: 'report',
+                          label: 'Report',
+                          contents: () => (
+                            <div className={util.formatClass(formStyles.main2)}>
+                              {this.state.compilation && (
+                                <div className={diagnosticsStyles.list}>
+                                  {this.state.compilation.diagnostics.map((diagnostic, index) => (
+                                    <div className={util.formatClass(diagnosticsStyles.entryRoot, {
+                                      error: diagnosticsStyles.entryRootError,
+                                      warning: diagnosticsStyles.entryRootWarning
+                                    }[diagnostic.kind])} key={index}>
+                                      <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
+                                      <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
+                                      {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
+                                      {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) }
+                      ]} />
                   </div>
                 ) }
             ]} />

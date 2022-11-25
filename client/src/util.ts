@@ -1,5 +1,9 @@
-import { List, Range, type Set as ImSet } from 'immutable';
+import { List, Range, type Set as ImSet, fromJS, is } from 'immutable';
 
+
+export function deepEqual(a: unknown, b: unknown): boolean {
+  return is(fromJS(a), fromJS(b));
+}
 
 export function findCommon<T>(arr: Iterable<T>): T | null {
   let value!: T;

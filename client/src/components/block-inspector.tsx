@@ -56,21 +56,23 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
     return (
       <div className={util.formatClass(formStyles.main2, spotlightStyles.root)}>
-        <div className={spotlightStyles.breadcrumbRoot}>
-          {family.slice(0, -1).map((block, index, arr) => {
-            let label = familyLabels[index];
-            let last = index === (arr.length - 1);
+        {(family.length > 1) && (
+          <div className={spotlightStyles.breadcrumbRoot}>
+            {family.slice(0, -1).map((_block, index, arr) => {
+              let label = familyLabels[index];
+              let last = index === (arr.length - 1);
 
-            return (
-              <React.Fragment key={index}>
-                <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                  this.props.selectBlock(this.props.blockPath!.slice(0, index));
-                }}>{label}</button>
-                {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
-              </React.Fragment>
-            );
-          })}
-        </div>
+              return (
+                <React.Fragment key={index}>
+                  <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
+                    this.props.selectBlock(this.props.blockPath!.slice(0, index));
+                  }}>{label}</button>
+                  {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
         <div className={spotlightStyles.header}>
           <h2 className={spotlightStyles.title}>{familyLabels.at(-1) ?? <i>Untitled step</i>}</h2>
           {/* <div className={spotlightStyles.navigationRoot}>
@@ -86,14 +88,14 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         {(process && processUnit) && (
           <FeatureList list={[processUnit.createProcessFeatures!(process.data, {
             host: this.props.host
-          })]} />
+          }).map((feature) => ({ ...feature, accent: true }))]} />
         )}
 
-        <FeatureList list={Array.from(family).reverse().map((block) => {
+        <FeatureList list={family.map((block, index) => {
           return Object.values(this.props.host.units).flatMap((unit) => {
-            return unit?.createStateFeatures?.(block.state, { host: this.props.host }) ?? [];
+            return unit?.createStateFeatures?.(block.state, family.slice(index + 1).map((b) => b.state), { host: this.props.host }) ?? [];
           });
-        }).filter((x) => x.length > 0)} />
+        }).reverse()} />
       </div>
     );
   }

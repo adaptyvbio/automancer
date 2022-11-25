@@ -22,8 +22,8 @@ export interface State {
 const namespace = 'repeat';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
-  computeMetrics(block, options) {
-    let childMetrics = options.computeMetrics(block.child);
+  computeMetrics(block, ancestors, options) {
+    let childMetrics = options.computeMetrics(block.child, [...ancestors, block]);
 
     return {
       child: childMetrics,

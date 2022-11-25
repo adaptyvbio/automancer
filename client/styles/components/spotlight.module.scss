@@ -130,6 +130,11 @@
     grid-template-columns: auto 1fr;
 
     height: 30px;
+
+    &Disabled {
+      opacity: 0.4;
+      color: #666;
+    }
   }
 
   &Icon {
@@ -151,10 +156,9 @@
     grid-row: 1 / span 2;
   }
 
-  &Group:nth-child(1) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
-  &Group:nth-child(2) &Entry:nth-child(1) &Icon { background-color: $app-purple; }
-  &Group:nth-child(2) &Entry:nth-child(2) &Icon { background-color: $app-red; }
-  &Group:nth-child(3) &Entry:nth-child(1) &Icon { background-color: $app-blue; }
+  &EntryAccent &Icon {
+    background-color: $app-blue;
+  }
 
   &Description {
     align-self: start;
@@ -175,5 +179,10 @@
 
   &Entry:has(&Description) &Label {
     align-self: end;
+  }
+
+  &Blank {
+    color: #666;
+    font-style: italic;
   }
 }

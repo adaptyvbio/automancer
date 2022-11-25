@@ -20,6 +20,8 @@ import { TabNav } from '../components/tab-nav';
 import { BlockInspector } from '../components/block-inspector';
 import * as format from '../format';
 import { ProtocolBlockPath } from '../interfaces/protocol';
+import { StartProtocolModal } from '../components/modals/start-protocol';
+import { ChipId } from '../backends/common';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
@@ -40,6 +42,7 @@ export interface ViewDraftState {
   compiling: boolean;
   requesting: boolean;
   selectedBlockPath: ProtocolBlockPath | null;
+  startModalOpen: boolean;
 
   draggedTrack: number | null;
   graphOpen: boolean;
@@ -63,6 +66,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
       selectedBlockPath: null,
+      startModalOpen: false,
 
       draggedTrack: null,
       graphOpen: true,
@@ -232,11 +236,45 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       let summary = (
         <FilledDraftSummary
           compiling={this.state.compiling}
-          compilation={this.state.compilation} />
+          compilation={this.state.compilation}
+          onStart={() => {
+            this.setState({ startModalOpen: true });
+          }} />
       );
 
       component = (
         <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
+          {this.state.startModalOpen && (
+            <StartProtocolModal
+              host={this.props.host}
+              onCancel={() => void this.setState({ startModalOpen: false })}
+              onSubmit={(data) => {
+                this.pool.add(async () => {
+                  let backend = this.props.host.backend;
+                  let chipId = data.chipId ?? (await backend.createChip()).chipId;
+
+                  if (data.newChipTitle) {
+                    await backend.command({
+                      chipId,
+                      namespace: 'metadata',
+                      command: {
+                        type: 'set',
+                        archived: false,
+                        description: null,
+                        title: data.newChipTitle
+                      }
+                    });
+                  }
+
+                  await backend.startDraft({
+                    chipId,
+                    draftId: crypto.randomUUID(),
+                    source: this.props.draft.item.source!
+                  })
+                });
+              }} />
+          )}
+
           <SplitPanels
             className={editorStyles.panels}
             panels={[
@@ -366,6 +404,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 export function FilledDraftSummary(props: {
   compilation: DraftCompilation | null;
   compiling: boolean;
+  onStart(): void;
 }) {
   if (props.compiling) {
     return <DraftSummary status="default" title="Compiling" />;
@@ -381,8 +420,8 @@ export function FilledDraftSummary(props: {
   }, [0, 0]);
 
   let onStart = compilation.valid
-    ? () => { }
-    : undefined;
+    ? props.onStart
+    : null;
 
   let warningText = warningCount > 0
     ? `${warningCount} warning${warningCount > 1 ? 's' : ''}`

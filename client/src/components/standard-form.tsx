@@ -3,10 +3,15 @@ import * as React from 'react';
 import { Icon } from './icon';
 import * as util from '../util';
 
+import formStyles from '../../styles/components/form.module.scss';
+import modalStyles from '../../styles/components/modal.module.scss';
 
-export function Actions(props: React.PropsWithChildren<{}>) {
+
+export function Actions(props: React.PropsWithChildren<{
+  mode?: 'default' | 'modal';
+}>) {
   return (
-    <div className="sform-actions">
+    <div className={util.formatClass(formStyles.actions, { [modalStyles.actions]: (props.mode === 'modal') })}>
       {props.children}
     </div>
   );
@@ -18,7 +23,7 @@ export function Action(props: {
   type?: 'button' | 'submit';
 }) {
   return (
-    <button type={props.type ?? 'button'} onClick={props.onClick} className="sform-action">
+    <button type={props.type ?? 'button'} onClick={props.onClick} className={formStyles.btn}>
       {props.label}
     </button>
   );
@@ -115,9 +120,9 @@ export function Select<T extends number | string | null>(props: {
   value: T;
 }) {
   return (
-    <label className="sform-group">
-      <div className="sform-label">{props.label}</div>
-      <div className="sform-select">
+    <label className={formStyles.fieldControl}>
+      <div className={formStyles.fieldLabel}>{props.label}</div>
+      <div className={formStyles.fieldSelect}>
         <select
           disabled={!!props.disabled}
           value={props.options.findIndex((option) => option.id === props.value)}
@@ -167,9 +172,9 @@ export function TextField(props: {
   value: string;
 }) {
   return (
-    <label className="sform-group">
-      <div className="sform-label">{props.label}</div>
-      <input type="text" className="sform-textfield"
+    <label className={formStyles.fieldControl}>
+      <div className={formStyles.fieldLabel}>{props.label}</div>
+      <input type="text" className={formStyles.fieldTextfield}
         placeholder={props.placeholder}
         onBlur={props.onBlur}
         onInput={props.onInput && ((event) => void props.onInput!(event.currentTarget.value))}

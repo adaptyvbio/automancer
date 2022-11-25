@@ -14,6 +14,7 @@ import { formatRelativeDate } from '../format';
 import * as util from '../util';
 
 import viewStyles from '../../styles/components/view.module.scss';
+import { MetadataTools } from '../unit';
 
 
 export interface ViewChipsProps {
@@ -32,10 +33,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
   }
 
   render() {
-    let metadataTools = this.props.host.units.metadata as unknown as {
-      archiveChip(host: Host, chip: Chip, value: boolean): Promise<void>;
-      getChipMetadata(chip: Chip): { archived: boolean; creationDate: number; title: string; description: string; };
-    };
+    let metadataTools = this.props.host.units.metadata as unknown as MetadataTools;
 
     let chips = Object.values(this.props.host.state.chips);
     let readableChips = (chips.filter((chip) => chip.readable) as Chip[])

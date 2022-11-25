@@ -8,7 +8,7 @@ import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
 
 export function DraftSummary(props: {
   description?: string | null;
-  onStart?(): void;
+  onStart?: (() => void) | null;
   status: 'default' | 'error' | 'success' | 'warning';
   title: string;
 }) {
@@ -28,9 +28,9 @@ export function DraftSummary(props: {
       <div className={diagnosticsStyles.reportTitle}>{props.title}</div>
       {props.description && <p className={diagnosticsStyles.reportDescription}>{props.description}</p>}
       {props.onStart && (
-        <button type="button" className={diagnosticsStyles.reportActionRoot}>
+        <button type="button" className={diagnosticsStyles.reportActionRoot} onClick={props.onStart}>
           <Icon name="play_circle" className={diagnosticsStyles.reportActionIcon} />
-          <div className={diagnosticsStyles.reportActionLabel} onClick={props.onStart}>Start</div>
+          <div className={diagnosticsStyles.reportActionLabel}>Start</div>
         </button>
       )}
     </div>

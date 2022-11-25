@@ -107,15 +107,14 @@
   }
 
   dialog {
-    margin: initial;
-    padding: initial;
+    max-width: unset;
+    max-height: unset;
+
+    margin: unset;
+    padding: unset;
 
     background: transparent;
-    border: initial;
-
-    &:not([open]) {
-      display: none;
-    }
+    border: unset;
   }
 
   a, button {

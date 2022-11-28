@@ -1,6 +1,7 @@
 import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { ChipId, HostState, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
+import { ProtocolBlockPath } from '../interfaces/protocol';
 
 
 export interface BaseBackend {
@@ -27,6 +28,7 @@ export interface BaseBackend {
   reloadUnits(): Promise<void>;
   resume(chipId: ChipId): Promise<void>;
   revealChipDirectory(chipId: ChipId): Promise<void>;
+  sendMessageToActiveBlock(chipId: ChipId, path: ProtocolBlockPath, message: unknown): Promise<void>;
   setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   startDraft(options: {

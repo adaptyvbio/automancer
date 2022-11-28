@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from enum import IntEnum
 import time
 import traceback
 from types import EllipsisType
@@ -52,53 +53,76 @@ class SegmentTransform(BaseTransform):
       state=state
     )
 
-@debug
+
+class SegmentProgramMode(IntEnum):
+  Normal = 0
+  Pausing = 1
+  Paused = 2
+
+@dataclass(kw_only=True)
 class SegmentProgramState:
-  def __init__(self, process: Optional[object] = None):
-    self.process = process
+  mode: SegmentProgramMode
+  process: Optional[Any]
 
   def export(self):
     return {
+      "mode": self.mode,
       "process": self.process.export()
     }
 
-@debug
 class SegmentProgram(BlockProgram):
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
     self._master = master
     self._parent = parent
 
+    self._mode: SegmentProgramMode
+    self._pause_future: Optional[asyncio.Future]
     self._process: Process
 
+  def import_message(self, message: dict):
+    match message["type"]:
+      case "pause":
+        self.pause()
+      case "resume":
+        self.resume()
+
   def pause(self):
+    self._mode = SegmentProgramMode.Pausing
     self._process.pause()
+
+  def resume(self):
+    assert self._pause_future
+    self._pause_future.set_result(None)
 
   async def run(self, initial_state: Optional[SegmentProgramState], symbol: ClaimSymbol):
     loop = asyncio.get_running_loop()
     hold = loop.create_task(self._master.hold(self._block.state, symbol))
 
-    last_info: Optional[ProgramExecEvent] = None
     runner = self._master.chip.runners[self._block._process.namespace]
+
+    self._mode = SegmentProgramMode.Normal
+    self._pause_future = None
     self._process = runner.Process(self._block._process.data)
 
     try:
       async for info in self._process.run(initial_state.process if initial_state else None):
-        match info.pausable, last_info:
-          case None, (None | ProgramExecEvent(pausable=None)):
-            pausable = hasattr(self._process, 'pause')
-          case (None, ProgramExecEvent(pausable=value)) | (value, _):
-            pausable = value
+        if (self._mode == SegmentProgramMode.Pausing) and info.stopped:
+          self._mode = SegmentProgramMode.Paused
+          self._pause_future = asyncio.Future()
 
         yield ProgramExecEvent(
           duration=info.duration,
           error=info.error,
-          pausable=pausable,
-          state=SegmentProgramState(process=info.state),
+          state=SegmentProgramState(mode=self._mode, process=info.state),
+          stopped=(self._mode == SegmentProgramMode.Paused),
           time=(info.time or time.time())
         )
 
-        last_info = info
+        if self._pause_future:
+          await self._pause_future
+          self._mode = SegmentProgramMode.Normal
+          self._pause_future = None
     except Exception as e:
       logger.error("Uncaught error raised in process")
       logger.error(e)

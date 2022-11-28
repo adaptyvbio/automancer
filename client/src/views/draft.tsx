@@ -184,7 +184,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     return compilation;
   }
 
-  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown }) {
+  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
     this.setState({
       selectedBlockPath: path
     });
@@ -270,7 +270,9 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                     chipId,
                     draftId: crypto.randomUUID(),
                     source: this.props.draft.item.source!
-                  })
+                  });
+
+                  this.props.setRoute(['execution', chipId]);
                 });
               }} />
           )}

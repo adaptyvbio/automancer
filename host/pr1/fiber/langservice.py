@@ -354,13 +354,19 @@ class PrimitiveType:
 
   def analyze(self, obj, context):
     match self._primitive:
-      case builtins.float | builtins.int:
+      case builtins.float | builtins.int if isinstance(obj, str):
         try:
           value = self._primitive(obj.value)
         except (TypeError, ValueError):
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
         else:
           return Analysis(), LocatedValue.new(value, area=obj.area)
+      case builtins.bool if isinstance(obj, str):
+        if obj.value in ("true", "false"):
+          return Analysis(), LocatedValue.new((obj.value == "true"), area=obj.area)
+        else:
+          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+        return Analysis()
       case _ if not isinstance(obj.value, self._primitive):
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _:

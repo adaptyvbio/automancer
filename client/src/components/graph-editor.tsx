@@ -21,7 +21,7 @@ export interface GraphEditorProps {
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
   state?: unknown;
-  summary: React.ReactNode;
+  summary?: React.ReactNode;
   tree: ProtocolBlock | null;
 }
 

@@ -84,4 +84,9 @@ class Executor(BaseExecutor):
 
   async def destroy(self):
     for device in self._devices.values():
+      del self._host.devices[device.id]
+
+      for worker in device._workers:
+        del self._host.devices[worker.id]
+
       await device.destroy()

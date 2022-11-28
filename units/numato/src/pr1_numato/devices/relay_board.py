@@ -32,6 +32,9 @@ class RelayBoardGlobalNode(ScalarWritableNode, BiWritableNode):
 
 
 class RelayBoardNode(BooleanWritableNode):
+  icon = "dynamic_form"
+  # icon = "toggle_on"
+
   def __init__(self, index: int, device: 'RelayBoardDevice'):
     super().__init__()
 

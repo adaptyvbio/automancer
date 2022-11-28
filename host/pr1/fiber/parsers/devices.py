@@ -76,6 +76,8 @@ class DevicesState(BlockUnitState):
   def export(self) -> object:
     def export_value(value):
       match value:
+        case bool():
+          return "On" if value else "Off"
         case Quantity():
           return f"{value:.2fP~}"
         case _:

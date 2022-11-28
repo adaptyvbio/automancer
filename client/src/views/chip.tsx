@@ -12,6 +12,7 @@ import { Pool } from '../util';
 import * as util from '../util';
 
 import viewStyles from '../../styles/components/view.module.scss';
+import { MetadataTools } from '../unit';
 
 
 export interface ViewChipProps {
@@ -55,7 +56,8 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
   render() {
-    let metadata = this.props.host.units.metadata.getChipMetadata(this.chip);
+    let metadataTools = this.props.host.units.metadata as unknown as MetadataTools;
+    let metadata = metadataTools.getChipMetadata(this.chip);
 
     let unitEntries = Object.values(this.props.host.units)
       .filter((unit) => this.chip.unitList.includes(unit.namespace))
@@ -112,7 +114,11 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
                 ...unitEntries
               ]}
               selectEntry={(tab) => {
-                this.props.setRoute(['chip', this.props.chipId, tab]);
+                this.props.setRoute(
+                  tab === 'protocol'
+                    ? ['execution', this.props.chipId]
+                    : ['chip', this.props.chipId, tab]
+                );
               }}
               selectedEntryId={this.props.tab} />
           </div>

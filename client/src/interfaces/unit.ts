@@ -1,8 +1,9 @@
 import type { Chip } from '../backends/common';
+import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
 import type { GraphBlockMetrics, GraphRenderer } from './graph';
-import type { Protocol, ProtocolBlock, ProtocolState } from './protocol';
+import type { Protocol, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
 //> General
@@ -36,13 +37,18 @@ export interface Unit {
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
   createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, options: CreateFeaturesOptions): FeatureGroupDef;
-  canChipRunProtocol?(protocol: Protocol, chip: Chip): boolean;
-  createCode?(protocol: Protocol): unknown;
-  getBlockDefaultLabel?(block: ProtocolBlock): string | null;
-  getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
+
+  createActiveBlockMenu?(block: ProtocolBlock, execState: unknown): MenuDef;
+  getActiveChildState?(execState: unknown, key: unknown): unknown;
+  getBlockClassLabel?(block: ProtocolBlock): string | null;
+  getBlockDefaultLabel?(block: ProtocolBlock): string | null;
+  getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
+  getChildrenExecutionKeys?(block: ProtocolBlock, execState: unknown): ProtocolBlockPath;
+  onSelectBlockMenu?(block: ProtocolBlock, execState: unknown, path: MenuEntryPath): void;
+  transformBlockLabel?(block: ProtocolBlock, execState: unknown, label: string): string | null;
 
   graphRenderer?: GraphRenderer<ProtocolBlock, GraphBlockMetrics>;
 }

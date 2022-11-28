@@ -1,6 +1,7 @@
 import { BackendCommon, ChipId, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
+import { ProtocolBlockPath } from '../interfaces/protocol';
 
 
 export abstract class RawMessageBackend extends BackendCommon {
@@ -92,7 +93,16 @@ export abstract class RawMessageBackend extends BackendCommon {
     });
   }
 
-  async setChipMetadata(chipId: string, value: Partial<{ description: string | null; name: string; }>): Promise<void> {
+  async sendMessageToActiveBlock(chipId: ChipId, path: ProtocolBlockPath, message: unknown) {
+    await this._request({
+      type: 'sendMessageToActiveBlock',
+      chipId,
+      message,
+      path
+    });
+  }
+
+  async setChipMetadata(chipId: string, value: Partial<{ description: string | null; name: string; }>) {
     await this._request({
       type: 'setChipMetadata',
       chipId,

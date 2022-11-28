@@ -2,13 +2,13 @@ import * as React from 'react';
 
 import { Icon } from './icon';
 import * as util from '../util';
-
-import formStyles from '../../styles/components/form.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
 import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockExplicitLabel, getBlockProcess } from '../unit';
 import { FeatureGroup, FeatureList } from './features';
+
+import formStyles from '../../styles/components/form.module.scss';
+import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 
 export interface BlockInspectorProps {

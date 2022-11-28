@@ -87,9 +87,31 @@ function getChildBlock(block: Block, key: number) {
   return block.children[key];
 }
 
+function getActiveChildState(state: State, _key: number) {
+  return state.child;
+}
+
+function getChildrenExecutionKeys(_block: Block, state: State) {
+  return [state.index];
+}
+
+function getBlockClassLabel(_block: Block) {
+  return 'Sequence block';
+}
+
+function createActiveBlockMenu(_block: Block, _state: State) {
+  return [
+    { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool' }
+  ];
+}
+
 
 export default {
+  createActiveBlockMenu,
   getChildBlock,
+  getActiveChildState,
+  getBlockClassLabel,
+  getChildrenExecutionKeys,
   graphRenderer,
   namespace
 }

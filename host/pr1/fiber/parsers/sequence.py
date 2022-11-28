@@ -91,7 +91,7 @@ class SequenceProgramState:
     return {
       "child": self.child and self.child.export(),
       "index": self.index,
-      "node": self.mode
+      "mode": self.mode
     }
 
 @debug
@@ -105,6 +105,9 @@ class SequenceProgram(BlockProgram):
     self._child_index = 0
 
     self._interrupting = False
+
+  def get_child(self, key: int):
+    return self._child_program
 
   def import_message(self, message: Any):
     match message["type"]:

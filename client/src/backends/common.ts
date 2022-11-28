@@ -2,7 +2,7 @@ import type { BaseBackend } from './base';
 import type { DraftCompilation } from '../draft';
 import type { Codes, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
-import type { Master, Protocol } from '../interfaces/protocol';
+import type { Master, Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -43,6 +43,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract reloadUnits(): Promise<void>;
   abstract resume(chipId: ChipId): Promise<void>;
   abstract revealChipDirectory(chipId: ChipId): Promise<void>;
+  abstract sendMessageToActiveBlock(chipId: ChipId, path: ProtocolBlockPath, message: unknown): Promise<void>;
   abstract setLocation(chipId: ChipId, location: ProtocolLocation): Promise<void>;
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startDraft(options: {

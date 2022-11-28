@@ -146,6 +146,14 @@ class Master:
         self._resume_future = asyncio.Future()
         await self._resume_future
 
+  def send_message(self, path: list, message: object):
+    program = self._program
+
+    for key in path:
+      program = program.get_child(key)
+
+    program.import_message(message)
+
   async def start(self, done_callback: Callable, update_callback: Callable):
     async def run_loop():
       nonlocal start_future

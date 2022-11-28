@@ -11,6 +11,7 @@ import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
 import { ViewDraft } from './views/draft';
+import { ViewExecution } from './views/execution';
 import { ViewProtocols } from './views/protocols';
 import { ViewSettings } from './views/settings';
 import { ViewSplit } from './views/test/split';
@@ -436,6 +437,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
           case 'test.split2': return (
             <ViewSplit2 />
+          );
+        }
+      } else if (route.length === 2) {
+        switch (route[0]) {
+          case 'execution': return (
+            <ViewExecution
+              app={this}
+              chipId={route[1] as ChipId}
+              host={this.state.host}
+              setRoute={setRoute} />
           );
         }
       } else if (route.length === 3) {

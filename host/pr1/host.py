@@ -398,6 +398,10 @@ class Host:
         chip = self.chips[request["chipId"]]
         self.backend.reveal(chip.dir)
 
+      case "sendMessageToActiveBlock":
+        chip = self.chips[request["chipId"]]
+        chip.master.send_message(request["path"], request["message"])
+
       case "upgradeChip":
         chip = self.chips[request["chipId"]]
         chip.upgrade(host=self)

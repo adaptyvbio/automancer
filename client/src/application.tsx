@@ -2,7 +2,7 @@ import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
 import type { AppBackend, DraftItem } from './app-backends/base';
-import type { ChipId } from './backends/common';
+import type { Chip, ChipId } from './backends/common';
 import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
 import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
@@ -441,13 +441,25 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         }
       } else if (route.length === 2) {
         switch (route[0]) {
-          case 'execution': return (
-            <ViewExecution
-              app={this}
-              chipId={route[1] as ChipId}
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
+          case 'execution': {
+            let chip = this.state.host.state.chips[route[1]];
+
+            if (!(chip as Chip).master) {
+              setTimeout(() => {
+                this.setRoute(['protocol']);
+              }, 100);
+
+              return <div />;
+            }
+
+            return (
+              <ViewExecution
+                app={this}
+                chipId={route[1] as ChipId}
+                host={this.state.host}
+                setRoute={setRoute} />
+            );
+          }
         }
       } else if (route.length === 3) {
         switch (route[0]) {

@@ -1,4 +1,5 @@
 import { List, Range, type Set as ImSet, fromJS, is } from 'immutable';
+import * as React from 'react';
 
 
 export function deepEqual(a: unknown, b: unknown): boolean {
@@ -47,6 +48,11 @@ export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) =
   return undefined;
 }
 
+
+export function useForceUpdate() {
+  let [_, setValue] = React.useState(0);
+  return () => void setValue(value => value + 1);
+}
 
 
 export function formatClass(...input: (string | Record<string, unknown>)[]): string {

@@ -26,3 +26,8 @@ export interface Master {
   protocol: Protocol;
   state: unknown;
 }
+
+export interface MasterProcessState {
+  time: number;
+  [key: string]: unknown;
+}

@@ -272,7 +272,9 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                     source: this.props.draft.item.source!
                   });
 
-                  this.props.setRoute(['execution', chipId]);
+                  setTimeout(() => {
+                    this.props.setRoute(['execution', chipId]);
+                  }, 500);
                 });
               }} />
           )}

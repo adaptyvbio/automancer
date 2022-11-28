@@ -11,10 +11,12 @@ from . import namespace
 
 @dataclass
 class ProcessState:
-  progress: float = 0.0
+  progress: float
+  paused: bool = False
 
   def export(self):
     return {
+      "paused": self.paused,
       "progress": self.progress
     }
 
@@ -62,7 +64,7 @@ class Process:
 
         yield ProgramExecEvent(
           duration=remaining_duration,
-          state=ProcessState(progress),
+          state=ProcessState(progress, paused=True),
           stopped=True,
           time=current_time
         )

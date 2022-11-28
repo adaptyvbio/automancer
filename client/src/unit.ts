@@ -1,9 +1,9 @@
 import { Chip } from './backends/common';
 import { Host } from './host';
-import { ProtocolBlock, ProtocolProcess } from './interfaces/protocol';
+import { Master, MasterProcessState, ProtocolBlock, ProtocolProcess } from './interfaces/protocol';
 
 
-export function getBlockExplicitLabel(block: ProtocolBlock, host: Host): string | null {
+export function getBlockExplicitLabel(block: ProtocolBlock, _host: Host): string | null {
   return (block.state?.['name'] as { value: string | null; } | undefined)?.value ?? null;
 }
 
@@ -20,10 +20,14 @@ export function getBlockLabel(block: ProtocolBlock, state: unknown | null, host:
     : label;
 }
 
-export function getBlockProcess(block: ProtocolBlock, host: Host): ProtocolProcess | null {
+export function getSegmentBlockProcessData(block: ProtocolBlock, _host: Host): ProtocolProcess | null {
   return block.namespace === 'segment'
     ? block['process'] as ProtocolProcess
     : null;
+}
+
+export function getSegmentBlockProcessState(state: unknown, _host: Host): MasterProcessState {
+  return (state as { process: MasterProcessState; }).process;
 }
 
 

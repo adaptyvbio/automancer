@@ -242,19 +242,19 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         });
       };
 
-      let origin = { x: 1, y: 2 };
+      let origin = { x: 1, y: 1 } satisfies Point;
       let treeMetrics = computeMetrics(this.props.tree, []);
       renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null, {
         attachmentEnd: false,
         attachmentStart: false
       });
 
-      let margin = { x: 1, y: 2 };
+      let margin = { x: 1, y: 1 } satisfies Point;
 
       let min = {
         x: (origin.x - margin.x) * settings.cellPixelSize,
         y: (origin.y - margin.y) * settings.cellPixelSize
-      };
+      } satisfies Point;
 
       this.offsetBoundaries = {
         min,

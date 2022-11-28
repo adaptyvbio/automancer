@@ -4,7 +4,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockExplicitLabel, getBlockProcess } from '../unit';
+import { getBlockExplicitLabel, getSegmentBlockProcessData } from '../unit';
 import { FeatureGroup, FeatureList } from './features';
 
 import formStyles from '../../styles/components/form.module.scss';
@@ -50,7 +50,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         ?? (block.namespace !== 'segment' ? 'Block' : null);
     });
 
-    let process = getBlockProcess(targetBlock, this.props.host);
+    let process = getSegmentBlockProcessData(targetBlock, this.props.host);
     let processUnit = process && this.props.host.units[process.namespace];
 
 

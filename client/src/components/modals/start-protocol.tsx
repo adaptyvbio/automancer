@@ -24,13 +24,17 @@ export function StartProtocolModal(props: {
     newChipTitle: string | null;
   }): void;
 }) {
-  let chips = Object.values(props.host.state.chips)
-    .filter((chip) => chip.condition === ChipCondition.Ok) as Chip[];
+  let metadataTools = props.host.units.metadata as unknown as MetadataTools;
+  let chips = (Object.values(props.host.state.chips)
+    .filter((chip) => chip.condition === ChipCondition.Ok) as Chip[])
+    .map((chip) => ({ chip, metadata: metadataTools.getChipMetadata(chip) }));
 
-  let [chipId, setChipId] = React.useState<ChipId | typeof NewChipOptionId>(chips[0]?.id ?? NewChipOptionId);
+  let [chipId, setChipId] = React.useState<ChipId | typeof NewChipOptionId>(
+    chips.find(({ chip, metadata }) => !metadata.archived && !chip.master)?.chip.id ?? NewChipOptionId
+  );
+
   let [newChipTitle, setNewChipTitle] = React.useState<string>('');
 
-  let metadataTools = props.host.units.metadata as unknown as MetadataTools;
   let refNewChipTitleInput = React.createRef<HTMLInputElement>();
 
   React.useEffect(() => {
@@ -63,15 +67,11 @@ export function StartProtocolModal(props: {
           }}
           options={[
             { id: '_header1', label: 'Existing experiments', disabled: true },
-            ...chips.map((chip) => {
-              let metadata = metadataTools.getChipMetadata(chip);
-
-              return {
-                id: chip.id,
-                label: metadata.title,
-                disabled: metadata.archived || chip.master
-              };
-            }),
+            ...chips.map(({ chip, metadata }) => ({
+              id: chip.id,
+              label: metadata.title,
+              disabled: metadata.archived || chip.master
+            })),
             { id: '_header2', label: 'New experiment', disabled: true },
             { id: NewChipOptionId, label: 'New experiment' }
           ]}

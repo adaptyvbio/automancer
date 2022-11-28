@@ -4,7 +4,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockExplicitLabel, getBlockLabel, getBlockProcess } from '../unit';
+import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
 import { FeatureGroup, FeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
@@ -38,6 +38,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
   }
 
   render() {
+    let units = this.props.host.units;
     let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
 
     let lineBlocks = [this.props.protocol.root];
@@ -46,7 +47,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     for (let key of activeBlockPath) {
       let parentBlock = lineBlocks.at(-1);
       let parentState = lineStates.at(-1);
-      let unit = this.props.host.units[parentBlock.namespace];
+      let unit = units[parentBlock.namespace];
       let block = unit.getChildBlock!(parentBlock, key);
       let state = unit.getActiveChildState!(parentState, key);
 
@@ -54,12 +55,15 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
       lineStates.push(state);
     }
 
+    let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
+    // let ProcessComponent = process && units[process.namespace].ProcessComponent;
+
     return (
       <div className={util.formatClass(formStyles.main2, spotlightStyles.root)}>
         {(lineBlocks.length > 1) && (
           <div className={spotlightStyles.breadcrumbRoot}>
             {lineBlocks /* .slice(0, -1) */ .map((block, index, arr) => {
-              let unit = this.props.host.units[block.namespace];
+              let unit = units[block.namespace];
               let state = lineStates[index];
               let label = getBlockLabel(block, state, this.props.host)! ?? 'Untitled step';
               let last = index === (arr.length - 1);
@@ -104,6 +108,19 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             </button>
           </div>
         </div>
+
+        {process && (() => {
+          let ProcessComponent = units[process.namespace].ProcessComponent!;
+          let segmentState = lineStates.at(-1) as any;
+
+          return (
+            <ProcessComponent
+              host={this.props.host}
+              processData={process!.data}
+              processState={getSegmentBlockProcessState(segmentState, this.props.host)}
+              time={segmentState.time} />
+          );
+        })()}
       </div>
     );
   }

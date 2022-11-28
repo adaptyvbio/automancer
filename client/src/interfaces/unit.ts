@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
@@ -34,6 +36,13 @@ export interface CreateFeaturesOptions {
 export interface Unit {
   namespace: UnitNamespace;
   styleSheets?: CSSStyleSheet[];
+
+  ProcessComponent?: React.ComponentType<{
+    host: Host;
+    processData: any;
+    processState: any;
+    time: number;
+  }>;
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
   createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, options: CreateFeaturesOptions): FeatureGroupDef;

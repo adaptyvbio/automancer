@@ -63,11 +63,13 @@ class SegmentProgramMode(IntEnum):
 class SegmentProgramState:
   mode: SegmentProgramMode
   process: Optional[Any]
+  time: float
 
   def export(self):
     return {
       "mode": self.mode,
-      "process": self.process.export()
+      "process": self.process.export(),
+      "time": self.time * 1000.0
     }
 
 class SegmentProgram(BlockProgram):
@@ -111,12 +113,11 @@ class SegmentProgram(BlockProgram):
           self._mode = SegmentProgramMode.Paused
           self._pause_future = asyncio.Future()
 
+        event_time = info.time or time.time()
+
         yield ProgramExecEvent(
-          duration=info.duration,
-          error=info.error,
-          state=SegmentProgramState(mode=self._mode, process=info.state),
-          stopped=(self._mode == SegmentProgramMode.Paused),
-          time=(info.time or time.time())
+          state=SegmentProgramState(mode=self._mode, process=info.state, time=event_time),
+          stopped=(self._mode == SegmentProgramMode.Paused)
         )
 
         if self._pause_future:

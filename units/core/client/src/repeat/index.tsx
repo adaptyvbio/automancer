@@ -56,7 +56,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
         {options.render(block.child, [...path, null], metrics.child, {
           x: position.x + 1,
           y: position.y + 2
-        }, state?.child ?? null)}
+        }, state?.child ?? null, options)}
       </>
     );
   }

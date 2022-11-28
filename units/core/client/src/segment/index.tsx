@@ -51,6 +51,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
       + (5.6 * (featureCount - 1))
       + (options.settings.nodeBodyPaddingY * 2)
       + (options.settings.nodePadding * 2)
+      + (options.settings.nodeBorderWidth * 2)
     ) / options.settings.cellPixelSize);
 
     return {
@@ -74,11 +75,11 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
     return (
       <GraphNode
         active={state !== null}
-        attachPoints={{
-          bottom: vertical,
-          left: !vertical,
-          right: !vertical,
-          top: vertical
+        attachmentPoints={{
+          bottom: (options.attachmentEnd && vertical),
+          left: (options.attachmentStart && !vertical),
+          right: (options.attachmentEnd && !vertical),
+          top: (options.attachmentStart && vertical)
         }}
         autoMove={false}
         cellSize={{

@@ -2,7 +2,6 @@ import * as React from 'react';
 
 import type { ProtocolBlock, ProtocolBlockPath } from './protocol';
 import type { Point, Size } from '../geometry';
-import type { Units } from './unit';
 import type { GraphRenderSettings } from '../components/graph-editor';
 import type { Host } from '../host';
 
@@ -26,7 +25,12 @@ export interface GraphRendererComputeSizeOptions {
 }
 
 export interface RendererRenderOptions {
+  attachmentEnd: boolean;
+  attachmentStart: boolean;
   host: Host;
-  render(block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null): React.ReactNode;
+  render(block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null, options: {
+    attachmentEnd: boolean;
+    attachmentStart: boolean;
+  }): React.ReactNode;
   settings: GraphRenderSettings;
 }

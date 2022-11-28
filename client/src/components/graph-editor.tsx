@@ -5,7 +5,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 
 import { GraphBlockMetrics } from '../interfaces/graph';
-import { Point, Size } from '../geometry';
+import { Point, SideFlags, Size } from '../geometry';
 import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
@@ -184,6 +184,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     let styles = this.refContainer.current!.computedStyleMap();
     let cellPixelSize = CSSNumericValue.parse(styles.get('--cell-size')!).value;
+    let nodeBorderWidth = CSSNumericValue.parse(styles.get('--node-border-width')!).value;
     let nodeHeaderHeight = CSSNumericValue.parse(styles.get('--node-header-height')!).value;
     let nodePadding = CSSNumericValue.parse(styles.get('--node-padding')!).value;
     let nodeBodyPaddingY = CSSNumericValue.parse(styles.get('--node-body-padding-y')!).value;
@@ -191,8 +192,10 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     this.settings = {
       editor: this,
 
+      allowCompactActions: true,
       cellPixelSize,
       nodeBodyPaddingY,
+      nodeBorderWidth,
       nodeHeaderHeight,
       nodePadding,
       vertical: true
@@ -220,8 +223,19 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         });
       };
 
-      let render = (block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null) => {
+      let render = (
+        block: ProtocolBlock,
+        path: ProtocolBlockPath,
+        metrics: GraphBlockMetrics,
+        position: Point,
+        state: unknown | null,
+        options: {
+          attachmentEnd: boolean;
+          attachmentStart: boolean;
+        }
+      ) => {
         return this.props.host.units[block.namespace].graphRenderer!.render(block, path, metrics, position, state, {
+          ...options,
           host: this.props.host,
           render,
           settings
@@ -230,7 +244,10 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
       let origin = { x: 1, y: 2 };
       let treeMetrics = computeMetrics(this.props.tree, []);
-      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null);
+      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null, {
+        attachmentEnd: false,
+        attachmentStart: false
+      });
 
       let margin = { x: 1, y: 2 };
 
@@ -319,8 +336,10 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 export interface GraphRenderSettings {
   editor: GraphEditor;
 
+  allowCompactActions: boolean;
   cellPixelSize: number;
   nodeBodyPaddingY: number;
+  nodeBorderWidth: number;
   nodeHeaderHeight: number;
   nodePadding: number;
   vertical: boolean;
@@ -344,12 +363,7 @@ interface GraphNodeDef {
 
 export function GraphNode(props: {
   active?: unknown;
-  attachPoints: {
-    bottom: boolean;
-    left: boolean;
-    right: boolean;
-    top: boolean;
-  };
+  attachmentPoints: SideFlags;
   autoMove: unknown;
   cellSize: Size;
   node: GraphNodeDef;
@@ -364,13 +378,13 @@ export function GraphNode(props: {
   let my = settings.nodePadding + settings.nodeHeaderHeight * 0.5;
   let attachPoints: Point[] = [];
 
-  if (props.attachPoints.left) {
+  if (props.attachmentPoints.left) {
     attachPoints.push({ x: settings.nodePadding, y: my });
-  } if (props.attachPoints.right) {
+  } if (props.attachmentPoints.right) {
     attachPoints.push({ x: settings.cellPixelSize * props.cellSize.width - settings.nodePadding, y: my });
-  } if (props.attachPoints.top) {
+  } if (props.attachmentPoints.top) {
     attachPoints.push({ x: mx, y: settings.nodePadding });
-  } if (props.attachPoints.bottom) {
+  } if (props.attachmentPoints.bottom) {
     attachPoints.push({ x: mx, y: settings.cellPixelSize * props.cellSize.height - settings.nodePadding });
   }
 

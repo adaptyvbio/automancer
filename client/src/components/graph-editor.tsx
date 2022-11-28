@@ -194,7 +194,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       cellPixelSize,
       nodeBodyPaddingY,
       nodeHeaderHeight,
-      nodePadding
+      nodePadding,
+      vertical: true
     };
   }
 
@@ -316,12 +317,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
 
 export interface GraphRenderSettings {
-  editor: GraphEditor,
+  editor: GraphEditor;
 
   cellPixelSize: number;
   nodeBodyPaddingY: number;
   nodeHeaderHeight: number;
   nodePadding: number;
+  vertical: boolean;
 }
 
 
@@ -342,6 +344,12 @@ interface GraphNodeDef {
 
 export function GraphNode(props: {
   active?: unknown;
+  attachPoints: {
+    bottom: boolean;
+    left: boolean;
+    right: boolean;
+    top: boolean;
+  };
   autoMove: unknown;
   cellSize: Size;
   node: GraphNodeDef;
@@ -351,6 +359,20 @@ export function GraphNode(props: {
   settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
+
+  let mx = settings.nodePadding + settings.nodeHeaderHeight * 0.8;
+  let my = settings.nodePadding + settings.nodeHeaderHeight * 0.5;
+  let attachPoints: Point[] = [];
+
+  if (props.attachPoints.left) {
+    attachPoints.push({ x: settings.nodePadding, y: my });
+  } if (props.attachPoints.right) {
+    attachPoints.push({ x: settings.cellPixelSize * props.cellSize.width - settings.nodePadding, y: my });
+  } if (props.attachPoints.top) {
+    attachPoints.push({ x: mx, y: settings.nodePadding });
+  } if (props.attachPoints.bottom) {
+    attachPoints.push({ x: mx, y: settings.cellPixelSize * props.cellSize.height - settings.nodePadding });
+  }
 
   return (
     <g
@@ -392,28 +414,28 @@ export function GraphNode(props: {
         </ContextMenuArea>
       </foreignObject>
 
-      <circle
-        cx={settings.nodePadding}
-        cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
-        r="5"
-        fill="#fff"
-        stroke="#000"
-        strokeWidth="2" />
-      <circle
-        cx={settings.cellPixelSize * props.cellSize.width - settings.nodePadding}
-        cy={settings.nodePadding + settings.nodeHeaderHeight * 0.5}
-        r="5"
-        fill="#fff"
-        stroke="#000"
-        strokeWidth="2" />
+      {attachPoints.map((attachPoint, index) => (
+        <circle
+          cx={attachPoint.x}
+          cy={attachPoint.y}
+          r="5"
+          fill="#fff"
+          stroke="#000"
+          strokeWidth="2"
+          key={index} />
+      ))}
     </g>
   );
 }
 
 
 export interface GraphLinkDef {
-  start: Point;
-  end: Point;
+  start: GraphLinkPoint;
+  end: GraphLinkPoint;
+}
+
+export interface GraphLinkPoint extends Point {
+  direction: 'horizontal' | 'vertical' | null;
 }
 
 export function GraphLink(props: {
@@ -422,28 +444,51 @@ export function GraphLink(props: {
 }) {
   let { link, settings } = props;
 
-  let startX = settings.cellPixelSize * link.start.x - settings.nodePadding;
+  let startX = settings.cellPixelSize * link.start.x;
   let startY = settings.cellPixelSize * link.start.y;
 
-  let endX = settings.cellPixelSize * link.end.x + settings.nodePadding;
+  switch (link.start.direction) {
+    case 'horizontal':
+      startX -= settings.nodePadding;
+      startY += settings.cellPixelSize;
+      break;
+
+    case 'vertical':
+      startX += settings.nodePadding + (settings.nodeHeaderHeight * 0.8);
+      startY -= settings.nodePadding;
+      break;
+  }
+
+  let endX = settings.cellPixelSize * link.end.x;
   let endY = settings.cellPixelSize * link.end.y;
+
+  switch (link.end.direction) {
+    case 'horizontal':
+      endX += settings.nodePadding;
+      endY += settings.cellPixelSize;
+      break;
+    case 'vertical':
+      endX += settings.nodePadding + (settings.nodeHeaderHeight * 0.8);
+      endY += settings.nodePadding;
+      break;
+  }
 
   let d = `M${startX} ${startY}`;
 
-  if (link.end.y !== link.start.y) {
-    let dir = (link.start.y < link.end.y) ? 1 : -1;
+  // if (link.end.y !== link.start.y) {
+  //   let dir = (link.start.y < link.end.y) ? 1 : -1;
 
-    let midCellX = Math.round((link.start.x + link.end.x) * 0.5);
-    let midX = settings.cellPixelSize * midCellX;
+  //   let midCellX = Math.round((link.start.x + link.end.x) * 0.5);
+  //   let midX = settings.cellPixelSize * midCellX;
 
-    let midStartX = settings.cellPixelSize * (midCellX - 1);
-    let midEndX = settings.cellPixelSize * (midCellX + 1);
+  //   let midStartX = settings.cellPixelSize * (midCellX - 1);
+  //   let midEndX = settings.cellPixelSize * (midCellX + 1);
 
-    let curveStartY = settings.cellPixelSize * (link.start.y + 1 * dir);
-    let curveEndY = settings.cellPixelSize * (link.end.y - 1 * dir);
+  //   let curveStartY = settings.cellPixelSize * (link.start.y + 1 * dir);
+  //   let curveEndY = settings.cellPixelSize * (link.end.y - 1 * dir);
 
-    d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
-  }
+  //   d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
+  // }
 
   d += `L${endX} ${endY}`;
 

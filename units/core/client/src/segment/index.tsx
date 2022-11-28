@@ -45,30 +45,41 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
 
     let featureCount = features.length;
     let width = Math.round((280 + options.settings.nodePadding * 2) / options.settings.cellPixelSize);
+    let height = Math.ceil((
+      ((name !== null) ? options.settings.nodeHeaderHeight : 0)
+      + (30 * featureCount)
+      + (5.6 * (featureCount - 1))
+      + (options.settings.nodeBodyPaddingY * 2)
+      + (options.settings.nodePadding * 2)
+    ) / options.settings.cellPixelSize);
 
     return {
       features,
       name,
 
-      start: { x: 0, y: 1 },
-      end: { x: width, y: 1 },
+      start: { x: 0, y: 0 },
+      end: options.settings.vertical
+        ? { x: 0, y: height }
+        : { x: width, y: 0 },
       size: {
         width,
-        height: Math.ceil((
-          ((name !== null) ? options.settings.nodeHeaderHeight : 0)
-          + (30 * featureCount)
-          + (5.6 * (featureCount - 1))
-          + (options.settings.nodeBodyPaddingY * 2)
-          + (options.settings.nodePadding * 2)
-        ) / options.settings.cellPixelSize)
+        height
       }
     };
   },
 
   render(block, path, metrics, position, state, options) {
+    let vertical = options.settings.vertical;
+
     return (
       <GraphNode
         active={state !== null}
+        attachPoints={{
+          bottom: vertical,
+          left: !vertical,
+          right: !vertical,
+          top: vertical
+        }}
         autoMove={false}
         cellSize={{
           width: metrics.size.width,

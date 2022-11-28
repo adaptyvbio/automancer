@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, FeatureGroupDef, formatDuration } from 'pr1';
+import { CreateFeaturesOptions, FeatureGroupDef, formatDuration, Unit } from 'pr1';
 
 
 // export interface ProcessLocationData {
@@ -27,4 +27,4 @@ function createProcessFeatures(processData: ProcessData, options: CreateFeatures
 export default {
   createProcessFeatures,
   namespace
-} /* satisfies Unit */
+} satisfies Unit

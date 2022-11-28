@@ -9,6 +9,6 @@
     "pr1-client": "file:../../client"
   },
   "devDependencies": {
-    "esbuild": "^0.14.38"
+    "esbuild": "~0.15.16"
   }
 }

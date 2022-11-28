@@ -27,6 +27,6 @@
     "@electron-forge/maker-zip": "^6.0.0",
     "electron": "^21.0.0",
     "electron-packager-languages": "^0.5.0",
-    "esbuild": "^0.15.0"
+    "esbuild": "~0.15.16"
   }
 }

@@ -410,6 +410,7 @@ class Host:
       case "sendMessageToActiveBlock":
         chip = self.chips[request["chipId"]]
         chip.master.send_message(request["path"], request["message"])
+        return None
 
       case "upgradeChip":
         chip = self.chips[request["chipId"]]

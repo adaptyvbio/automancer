@@ -20,18 +20,13 @@ function ProcessComponent(props: {
   processLocation: ProcessLocation;
   time: number;
 }) {
-  let time = Date.now();
-  let currentProgress = props.processLocation.progress + ((time - props.time) / props.processData.value);
-  // console.log(currentProgress)
-
   return (
     <div>
-      {/* <pre>{JSON.stringify({ ...props, host: null }, null, 2)}</pre> */}
       <ProgressBar
+        duration={props.processData.value}
         paused={props.processLocation.paused}
-        targetEndTime={time + (props.processData.value * (1 - currentProgress))}
-        time={time}
-        value={currentProgress} />
+        time={props.time}
+        value={props.processLocation.progress} />
     </div>
   );
 }
@@ -40,9 +35,6 @@ function createProcessFeatures(processData: ProcessData, options: CreateFeatures
   return [{
     icon: 'hourglass_empty',
     label: formatDuration(processData.value)
-      // + ((options.location?.segmentIndex === options.segmentIndex)
-      //   ? (` (${(options.location.state?.progress ?? 0) * 100}%)`)
-      //   : '')
   }];
 }
 

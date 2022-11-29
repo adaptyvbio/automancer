@@ -56,7 +56,6 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     }
 
     let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
-    // let ProcessComponent = process && units[process.namespace].ProcessComponent;
 
     return (
       <div className={util.formatClass(formStyles.main2, spotlightStyles.root)}>

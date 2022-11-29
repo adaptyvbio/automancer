@@ -7,9 +7,9 @@ import styles from '../../styles/components/progress-bar.module.scss';
 
 
 export interface ProgressBarProps {
+  duration: number;
   paused?: unknown;
   setValue?(newValue: number): void;
-  targetEndTime?: number;
   time: number;
   value: number;
 }
@@ -40,29 +40,33 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
     }
   }
 
+  getStats() {
+    let deltaTime = Date.now() - this.props.time;
+    let currentValue = Math.min(1, this.props.value + (!this.props.paused ? (deltaTime / this.props.duration) : 0));
+    let remainingTime = this.props.duration * (1 - this.props.value) - deltaTime;
+
+    return { currentValue, remainingTime };
+  }
+
   update() {
     if (this.animation) {
       this.animation.cancel();
     }
 
-    if (!this.props.paused && this.props.targetEndTime) {
-      let duration = this.props.targetEndTime - Date.now();
+    if (!this.props.paused) {
+      let { currentValue, remainingTime } = this.getStats();
 
-      if (duration > 0) {
+      if (remainingTime > 0) {
         this.animation = this.ref.current!.animate([
-          { width: `${this.props.value * 100}%` },
+          { width: `${currentValue * 100}%` },
           { width: '100%' }
-        ], { duration, fill: 'forwards' });
+        ], { duration: remainingTime, fill: 'forwards' });
       }
     }
   }
 
   render() {
-    let time = Date.now();
-    let remainingTime = this.props.targetEndTime ? this.props.targetEndTime - time : null;
-    let currentValue = this.props.targetEndTime
-      ? this.props.value + (time - this.props.time) / (this.props.targetEndTime! - this.props.time)
-      : null;
+    let { currentValue, remainingTime } = this.getStats();
 
     return (
       <div className={util.formatClass(styles.root, {
@@ -94,15 +98,17 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
         <div className={styles.text}>
           <UnstableText
             interval={
-              (!this.props.paused && this.props.targetEndTime)
-                ? remainingTime! / (1 - currentValue!) / 100
+              !this.props.paused
+                ? remainingTime / (1 - currentValue) / 100
                 : null
             }
-            contents={() => (
-              <>
-                {((this.state.selectValue ?? this.props.value + (Date.now() - this.props.time) / (this.props.targetEndTime! - this.props.time)) * 100).toFixed(0)}%
-              </>
-            )} />
+            contents={() => {
+              let { currentValue } = this.getStats();
+
+              return (
+                <> {((this.state.selectValue ?? currentValue) * 100).toFixed(0)}%</>
+              );
+            }} />
         </div>
       </div>
     )

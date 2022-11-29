@@ -10,7 +10,7 @@ from . import namespace
 
 
 @dataclass
-class ProcessState:
+class ProcessLocation:
   progress: float
   paused: bool = False
 
@@ -35,16 +35,18 @@ class Process:
     self._pausing = True
     self._task.cancel()
 
-  async def run(self, initial_state: Optional[ProcessState]):
+  async def run(self, initial_state: Optional[ProcessLocation]):
     progress = initial_state.progress if initial_state else 0.0
-    remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0
+
+    total_duration = self._data._value / 1000.0
+    remaining_duration = total_duration * (1.0 - progress)
 
     while True:
       task_time = time.time()
 
       yield ProgramExecEvent(
         duration=remaining_duration,
-        state=ProcessState(progress),
+        state=ProcessLocation(progress),
         time=task_time
       )
 
@@ -59,12 +61,12 @@ class Process:
         current_time = time.time()
         elapsed_time = current_time - task_time
 
-        progress += elapsed_time / remaining_duration
-        remaining_duration = (self._data._value * (1.0 - progress)) / 1000.0
+        progress += elapsed_time / total_duration
+        remaining_duration = total_duration * (1.0 - progress)
 
         yield ProgramExecEvent(
           duration=remaining_duration,
-          state=ProcessState(progress, paused=True),
+          state=ProcessLocation(progress, paused=True),
           stopped=True,
           time=current_time
         )
@@ -74,7 +76,7 @@ class Process:
 
     yield ProgramExecEvent(
       duration=0.0,
-      state=ProcessState(1.0)
+      state=ProcessLocation(1.0)
     )
 
 class Runner(BaseProcessRunner):

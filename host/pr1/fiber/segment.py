@@ -95,6 +95,7 @@ class SegmentProgram(BlockProgram):
   def pause(self):
     self._mode = SegmentProgramMode.Pausing
     self._process.pause()
+    self._resume_future = asyncio.Future()
 
   def resume(self):
     assert self._resume_future
@@ -122,8 +123,15 @@ class SegmentProgram(BlockProgram):
         event_time = event.time or time.time()
 
         if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
+          # The process is now paused.
+
+          # Revert the state.
           await iterator.close_second()
 
+          assert location
+          location.state = None
+
+          # Create a future that will be resolved when the process is resumed.
           self._mode = SegmentProgramMode.Paused
           self._resume_future = asyncio.Future()
 
@@ -140,18 +148,21 @@ class SegmentProgram(BlockProgram):
           location.time = event_time
 
         yield ProgramExecEvent(
-          state=SegmentProgramLocation(mode=self._mode, process=event.state, time=event_time),
+          state=location,
           stopped=(self._mode == SegmentProgramMode.Paused)
         )
 
-        # if self._resume_future:
-        #   await self._resume_future
-        #   self._mode = SegmentProgramMode.Normal
-        #   self._resume_future = None
+        if self._resume_future:
+          # If the process is paused, wait for it to be resumed.
+          await self._resume_future
 
-        if self._mode == SegmentProgramMode.Paused:
+          # Reset the mode.
           self._mode = SegmentProgramMode.Normal
+          self._resume_future = None
+
+          # Re-apply the state.
           set_hold()
+
       else:
         if location:
           location.state = event

@@ -24,13 +24,7 @@ class Executor(BaseExecutor):
           logger.info("Watching all nodes")
 
       case "write":
-        node = self._host.root_node
-
-        for segment in instruction["path"]:
-          if isinstance(node, CollectionNode):
-            node = node.nodes[segment]
-          else:
-            raise ValueError()
+        node = self._host.root_node.find(instruction["path"])
 
         if isinstance(node, BaseWritableNode):
           async def write():

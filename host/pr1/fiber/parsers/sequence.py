@@ -6,9 +6,9 @@ from typing import Any, Optional
 
 from .. import langservice as lang
 from ..eval import EvalEnvs, EvalStack
-from ..master2 import BlockMesh, ClaimSymbol
 from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from ..process import ProgramExecEvent
+from ...devices.claim import ClaimSymbol
 from ...reader import LocationArea
 from ...util import schema as sc
 from ...util.decorators import debug
@@ -125,7 +125,6 @@ class SequenceProgram(BlockProgram):
     start_state = initial_state or SequenceProgramState(mode=SequenceProgramMode.Normal)
 
     loop = asyncio.get_running_loop()
-    hold = loop.create_task(self._master.hold(self._block.state, symbol))
 
     # Enter state
 
@@ -159,8 +158,6 @@ class SequenceProgram(BlockProgram):
           stopped=info.stopped,
           time=info.time
         )
-
-    hold.cancel()
 
 
 @debug

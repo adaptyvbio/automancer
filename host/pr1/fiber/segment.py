@@ -4,13 +4,14 @@ from enum import IntEnum
 import time
 import traceback
 from types import EllipsisType
-from typing import Any, Optional, Protocol, Sequence
+from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence
 
+from ..util.ref import Ref
 from ..host import logger
 from .process import Process, ProgramExecEvent
 from .langservice import Analysis
-from .master2 import BlockMesh, ClaimSymbol
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
+from ..devices.claim import ClaimSymbol
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
 from ..util.decorators import debug
@@ -64,11 +65,12 @@ class SegmentProgramState:
   mode: SegmentProgramMode
   process: Optional[Any]
   time: float
+  state: Optional[Any] = None
 
   def export(self):
     return {
       "mode": self.mode,
-      "process": self.process.export(),
+      "process": self.process and self.process.export(),
       "time": self.time * 1000.0
     }
 
@@ -79,7 +81,7 @@ class SegmentProgram(BlockProgram):
     self._parent = parent
 
     self._mode: SegmentProgramMode
-    self._pause_future: Optional[asyncio.Future]
+    self._resume_future: Optional[asyncio.Future]
     self._process: Process
 
   def import_message(self, message: dict):
@@ -94,43 +96,58 @@ class SegmentProgram(BlockProgram):
     self._process.pause()
 
   def resume(self):
-    assert self._pause_future
-    self._pause_future.set_result(None)
+    assert self._resume_future
+    self._resume_future.set_result(None)
 
   async def run(self, initial_state: Optional[SegmentProgramState], symbol: ClaimSymbol):
     loop = asyncio.get_running_loop()
-    hold = loop.create_task(self._master.hold(self._block.state, symbol))
 
     runner = self._master.chip.runners[self._block._process.namespace]
 
     self._mode = SegmentProgramMode.Normal
-    self._pause_future = None
+    self._resume_future = None
     self._process = runner.Process(self._block._process.data)
 
-    try:
-      async for info in self._process.run(initial_state.process if initial_state else None):
-        if (self._mode == SegmentProgramMode.Pausing) and info.stopped:
-          self._mode = SegmentProgramMode.Paused
-          self._pause_future = asyncio.Future()
+    iterator = DoubleIterator(self._process.run(initial_state.process if initial_state else None))
 
-        event_time = info.time or time.time()
+    def set_hold():
+      iterator.set_second(self._master.hold(self._block.state, symbol))
+
+    set_hold()
+
+    async for main, event in iterator:
+      if main:
+        if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
+          await iterator.close_second()
+
+          self._mode = SegmentProgramMode.Paused
+          self._resume_future = asyncio.Future()
+
+        event_time = event.time or time.time()
 
         yield ProgramExecEvent(
-          state=SegmentProgramState(mode=self._mode, process=info.state, time=event_time),
+          state=SegmentProgramState(mode=self._mode, process=event.state, time=event_time),
           stopped=(self._mode == SegmentProgramMode.Paused)
         )
 
-        if self._pause_future:
-          await self._pause_future
+        # if self._resume_future:
+        #   await self._resume_future
+        #   self._mode = SegmentProgramMode.Normal
+        #   self._resume_future = None
+
+        if self._mode == SegmentProgramMode.Paused:
           self._mode = SegmentProgramMode.Normal
-          self._pause_future = None
-    except Exception as e:
-      logger.error("Uncaught error raised in process")
-      logger.error(e)
-
-      yield ProgramExecEvent(error=e)
-
-    hold.cancel()
+          set_hold()
+      else:
+        yield ProgramExecEvent(
+          state=SegmentProgramState(
+            mode=self._mode,
+            # process=self._process.state,
+            process=None,
+            time=time.time(),
+            state=event
+          )
+        )
 
 
 @dataclass
@@ -176,3 +193,66 @@ class SegmentBlock(BaseBlock):
       "process": self._process.export(),
       "state": self.state.export()
     }
+
+
+class DoubleIterator:
+  def __init__(self, main: AsyncIterator):
+    self._main = main
+    self._main_task = None
+    self._second_task = None
+
+  async def close_second(self):
+    assert self._second_task
+
+    self._second_task.cancel()
+
+    try:
+      await self._second_task
+    except (StopAsyncIteration, asyncio.CancelledError):
+      pass
+
+    self._second_task = None
+
+    try:
+      await anext(self._second)
+    except StopAsyncIteration:
+      pass
+
+  def set_second(self, second: AsyncIterator):
+    self._second = second
+
+  def _callback(self, main, task):
+    # print(">>>>", main, task)
+
+    if main:
+      self._main_task = None
+    else:
+      self._second_task = None
+
+    try:
+      value = task.result()
+    except asyncio.CancelledError:
+      pass
+    except StopAsyncIteration:
+      if main:
+        def callback(_):
+          self._future.set_exception(StopAsyncIteration)
+
+        asyncio.ensure_future(self.close_second()).add_done_callback(callback)
+    else:
+      self._future.set_result((main, value))
+
+  def __aiter__(self):
+    return self
+
+  async def __anext__(self):
+    if not self._main_task:
+      self._main_task = asyncio.create_task(anext(self._main)) # type: ignore
+      self._main_task.add_done_callback(lambda task: self._callback(True, task))
+
+    if not self._second_task:
+      self._second_task = asyncio.create_task(anext(self._second)) # type: ignore
+      self._second_task.add_done_callback(lambda task: self._callback(False, task))
+
+    self._future = asyncio.Future()
+    return await self._future

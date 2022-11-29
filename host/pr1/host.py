@@ -8,7 +8,7 @@ import uuid
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
-from .devices.node import CollectionNode, DeviceNode
+from .devices.node import BaseNode, CollectionNode, DeviceNode
 from .draft import Draft
 from .fiber.parser import FiberParser
 from .fiber.master2 import Master
@@ -25,6 +25,15 @@ class HostRootNode(CollectionNode):
     self.id = 'root'
     self.label = "Root"
     self.nodes = devices
+
+  def find(self, path: list[str]) -> BaseNode:
+    node = self
+
+    for node_id in path:
+      assert isinstance(node, CollectionNode)
+      node = node.nodes[node_id]
+
+    return node
 
 
 class Host:

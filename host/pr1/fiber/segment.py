@@ -61,16 +61,17 @@ class SegmentProgramMode(IntEnum):
   Paused = 2
 
 @dataclass(kw_only=True)
-class SegmentProgramState:
+class SegmentProgramLocation:
   mode: SegmentProgramMode
-  process: Optional[Any]
+  process: Any
   time: float
   state: Optional[Any] = None
 
   def export(self):
     return {
       "mode": self.mode,
-      "process": self.process and self.process.export(),
+      "process": self.process.export(),
+      "state": self.state and self.state.export(),
       "time": self.time * 1000.0
     }
 
@@ -99,9 +100,7 @@ class SegmentProgram(BlockProgram):
     assert self._resume_future
     self._resume_future.set_result(None)
 
-  async def run(self, initial_state: Optional[SegmentProgramState], symbol: ClaimSymbol):
-    loop = asyncio.get_running_loop()
-
+  async def run(self, initial_state: Optional[SegmentProgramLocation], symbol: ClaimSymbol):
     runner = self._master.chip.runners[self._block._process.namespace]
 
     self._mode = SegmentProgramMode.Normal
@@ -115,18 +114,33 @@ class SegmentProgram(BlockProgram):
 
     set_hold()
 
+    location: Optional[SegmentProgramLocation] = None
+    state_location: Optional[Any] = None
+
     async for main, event in iterator:
       if main:
+        event_time = event.time or time.time()
+
         if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
           await iterator.close_second()
 
           self._mode = SegmentProgramMode.Paused
           self._resume_future = asyncio.Future()
 
-        event_time = event.time or time.time()
+        if not location:
+          location = SegmentProgramLocation(
+            mode=self._mode,
+            process=event.state,
+            state=state_location,
+            time=event_time
+          )
+        else:
+          location.mode = self._mode
+          location.process = event.state
+          location.time = event_time
 
         yield ProgramExecEvent(
-          state=SegmentProgramState(mode=self._mode, process=event.state, time=event_time),
+          state=SegmentProgramLocation(mode=self._mode, process=event.state, time=event_time),
           stopped=(self._mode == SegmentProgramMode.Paused)
         )
 
@@ -139,15 +153,16 @@ class SegmentProgram(BlockProgram):
           self._mode = SegmentProgramMode.Normal
           set_hold()
       else:
-        yield ProgramExecEvent(
-          state=SegmentProgramState(
-            mode=self._mode,
-            # process=self._process.state,
-            process=None,
-            time=time.time(),
-            state=event
+        if location:
+          location.state = event
+          location.time = time.time()
+
+          yield ProgramExecEvent(
+            state=location,
+            stopped=False
           )
-        )
+        else:
+          state_location = event.state
 
 
 @dataclass

@@ -1,10 +1,11 @@
 import asyncio
+from enum import IntEnum
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from pr1.devices.claim import Claim
-from pr1.devices.node import BaseWritableNode
+from pr1.devices.claim import Claim, ClaimSymbol
+from pr1.devices.node import BaseWritableNode, NodePath
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
 from pr1.units.base import BaseProcessRunner, BaseRunner
@@ -12,11 +13,20 @@ from pr1.units.base import BaseProcessRunner, BaseRunner
 from . import namespace
 
 
+class NodeWriteError(IntEnum):
+  Disconnected = 0
+  Unclaimable = 1
+
+
 @dataclass
-class StateState:
+class StateLocation:
+  values: dict[NodePath, Optional[NodeWriteError]]
+
   def export(self):
     return {
-
+      "values": [
+        [path, error] for path, error in self.values.items()
+      ]
     }
 
 class Runner(BaseRunner):
@@ -29,42 +39,54 @@ class Runner(BaseRunner):
 
     # self._executor = host.executors[namespace]
 
-  async def hold(self, state, symbol):
-    claims = set[Claim]()
+  async def hold(self, state, symbol: ClaimSymbol):
+    # claims = dict[NodePath, Optional[Claim]]()
 
-    async def write_node(node: BaseWritableNode, value: Any):
-      claim = node.claim_now(symbol)
+    def send_location():
+      nonlocal event_future
 
-      if not claim:
-        print("Failed to claim", path)
+      event_future.set_result(location)
+      event_future = asyncio.Future()
+
+    async def write_node(path: NodePath, initial_claim: Optional[Claim], node: BaseWritableNode, value: Any):
+      claim = initial_claim
 
       try:
         while True:
-          if not claim:
-            claim = await node.claim(symbol)
-
-          claims.add(claim)
+          claim = await node.claim(symbol)
 
           await asyncio.shield(node.write(value))
           await claim.lost()
 
-          claims.remove(claim)
+          location.values[path] = NodeWriteError.Unclaimable
+          send_location()
       finally:
         if claim and claim.valid:
           claim.release()
 
+    event_future = asyncio.Future()
+    location = StateLocation(values={ path: None for path in state.values.keys() })
     tasks = set()
 
     for path, value in state.values.items():
       node = self._host.root_node.find(path)
       assert isinstance(node, BaseWritableNode)
 
-      tasks.add(asyncio.create_task(write_node(node, value)))
+      claim = node.claim_now(symbol)
+
+      if not claim:
+        location.values[path] = NodeWriteError.Unclaimable
+
+      if not node.connected:
+        location.values[path] = NodeWriteError.Disconnected
+
+      tasks.add(asyncio.create_task(write_node(path, claim, node, value)))
+
+    yield location
 
     try:
-      await asyncio.Future()
+      yield await event_future
     except asyncio.CancelledError:
-      # print("Release state ->", state)
       for task in tasks:
         task.cancel()
 
@@ -74,6 +96,3 @@ class Runner(BaseRunner):
           pass
 
       raise
-
-    return
-    yield

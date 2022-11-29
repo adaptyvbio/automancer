@@ -23,11 +23,17 @@ export type ProtocolState = Record<UnitNamespace, unknown>;
 
 
 export interface Master {
+  location: MasterBlockLocation;
   protocol: Protocol;
-  state: unknown;
 }
 
 export interface MasterProcessState {
   time: number;
   [key: string]: unknown;
+}
+
+export type MasterStateLocation = Record<UnitNamespace, unknown> | null;
+
+export interface MasterBlockLocation {
+  state: MasterStateLocation;
 }

@@ -8,8 +8,6 @@ export function UnstableText(props: {
   interval: number | null;
 }) {
   let forceUpdate = util.useForceUpdate();
-  // let refInterval = React.useRef<number | null>(null);
-  console.log(props.interval);
 
   React.useEffect(() => {
     if (props.interval !== null) {

@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, FeatureGroupDef, ProgressBar, React, Unit, formatDuration } from 'pr1';
+import { CreateFeaturesOptions, FeatureGroupDef, ProgressBar, React, Unit, formatDuration, Host } from 'pr1';
 
 
 export interface ProcessData {
@@ -6,7 +6,7 @@ export interface ProcessData {
   value: number;
 }
 
-export interface ProcessState {
+export interface ProcessLocation {
   paused: boolean;
   progress: number;
 }
@@ -15,20 +15,20 @@ export interface ProcessState {
 const namespace = 'timer';
 
 function ProcessComponent(props: {
+  host: Host;
   processData: ProcessData;
-  processState: ProcessState;
+  processLocation: ProcessLocation;
   time: number;
 }) {
   let time = Date.now();
-  let currentProgress = props.processState.progress + ((time - props.time) / props.processData.value);
+  let currentProgress = props.processLocation.progress + ((time - props.time) / props.processData.value);
   // console.log(currentProgress)
 
   return (
     <div>
-      <p>Progress: 0%</p>
-      <pre>{JSON.stringify({ ...props, host: null }, null, 2)}</pre>
+      {/* <pre>{JSON.stringify({ ...props, host: null }, null, 2)}</pre> */}
       <ProgressBar
-        paused={props.processState.paused}
+        paused={props.processLocation.paused}
         targetEndTime={time + (props.processData.value * (1 - currentProgress))}
         time={time}
         value={currentProgress} />

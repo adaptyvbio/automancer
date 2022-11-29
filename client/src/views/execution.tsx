@@ -8,7 +8,7 @@ import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
-import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
+import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools } from '../unit';
 
 import editorStyles from '../../styles/components/editor.module.scss';
@@ -72,20 +72,20 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     //   return unit.getExecutionInfo(block, state, { getExecutionInfo });
     // };
 
-    let getActiveBlockPaths = (block: ProtocolBlock, state: unknown, path: ProtocolBlockPath): ProtocolBlockPath[] => {
+    let getActiveBlockPaths = (block: ProtocolBlock, location: MasterBlockLocation, path: ProtocolBlockPath): ProtocolBlockPath[] => {
       let unit = this.props.host.units[block.namespace];
-      let keys = unit.getChildrenExecutionKeys!(block, state);
+      let keys = unit.getChildrenExecutionKeys!(block, location);
 
       return keys
         ? keys.flatMap((key) => getActiveBlockPaths(
             unit.getChildBlock!(block, key),
-            unit.getActiveChildState!(state, key),
+            unit.getActiveChildState!(location, key),
             [...path, key]
           ))
         : [path];
     };
 
-    let activeBlockPaths = getActiveBlockPaths(this.master.protocol.root, this.master.state, []);
+    let activeBlockPaths = getActiveBlockPaths(this.master.protocol.root, this.master.location, []);
 
     return (
       <main className={viewStyles.root}>
@@ -112,7 +112,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                     host={this.props.host}
                     selectBlock={this.selectBlock.bind(this)}
                     selectedBlockPath={this.state.selectedBlockPath}
-                    state={this.master.state}
+                    state={this.master.location}
                     tree={this.master.protocol.root} />
                 )
               },
@@ -133,9 +133,9 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                             chip={this.chip}
                             // blockPath={this.state.selectedBlockPath}
                             host={this.props.host}
+                            location={this.master.location}
                             protocol={this.master.protocol}
-                            selectBlock={this.selectBlock.bind(this)}
-                            state={this.master.state} />
+                            selectBlock={this.selectBlock.bind(this)} />
                           // <BlockInspector
                           //   blockPath={this.state.selectedBlockPath}
                           //   host={this.props.host}

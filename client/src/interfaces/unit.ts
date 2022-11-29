@@ -5,7 +5,7 @@ import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
 import type { GraphBlockMetrics, GraphRenderer } from './graph';
-import type { Protocol, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
+import type { MasterBlockLocation, MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
 //> General
@@ -19,6 +19,10 @@ export interface Feature {
   accent?: unknown;
   description?: string | null;
   disabled?: unknown;
+  error?: {
+    kind: 'emergency' | 'error' | 'power' | 'shield' | 'warning';
+    message: string;
+  } | null;
   icon: string;
   label: string;
 }
@@ -40,18 +44,18 @@ export interface Unit {
   ProcessComponent?: React.ComponentType<{
     host: Host;
     processData: any;
-    processState: any;
+    processLocation: any;
     time: number;
   }>;
 
   createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
-  createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, options: CreateFeaturesOptions): FeatureGroupDef;
+  createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions): FeatureGroupDef;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 
   createActiveBlockMenu?(block: ProtocolBlock, execState: unknown): MenuDef;
-  getActiveChildState?(execState: unknown, key: unknown): unknown;
+  getActiveChildState?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
   getBlockClassLabel?(block: ProtocolBlock): string | null;
   getBlockDefaultLabel?(block: ProtocolBlock): string | null;
   getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;

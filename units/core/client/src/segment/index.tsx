@@ -39,7 +39,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
         ?? [{ icon: 'not_listed_location', label: 'Unknown process' }])
         .map((feature) => ({ ...feature, accent: true })),
       ...Object.values(options.host.units).flatMap((unit) => {
-        return unit?.createStateFeatures?.(block.state, null, createFeaturesOptions) ?? [];
+        return unit?.createStateFeatures?.(block.state, null, null, createFeaturesOptions) ?? [];
       })
     ];
 

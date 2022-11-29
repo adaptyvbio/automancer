@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import traceback
 from typing import Any, Callable, Optional
 
@@ -74,6 +75,16 @@ class ParBlock:
 
   def __init__(self, children, /):
     self._children = children
+
+
+@dataclass
+class StateLocation:
+  unit_locations: dict[str, Any]
+
+  def export(self):
+    return {
+      namespace: (unit_location and unit_location.export()) for namespace, unit_location in self.unit_locations.items()
+    }
 
 
 class Master:
@@ -160,26 +171,21 @@ class Master:
 
     await start_future
 
-  # def stop(self):
-  #   self._task.cancel()
+  async def hold(self, state: BlockState, symbol: ClaimSymbol):
+    runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
+    namespaces = list(runners.keys())
 
-  # def enter_state(self, state: BlockState, parent_mesh: BlockMesh, symbol: ClaimSymbol) -> BlockMesh:
-  #   mesh = dict()
+    location = StateLocation({ namespace: None for namespace in namespaces })
 
-  #   for namespace, runner in self.chip.runners.items():
-  #     mesh[namespace] = runner.enter_state(state[namespace], parent_mesh=parent_mesh, symbol=symbol)
+    async for index, unit_state_location in DynamicParallelIterator([runner.hold(state[namespace], symbol) for namespace, runner in runners.items()]):
+      namespace = namespaces[index]
+      location.unit_locations[namespace] = unit_state_location
 
-  #   return BlockMesh(mesh)
+      yield location
 
-  # def exit_state(self, mesh: BlockMesh):
-  #   for namespace, runner in self.chip.runners.items():
-  #     runner.exit_state(mesh[namespace])
-
-  def hold(self, state: BlockState, symbol: ClaimSymbol):
-    return DynamicParallelIterator([runner.hold(state[namespace], symbol) for namespace, runner in self.chip.runners.items() if state.get(namespace)])
 
   def export(self):
     return {
-      "protocol": self.protocol.export(),
-      "state": self._state.export()
+      "location": self._state.export(),
+      "protocol": self.protocol.export()
     }

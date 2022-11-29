@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
+import { MasterBlockLocation, Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
 import { FeatureGroup, FeatureList } from './features';
@@ -17,9 +17,9 @@ export interface ExecutionInspectorProps {
   activeBlockPaths: ProtocolBlockPath[];
   chip: Chip;
   host: Host;
+  location: MasterBlockLocation;
   protocol: Protocol;
   selectBlock(path: ProtocolBlockPath | null): void;
-  state: unknown;
 }
 
 export interface ExecutionInspectorState {
@@ -42,17 +42,17 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
 
     let lineBlocks = [this.props.protocol.root];
-    let lineStates = [this.props.state];
+    let lineLocations = [this.props.location];
 
     for (let key of activeBlockPath) {
       let parentBlock = lineBlocks.at(-1);
-      let parentState = lineStates.at(-1);
+      let parentLocation = lineLocations.at(-1);
       let unit = units[parentBlock.namespace];
       let block = unit.getChildBlock!(parentBlock, key);
-      let state = unit.getActiveChildState!(parentState, key);
+      let location = unit.getActiveChildState!(parentLocation, key);
 
       lineBlocks.push(block);
-      lineStates.push(state);
+      lineLocations.push(location);
     }
 
     let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
@@ -64,10 +64,10 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           <div className={spotlightStyles.breadcrumbRoot}>
             {lineBlocks /* .slice(0, -1) */ .map((block, index, arr) => {
               let unit = units[block.namespace];
-              let state = lineStates[index];
-              let label = getBlockLabel(block, state, this.props.host)! ?? 'Untitled step';
+              let location = lineLocations[index];
+              let label = getBlockLabel(block, location, this.props.host)! ?? 'Untitled step';
               let last = index === (arr.length - 1);
-              let menu = unit.createActiveBlockMenu?.(block, state) ?? [];
+              let menu = unit.createActiveBlockMenu?.(block, location) ?? [];
 
               return (
                 <React.Fragment key={index}>
@@ -79,7 +79,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                       ...menu
                     ]}
                     onSelect={(path) => {
-                      let message = unit.onSelectBlockMenu?.(block, state, path);
+                      let message = unit.onSelectBlockMenu?.(block, location, path);
 
                       if (message) {
                         this.pool.add(async () => {
@@ -98,7 +98,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{getBlockLabel(lineBlocks.at(-1), lineStates.at(-1), this.props.host) ?? <i>Untitled step</i>}</h2>
+          <h2 className={spotlightStyles.title}>{getBlockLabel(lineBlocks.at(-1), lineLocations.at(-1), this.props.host) ?? <i>Untitled step</i>}</h2>
           <div className={spotlightStyles.navigationRoot}>
             <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === 0}>
               <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
@@ -110,17 +110,41 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
         </div>
 
         {process && (() => {
-          let ProcessComponent = units[process.namespace].ProcessComponent!;
-          let segmentState = lineStates.at(-1) as any;
+          let processUnit = units[process.namespace];
+          let ProcessComponent = processUnit.ProcessComponent!;
+          let segmentLocation = lineLocations.at(-1) as any;
 
           return (
-            <ProcessComponent
-              host={this.props.host}
-              processData={process!.data}
-              processState={getSegmentBlockProcessState(segmentState, this.props.host)}
-              time={segmentState.time} />
+            <>
+              <FeatureList list={[processUnit.createProcessFeatures!(process.data, {
+                host: this.props.host
+              }).map((feature) => ({ ...feature, accent: true }))]} />
+              <ProcessComponent
+                host={this.props.host}
+                processData={process!.data}
+                processLocation={getSegmentBlockProcessState(segmentLocation, this.props.host)}
+                time={segmentLocation.time} />
+            </>
           );
         })()}
+
+        <FeatureList list={lineBlocks.flatMap((block, index) => {
+          let location = lineLocations[index];
+
+          return block.state
+            ? [Object.values(this.props.host.units).flatMap((unit) => {
+              return unit?.createStateFeatures?.(
+                block.state!,
+                (lineBlocks
+                  .slice(index + 1)
+                  .map((b) => b.state)
+                  .filter((s) => s)) as ProtocolState[],
+                location.state,
+                { host: this.props.host }
+              ) ?? [];
+            })]
+            : [];
+        }).reverse()} />
       </div>
     );
   }

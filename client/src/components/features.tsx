@@ -32,8 +32,19 @@ export function FeatureGroup(props: {
             [spotlightStyles.featureEntryDisabled]: feature.disabled
           })} key={feature.label}>
             <Icon name={feature.icon} className={spotlightStyles.featureIcon} />
-            {feature.description && <div className={spotlightStyles.featureDescription}>{feature.description}</div>}
-            <div className={spotlightStyles.featureLabel}>{feature.label}</div>
+            <div className={spotlightStyles.featureBody}>
+              {feature.description && <div className={spotlightStyles.featureDescription}>{feature.description}</div>}
+              <div className={spotlightStyles.featureLabel}>{feature.label}</div>
+            </div>
+            {feature.error && (
+              <Icon name={{
+                emergency: 'emergency_home',
+                error: 'error',
+                power: 'power_off',
+                shield: 'gpp_maybe',
+                warning: 'warning'
+              }[feature.error.kind]} className={spotlightStyles.featureErrorIcon} />
+            )}
           </div>
         ))
         : (

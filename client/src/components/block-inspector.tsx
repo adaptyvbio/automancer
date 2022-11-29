@@ -75,14 +75,6 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         )}
         <div className={spotlightStyles.header}>
           <h2 className={spotlightStyles.title}>{familyLabels.at(-1) ?? <i>Untitled step</i>}</h2>
-          {/* <div className={spotlightStyles.navigationRoot}>
-            <button type="button" className={spotlightStyles.navigationButton} disabled>
-              <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
-            </button>
-            <button type="button" className={spotlightStyles.navigationButton}>
-              <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
-            </button>
-          </div> */}
         </div>
 
         {(process && processUnit) && (
@@ -100,6 +92,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
                   .slice(index + 1)
                   .map((b) => b.state)
                   .filter((s) => s)) as ProtocolState[],
+                null,
                 { host: this.props.host }
               ) ?? [];
             })]

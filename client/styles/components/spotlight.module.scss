@@ -127,7 +127,7 @@
     display: grid;
     align-items: center;
     column-gap: 0.8rem;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
 
     height: 30px;
 
@@ -152,12 +152,17 @@
       'opsz' 20;
   }
 
-  &Entry:has(&Description) &Icon {
-    grid-row: 1 / span 2;
-  }
-
   &EntryAccent &Icon {
     background-color: $app-blue;
+  }
+
+  &Body {
+    display: flex;
+    flex-direction: column;
+
+    &:last-child {
+      grid-column-end: 3;
+    }
   }
 
   &Description {
@@ -177,12 +182,17 @@
     line-height: 1.15;
   }
 
-  &Entry:has(&Description) &Label {
-    align-self: end;
-  }
-
   &Blank {
     color: #666;
     font-style: italic;
+  }
+
+  &ErrorIcon {
+    color: $app-red;
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 100,
+      'GRAD' 200,
+      'opsz' 20;
   }
 }

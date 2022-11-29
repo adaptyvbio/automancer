@@ -70,7 +70,7 @@ class DynamicParallelIterator(Generic[T]):
       self.cancel()
       self._future = None
 
-      raise
+      raise # ?
 
 
 if __name__ == '__main__':

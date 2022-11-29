@@ -43,6 +43,14 @@ host = Host(backend=Backend(), update_callback=callback)
 
 
 async def main():
+  # async def task_counter():
+  #   while True:
+  #     print(f"Task count: {len(asyncio.all_tasks())}")
+  #     await asyncio.sleep(0.2)
+
+  # asyncio.create_task(task_counter())
+
+
   await host.initialize()
 
   from .fiber.parser import FiberParser

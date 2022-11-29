@@ -3,12 +3,15 @@ import traceback
 from pint import Unit
 from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
 
+from .claim import Claimable
+
 
 T = TypeVar('T')
 
 # Misc
 
 NodePath = tuple[str]
+
 
 # Base nodes
 
@@ -182,9 +185,10 @@ class ScalarReadableNode(BaseReadableNode[float]):
 
 # Writable value nodes
 
-class BaseWritableNode(BaseNode, Generic[T]):
+class BaseWritableNode(BaseNode, Claimable, Generic[T]):
   def __init__(self):
-    super().__init__()
+    BaseNode.__init__(self)
+    Claimable.__init__(self)
 
     self.current_value: Optional[T]
     self.target_value: Optional[T]

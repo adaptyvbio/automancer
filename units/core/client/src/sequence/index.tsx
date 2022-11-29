@@ -89,7 +89,9 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   render(block, path, metrics, position, state, options) {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
-    let linkDirection = (vertical ? 'vertical' : 'horizontal') as 'vertical' | 'horizontal';
+    let linkDirection = vertical
+      ? ('vertical' as const)
+      : ('horizontal' as const);
 
     let children = block.children.map((child, childIndex) => {
       let childState = (state?.index === childIndex)

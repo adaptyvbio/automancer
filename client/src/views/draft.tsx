@@ -280,7 +280,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           )}
 
           <SplitPanels
-            className={editorStyles.panels}
             panels={[
               { component: (
                 <TextEditor

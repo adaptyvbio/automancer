@@ -11,7 +11,6 @@ import { Host } from '../host';
 import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools } from '../unit';
 
-import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 
@@ -104,7 +103,6 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
           ref={this.refTitleBar} />
         <div className={viewStyles.contents}>
           <SplitPanels
-            className={editorStyles.panels}
             panels={[
               {
                 component: (

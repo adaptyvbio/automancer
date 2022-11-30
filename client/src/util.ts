@@ -55,7 +55,7 @@ export function useForceUpdate() {
 }
 
 
-export function formatClass(...input: (string | Record<string, unknown>)[]): string {
+export function formatClass(...input: (Record<string, unknown> | string | undefined)[]): string {
   return input
     .filter((item) => item)
     .flatMap((item) => {
@@ -63,7 +63,7 @@ export function formatClass(...input: (string | Record<string, unknown>)[]): str
         return item;
       } if (Array.isArray(item)) {
         return formatClass(...item);
-      } if (item.constructor === Object) {
+      } if ((typeof item === 'object') && (item.constructor === Object)) {
         return Object.entries(item)
           .filter(([key, value]) => (key && value))
           .map(([key, _value]) => key);

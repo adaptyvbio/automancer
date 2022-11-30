@@ -1,0 +1,52 @@
+@use "../constants" as *;
+
+
+$border-color: #ddd;
+
+
+.root {
+  display: grid;
+  height: 100%;
+  overflow: hidden;
+
+  > :nth-child(odd) {
+    overflow-x: hidden;
+  }
+
+  > :nth-child(even) {
+    cursor: col-resize;
+    pointer-events: initial;
+    position: relative;
+    z-index: 1;
+
+    &::before, &::after {
+      content: "";
+
+      position: absolute;
+      inset: 0;
+
+      height: 100%;
+    }
+
+    // Hover area
+    &::before {
+      width: 6px;
+      translate: calc(0.5px - 50%) 0;
+    }
+
+    // Blue handle
+    &::after {
+      width: 1px;
+      background-color: $border-color;
+    }
+
+    &:is(:hover, :global(._dragging))::after {
+      background-color: $app-blue;
+      scale: 4 1;
+    }
+
+    &:hover::after {
+      transition: background-color $dur-short 300ms, scale $dur-short 300ms;
+    }
+  }
+}

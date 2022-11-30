@@ -3,6 +3,8 @@ import Split from 'react-split-grid';
 
 import * as util from '../util';
 
+import styles from '../../styles/components/split-panels.module.scss';
+
 
 export interface Panel {
   component: React.ReactNode;
@@ -17,49 +19,16 @@ export function SplitPanels(props: {
 }) {
   let [draggedTrack, setDraggedTrack] = React.useState<number | null>(null);
   let refContainer = React.useRef<HTMLDivElement>();
-  let refPanels = React.useRef<Panel[]>();
 
-  React.useEffect(() => {
-    refPanels.current = props.panels;
+  let getGridTemplate = (value?: string) => {
+    return (value ?? refContainer.current!.computedStyleMap().get('grid-template-columns').toString()).split(' ').map((item) => CSSNumericValue.parse(item));
+  };
 
+  let updateOpenPanels = () => {
     let gridTemplate = getGridTemplate();
-    let updated = false;
 
     for (let [index, panel] of props.panels.entries()) {
       let open = gridTemplate[index * 2].value > 1e-9;
-
-      if ((panel.open !== undefined) && (panel.open !== open)) {
-        let nominalSize = (panel.nominalSize ?? CSSNumericValue.parse('1fr'));
-
-        gridTemplate[index * 2] = panel.open
-          ? nominalSize
-          : CSSNumericValue.parse('0' + nominalSize.unit);
-        updated = true;
-      }
-    }
-
-    if (updated) {
-      setGridTemplate(gridTemplate);
-    }
-  }, [props.panels]);
-
-  let getGridTemplate = () => {
-    return refContainer.current!.computedStyleMap().get('grid-template-columns').toString().split(' ').map((item) => CSSNumericValue.parse(item));
-  };
-
-  let setGridTemplate = (template: CSSNumericValue[]) => {
-    refContainer.current!.style.setProperty('grid-template-columns', template.map((item) => item.toString()).join(' '));
-  };
-
-  // console.log('reading', props.panels[1].open);
-  let updateOpenPanels = () => {
-    // console.log('state', props.panels[1].open);
-
-    let gridTemplate = getGridTemplate();
-
-    for (let [index, panel] of refPanels.current!.entries()) {
-      let open = gridTemplate[index * 2].value > 1e-9;
-      // console.log(index, panel.open, '->', open)
 
       if ((panel.open !== undefined) && (open !== panel.open)) {
         panel.onToggle?.(open);
@@ -83,7 +52,41 @@ export function SplitPanels(props: {
         getGridProps,
         getGutterProps,
       }) => (
-        <div className={props.className} {...getGridProps()} ref={refContainer}>
+        <div className={util.formatClass(styles.root, props.className)} {...(() => {
+          let gridProps = getGridProps();
+
+          let rawGridTemplate = gridProps.style.gridTemplateColumns;
+          let gridTemplate = rawGridTemplate && getGridTemplate(rawGridTemplate);
+          let newGridTemplate: CSSNumericValue[] | null = null;
+
+          if (!gridTemplate) {
+            newGridTemplate = new Array(props.panels.length * 2 - 1).fill(CSSNumericValue.parse('1px'));
+          }
+
+          for (let [index, panel] of props.panels.entries()) {
+            if (!gridTemplate || (
+              (panel.open !== undefined) && (panel.open !== (gridTemplate[index * 2].value > 1e-9))
+            )) {
+              let nominalSize = (panel.nominalSize ?? CSSNumericValue.parse('1fr'));
+
+              if (!newGridTemplate) {
+                newGridTemplate = gridTemplate.slice();
+              }
+
+              newGridTemplate![index * 2] = (panel.open !== false)
+                ? nominalSize
+                : CSSNumericValue.parse('0' + nominalSize.unit);
+            }
+          }
+
+          return {
+            ...gridProps,
+            style: {
+              ...gridProps.style,
+              ...(newGridTemplate && { gridTemplateColumns: newGridTemplate.map((item) => item.toString()).join(' ') }),
+            }
+          };
+        })()} ref={refContainer}>
           {props.panels.map((panel, index) => {
             let last = index === props.panels.length - 1;
             let gutterIndex = index * 2 + 1;

@@ -1,9 +1,12 @@
 from asyncio import CancelledError, Future, Task
-from typing import AsyncIterator, Generic, Optional, TypeVar
+from typing import AsyncIterator, Generic, Literal, Optional, TypeVar
 import asyncio
+import warnings
 
 
 T = TypeVar('T')
+S = TypeVar('S')
+
 
 class DynamicParallelIterator(Generic[T]):
   def __init__(self, iterators: list[AsyncIterator[T]]):
@@ -22,7 +25,7 @@ class DynamicParallelIterator(Generic[T]):
       self._iterators[index] = None
 
       if not self._cancelled:
-        print("Warning: iterator stopped unexpectedly")
+        warnings.warn(f"[{type(self).__name__}] Iterator {index} stopped unexpectedly")
 
       if self._future and self._cancelled and all(task is None for task in self._tasks):
         self._future.set_exception(StopAsyncIteration)
@@ -70,7 +73,82 @@ class DynamicParallelIterator(Generic[T]):
       self.cancel()
       self._future = None
 
-      raise # ?
+      raise
+
+
+class CoupledStateIterator(DynamicParallelIterator):
+  def __init__(self, main_iterator: AsyncIterator):
+    self._state_iterator: Optional[AsyncIterator] = None
+    self._task: Optional[Task] = None
+    self._wait_future: Optional[Future] = asyncio.Future()
+
+    async def primary_iterator():
+      async for event in main_iterator:
+        print("> Primary: event", event)
+        yield event
+
+      print("> Primary: done")
+      self.cancel()
+
+      try:
+        await asyncio.Future()
+      except CancelledError:
+        print("> Primary: cancelled")
+        raise
+
+    async def secondary_iterator():
+      assert self._tasks[0]
+      await self._tasks[0]
+
+      while True:
+        if self._wait_future:
+          await self._wait_future
+
+        assert self._state_iterator
+
+        try:
+          while True:
+            self._task = asyncio.create_task(anext(self._state_iterator)) # type: ignore
+            event = await self._task
+            self._task = None
+            print("> Secondary: event", event)
+
+            yield event
+        except asyncio.CancelledError:
+          print("> Secondary: cancelled")
+
+          if self._state_iterator:
+            break
+        except StopAsyncIteration:
+          return
+
+    super().__init__([
+      primary_iterator(),
+      secondary_iterator()
+    ])
+
+  async def close_state(self):
+    print("> Close state")
+
+    if self._task:
+      try:
+        self._task.cancel()
+      except CancelledError:
+        pass
+
+      self._task = None
+
+    self._state_iterator = None
+    self._wait_future = asyncio.Future()
+
+  def set_state(self, iterator: AsyncIterator):
+    print("> Set state")
+
+    assert self._wait_future
+
+    self._state_iterator = iterator
+    self._wait_future.set_result(None)
+    self._wait_future = None
 
 
 if __name__ == '__main__':

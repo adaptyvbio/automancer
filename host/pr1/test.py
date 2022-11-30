@@ -67,14 +67,17 @@ async def main():
 name: Foobar
 
 steps:
-  actions:
+  activate: 1 s
+  Mock.valueBool: true
+
+  # actions:
     # - activate: 500 ms
-    - activate: 1 s
+    # - activate: 1 s
       # RB.relay0: true
-      Mock.valueBool: true
-    - activate: 1 s
-      Mock.valueBool: false
-    - activate: 1 s
+      # Mock.valueBool: true
+    # - activate: 1 s
+    #   Mock.valueBool: false
+    # - activate: 1 s
 """,
     host=host,
     Parsers=[SequenceParser, ShorthandsParser, AcmeParser, DevicesParser, ScoreParser]
@@ -84,26 +87,32 @@ steps:
 
   chip = next(iter(host.chips.values()))
   # chip.upgrade(host=host)
-  print(chip.runners)
 
   if parser.protocol:
     master = Master(parser.protocol, chip=chip)
 
     async def a():
       async for info in master.run():
+        continue
+
         print("[Info]")
         # print("  Raw:", info)
         print("  Exported:", info.state.export())
         print()
 
     async def b():
-      # await asyncio.sleep(1.5)
-      # print("[Pausing]")
-      # master.pause()
-      # await asyncio.sleep(1)
-      # print("[Resuming]")
-      # master.resume()
+      await asyncio.sleep(0.5)
+      print("[Pausing]")
+      master.pause()
+      await asyncio.sleep(2)
+      print("[Resuming]")
+      master.resume()
       pass
+
+
+    print()
+    print("--------")
+    print()
 
     await asyncio.gather(a(), b())
     # await a()

@@ -10,7 +10,7 @@ class MockDevice(DeviceNode):
 
   def __init__(self):
     super().__init__()
-    self.connected = False
+    self.connected = True
 
     self.nodes = {
       'valueBool': MockBoolNode()
@@ -22,7 +22,7 @@ class MockBoolNode(BooleanWritableNode):
 
   def __init__(self):
     super().__init__()
-    self.connected = False
+    self.connected = True
 
     self.current_value = False
     self.target_value = False

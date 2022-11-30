@@ -53,11 +53,13 @@ class Runner(BaseRunner):
 
       try:
         while True:
-          claim = await node.claim(symbol)
+          if not claim:
+            claim = await node.claim(symbol)
 
           await asyncio.shield(node.write(value))
           await claim.lost()
 
+          claim = None
           location.values[path] = NodeWriteError.Unclaimable
           send_location()
       finally:

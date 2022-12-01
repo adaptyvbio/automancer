@@ -1,5 +1,4 @@
-import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React } from 'pr1';
-import { MenuEntryPath } from 'pr1/lib/types/components/context-menu';
+import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -102,7 +101,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
 
 function createActiveBlockMenu(block: Block, state: State) {
   return (state.mode !== StateMode.Paused)
-    ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (state.mode === StateMode.Pausing) }]
+    ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (state.mode !== StateMode.Normal) }]
     : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }];
 }
 
@@ -120,7 +119,7 @@ function getChildrenExecutionKeys(block: Block, state: State, path: ProtocolBloc
 }
 
 function transformBlockLabel(block: Block, state: State, label: string) {
-  return `${label} (mode: ${StateMode[state.mode]})`;
+  return `${label} (mode: ${StateMode[state.mode]}, ${state.mode})`;
 }
 
 

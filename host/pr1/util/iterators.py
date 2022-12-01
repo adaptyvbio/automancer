@@ -109,20 +109,17 @@ class CoupledStateIterator(Generic[T, S]):
 
     async def primary_iterator():
       async for event in main_iterator:
-        print("> Primary: event", event)
         yield event
 
         if self._open_future:
           await self._open_future
 
-      print("> Primary: done")
       self._iterator.cancel()
 
       # TODO: Remove?
       try:
         await asyncio.Future()
       except CancelledError:
-        print("> Primary: cancelled")
         raise
 
     async def secondary_iterator():
@@ -137,11 +134,9 @@ class CoupledStateIterator(Generic[T, S]):
             self._task = asyncio.create_task(anext(self._state_iterator)) # type: ignore
             event = await self._task
             self._task = None
-            print("> Secondary: event", event)
 
             yield event
         except (asyncio.CancelledError, StopAsyncIteration):
-          print("> Secondary: cancelled")
 
           self._state_iterator = None
           self._task = None
@@ -161,15 +156,12 @@ class CoupledStateIterator(Generic[T, S]):
     self._secondary_value: Optional[S]
 
   def close_state(self):
-    print("> Close state")
     self._open_future = asyncio.Future()
 
     if self._task:
       self._task.cancel()
 
   def set_state(self, iterator: AsyncIterator):
-    print("> Set state")
-
     assert self._open_future
     assert self._wait_future
 

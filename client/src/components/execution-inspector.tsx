@@ -82,7 +82,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                       if (message) {
                         this.pool.add(async () => {
-                          await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath, message);
+                          await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, index), message);
                         });
                       }
                     }}>

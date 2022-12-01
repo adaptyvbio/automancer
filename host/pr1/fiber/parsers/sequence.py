@@ -12,6 +12,7 @@ from ...devices.claim import ClaimSymbol
 from ...reader import LocationArea
 from ...util import schema as sc
 from ...util.decorators import debug
+from ...util.iterators import CoupledStateIterator
 
 
 ActionInfo = tuple[BlockData, LocationArea]
@@ -77,21 +78,25 @@ class SequenceTransform(BaseTransform):
 
 class SequenceProgramMode(IntEnum):
   Normal = 0
-  Pausing = 1
-  Interrupting = 2
-  Stopped = 3
+  PausingChild = 1
+  PausingState = 2
+  Paused = 3
 
 @dataclass(kw_only=True)
-class SequenceProgramState:
+class SequenceProgramLocation:
   child: Optional[Any] = None
   index: int = 0
+  interrupting: bool = False
   mode: SequenceProgramMode
+  state: Optional[Any]
 
   def export(self):
     return {
       "child": self.child and self.child.export(),
       "index": self.index,
-      "mode": self.mode
+      "interrupting": self.interrupting,
+      "mode": self.mode,
+      "state": self.state and self.state.export()
     }
 
 @debug
@@ -102,63 +107,79 @@ class SequenceProgram(BlockProgram):
     self._parent = parent
 
     self._child_program: BlockProgram
-    self._child_index = 0
-
     self._interrupting = False
+    self._mode: SequenceProgramMode = SequenceProgramMode.Normal
+    self._resume_future: Optional[asyncio.Future]
 
   def get_child(self, key: int):
     return self._child_program
 
   def import_message(self, message: Any):
     match message["type"]:
+      case "pause":
+        self.pause()
+        self._resume_future = asyncio.Future()
+      case "resume":
+        self.resume()
       case "setInterrupt":
         self.set_interrupt(message["value"])
 
   def pause(self):
-    self._interrupting = False
+    self._mode = SequenceProgramMode.PausingChild
     self._child_program.pause()
+
+  def resume(self):
+    assert self._mode == SequenceProgramMode.Paused
+    assert self._resume_future
+
+    self._resume_future.set_result(None)
 
   def set_interrupt(self, value: bool, /):
     self._interrupting = value
 
-  async def run(self, initial_state: Optional[SequenceProgramState], symbol: ClaimSymbol):
-    start_state = initial_state or SequenceProgramState(mode=SequenceProgramMode.Normal)
+  async def run(self, initial_state: Optional[SequenceProgramLocation], symbol: ClaimSymbol):
+    async def run():
+      for child_index, child_block in enumerate(self._block._children):
+        if initial_state and (child_index < initial_state.index):
+          continue
 
-    loop = asyncio.get_running_loop()
+        self._child_program = child_block.Program(child_block, self._master, self)
 
-    # Enter state
+        async for event in self._child_program.run(initial_state.child if initial_state and (child_index == initial_state.index) else None, ClaimSymbol(symbol)):
+          yield (child_index, event)
 
-    for child_index, child_block in enumerate(self._block._children):
-      if child_index < start_state.index:
+    iterator = CoupledStateIterator[tuple[int, ProgramExecEvent], Any](run())
+
+    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
+    set_state()
+
+    async for (child_index, event), state_location in iterator:
+      if (self._mode == SequenceProgramMode.PausingChild) and event.stopped:
+        iterator.close_state()
+        self._mode = SequenceProgramMode.PausingState
         continue
 
-      if self._interrupting:
-        self._interrupting = False
+      if self._mode == SequenceProgramMode.PausingState and not state_location:
+        self._mode = SequenceProgramMode.Paused
 
-        yield ProgramExecEvent(
-          state=SequenceProgramState(
-            index=child_index,
-            mode=SequenceProgramMode.Stopped
-          ),
-          stopped=True
-        )
+      yield ProgramExecEvent(
+        state=SequenceProgramLocation(
+          child=event.state,
+          index=child_index,
+          interrupting=self._interrupting,
+          mode=self._mode,
+          state=state_location
+        ),
+        stopped=(self._mode == SequenceProgramMode.Paused)
+      )
 
-      self._child_program = child_block.Program(child_block, self._master, self)
+      if self._mode == SequenceProgramMode.Paused:
+        if self._resume_future:
+          await self._resume_future
+          self._resume_future = None
 
-      async for info in self._child_program.run(start_state.child if child_index == start_state.index else None, ClaimSymbol(symbol)):
-        if info.stopped:
-          pass # Re-enter state
-
-        yield ProgramExecEvent(
-          state=SequenceProgramState(
-            child=info.state,
-            index=child_index,
-            mode=SequenceProgramMode.Stopped
-          ),
-          stopped=info.stopped,
-          time=info.time
-        )
-
+        self._mode = SequenceProgramMode.Normal
+        set_state()
 
 @debug
 class SequenceBlock(BaseBlock):

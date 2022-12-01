@@ -96,11 +96,15 @@ class SegmentProgram(BlockProgram):
         self.resume()
 
   def pause(self):
+    assert self._mode == SegmentProgramMode.Normal
+
     self._mode = SegmentProgramMode.PausingProcess
     self._process.pause()
 
   def resume(self):
+    assert self._mode == SegmentProgramMode.Paused
     assert self._resume_future
+
     self._resume_future.set_result(None)
 
   async def run(self, initial_state: Optional[SegmentProgramLocation], symbol: ClaimSymbol):
@@ -111,28 +115,20 @@ class SegmentProgram(BlockProgram):
     self._process = runner.Process(self._block._process.data)
 
     iterator = CoupledStateIterator[ProgramExecEvent, Any](self._process.run(initial_state.process if initial_state else None))
-    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
 
+    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
     set_state()
 
     async for event, state_location in iterator:
-      print("> Event", self._mode, state_location)
-
       event_time = event.time or time.time()
 
       if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
-        # The process is now paused.
-
-        # Revert the state.
         iterator.close_state()
         self._mode = SegmentProgramMode.PausingState
-
         continue
 
       if (self._mode == SegmentProgramMode.PausingState) and not state_location:
         self._mode = SegmentProgramMode.Paused
-
-      print("> Sending", self._mode)
 
       yield ProgramExecEvent(
         state=SegmentProgramLocation(

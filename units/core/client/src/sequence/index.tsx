@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphLink, GraphRenderer, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
+import { GraphBlockMetrics, GraphLink, GraphRenderer, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -11,9 +11,18 @@ export interface BlockMetrics extends GraphBlockMetrics {
   linksCompact: boolean[];
 }
 
-export interface State {
+export interface Location {
   child: unknown;
   index: number;
+  interrupting: boolean;
+  mode: LocationMode;
+}
+
+export enum LocationMode {
+  Normal = 0,
+  PausingChild = 1,
+  PausingState = 2,
+  Paused = 3
 }
 
 
@@ -22,7 +31,7 @@ const verticalCellGap = 1;
 
 const namespace = 'sequence';
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
+const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, options) {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
@@ -157,11 +166,11 @@ function getChildBlock(block: Block, key: number) {
   return block.children[key];
 }
 
-function getActiveChildState(state: State, _key: number) {
+function getActiveChildState(state: Location, _key: number) {
   return state.child;
 }
 
-function getChildrenExecutionKeys(_block: Block, state: State) {
+function getChildrenExecutionKeys(_block: Block, state: Location) {
   return [state.index];
 }
 
@@ -169,10 +178,28 @@ function getBlockClassLabel(_block: Block) {
   return 'Sequence block';
 }
 
-function createActiveBlockMenu(_block: Block, _state: State) {
+function createActiveBlockMenu(_block: Block, location: Location) {
   return [
-    { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool' }
+    ...((location.mode !== LocationMode.Paused)
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) }]
+      : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }]),
+    { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
   ];
+}
+
+function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
+  switch (path.first()) {
+    case 'interrupt':
+      return { type: 'setInterrupt', value: !location.interrupting }
+    case 'pause':
+      return { 'type': 'pause' };
+    case 'resume':
+      return { 'type': 'resume' };
+  }
+}
+
+function transformBlockLabel(block: Block, location: Location, label: string) {
+  return `${label} (mode: ${LocationMode[location.mode]}, ${location.mode})`;
 }
 
 
@@ -183,5 +210,7 @@ export default {
   getBlockClassLabel,
   getChildrenExecutionKeys,
   graphRenderer,
-  namespace
+  namespace,
+  onSelectBlockMenu,
+  transformBlockLabel
 } satisfies Unit

@@ -20,8 +20,9 @@ export interface State {
 
 export enum StateMode {
   Normal = 0,
-  Pausing = 1,
-  Paused = 2
+  PausingProcess = 1,
+  PausingState = 2,
+  Paused = 3
 }
 
 

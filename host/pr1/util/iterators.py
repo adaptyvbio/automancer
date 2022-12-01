@@ -1,5 +1,5 @@
 from asyncio import CancelledError, Future, Task
-from typing import AsyncIterator, Generic, Literal, Optional, TypeVar
+from typing import AsyncIterator, Generic, Literal, Optional, TypeVar, cast
 import asyncio
 import warnings
 
@@ -13,6 +13,7 @@ class DynamicParallelIterator(Generic[T]):
     self._cancelled = False
     self._future: Optional[Future] = None
     self._iterators: list[Optional[AsyncIterator[T]]] = iterators # type: ignore
+    self._querying = False
     self._queue: list[tuple[int, T]] = list()
     self._tasks: list[Optional[Task]] = [None] * len(iterators)
 
@@ -35,7 +36,7 @@ class DynamicParallelIterator(Generic[T]):
       if self._future:
         self._future.set_result(value)
         self._future = None
-      else:
+      elif not self._querying:
         self._queue.append(value)
 
   def _create_tasks(self):
@@ -54,10 +55,33 @@ class DynamicParallelIterator(Generic[T]):
       if task:
         task.cancel()
 
+  async def get_all(self):
+    assert not self._cancelled
+    assert not self._querying
+    assert not self._queue
+    assert not self._future
+
+    self._querying = True
+    self._create_tasks()
+
+    tasks = cast(list[Task], self._tasks.copy())
+    await asyncio.wait(tasks)
+
+    def transform_task(task: Task):
+      try:
+        return task.result()
+      except (CancelledError, StopAsyncIteration):
+        return None
+
+    self._querying = False
+    return [transform_task(task) for task in tasks]
+
   def __aiter__(self) -> AsyncIterator[tuple[int, T]]:
     return self
 
   async def __anext__(self):
+    assert not self._querying
+
     if self._queue:
       return self._queue.pop(0)
 
@@ -70,14 +94,15 @@ class DynamicParallelIterator(Generic[T]):
     try:
       return await self._future
     except CancelledError:
+      self._future = asyncio.Future()
       self.cancel()
-      self._future = None
-
-      raise
+      return await self._future
 
 
-class CoupledStateIterator(DynamicParallelIterator):
+class CoupledStateIterator(Generic[T, S]):
   def __init__(self, main_iterator: AsyncIterator):
+    self._open_future: Optional[Future] = asyncio.Future()
+    self._reset = False
     self._state_iterator: Optional[AsyncIterator] = None
     self._task: Optional[Task] = None
     self._wait_future: Optional[Future] = asyncio.Future()
@@ -87,9 +112,13 @@ class CoupledStateIterator(DynamicParallelIterator):
         print("> Primary: event", event)
         yield event
 
-      print("> Primary: done")
-      self.cancel()
+        if self._open_future:
+          await self._open_future
 
+      print("> Primary: done")
+      self._iterator.cancel()
+
+      # TODO: Remove?
       try:
         await asyncio.Future()
       except CancelledError:
@@ -97,9 +126,6 @@ class CoupledStateIterator(DynamicParallelIterator):
         raise
 
     async def secondary_iterator():
-      assert self._tasks[0]
-      await self._tasks[0]
-
       while True:
         if self._wait_future:
           await self._wait_future
@@ -114,41 +140,67 @@ class CoupledStateIterator(DynamicParallelIterator):
             print("> Secondary: event", event)
 
             yield event
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, StopAsyncIteration):
           print("> Secondary: cancelled")
 
-          if self._state_iterator:
-            break
-        except StopAsyncIteration:
-          return
+          self._state_iterator = None
+          self._task = None
+          self._wait_future = asyncio.Future()
 
-    super().__init__([
+          if self._iterator._cancelled:
+            break
+          else:
+            yield None
+
+    self._iterator = DynamicParallelIterator([
       primary_iterator(),
       secondary_iterator()
     ])
 
-  async def close_state(self):
+    self._primary_value: T
+    self._secondary_value: Optional[S]
+
+  def close_state(self):
     print("> Close state")
+    self._open_future = asyncio.Future()
 
     if self._task:
-      try:
-        self._task.cancel()
-      except CancelledError:
-        pass
-
-      self._task = None
-
-    self._state_iterator = None
-    self._wait_future = asyncio.Future()
+      self._task.cancel()
 
   def set_state(self, iterator: AsyncIterator):
     print("> Set state")
 
+    assert self._open_future
     assert self._wait_future
 
+    self._reset = True
     self._state_iterator = iterator
+
+    self._open_future.set_result(None)
+    self._open_future = None
+
     self._wait_future.set_result(None)
     self._wait_future = None
+
+  async def __aiter__(self) -> AsyncIterator[tuple[T, Optional[S]]]:
+    while True:
+      if self._reset:
+        self._reset = False
+
+        self._primary_value, self._secondary_value = cast(tuple[T, S], await self._iterator.get_all())
+        yield self._primary_value, self._secondary_value
+
+      async for index, value in self._iterator:
+        match index:
+          case 0: self._primary_value = cast(T, value)
+          case 1: self._secondary_value = cast(S, value)
+
+        yield self._primary_value, self._secondary_value
+
+        if self._reset:
+          break
+      else:
+        break
 
 
 if __name__ == '__main__':

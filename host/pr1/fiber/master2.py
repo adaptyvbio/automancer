@@ -131,8 +131,7 @@ class Master:
     async for event in self._program.run(initial_state, symbol):
       yield event
 
-      if self._pause_future:
-      # if info.stopped and self._pause_future:
+      if event.stopped and self._pause_future:
         self._pause_future.set_result(True)
         self._pause_future = None
 
@@ -175,11 +174,16 @@ class Master:
     runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
     namespaces = list(runners.keys())
 
-    location = StateLocation({ namespace: None for namespace in namespaces })
+    iterator = DynamicParallelIterator([runner.hold(state[namespace], symbol) for namespace, runner in runners.items()])
 
-    async for index, unit_state_location in DynamicParallelIterator([runner.hold(state[namespace], symbol) for namespace, runner in runners.items()]):
+    unit_locations = await iterator.get_all()
+    location = StateLocation({ namespace: unit_locations[index] for index, namespace in enumerate(namespaces) })
+
+    yield location
+
+    async for index, unit_location in iterator:
       namespace = namespaces[index]
-      location.unit_locations[namespace] = unit_state_location
+      location.unit_locations[namespace] = unit_location
 
       yield location
 

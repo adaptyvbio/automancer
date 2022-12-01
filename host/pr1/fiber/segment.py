@@ -58,8 +58,9 @@ class SegmentTransform(BaseTransform):
 
 class SegmentProgramMode(IntEnum):
   Normal = 0
-  Pausing = 1
-  Paused = 2
+  PausingProcess = 1
+  PausingState = 2
+  Paused = 3
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
@@ -95,7 +96,7 @@ class SegmentProgram(BlockProgram):
         self.resume()
 
   def pause(self):
-    self._mode = SegmentProgramMode.Pausing
+    self._mode = SegmentProgramMode.PausingProcess
     self._process.pause()
 
   def resume(self):
@@ -109,68 +110,51 @@ class SegmentProgram(BlockProgram):
     self._resume_future = None
     self._process = runner.Process(self._block._process.data)
 
-    iterator = CoupledStateIterator(self._process.run(initial_state.process if initial_state else None))
-
-    def set_state():
-      iterator.set_state(self._master.hold(self._block.state, symbol))
+    iterator = CoupledStateIterator[ProgramExecEvent, Any](self._process.run(initial_state.process if initial_state else None))
+    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
 
     set_state()
 
-    location: Optional[SegmentProgramLocation] = None
+    async for event, state_location in iterator:
+      print("> Event", self._mode, state_location)
 
-    async for index, event in iterator:
-      if index == 0:
-        event_time = event.time or time.time()
+      event_time = event.time or time.time()
 
-        if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
-          # The process is now paused.
+      if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
+        # The process is now paused.
 
-          # Revert the state.
-          await iterator.close_state()
+        # Revert the state.
+        iterator.close_state()
+        self._mode = SegmentProgramMode.PausingState
 
-          assert location
-          location.state = None
+        continue
 
-          self._mode = SegmentProgramMode.Paused
+      if (self._mode == SegmentProgramMode.PausingState) and not state_location:
+        self._mode = SegmentProgramMode.Paused
 
-        if not location:
-          location = SegmentProgramLocation(
-            mode=self._mode,
-            process=event.state,
-            time=event_time
-          )
-        else:
-          location.mode = self._mode
-          location.process = event.state
-          location.time = event_time
+      print("> Sending", self._mode)
 
-        yield ProgramExecEvent(
-          state=location,
-          stopped=(self._mode == SegmentProgramMode.Paused)
-        )
+      yield ProgramExecEvent(
+        state=SegmentProgramLocation(
+          mode=self._mode,
+          process=event.state,
+          state=state_location,
+          time=event_time
+        ),
+        stopped=(self._mode == SegmentProgramMode.Paused)
+      )
 
+      if self._mode == SegmentProgramMode.Paused:
         if self._resume_future:
           # If the process is paused, wait for it to be resumed.
           await self._resume_future
           self._resume_future = None
 
-        if self._mode == SegmentProgramMode.Paused:
-          # Reset the mode.
-          self._mode = SegmentProgramMode.Normal
+        # Reset the mode.
+        self._mode = SegmentProgramMode.Normal
 
-          # Re-apply the state.
-          set_state()
-
-      else:
-        assert location
-
-        location.state = event
-        location.time = time.time()
-
-        yield ProgramExecEvent(
-          state=location,
-          stopped=False
-        )
+        # Re-apply the state.
+        set_state()
 
 
 @dataclass

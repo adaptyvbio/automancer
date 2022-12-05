@@ -12,7 +12,7 @@ from ...devices.claim import ClaimSymbol
 from ...reader import LocationArea
 from ...util import schema as sc
 from ...util.decorators import debug
-from ...util.iterators import CoupledStateIterator
+from ...util.iterators import CoupledStateIterator2
 
 
 ActionInfo = tuple[BlockData, LocationArea]
@@ -121,12 +121,13 @@ class SequenceProgram(BlockProgram):
         self._resume_future = asyncio.Future()
       case "resume":
         self.resume()
-      case "setInterrupt":
-        self.set_interrupt(message["value"])
+      # case "setInterrupt":
+      #   self.set_interrupt(message["value"])
 
   def pause(self):
     self._mode = SequenceProgramMode.PausingChild
     self._child_program.pause()
+    self._resume_future = asyncio.Future()
 
   def resume(self):
     assert self._mode == SequenceProgramMode.Paused
@@ -134,9 +135,9 @@ class SequenceProgram(BlockProgram):
 
     self._resume_future.set_result(None)
 
-  def set_interrupt(self, value: bool, /):
-    self._interrupting = value
-    self._iterator.trigger()
+  # def set_interrupt(self, value: bool, /):
+  #   self._interrupting = value
+  #   self._iterator.trigger()
 
   async def run(self, initial_state: Optional[SequenceProgramLocation], symbol: ClaimSymbol):
     async def run():
@@ -149,20 +150,22 @@ class SequenceProgram(BlockProgram):
         async for event in self._child_program.run(initial_state.child if initial_state and (child_index == initial_state.index) else None, ClaimSymbol(symbol)):
           yield (child_index, event)
 
-    self._iterator = CoupledStateIterator[tuple[int, ProgramExecEvent], Any](run())
+    self._iterator = CoupledStateIterator2[tuple[int, ProgramExecEvent], Any](run())
 
-    set_state = lambda: self._iterator.set_state(self._master.hold(self._block.state, symbol))
-    set_state()
+    state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, symbol=symbol)
+    state_location = state_instance.apply(self._block.state, resume=False)
+    self._iterator.notify(state_location)
 
     async for (child_index, event), state_location in self._iterator:
       if (self._mode == SequenceProgramMode.PausingChild) and event.stopped:
-        self._iterator.close_state()
         self._mode = SequenceProgramMode.PausingState
-        continue
+        await state_instance.suspend()
+        # continue
 
-      if self._mode == SequenceProgramMode.PausingState and not state_location:
+      if self._mode == SequenceProgramMode.PausingState:
         self._mode = SequenceProgramMode.Paused
 
+      # print(">>>", self._mode, self._resume_future if hasattr(self, "_resume_future") else None)
       yield ProgramExecEvent(
         state=SequenceProgramLocation(
           child=event.state,
@@ -180,7 +183,11 @@ class SequenceProgram(BlockProgram):
           self._resume_future = None
 
         self._mode = SequenceProgramMode.Normal
-        set_state()
+        state_location = state_instance.apply(self._block.state, resume=False)
+        self._iterator.notify(state_location)
+
+    await state_instance.suspend()
+
 
 @debug
 class SequenceBlock(BaseBlock):

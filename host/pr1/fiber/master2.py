@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import traceback
 from typing import Any, Callable, Optional
 
+from ..units.base import BaseRunner
+
 from .parser import BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
@@ -170,26 +172,38 @@ class Master:
 
     await start_future
 
-  async def hold(self, state: BlockState, symbol: ClaimSymbol):
+  def create_instance(self, state: BlockState, *, notify: Callable, symbol: ClaimSymbol):
     runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
-    namespaces = list(runners.keys())
-
-    iterator = DynamicParallelIterator([runner.hold(state[namespace], symbol) for namespace, runner in runners.items()])
-
-    unit_locations = await iterator.get_all()
-    location = StateLocation({ namespace: unit_locations[index] for index, namespace in enumerate(namespaces) })
-
-    yield location
-
-    async for index, unit_location in iterator:
-      namespace = namespaces[index]
-      location.unit_locations[namespace] = unit_location
-
-      yield location
-
+    return StateInstanceCollection(runners, notify=notify, symbol=symbol)
 
   def export(self):
     return {
       "location": self._state.export(),
       "protocol": self.protocol.export()
     }
+
+
+class StateInstanceCollection:
+  def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, symbol: ClaimSymbol):
+    self._notify = notify
+    self._runners = runners
+    self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
+    self._location: StateLocation
+
+  def _notify_unit(self, namespace: str, event: Any):
+    self._location.unit_locations[namespace] = event
+    self._notify(self._location)
+
+  def apply(self, state: Any, *, resume: bool):
+    print(f"Apply, resume={resume}")
+
+    self._location = StateLocation({ namespace: instance.apply(state[namespace], resume=resume) for namespace, instance in self._instances.items()})
+    return self._location
+
+  def update(self, state: Any):
+    ...
+
+  async def suspend(self):
+    print("Suspending")
+    await asyncio.gather(*[instance.suspend() for namespace, instance in self._instances.items()])
+    print("Suspended")

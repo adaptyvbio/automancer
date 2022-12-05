@@ -1,7 +1,7 @@
 from collections import namedtuple
 import functools
 import pickle
-from typing import Any
+from typing import Any, Optional
 
 from ..fiber.langservice import Attribute
 
@@ -23,6 +23,7 @@ class BaseParser:
 
 
 class BaseRunner:
+  StateInstance: Optional[Any]
   dependencies = set()
 
   def __init__(self, *, chip, host):

@@ -6,7 +6,7 @@ import traceback
 from types import EllipsisType
 from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence
 
-from ..util.iterators import CoupledStateIterator
+from ..util.iterators import CoupledStateIterator2
 from ..util.ref import Ref
 from ..host import logger
 from .process import Process, ProgramExecEvent
@@ -17,6 +17,7 @@ from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable
+from .master2 import Master
 
 
 logger = logger.getChild("segment")
@@ -80,7 +81,7 @@ class SegmentProgramLocation:
 class SegmentProgram(BlockProgram):
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
-    self._master = master
+    self._master: Master = master
     self._parent = parent
 
     self._mode: SegmentProgramMode
@@ -114,20 +115,21 @@ class SegmentProgram(BlockProgram):
     self._resume_future = None
     self._process = runner.Process(self._block._process.data)
 
-    iterator = CoupledStateIterator[ProgramExecEvent, Any](self._process.run(initial_state.process if initial_state else None))
+    iterator = CoupledStateIterator2[ProgramExecEvent, Any](self._process.run(initial_state.process if initial_state else None))
 
-    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
-    set_state()
+    state_instance = self._master.create_instance(self._block.state, notify=iterator.notify, symbol=symbol)
+    state_location = state_instance.apply(self._block.state, resume=False)
+    iterator.notify(state_location)
 
     async for event, state_location in iterator:
       event_time = event.time or time.time()
 
       if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
-        iterator.close_state()
         self._mode = SegmentProgramMode.PausingState
-        continue
+        await state_instance.suspend()
+        # continue
 
-      if (self._mode == SegmentProgramMode.PausingState) and not state_location:
+      if self._mode == SegmentProgramMode.PausingState:
         self._mode = SegmentProgramMode.Paused
 
       yield ProgramExecEvent(
@@ -150,7 +152,10 @@ class SegmentProgram(BlockProgram):
         self._mode = SegmentProgramMode.Normal
 
         # Re-apply the state.
-        set_state()
+        state_location = state_instance.apply(self._block.state, resume=True)
+        iterator.notify(state_location)
+
+    await state_instance.suspend()
 
 
 @dataclass

@@ -27,7 +27,7 @@ class ClaimSymbol:
 
 
 class Claim:
-  def __init__(self, *, target: 'Claimable', symbol: ClaimSymbol):
+  def __init__(self, *, target: 'Claimable', symbol: Optional[ClaimSymbol]):
     self.target = target
     self.symbol = symbol
 
@@ -78,8 +78,8 @@ class Claimable:
       assert self._owner
       return self._owner
 
-  def claim_now(self, symbol: ClaimSymbol) -> Optional[Claim]:
-    if (not self._owner) or (symbol > self._owner.symbol):
+  def claim_now(self, symbol: Optional[ClaimSymbol] = None, *, force = False) -> Optional[Claim]:
+    if (not self._owner) or (symbol and self._owner.symbol and (symbol > self._owner.symbol)) or force:
       if self._owner:
         self._owner._lost_future.set_result(None)
 

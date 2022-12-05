@@ -1,5 +1,5 @@
 from asyncio import CancelledError, Future, Task
-from typing import AsyncIterator, Generic, Literal, Optional, TypeVar, cast
+from typing import Any, AsyncIterator, Generic, Literal, Optional, TypeVar, cast
 import asyncio
 import warnings
 
@@ -101,11 +101,12 @@ class DynamicParallelIterator(Generic[T]):
 
 class CoupledStateIterator(Generic[T, S]):
   def __init__(self, main_iterator: AsyncIterator):
-    self._open_future: Optional[Future] = asyncio.Future()
+    self._open_future: Optional[Future] = Future()
     self._reset = False
     self._state_iterator: Optional[AsyncIterator] = None
     self._task: Optional[Task] = None
-    self._wait_future: Optional[Future] = asyncio.Future()
+    self._trigger_future = Future()
+    self._wait_future: Optional[Future] = Future()
 
     async def primary_iterator():
       async for event in main_iterator:
@@ -137,7 +138,6 @@ class CoupledStateIterator(Generic[T, S]):
 
             yield event
         except (asyncio.CancelledError, StopAsyncIteration):
-
           self._state_iterator = None
           self._task = None
           self._wait_future = asyncio.Future()
@@ -147,9 +147,17 @@ class CoupledStateIterator(Generic[T, S]):
           else:
             yield None
 
-    self._iterator = DynamicParallelIterator([
+    async def tertiary_iterator():
+      while True:
+        await self._trigger_future
+        yield
+
+        self._trigger_future = Future()
+
+    self._iterator = DynamicParallelIterator[Any]([
       primary_iterator(),
-      secondary_iterator()
+      secondary_iterator(),
+      tertiary_iterator()
     ])
 
     self._primary_value: T
@@ -174,12 +182,17 @@ class CoupledStateIterator(Generic[T, S]):
     self._wait_future.set_result(None)
     self._wait_future = None
 
+    self.trigger()
+
+  def trigger(self):
+    self._trigger_future.set_result(None)
+
   async def __aiter__(self) -> AsyncIterator[tuple[T, Optional[S]]]:
     while True:
       if self._reset:
         self._reset = False
 
-        self._primary_value, self._secondary_value = cast(tuple[T, S], await self._iterator.get_all())
+        self._primary_value, self._secondary_value, _ = cast(tuple[T, S, Any], await self._iterator.get_all())
         yield self._primary_value, self._secondary_value
 
       async for index, value in self._iterator:

@@ -22,6 +22,9 @@ class ClaimSymbol:
   def __gt__(self, other: 'ClaimSymbol') -> bool:
     return other < self
 
+  def __repr__(self):
+    return f"{type(self).__name__}(parent={self.parent})"
+
 
 class Claim:
   def __init__(self, *, target: 'Claimable', symbol: ClaimSymbol):
@@ -49,7 +52,7 @@ class Claim:
       future.set_result(None)
 
   def __repr__(self):
-    return f"Claim(target={self.target})"
+    return f"Claim(symbol={self.symbol}, target={self.target})"
 
 class Claimable:
   def __init__(self):

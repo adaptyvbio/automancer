@@ -136,6 +136,7 @@ class SequenceProgram(BlockProgram):
 
   def set_interrupt(self, value: bool, /):
     self._interrupting = value
+    self._iterator.trigger()
 
   async def run(self, initial_state: Optional[SequenceProgramLocation], symbol: ClaimSymbol):
     async def run():
@@ -148,14 +149,14 @@ class SequenceProgram(BlockProgram):
         async for event in self._child_program.run(initial_state.child if initial_state and (child_index == initial_state.index) else None, ClaimSymbol(symbol)):
           yield (child_index, event)
 
-    iterator = CoupledStateIterator[tuple[int, ProgramExecEvent], Any](run())
+    self._iterator = CoupledStateIterator[tuple[int, ProgramExecEvent], Any](run())
 
-    set_state = lambda: iterator.set_state(self._master.hold(self._block.state, symbol))
+    set_state = lambda: self._iterator.set_state(self._master.hold(self._block.state, symbol))
     set_state()
 
-    async for (child_index, event), state_location in iterator:
+    async for (child_index, event), state_location in self._iterator:
       if (self._mode == SequenceProgramMode.PausingChild) and event.stopped:
-        iterator.close_state()
+        self._iterator.close_state()
         self._mode = SequenceProgramMode.PausingState
         continue
 

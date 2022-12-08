@@ -99,6 +99,9 @@ class Master:
 
     self._pause_future: Optional[asyncio.Future] = None
 
+  def halt(self):
+    self._program.halt()
+
   def pause(self):
     self._pause_future = asyncio.Future()
     self._program.pause()

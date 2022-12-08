@@ -183,12 +183,15 @@ function createActiveBlockMenu(_block: Block, location: Location) {
     ...((location.mode !== LocationMode.Paused)
       ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) }]
       : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }]),
+      { id: 'halt', name: 'Halt', icon: 'report' },
     { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
   ];
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
   switch (path.first()) {
+    case 'halt':
+      return { type: 'halt' };
     case 'interrupt':
       return { type: 'setInterrupt', value: !location.interrupting }
     case 'pause':

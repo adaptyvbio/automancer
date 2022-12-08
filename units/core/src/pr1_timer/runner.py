@@ -20,33 +20,53 @@ class ProcessLocation:
       "progress": self.progress
     }
 
+@dataclass
+class ProcessPoint:
+  progress: float
+
+  @classmethod
+  def import_value(cls, value: Any):
+    return cls(progress=value["progress"])
+
 class Process:
   def __init__(self, data: Any):
     self._data = data
-    self._pausing = False
 
+    self._progress: Optional[float] = None
     self._resume_future: Optional[asyncio.Future] = None
-    self._task: Any
+    self._task: Optional[asyncio.Task] = None
 
   def halt(self):
-    if not self._pausing:
+    if self._task:
+      self._task.cancel()
+    if self._resume_future:
+      self._resume_future.cancel()
+
+  def jump(self, point: ProcessPoint):
+    self._progress = point.progress
+
+    if self._task:
       self._task.cancel()
 
   def pause(self):
-    self._pausing = True
+    assert self._task
+
+    self._resume_future = asyncio.Future()
     self._task.cancel()
 
   def resume(self):
     assert self._resume_future
     self._resume_future.set_result(None)
 
-  async def run(self, initial_state: Optional[ProcessLocation]):
-    progress = initial_state.progress if initial_state else 0.0
-
+  async def run(self, initial_point: Optional[ProcessPoint]):
+    self._progress = initial_point.progress if initial_point else 0.0
     total_duration = self._data._value / 1000.0
-    remaining_duration = total_duration * (1.0 - progress)
 
     while True:
+      progress = self._progress
+      self._progress = None
+
+      remaining_duration = total_duration * (1.0 - progress)
       task_time = time.time()
 
       yield ProgramExecEvent(
@@ -60,24 +80,30 @@ class Process:
       try:
         await self._task
       except asyncio.CancelledError:
-        self._pausing = False
-        self._resume_future = asyncio.Future()
-        self._task = None
+        if self._progress is None:
+          self._task = None
 
-        current_time = time.time()
-        elapsed_time = current_time - task_time
+          current_time = time.time()
+          elapsed_time = current_time - task_time
 
-        progress += elapsed_time / total_duration
-        remaining_duration = total_duration * (1.0 - progress)
+          progress += elapsed_time / total_duration
+          remaining_duration = total_duration * (1.0 - progress)
+          self._progress = progress
 
-        yield ProgramExecEvent(
-          duration=remaining_duration,
-          state=ProcessLocation(progress, paused=True),
-          stopped=True,
-          time=current_time
-        )
+          yield ProgramExecEvent(
+            duration=remaining_duration,
+            state=ProcessLocation(progress, paused=True),
+            stopped=True,
+            time=current_time
+          )
 
-        await self._resume_future
+          if self._resume_future:
+            try:
+              await self._resume_future
+            except asyncio.CancelledError:
+              return
+          else:
+            return
       else:
         self._task = None
         break

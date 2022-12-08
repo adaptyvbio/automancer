@@ -58,6 +58,8 @@ class SegmentTransform(BaseTransform):
 
 
 class SegmentProgramMode(IntEnum):
+  Halted = 5
+  Halting = 4
   Normal = 0
   PausingProcess = 1
   PausingState = 2
@@ -78,21 +80,55 @@ class SegmentProgramLocation:
       "time": self.time * 1000.0
     }
 
+@dataclass(kw_only=True)
+class SegmentProgramPoint:
+  process: Optional[Any]
+
+  # @classmethod
+  # def import_value(cls, program: 'SegmentProgram'):
+  #   program._block.Program.Point.import_value(program)
+  #   return cls(process=)
+
 class SegmentProgram(BlockProgram):
+  Point = SegmentProgramPoint
+
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
     self._master: Master = master
     self._parent = parent
 
     self._mode: SegmentProgramMode
+    self._point: Optional[SegmentProgramPoint]
     self._process: Process
 
   def import_message(self, message: dict):
     match message["type"]:
+      case "halt":
+        self.halt()
+        # @dataclass
+        # class A:
+        #   progress = 0.5
+
+        # self.jump(SegmentProgramPoint(process=A()))
       case "pause":
         self.pause()
       case "resume":
         self.resume()
+
+  def halt(self):
+    assert self._mode in (SegmentProgramMode.Normal, SegmentProgramMode.Paused)
+
+    self._mode = SegmentProgramMode.Halting
+    self._process.halt()
+
+  def jump(self, point: SegmentProgramPoint):
+    assert self._mode == SegmentProgramMode.Normal
+
+    if hasattr(self._process, 'jump'):
+      self._process.jump(point.process)
+    else:
+      self._point = point
+      self.halt()
 
   def pause(self):
     assert self._mode == SegmentProgramMode.Normal
@@ -104,14 +140,21 @@ class SegmentProgram(BlockProgram):
     assert self._mode == SegmentProgramMode.Paused
     self._process.resume()
 
-  async def run(self, initial_location: Optional[SegmentProgramLocation], symbol: ClaimSymbol):
-    runner = self._master.chip.runners[self._block._process.namespace]
+  async def run(self, initial_point: Optional[SegmentProgramPoint], symbol: ClaimSymbol):
+    Process = self._master.chip.runners[self._block._process.namespace].Process
+    self._point = initial_point or SegmentProgramPoint(process=None)
 
-    self._mode = SegmentProgramMode.Normal
-    self._resume_future = None
-    self._process = runner.Process(self._block._process.data)
+    async def run():
+      while self._point:
+        point = self._point
+        self._mode = SegmentProgramMode.Normal
+        self._point = None
+        self._process = Process(self._block._process.data)
 
-    iterator = CoupledStateIterator2[ProgramExecEvent, Any](self._process.run(initial_location.process if initial_location else None))
+        async for event in self._process.run(point.process):
+          yield event
+
+    iterator = CoupledStateIterator2[ProgramExecEvent, Any](run())
 
     state_instance = self._master.create_instance(self._block.state, notify=iterator.notify, symbol=symbol)
     state_location = state_instance.apply(self._block.state, resume=False)
@@ -123,6 +166,9 @@ class SegmentProgram(BlockProgram):
       if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
         self._mode = SegmentProgramMode.PausingState
         await state_instance.suspend()
+
+      if (self._mode == SegmentProgramMode.Halting) and event.stopped:
+        self._mode = SegmentProgramMode.Halted
 
       if self._mode == SegmentProgramMode.PausingState:
         self._mode = SegmentProgramMode.Paused
@@ -138,9 +184,10 @@ class SegmentProgram(BlockProgram):
           state=state_location,
           time=event_time
         ),
-        stopped=(self._mode == SegmentProgramMode.Paused)
+        stopped=(self._mode in (SegmentProgramMode.Paused, SegmentProgramMode.Halted))
       )
 
+    # TODO: Already suspended when doing Pause then Halt
     await state_instance.suspend()
 
 

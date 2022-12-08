@@ -1,6 +1,6 @@
 import datetime
 from enum import IntEnum
-from typing import AsyncIterator, Generic, Optional, Protocol, TypeVar
+from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
 from .parser import BlockState
@@ -63,6 +63,12 @@ class ProgramExecEvent(Generic[T]):
 
 class Process(Protocol[T]):
   def cancel(self):
+    ...
+
+  def halt(self):
+    ...
+
+  def jump(self, point: Any):
     ...
 
   def pause(self):

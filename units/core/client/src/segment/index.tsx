@@ -18,6 +18,7 @@ export interface State {
 }
 
 export enum StateMode {
+  Halting = 4,
   Normal = 0,
   PausingProcess = 1,
   PausingState = 2,
@@ -100,13 +101,18 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
 };
 
 function createActiveBlockMenu(block: Block, state: State) {
-  return (state.mode !== StateMode.Paused)
-    ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (state.mode !== StateMode.Normal) }]
-    : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }];
+  return [
+    ...((state.mode !== StateMode.Paused)
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (state.mode !== StateMode.Normal) }]
+      : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }]),
+    { id: 'halt', name: 'Halt', icon: 'report' }
+  ];
 }
 
 function onSelectBlockMenu(block: Block, state: State, path: MenuEntryPath) {
   switch (path.first()) {
+    case 'halt':
+      return { 'type': 'halt' };
     case 'pause':
       return { 'type': 'pause' };
     case 'resume':

@@ -213,6 +213,7 @@ class CoupledStateIterator2(Generic[T, S]):
     self._future: Optional[Future[None]] = None
     self._iterator = iterator
     self._task: Optional[Task[T]] = None
+    self._triggered = False
 
     self._value: Optional[T] = None
     self._state: S
@@ -242,12 +243,21 @@ class CoupledStateIterator2(Generic[T, S]):
       self._future.set_result(None)
       self._future = None
 
+  def trigger(self):
+    self._triggered = True
+
+    if self._future:
+      self._future.set_result(None)
+      self._future = None
+
   def __aiter__(self):
     return self
 
   async def __anext__(self):
     while True:
-      if self._value_queue or self._state_queue:
+      if self._value_queue or self._state_queue or self._triggered:
+        self._triggered = None
+
         if self._value_queue:
           self._value = self._value_queue.pop(0)
 

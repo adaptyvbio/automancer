@@ -58,17 +58,18 @@ class BlockState(dict[str, Optional[BlockUnitState]]):
       return BlockState(result)
 
   def __and__(self, other: 'BlockState'):
-    result = dict()
+    self_result = dict()
+    other_result = dict()
 
-    for key, value in self.items():
-      other_value = other[key]
+    for namespace, value in self.items():
+      other_value = other[namespace]
 
       if (value is not None) or (other_value is not None):
-        result[key] = value & other_value # type: ignore
+        self_result[namespace], other_result[namespace] = value & other_value # type: ignore
       else:
-        result[key] = None
+        self_result[namespace], other_result[namespace] = None, None
 
-    return BlockState(result)
+    return BlockState(self_result), BlockState(other_result)
 
   def export(self):
     return { namespace: state and state.export() for namespace, state in self.items() if state }
@@ -103,6 +104,9 @@ class BlockProgram(Protocol):
     ...
 
   def pause(self):
+    ...
+
+  def resume(self):
     ...
 
   def run(self, child: Any, /, symbol) -> AsyncIterator[Any]:

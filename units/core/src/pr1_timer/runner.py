@@ -25,6 +25,7 @@ class Process:
     self._data = data
     self._pausing = False
 
+    self._resume_future: Optional[asyncio.Future] = None
     self._task: Any
 
   def halt(self):
@@ -34,6 +35,10 @@ class Process:
   def pause(self):
     self._pausing = True
     self._task.cancel()
+
+  def resume(self):
+    assert self._resume_future
+    self._resume_future.set_result(None)
 
   async def run(self, initial_state: Optional[ProcessLocation]):
     progress = initial_state.progress if initial_state else 0.0
@@ -56,6 +61,7 @@ class Process:
         await self._task
       except asyncio.CancelledError:
         self._pausing = False
+        self._resume_future = asyncio.Future()
         self._task = None
 
         current_time = time.time()
@@ -70,6 +76,8 @@ class Process:
           stopped=True,
           time=current_time
         )
+
+        await self._resume_future
       else:
         self._task = None
         break

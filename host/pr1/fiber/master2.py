@@ -98,32 +98,19 @@ class Master:
     self._state: Any
 
     self._pause_future: Optional[asyncio.Future] = None
-    self._resume_future: Optional[asyncio.Future] = None
-
-  @property
-  def paused(self):
-    return self._resume_future is not None
-
-  @property
-  def pausing(self):
-    return self._pause_future is not None
 
   def pause(self):
     self._pause_future = asyncio.Future()
     self._program.pause()
 
   async def wait_pause(self):
-    assert not self.paused and not self.pausing
     self.pause()
 
     assert self._pause_future
     await self._pause_future
 
   def resume(self):
-    assert self._resume_future
-
-    self._resume_future.set_result(None)
-    self._resume_future = None
+    self._program.resume()
 
   async def run(self, initial_state = None):
     symbol = ClaimSymbol()
@@ -136,9 +123,6 @@ class Master:
       if event.stopped and self._pause_future:
         self._pause_future.set_result(True)
         self._pause_future = None
-
-        self._resume_future = asyncio.Future()
-        await self._resume_future
 
   def send_message(self, path: list, message: object):
     program = self._program

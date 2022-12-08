@@ -45,11 +45,7 @@ class Claim:
       raise Exception("Claim has been released or is lost already")
 
     self.target._owner = None
-
-    if self.target._claimants:
-      symbol, future = self.target._claimants.pop(0)
-      self.target._owner = Claim(target=self.target, symbol=symbol)
-      future.set_result(None)
+    self.target._designate_target_soon()
 
   def __repr__(self):
     return f"Claim(symbol={self.symbol}, target={self.target})"
@@ -58,6 +54,16 @@ class Claimable:
   def __init__(self):
     self._claimants = list()
     self._owner: Optional[Claim] = None
+
+  def _designate_target(self):
+    if self._claimants:
+      symbol, future = self._claimants.pop()
+      self._owner = Claim(target=self, symbol=symbol)
+      future.set_result(None)
+
+  def _designate_target_soon(self):
+    loop = asyncio.get_running_loop()
+    loop.call_soon(self._designate_target)
 
   async def claim(self, symbol: ClaimSymbol) -> Claim:
     claim = self.claim_now(symbol)

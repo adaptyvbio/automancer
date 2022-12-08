@@ -85,14 +85,12 @@ class SegmentProgram(BlockProgram):
     self._parent = parent
 
     self._mode: SegmentProgramMode
-    self._resume_future: Optional[asyncio.Future]
     self._process: Process
 
   def import_message(self, message: dict):
     match message["type"]:
       case "pause":
         self.pause()
-        self._resume_future = asyncio.Future()
       case "resume":
         self.resume()
 
@@ -104,18 +102,16 @@ class SegmentProgram(BlockProgram):
 
   def resume(self):
     assert self._mode == SegmentProgramMode.Paused
-    assert self._resume_future
+    self._process.resume()
 
-    self._resume_future.set_result(None)
-
-  async def run(self, initial_state: Optional[SegmentProgramLocation], symbol: ClaimSymbol):
+  async def run(self, initial_location: Optional[SegmentProgramLocation], symbol: ClaimSymbol):
     runner = self._master.chip.runners[self._block._process.namespace]
 
     self._mode = SegmentProgramMode.Normal
     self._resume_future = None
     self._process = runner.Process(self._block._process.data)
 
-    iterator = CoupledStateIterator2[ProgramExecEvent, Any](self._process.run(initial_state.process if initial_state else None))
+    iterator = CoupledStateIterator2[ProgramExecEvent, Any](self._process.run(initial_location.process if initial_location else None))
 
     state_instance = self._master.create_instance(self._block.state, notify=iterator.notify, symbol=symbol)
     state_location = state_instance.apply(self._block.state, resume=False)
@@ -127,10 +123,13 @@ class SegmentProgram(BlockProgram):
       if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
         self._mode = SegmentProgramMode.PausingState
         await state_instance.suspend()
-        # continue
 
       if self._mode == SegmentProgramMode.PausingState:
         self._mode = SegmentProgramMode.Paused
+
+      if (self._mode == SegmentProgramMode.Paused) and (not event.stopped):
+        self._mode = SegmentProgramMode.Normal
+        state_location = state_instance.apply(self._block.state, resume=True)
 
       yield ProgramExecEvent(
         state=SegmentProgramLocation(
@@ -141,19 +140,6 @@ class SegmentProgram(BlockProgram):
         ),
         stopped=(self._mode == SegmentProgramMode.Paused)
       )
-
-      if self._mode == SegmentProgramMode.Paused:
-        if self._resume_future:
-          # If the process is paused, wait for it to be resumed.
-          await self._resume_future
-          self._resume_future = None
-
-        # Reset the mode.
-        self._mode = SegmentProgramMode.Normal
-
-        # Re-apply the state.
-        state_location = state_instance.apply(self._block.state, resume=True)
-        iterator.notify(state_location)
 
     await state_instance.suspend()
 

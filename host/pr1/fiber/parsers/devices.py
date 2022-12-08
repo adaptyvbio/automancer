@@ -73,6 +73,15 @@ class DevicesState(BlockUnitState):
   def __init__(self, values: dict[NodePath, Any]):
     self.values = values
 
+  def __and__(self, other: Optional['DevicesState']):
+    return (
+      None,
+      DevicesState({ **self.values, **other.values }) if other is not None else self,
+    )
+
+  def __rand__(self, other: Optional['DevicesState']):
+    return self
+
   def export(self) -> object:
     def export_value(value):
       match value:

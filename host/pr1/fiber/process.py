@@ -50,12 +50,12 @@ class ProgramExecEvent(Generic[T]):
     pausable: Optional[bool] = None,
     state: Optional[T] = None,
     stopped: bool = False,
-    time: Optional[DateLike] = None,
+    time: Optional[float] = None,
     **kwargs
   ):
-    self.duration = duration
-    self.error = error
-    self.pausable = pausable
+    # self.duration = duration
+    # self.error = error
+    # self.pausable = pausable
     self.state = state
     self.stopped = stopped
     self.time = time
@@ -66,6 +66,9 @@ class Process(Protocol[T]):
     ...
 
   def pause(self):
+    ...
+
+  def resume(self):
     ...
 
   def run(self, block_state: BlockState, initial_state: Optional[T]) -> AsyncIterator[ProgramExecEvent[T]]:

@@ -25,6 +25,11 @@ export enum LocationMode {
   Paused = 3
 }
 
+export interface Point {
+  child: unknown | null;
+  index: number;
+}
+
 
 const horizontalCellGap = 2;
 const verticalCellGap = 1;
@@ -166,8 +171,8 @@ function getChildBlock(block: Block, key: number) {
   return block.children[key];
 }
 
-function getActiveChildState(state: Location, _key: number) {
-  return state.child;
+function getActiveChildState(location: Location, _key: number) {
+  return location.child;
 }
 
 function getChildrenExecutionKeys(_block: Block, state: Location) {
@@ -186,6 +191,13 @@ function createActiveBlockMenu(_block: Block, location: Location) {
       { id: 'halt', name: 'Halt', icon: 'report' },
     { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
   ];
+}
+
+function createDefaultPoint(block: Block, key: number, getChildPoint: (block: ProtocolBlock) => unknown) {
+  return {
+    child: getChildPoint(block.children[key]),
+    index: key
+  };
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
@@ -208,6 +220,7 @@ function transformBlockLabel(block: Block, location: Location, label: string) {
 
 export default {
   createActiveBlockMenu,
+  createDefaultPoint,
   getChildBlock,
   getActiveChildState,
   getBlockClassLabel,

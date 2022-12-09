@@ -11,12 +11,15 @@ import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
 import { FeatureGroup } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
+import { FeatureGroupDef } from '../interfaces/unit';
+import { MenuDef, MenuEntryPath } from './context-menu';
+import { ViewExecution } from '../views/execution';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
-import { FeatureGroupDef } from '../interfaces/unit';
 
 
 export interface GraphEditorProps {
+  execution: ViewExecution;
   host: Host;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
@@ -366,8 +369,10 @@ export function GraphNode(props: {
   attachmentPoints: SideFlags;
   autoMove: unknown;
   cellSize: Size;
+  createMenu(): MenuDef;
   node: GraphNodeDef;
   onMouseDown?(event: React.MouseEvent): void;
+  onSelectBlockMenu(path: MenuEntryPath): void;
   path: ProtocolBlockPath;
   selected?: unknown;
   settings: GraphRenderSettings;
@@ -399,13 +404,8 @@ export function GraphNode(props: {
         height={settings.cellPixelSize * props.cellSize.height}
         className={graphEditorStyles.nodeobject}>
         <ContextMenuArea
-          createMenu={() => [
-            { id: 'jump', name: 'Jump', icon: 'move_down', disabled: props.active },
-            { id: 'pause', name: 'Pause process', icon: 'pause_circle', disabled: !props.active }
-          ]}
-          onSelect={(path) => {
-
-          }}>
+          createMenu={props.createMenu}
+          onSelect={props.onSelectBlockMenu}>
           <div
             className={util.formatClass(graphEditorStyles.node, { '_active': props.active || props.selected })}
             onClick={(event) => {

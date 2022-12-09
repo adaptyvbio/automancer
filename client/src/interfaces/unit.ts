@@ -54,14 +54,15 @@ export interface Unit {
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 
-  createActiveBlockMenu?(block: ProtocolBlock, execState: unknown): MenuDef;
+  createActiveBlockMenu?(block: ProtocolBlock, location: unknown): MenuDef;
+  createDefaultPoint?(block: ProtocolBlock, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
   getActiveChildState?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
   getBlockClassLabel?(block: ProtocolBlock): string | null;
   getBlockDefaultLabel?(block: ProtocolBlock): string | null;
   getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
-  getChildrenExecutionKeys?(block: ProtocolBlock, execState: unknown): ProtocolBlockPath;
-  onSelectBlockMenu?(block: ProtocolBlock, execState: unknown, path: MenuEntryPath): void;
-  transformBlockLabel?(block: ProtocolBlock, execState: unknown, label: string): string | null;
+  getChildrenExecutionKeys?(block: ProtocolBlock, location: unknown): ProtocolBlockPath | null;
+  onSelectBlockMenu?(block: ProtocolBlock, location: unknown, path: MenuEntryPath): unknown | undefined;
+  transformBlockLabel?(block: ProtocolBlock, location: unknown, label: string): string | null;
 
   graphRenderer?: GraphRenderer<ProtocolBlock, GraphBlockMetrics>;
 }

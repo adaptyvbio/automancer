@@ -7,6 +7,7 @@ export const Icon = React.memo(function Icon(props: {
   className?: string;
   name: string;
   style?: string;
+  title?: string;
 }) {
   let disabled = props.name[0] === '-';
   let name = disabled
@@ -20,7 +21,8 @@ export const Icon = React.memo(function Icon(props: {
         props.className ?? 'icon',
         { '_disabled': disabled }
       )}
-      style={{ userSelect: 'none' }}>
+      style={{ userSelect: 'none' }}
+      title={props.title}>
       {name}
     </span>
   );

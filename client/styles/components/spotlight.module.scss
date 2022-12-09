@@ -13,6 +13,10 @@
 
     margin-left: -0.6rem;
     overflow-x: auto;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   &Entry {

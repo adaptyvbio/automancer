@@ -10,6 +10,7 @@ import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
 import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools } from '../unit';
+import { Pool } from '../util';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -28,6 +29,7 @@ export interface ViewExecutionState {
 }
 
 export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecutionState> {
+  pool = new Pool();
   refTitleBar = React.createRef<TitleBar>();
 
   constructor(props: ViewExecutionProps) {
@@ -46,6 +48,15 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
   get master() {
     return this.chip.master!;
+  }
+
+  jump(point: unknown) {
+    this.pool.add(async () => {
+      await this.props.host.backend.sendMessageToActiveBlock(this.chip.id, [], {
+        type: 'jump',
+        point
+      });
+    });
   }
 
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
@@ -107,6 +118,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
               {
                 component: (
                   <GraphEditor
+                    execution={this}
                     host={this.props.host}
                     selectBlock={this.selectBlock.bind(this)}
                     selectedBlockPath={this.state.selectedBlockPath}

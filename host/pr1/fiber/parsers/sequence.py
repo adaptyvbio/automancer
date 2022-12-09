@@ -106,6 +106,16 @@ class SequenceProgramPoint:
   child: Optional[Any]
   index: int
 
+  @classmethod
+  def import_value(cls, data: Any, /, block: 'SequenceBlock', *, master):
+    index = data["index"]
+    child_block = block._children[index]
+
+    return cls(
+      child=(child_block.Point.import_value(data["child"], child_block, master=master) if data["child"] is not None else None),
+      index=index
+    )
+
 @debug
 class SequenceProgram(BlockProgram):
   def __init__(self, block: 'SequenceBlock', master, parent):
@@ -127,6 +137,8 @@ class SequenceProgram(BlockProgram):
       case "halt":
         self.halt()
         # self.jump(SequenceProgramPoint(child=None, index=2))
+      case "jump":
+        self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
       case "pause":
         self.pause()
       case "resume":
@@ -227,6 +239,7 @@ class SequenceProgram(BlockProgram):
 
 @debug
 class SequenceBlock(BaseBlock):
+  Point: type[SequenceProgramPoint] = SequenceProgramPoint
   Program = SequenceProgram
 
   def __init__(self, children: list[BaseBlock], state: BlockState):

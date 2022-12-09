@@ -37,13 +37,16 @@ export function FeatureGroup(props: {
               <div className={spotlightStyles.featureLabel}>{feature.label}</div>
             </div>
             {feature.error && (
-              <Icon name={{
-                emergency: 'emergency_home',
-                error: 'error',
-                power: 'power_off',
-                shield: 'gpp_maybe',
-                warning: 'warning'
-              }[feature.error.kind]} className={spotlightStyles.featureErrorIcon} />
+              <Icon
+                className={spotlightStyles.featureErrorIcon}
+                name={{
+                  emergency: 'emergency_home',
+                  error: 'error',
+                  power: 'power_off',
+                  shield: 'gpp_maybe',
+                  warning: 'warning'
+                }[feature.error.kind]}
+                title={feature.error.message} />
             )}
           </div>
         ))

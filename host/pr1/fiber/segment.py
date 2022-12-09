@@ -84,14 +84,11 @@ class SegmentProgramLocation:
 class SegmentProgramPoint:
   process: Optional[Any]
 
-  # @classmethod
-  # def import_value(cls, program: 'SegmentProgram'):
-  #   program._block.Program.Point.import_value(program)
-  #   return cls(process=)
+  @classmethod
+  def import_value(cls, data: Any, /, block: 'SegmentBlock', *, master):
+    return cls(process=None)
 
 class SegmentProgram(BlockProgram):
-  Point = SegmentProgramPoint
-
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
     self._master: Master = master
@@ -105,11 +102,8 @@ class SegmentProgram(BlockProgram):
     match message["type"]:
       case "halt":
         self.halt()
-        # @dataclass
-        # class A:
-        #   progress = 0.5
-
-        # self.jump(SegmentProgramPoint(process=A()))
+      case "jump":
+        self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
       case "pause":
         self.pause()
       case "resume":
@@ -198,6 +192,7 @@ class LinearSegment:
 
 @debug
 class SegmentBlock(BaseBlock):
+  Point: type[SegmentProgramPoint] = SegmentProgramPoint
   Program = SegmentProgram
 
   def __init__(self, process: SegmentProcessData, state: BlockState):

@@ -118,6 +118,11 @@ class BlockProgram(Protocol):
   def run(self, child: Any, /, symbol) -> AsyncIterator[Any]:
     ...
 
+class BaseProgramPoint(Protocol):
+  @classmethod
+  def import_value(cls, data: Any, /, block: 'BaseBlock', *, master) -> 'BaseProgramPoint':
+    ...
+
 class BaseBlock(Protocol):
   def __init__(self):
     self.state: Optional[BlockState]
@@ -128,6 +133,7 @@ class BaseBlock(Protocol):
   def export(self):
     ...
 
+  Point: type[BaseProgramPoint]
   Program: type[BlockProgram]
 
 BlockAttrs = dict[str, dict[str, Any | EllipsisType]]

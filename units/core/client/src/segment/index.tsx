@@ -1,4 +1,4 @@
-import { FeatureGroupDef, GraphBlockMetrics, GraphNode, GraphRenderer, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React } from 'pr1';
+import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -12,12 +12,12 @@ export interface BlockMetrics extends GraphBlockMetrics {
   name: string | null;
 }
 
-export interface State {
-  mode: StateMode;
+export interface Location {
+  mode: LocationMode;
   process: unknown;
 }
 
-export enum StateMode {
+export enum LocationMode {
   Halting = 4,
   Normal = 0,
   PausingProcess = 1,
@@ -25,10 +25,14 @@ export enum StateMode {
   Paused = 3
 }
 
+export interface Point {
+  process: unknown | null;
+}
+
 
 const namespace = 'segment';
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
+const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, options) {
     let createFeaturesOptions = {
       host: options.host
@@ -70,12 +74,13 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
     };
   },
 
-  render(block, path, metrics, position, state, options) {
+  render(block, path, metrics, position, location, options) {
+    let active = (location !== null);
     let vertical = options.settings.vertical;
 
     return (
       <GraphNode
-        active={state !== null}
+        active={active}
         attachmentPoints={{
           bottom: (options.attachmentEnd && vertical),
           left: (options.attachmentStart && !vertical),
@@ -87,11 +92,42 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
           width: metrics.size.width,
           height: metrics.size.height
         }}
+        createMenu={() => {
+          return [
+            ...(active
+              ? createActiveBlockMenu(block, location!)
+              : []),
+            { id: 'jump', name: 'Jump to', icon: 'move_down' },
+            { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
+          ];
+        }}
         node={{
           id: 'a',
           title: (metrics.name !== null) ? { value: metrics.name } : null,
           features: metrics.features,
           position
+        }}
+        onSelectBlockMenu={(menuPath) => {
+          let message = onSelectBlockMenu(block, location!, menuPath);
+
+          if (message) {
+            // ...
+            return;
+          }
+
+          switch (menuPath.first()) {
+            case 'jump': {
+              let tree = options.settings.editor.props.tree!;
+
+              let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
+                let unit = options.host.units[block.namespace];
+                return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
+              };
+
+              let point = getChildPoint(tree, path);
+              options.settings.editor.props.execution.jump(point);
+            }
+          }
         }}
         path={path}
         selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
@@ -100,16 +136,22 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, State> = {
   }
 };
 
-function createActiveBlockMenu(block: Block, state: State) {
+function createActiveBlockMenu(block: Block, location: Location) {
   return [
-    ...((state.mode !== StateMode.Paused)
-      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (state.mode !== StateMode.Normal) }]
+    ...((location.mode !== LocationMode.Paused)
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) }]
       : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }]),
-    { id: 'halt', name: 'Halt', icon: 'report' }
+    { id: 'halt', name: 'Halt', icon: 'block' }
   ];
 }
 
-function onSelectBlockMenu(block: Block, state: State, path: MenuEntryPath) {
+function createDefaultPoint(block: Block, key: null, getChildPoint: (block: ProtocolBlock) => unknown) {
+  return {
+    process: null
+  };
+}
+
+function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
   switch (path.first()) {
     case 'halt':
       return { 'type': 'halt' };
@@ -120,20 +162,21 @@ function onSelectBlockMenu(block: Block, state: State, path: MenuEntryPath) {
   }
 }
 
-function getChildrenExecutionKeys(block: Block, state: State, path: ProtocolBlockPath) {
+function getChildrenExecutionKeys(block: Block, location: Location, path: ProtocolBlockPath) {
   return null;
 }
 
-function transformBlockLabel(block: Block, state: State, label: string) {
-  return `${label} (mode: ${StateMode[state.mode]}, ${state.mode})`;
+function transformBlockLabel(block: Block, location: Location, label: string) {
+  return `${label} (mode: ${LocationMode[location.mode]}, ${location.mode})`;
 }
 
 
 export default {
   createActiveBlockMenu,
+  createDefaultPoint,
   getChildrenExecutionKeys,
   graphRenderer,
   namespace,
   onSelectBlockMenu,
   transformBlockLabel
-}
+} satisfies Unit

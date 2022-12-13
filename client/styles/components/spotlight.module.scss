@@ -3,7 +3,18 @@
 
 
 .root {
+  height: 100%;
+  overflow-y: auto;
+
+  &:not(.contents) {
+    display: grid;
+    grid-template-rows: 1fr auto;
+  }
+}
+
+.contents {
   max-width: 500px;
+  padding: 1rem 1.4rem;
 }
 
 .breadcrumb {
@@ -104,5 +115,27 @@
     &:not(:hover)::after {
       opacity: 0;
     }
+  }
+}
+
+
+.footer {
+  &Root {
+    display: flex;
+    justify-content: space-between;
+
+    margin-top: auto;
+    padding: 1rem 1.4rem;
+
+    border-top: 1px solid #ddd;
+
+    > * {
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  &Status {
+    color: #666;
   }
 }

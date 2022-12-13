@@ -407,7 +407,10 @@ export function GraphNode(props: {
           createMenu={props.createMenu}
           onSelect={props.onSelectBlockMenu}>
           <div
-            className={util.formatClass(graphEditorStyles.node, { '_active': props.active || props.selected })}
+            className={util.formatClass(graphEditorStyles.node, {
+              '_active': props.active,
+              '_selected': props.selected
+            })}
             onClick={(event) => {
               event.stopPropagation();
               settings.editor.selectBlock(props.path);

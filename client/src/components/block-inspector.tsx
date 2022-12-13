@@ -4,7 +4,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockExplicitLabel, getSegmentBlockProcessData } from '../unit';
+import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData } from '../unit';
 import { SimpleFeatureList } from './features';
 
 import formStyles from '../../styles/components/form.module.scss';
@@ -44,10 +44,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
     }
 
     let familyLabels = family.map((block) => {
-      let unit = this.props.host.units[block.namespace];
-      return getBlockExplicitLabel(block, this.props.host)
-        ?? unit.getBlockDefaultLabel?.(block)
-        ?? (block.namespace !== 'segment' ? 'Block' : null);
+      return getBlockLabel(block, null, this.props.host);
     });
 
     let process = getSegmentBlockProcessData(targetBlock, this.props.host);
@@ -55,7 +52,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
 
     return (
-      <div className={util.formatClass(formStyles.main2, spotlightStyles.root)}>
+      <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
         {(family.length > 1) && (
           <div className={spotlightStyles.breadcrumbRoot}>
             {family.slice(0, -1).map((_block, index, arr) => {
@@ -66,7 +63,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
                 <React.Fragment key={index}>
                   <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
                     this.props.selectBlock(this.props.blockPath!.slice(0, index));
-                  }}>{label}</button>
+                  }}>{renderLabel(label)}</button>
                   {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
                 </React.Fragment>
               );
@@ -74,7 +71,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{familyLabels.at(-1) ?? <i>Untitled step</i>}</h2>
+          <h2 className={spotlightStyles.title}>{renderLabel(familyLabels.at(-1))}</h2>
         </div>
 
         {(process && processUnit) && (
@@ -101,4 +98,16 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       </div>
     );
   }
+}
+
+
+export function renderLabel(label: ReturnType<typeof getBlockLabel>) {
+  return (
+    <>
+      {label.explicit
+        ? label.value
+        : <i>{label.value}</i>}
+      {label.suffix && (' ' + label.suffix)}
+    </>
+  );
 }

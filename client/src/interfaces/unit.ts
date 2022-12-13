@@ -52,18 +52,19 @@ export interface Unit {
   createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions): FeatureGroupDef;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
+  getProcessLabel?(processData: unknown): string | null;
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 
   createActiveBlockMenu?(block: ProtocolBlock, location: unknown): MenuDef;
   createDefaultPoint?(block: ProtocolBlock, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
   getActiveChildState?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
   getBlockClassLabel?(block: ProtocolBlock): string | null;
-  getBlockDefaultLabel?(block: ProtocolBlock): string | null;
+  getBlockDefaultLabel?(block: ProtocolBlock, host: Host): string | null;
+  getBlockLocationLabelSuffix?(block: ProtocolBlock, location: unknown): string | null;
   getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
   getChildrenExecutionKeys?(block: ProtocolBlock, location: unknown): ProtocolBlockPath | null;
   isBlockPaused?(block: ProtocolBlock, location: unknown): boolean;
   onSelectBlockMenu?(block: ProtocolBlock, location: unknown, path: MenuEntryPath): unknown | undefined;
-  transformBlockLabel?(block: ProtocolBlock, location: unknown, label: string): string | null;
 
   graphRenderer?: GraphRenderer<ProtocolBlock, GraphBlockMetrics>;
 }

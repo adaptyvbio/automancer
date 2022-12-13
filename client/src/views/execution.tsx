@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import type { Application, Route } from '../application';
 import { Chip, ChipId } from '../backends/common';
+import { BlockInspector } from '../components/block-inspector';
 import { ExecutionInspector } from '../components/execution-inspector';
 import { GraphEditor } from '../components/graph-editor';
 import { SplitPanels } from '../components/split-panels';
@@ -11,6 +12,7 @@ import { Host } from '../host';
 import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools } from '../unit';
 import { Pool } from '../util';
+import * as util from '../util';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -97,6 +99,10 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
     let activeBlockPaths = getActiveBlockPaths(this.master.protocol.root, this.master.location, []);
 
+    let selectedActiveBlockPathIndex = this.state.selectedBlockPath
+      ? activeBlockPaths.findIndex((path) => util.deepEqual(path, this.state.selectedBlockPath))
+      : -1;
+
     return (
       <main className={viewStyles.root}>
         <TitleBar
@@ -134,25 +140,31 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                     activeEntryId={this.state.toolsTabId}
                     setActiveEntryId={(id) => void this.setState({ toolsTabId: id })}
                     entries={[
-                      {
-                        id: 'inspector',
-                        label: 'Inspector',
-                        contents: () => (
-                          <ExecutionInspector
-                            activeBlockPaths={activeBlockPaths}
-                            chip={this.chip}
-                            // blockPath={this.state.selectedBlockPath}
-                            host={this.props.host}
-                            location={this.master.location}
-                            protocol={this.master.protocol}
-                            selectBlock={this.selectBlock.bind(this)} />
-                          // <BlockInspector
-                          //   blockPath={this.state.selectedBlockPath}
-                          //   host={this.props.host}
-                          //   protocol={this.master.protocol}
-                          //   selectBlock={this.selectBlock.bind(this)} />
-                        )
-                      }
+                      (() => {
+                        let showDefaultInspector = (this.state.selectedBlockPath) && (selectedActiveBlockPathIndex < 0) // TODO: Improve
+
+                        return {
+                          id: 'inspector',
+                          label: (showDefaultInspector ? 'Default Inspector' : 'Execution inspector'),
+                          contents: () => showDefaultInspector
+                            ? (
+                              <BlockInspector
+                                blockPath={this.state.selectedBlockPath}
+                                host={this.props.host}
+                                protocol={this.master.protocol}
+                                selectBlock={this.selectBlock.bind(this)} />
+                            )
+                            : (
+                              <ExecutionInspector
+                                activeBlockPaths={activeBlockPaths}
+                                chip={this.chip}
+                                host={this.props.host}
+                                location={this.master.location}
+                                protocol={this.master.protocol}
+                                selectBlock={this.selectBlock.bind(this)} />
+                            )
+                        };
+                      })()
                     ]} />
                 )
               }

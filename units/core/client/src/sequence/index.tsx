@@ -217,8 +217,8 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
   }
 }
 
-function transformBlockLabel(block: Block, location: Location, label: string) {
-  return `${label} (mode: ${LocationMode[location.mode]}, ${location.mode})`;
+function getBlockLocationLabelSuffix(block: Block, location: Location) {
+  return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
 }
 
 
@@ -233,5 +233,5 @@ export default {
   isBlockPaused,
   namespace,
   onSelectBlockMenu,
-  transformBlockLabel
+  getBlockLocationLabelSuffix
 } satisfies Unit

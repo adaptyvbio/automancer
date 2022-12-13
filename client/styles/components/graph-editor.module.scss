@@ -183,10 +183,16 @@
 
   &:global(._active) {
     border-color: $app-blue;
+    box-shadow: 3px 3px 3px #0003;
+  }
+
+  &:global(._selected) {
+    background-color: lighten($app-blue, 56%);
+    border-color: $app-blue;
   }
 
   &:global(._context) {
-    border-color: rgb(90, 0, 120);
+    border-color: #85144b;
   }
 }
 

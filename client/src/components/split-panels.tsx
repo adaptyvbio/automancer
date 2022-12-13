@@ -65,7 +65,8 @@ export function SplitPanels(props: {
 
           for (let [index, panel] of props.panels.entries()) {
             if (!gridTemplate || (
-              (panel.open !== undefined) && (panel.open !== (gridTemplate[index * 2].value > 1e-9))
+              false
+              // (panel.open !== undefined) && (panel.open !== (gridTemplate[index * 2].value > 1e-9))
             )) {
               let nominalSize = (panel.nominalSize ?? CSSNumericValue.parse('1fr'));
 

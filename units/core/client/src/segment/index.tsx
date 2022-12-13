@@ -1,4 +1,4 @@
-import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, Unit } from 'pr1';
+import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -170,18 +170,24 @@ function getChildrenExecutionKeys(block: Block, location: Location, path: Protoc
   return null;
 }
 
-function transformBlockLabel(block: Block, location: Location, label: string) {
-  return `${label} (mode: ${LocationMode[location.mode]}, ${location.mode})`;
+function getBlockDefaultLabel(block: Block, host: Host) {
+  let unit = host.units[block.process.namespace];
+  return unit.getProcessLabel?.(block.process.data) ?? null;
+}
+
+function getBlockLocationLabelSuffix(block: Block, location: Location) {
+  return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
 }
 
 
 export default {
   createActiveBlockMenu,
   createDefaultPoint,
+  getBlockDefaultLabel,
+  getBlockLocationLabelSuffix,
   getChildrenExecutionKeys,
   graphRenderer,
   isBlockPaused,
   namespace,
-  onSelectBlockMenu,
-  transformBlockLabel
+  onSelectBlockMenu
 } satisfies Unit

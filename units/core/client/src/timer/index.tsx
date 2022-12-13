@@ -38,9 +38,15 @@ function createProcessFeatures(processData: ProcessData, options: CreateFeatures
   }];
 }
 
+function getProcessLabel(processData: ProcessData) {
+  return 'Wait';
+  // return 'Wait ' + formatDuration(processData.value);
+}
+
 
 export default {
   ProcessComponent,
   createProcessFeatures,
+  getProcessLabel,
   namespace
 } satisfies Unit

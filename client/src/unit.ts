@@ -7,17 +7,22 @@ export function getBlockExplicitLabel(block: ProtocolBlock, _host: Host): string
   return (block.state?.['name'] as { value: string | null; } | undefined)?.value ?? null;
 }
 
-export function getBlockLabel(block: ProtocolBlock, state: unknown | null, host: Host): string | null {
+export function getBlockLabel(block: ProtocolBlock, location: unknown | null, host: Host) {
   let unit = host.units[block.namespace];
 
-  let label = getBlockExplicitLabel(block, host)
-    ?? unit.getBlockDefaultLabel?.(block)
-    ?? (block.namespace !== 'segment' ? 'Block' : null)
-    ?? 'Segment';
+  let explicitLabel = getBlockExplicitLabel(block, host);
 
-  return (state && label)
-    ? unit.transformBlockLabel?.(block, state, label) ?? label
-    : label;
+  let value = explicitLabel
+    ?? unit.getBlockDefaultLabel?.(block, host)
+    ?? 'Block';
+
+  return {
+    explicit: !!explicitLabel,
+    suffix: location
+      ? unit.getBlockLocationLabelSuffix?.(block, location)
+      : null,
+    value
+  };
 }
 
 export function getSegmentBlockProcessData(block: ProtocolBlock, _host: Host): ProtocolProcess | null {

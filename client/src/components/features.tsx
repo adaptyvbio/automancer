@@ -25,6 +25,8 @@ export function FeatureList(props: {
   pausedGroupIndex: number | null;
   setHoveredGroupIndex(value: number | null): void;
 }) {
+  let groupHovered = (props.hoveredGroupIndex !== null);
+
   return (
     <div className={styles.list}>
       <FeatureListDivider
@@ -32,15 +34,19 @@ export function FeatureList(props: {
         hovered={props.hoveredGroupIndex === props.list.length}
         paused={props.pausedGroupIndex === props.list.length}
         setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? props.list.length : null)} />
-      {Array.from(props.list.entries()).reverse().map(([index, group]) => (
-        <React.Fragment key={index}>
-          <FeatureGroup group={group} />
-          <FeatureListDivider
-            hovered={props.hoveredGroupIndex === index}
-            paused={props.pausedGroupIndex === index}
-            setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? index : null)} />
-        </React.Fragment>
-      ))}
+      {Array.from(props.list.entries()).reverse().map(([index, group]) => {
+        let hovered = (props.hoveredGroupIndex === index);
+
+        return (
+          <React.Fragment key={index}>
+            <FeatureGroup group={group} />
+            <FeatureListDivider
+              hovered={hovered}
+              paused={(!groupHovered || hovered) && (props.pausedGroupIndex === index)}
+              setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? index : null)} />
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }

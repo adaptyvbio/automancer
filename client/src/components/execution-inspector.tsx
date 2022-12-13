@@ -5,7 +5,7 @@ import * as util from '../util';
 import { MasterBlockLocation, Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
-import { FeatureGroup, FeatureList } from './features';
+import { FeatureList, SimpleFeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
 
@@ -24,6 +24,7 @@ export interface ExecutionInspectorProps {
 
 export interface ExecutionInspectorState {
   activeBlockPathIndex: number;
+  hoveredBlockIndex: number | null;
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
@@ -33,7 +34,8 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     super(props);
 
     this.state = {
-      activeBlockPathIndex: 0
+      activeBlockPathIndex: 0,
+      hoveredBlockIndex: null
     };
   }
 
@@ -54,6 +56,15 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
       lineBlocks.push(block);
       lineLocations.push(location);
     }
+
+    let pausedBlockIndexRaw = lineBlocks.findIndex((block, index) => {
+      let location = lineLocations[index];
+      let unit = units[block.namespace];
+
+      return unit.isBlockPaused?.(block, location) ?? false;
+    });
+
+    let pausedBlockIndex = (pausedBlockIndexRaw >= 0) ? pausedBlockIndexRaw : null;
 
     let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
 
@@ -115,7 +126,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
           return (
             <>
-              <FeatureList list={[processUnit.createProcessFeatures!(process.data, {
+              <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, {
                 host: this.props.host
               }).map((feature) => ({ ...feature, accent: true }))]} />
               <ProcessComponent
@@ -127,23 +138,33 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           );
         })()}
 
-        <FeatureList list={lineBlocks.flatMap((block, index) => {
-          let location = lineLocations[index];
+        <FeatureList
+          hoveredGroupIndex={this.state.hoveredBlockIndex}
+          pausedGroupIndex={pausedBlockIndex}
+          list={lineBlocks.flatMap((block, index) => {
+            let location = lineLocations[index];
+            let disabled = (this.state.hoveredBlockIndex !== null)
+              ? (index >= this.state.hoveredBlockIndex)
+              : (pausedBlockIndex !== null) && (index >= pausedBlockIndex);
 
-          return block.state
-            ? [Object.values(this.props.host.units).flatMap((unit) => {
-              return unit?.createStateFeatures?.(
-                block.state!,
-                (lineBlocks
-                  .slice(index + 1)
-                  .map((b) => b.state)
-                  .filter((s) => s)) as ProtocolState[],
-                location.state,
-                { host: this.props.host }
-              ) ?? [];
-            })]
-            : [];
-        }).reverse()} />
+            return block.state
+              ? [Object.values(this.props.host.units).flatMap((unit) => {
+                return unit?.createStateFeatures?.(
+                  block.state!,
+                  (lineBlocks
+                    .slice(index + 1, this.state.hoveredBlockIndex ?? pausedBlockIndex ?? lineBlocks.length)
+                    .map((b) => b.state)
+                    .filter((s) => s)) as ProtocolState[],
+                  location.state,
+                  { host: this.props.host }
+                ) ?? [];
+              }).map((feature) => ({
+                ...feature,
+                disabled: (disabled || feature.disabled)
+              }))]
+              : [];
+          })}
+          setHoveredGroupIndex={(hoveredBlockIndex) => void this.setState({ hoveredBlockIndex })} />
       </div>
     );
   }

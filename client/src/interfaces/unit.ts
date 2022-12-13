@@ -61,6 +61,7 @@ export interface Unit {
   getBlockDefaultLabel?(block: ProtocolBlock): string | null;
   getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
   getChildrenExecutionKeys?(block: ProtocolBlock, location: unknown): ProtocolBlockPath | null;
+  isBlockPaused?(block: ProtocolBlock, location: unknown): boolean;
   onSelectBlockMenu?(block: ProtocolBlock, location: unknown, path: MenuEntryPath): unknown | undefined;
   transformBlockLabel?(block: ProtocolBlock, location: unknown, label: string): string | null;
 

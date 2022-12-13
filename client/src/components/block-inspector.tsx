@@ -5,7 +5,7 @@ import * as util from '../util';
 import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockExplicitLabel, getSegmentBlockProcessData } from '../unit';
-import { FeatureGroup, FeatureList } from './features';
+import { SimpleFeatureList } from './features';
 
 import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
@@ -78,12 +78,12 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         </div>
 
         {(process && processUnit) && (
-          <FeatureList list={[processUnit.createProcessFeatures!(process.data, {
+          <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, {
             host: this.props.host
           }).map((feature) => ({ ...feature, accent: true }))]} />
         )}
 
-        <FeatureList list={family.flatMap((block, index) => {
+        <SimpleFeatureList list={family.flatMap((block, index) => {
           return block.state
             ? [Object.values(this.props.host.units).flatMap((unit) => {
               return unit?.createStateFeatures?.(
@@ -97,7 +97,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
               ) ?? [];
             })]
             : [];
-        }).reverse()} />
+        })} />
       </div>
     );
   }

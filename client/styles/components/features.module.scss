@@ -1,0 +1,153 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+$divider-height: 20px;
+$entry-height: 30px;
+
+
+.list {
+  display: flex;
+  flex-direction: column;
+
+  margin: 1rem 0;
+}
+
+.divider {
+  &Root {
+    display: grid;
+    align-items: center;
+    column-gap: 1rem;
+    grid-template-columns: 1fr auto 1fr;
+
+    height: $divider-height;
+    margin: -$divider-height * 0.5 0;
+    z-index: 1;
+
+    color: $app-blue;
+
+    > :nth-child(odd) {
+      background-color: currentColor;
+      height: 2px;
+    }
+
+    &:not(:hover, :global(._active)) {
+      > :first-child {
+        grid-column: 1 / -1;
+        height: 1px;
+
+        background-color: #ccc;
+      }
+
+      > :nth-child(n+2), &:is(:first-child, :last-child) > * {
+        display: none;
+      }
+    }
+
+    &:global(._alternate) {
+      color: #999;
+      font-style: italic;
+    }
+  }
+
+  &Label {
+    font-weight: 500;
+  }
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.4rem;
+}
+
+.list .group {
+  padding: 0.6rem 1rem;
+}
+
+.listSimple .group:not(:last-child) {
+  margin-bottom: -1px;
+  border-bottom: 1px solid #ddd;
+}
+
+.entry {
+  display: grid;
+  align-items: center;
+  column-gap: 0.8rem;
+  grid-template-columns: auto 1fr auto;
+
+  height: $entry-height;
+
+  &Disabled {
+    opacity: 0.4;
+    color: #666;
+  }
+}
+
+.icon {
+  padding: 4px;
+
+  background-color: $icon-grey;
+  border-radius: 4px;
+
+  color: #fff;
+  font-size: 20px;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 200,
+    'GRAD' 200,
+    'opsz' 20;
+}
+
+.entryAccent .icon {
+  background-color: $app-blue;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+
+  &:last-child {
+    grid-column-end: 3;
+  }
+}
+
+.description {
+  align-self: start;
+
+  @include text-ellipsis();
+
+  color: #999;
+  font-size: 0.85rem;
+  line-height: 1.15;
+}
+
+.label {
+  @include text-ellipsis();
+
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.blank {
+  &Outer {
+    display: flex;
+    height: $entry-height;
+  }
+
+  &Inner {
+    margin: auto 0;
+
+    color: #666;
+    font-style: italic;
+  }
+}
+
+.errorIcon {
+  color: $app-red;
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 100,
+    'GRAD' 200,
+    'opsz' 20;
+}

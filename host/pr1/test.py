@@ -67,7 +67,16 @@ async def main():
 name: Foobar
 
 steps:
-  activate: 1 s
+  # actions:
+  #   - activate: 2s
+  #     Mock.valueBool: false
+    # - activate: 2s
+  actions:
+    - activate: 2s
+      Mock.valueBool: false
+
+    # - activate: 2s
+    #   Mock.valueBool: false
   Mock.valueBool: true
 
   # actions:
@@ -93,7 +102,7 @@ steps:
 
     async def a():
       async for info in master.run():
-        continue
+        # continue
 
         print("[Info]")
         # print("  Raw:", info)
@@ -101,16 +110,23 @@ steps:
         print()
 
     async def b():
-      await asyncio.sleep(0.5)
+      # node = host.root_node.nodes['Mock'].nodes['valueBool']
+      # await asyncio.sleep(2)
+      # claim = node.claim_now(force=True)
+      # await asyncio.sleep(2)
+      # claim.release()
+
       print("[Pausing]")
-      master.pause()
-      await asyncio.sleep(2)
-      print("[Resuming]")
-      master.resume()
+      await asyncio.sleep(1)
+      master.halt()
+      # master.pause()
+      # await asyncio.sleep(1)
+      # print("[Resuming]")
+      # master.resume()
       pass
 
 
-    print()
+    # print()
     print("--------")
     print()
 

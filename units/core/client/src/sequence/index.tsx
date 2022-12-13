@@ -200,6 +200,10 @@ function createDefaultPoint(block: Block, key: number, getChildPoint: (block: Pr
   };
 }
 
+function isBlockPaused(_block: Block, location: Location) {
+  return (location.mode === LocationMode.Paused);
+}
+
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
   switch (path.first()) {
     case 'halt':
@@ -226,6 +230,7 @@ export default {
   getBlockClassLabel,
   getChildrenExecutionKeys,
   graphRenderer,
+  isBlockPaused,
   namespace,
   onSelectBlockMenu,
   transformBlockLabel

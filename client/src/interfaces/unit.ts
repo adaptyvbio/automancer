@@ -55,7 +55,7 @@ export interface Unit {
   getProcessLabel?(processData: unknown): string | null;
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 
-  createActiveBlockMenu?(block: ProtocolBlock, location: unknown): MenuDef;
+  createActiveBlockMenu?(block: ProtocolBlock, location: unknown, options: { host: Host; }): MenuDef;
   createDefaultPoint?(block: ProtocolBlock, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
   getActiveChildState?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
   getBlockClassLabel?(block: ProtocolBlock): string | null;
@@ -63,7 +63,8 @@ export interface Unit {
   getBlockLocationLabelSuffix?(block: ProtocolBlock, location: unknown): string | null;
   getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
   getChildrenExecutionKeys?(block: ProtocolBlock, location: unknown): ProtocolBlockPath | null;
-  isBlockPaused?(block: ProtocolBlock, location: unknown): boolean;
+  isBlockBusy?(block: ProtocolBlock, location: unknown,  options: { host: Host; }): boolean;
+  isBlockPaused?(block: ProtocolBlock, location: unknown, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: ProtocolBlock, location: unknown, path: MenuEntryPath): unknown | undefined;
 
   graphRenderer?: GraphRenderer<ProtocolBlock, GraphBlockMetrics>;

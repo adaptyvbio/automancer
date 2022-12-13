@@ -77,12 +77,14 @@ class SequenceTransform(BaseTransform):
 
 
 class SequenceProgramMode(IntEnum):
-  Halted = 5
-  Halting = 4
-  Normal = 0
-  PausingChild = 1
-  PausingState = 2
-  Paused = 3
+  Halted = -1
+  Resuming = -2
+
+  Halting = 0
+  Normal = 1
+  PausingChild = 2
+  PausingState = 3
+  Paused = 4
 
 @dataclass(kw_only=True)
 class SequenceProgramLocation:
@@ -125,18 +127,27 @@ class SequenceProgram(BlockProgram):
 
     self._child_index: int
     self._child_program: BlockProgram
+    self._child_stopped: bool
     self._interrupting = False
     self._mode: SequenceProgramMode
     self._point: Optional[SequenceProgramPoint]
 
-  def get_child(self, key: int):
+  @property
+  def busy(self):
+    return self._mode in (
+      SequenceProgramMode.Halting,
+      SequenceProgramMode.PausingChild,
+      SequenceProgramMode.PausingState
+    ) or self._child_program.busy
+
+  def get_child(self, block_key: int, exec_key: None):
+    assert block_key == self._child_index
     return self._child_program
 
   def import_message(self, message: Any):
     match message["type"]:
       case "halt":
         self.halt()
-        # self.jump(SequenceProgramPoint(child=None, index=2))
       case "jump":
         self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
       case "pause":
@@ -147,7 +158,7 @@ class SequenceProgram(BlockProgram):
         self.set_interrupt(message["value"])
 
   def halt(self):
-    assert self._mode in (SequenceProgramMode.Normal, SequenceProgramMode.Paused)
+    assert (not self.busy) and (self._mode in (SequenceProgramMode.Normal, SequenceProgramMode.Paused))
 
     self._mode = SequenceProgramMode.Halting
     self._child_program.halt()
@@ -161,14 +172,19 @@ class SequenceProgram(BlockProgram):
 
 
   def pause(self):
-    assert self._mode == SequenceProgramMode.Normal
-
+    assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
     self._mode = SequenceProgramMode.PausingChild
-    self._child_program.pause()
+
+    if not self._child_stopped:
+      self._child_program.pause()
+    else:
+      self._iterator.trigger()
 
   def resume(self):
-    assert self._mode == SequenceProgramMode.Paused
-    self._child_program.resume()
+    assert (not self.busy) and (self._mode == SequenceProgramMode.Paused)
+
+    self._mode = SequenceProgramMode.Resuming
+    self._iterator.trigger()
 
   def set_interrupt(self, value: bool, /):
     self._interrupting = value
@@ -209,6 +225,8 @@ class SequenceProgram(BlockProgram):
     self._iterator.notify(state_location)
 
     async for event, state_location in self._iterator:
+      self._child_stopped = event.stopped
+
       if (self._mode == SequenceProgramMode.PausingChild) and event.stopped:
         self._mode = SequenceProgramMode.PausingState
         await state_instance.suspend()
@@ -219,7 +237,7 @@ class SequenceProgram(BlockProgram):
       if self._mode == SequenceProgramMode.PausingState:
         self._mode = SequenceProgramMode.Paused
 
-      if (self._mode == SequenceProgramMode.Paused) and (not event.stopped):
+      if ((self._mode == SequenceProgramMode.Paused) and (not event.stopped)) or (self._mode == SequenceProgramMode.Resuming):
         self._mode = SequenceProgramMode.Normal
         state_location = state_instance.apply(self._block.state, resume=False)
 

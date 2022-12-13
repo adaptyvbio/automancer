@@ -58,12 +58,13 @@ class SegmentTransform(BaseTransform):
 
 
 class SegmentProgramMode(IntEnum):
-  Halted = 5
-  Halting = 4
-  Normal = 0
-  PausingProcess = 1
-  PausingState = 2
-  Paused = 3
+  Halted = -1
+
+  Halting = 0
+  Normal = 1
+  PausingProcess = 2
+  PausingState = 3
+  Paused = 4
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
@@ -98,6 +99,10 @@ class SegmentProgram(BlockProgram):
     self._point: Optional[SegmentProgramPoint]
     self._process: Process
 
+  @property
+  def busy(self):
+    return self._mode in (SegmentProgramMode.PausingProcess, SegmentProgramMode.PausingState)
+
   def import_message(self, message: dict):
     match message["type"]:
       case "halt":
@@ -110,13 +115,13 @@ class SegmentProgram(BlockProgram):
         self.resume()
 
   def halt(self):
-    assert self._mode in (SegmentProgramMode.Normal, SegmentProgramMode.Paused)
+    assert (not self.busy) and (self._mode in (SegmentProgramMode.Normal, SegmentProgramMode.Paused))
 
     self._mode = SegmentProgramMode.Halting
     self._process.halt()
 
   def jump(self, point: SegmentProgramPoint):
-    assert self._mode == SegmentProgramMode.Normal
+    assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
 
     if hasattr(self._process, 'jump'):
       self._process.jump(point.process)
@@ -125,13 +130,13 @@ class SegmentProgram(BlockProgram):
       self.halt()
 
   def pause(self):
-    assert self._mode == SegmentProgramMode.Normal
+    assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
 
     self._mode = SegmentProgramMode.PausingProcess
     self._process.pause()
 
   def resume(self):
-    assert self._mode == SegmentProgramMode.Paused
+    assert (not self.busy) and (self._mode == SegmentProgramMode.Paused)
     self._process.resume()
 
   async def run(self, initial_point: Optional[SegmentProgramPoint], symbol: ClaimSymbol):
@@ -181,8 +186,8 @@ class SegmentProgram(BlockProgram):
         stopped=(self._mode in (SegmentProgramMode.Paused, SegmentProgramMode.Halted))
       )
 
-    # TODO: Already suspended when doing Pause then Halt
-    await state_instance.suspend()
+    if state_instance.applied:
+      await state_instance.suspend()
 
 
 @dataclass

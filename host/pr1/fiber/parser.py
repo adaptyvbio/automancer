@@ -103,6 +103,13 @@ class BlockProgram(Protocol):
   def __init__(self, block: 'BaseBlock', master: Any, parent: 'BlockProgram' | Any):
     ...
 
+  @property
+  def busy(self):
+    ...
+
+  def import_message(self, message: object):
+    ...
+
   def halt(self):
     ...
 

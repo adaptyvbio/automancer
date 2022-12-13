@@ -80,7 +80,8 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 let location = lineLocations[index];
                 let label = getBlockLabel(block, location, this.props.host)! ?? 'Untitled step';
                 let last = index === (arr.length - 1);
-                let menu = unit.createActiveBlockMenu?.(block, location) ?? [];
+                let menu = unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? [];
+                let blockPath = activeBlockPath.slice(0, index);
 
                 return (
                   <React.Fragment key={index}>
@@ -96,7 +97,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                         if (message) {
                           this.pool.add(async () => {
-                            await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, index), message);
+                            await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, blockPath, message);
                           });
                         }
                       }}>

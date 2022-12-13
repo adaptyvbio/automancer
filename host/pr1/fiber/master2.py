@@ -127,11 +127,11 @@ class Master:
         self._pause_future.set_result(True)
         self._pause_future = None
 
-  def send_message(self, path: list, message: object):
+  def send_message(self, block_path: list, exec_path: list, message: object):
     program = self._program
 
-    for key in path:
-      program = program.get_child(key)
+    for block_key, exec_key in zip(block_path, exec_path):
+      program = program.get_child(block_key, exec_key)
 
     program.import_message(message)
 
@@ -172,18 +172,22 @@ class Master:
 
 class StateInstanceCollection:
   def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, symbol: ClaimSymbol):
+    self._applied = False
     self._notify = notify
     self._runners = runners
     self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
     self._location: StateLocation
+
+  @property
+  def applied(self):
+    return self._applied
 
   def _notify_unit(self, namespace: str, event: Any):
     self._location.unit_locations[namespace] = event
     self._notify(self._location)
 
   def apply(self, state: Any, *, resume: bool):
-    print(f"Apply, resume={resume}")
-
+    self._applied = True
     self._location = StateLocation({ namespace: instance.apply(state[namespace], resume=resume) for namespace, instance in self._instances.items()})
     return self._location
 
@@ -191,6 +195,5 @@ class StateInstanceCollection:
     ...
 
   async def suspend(self):
-    print("Suspending")
+    self._applied = False
     await asyncio.gather(*[instance.suspend() for namespace, instance in self._instances.items()])
-    print("Suspended")

@@ -18,11 +18,11 @@ export interface Location {
 }
 
 export enum LocationMode {
-  Halting = 4,
-  Normal = 0,
-  PausingProcess = 1,
-  PausingState = 2,
-  Paused = 3
+  Halting = 0,
+  Normal = 1,
+  PausingProcess = 2,
+  PausingState = 3,
+  Paused = 4
 }
 
 export interface Point {
@@ -95,7 +95,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         createMenu={() => {
           return [
             ...(active
-              ? createActiveBlockMenu(block, location!)
+              ? createActiveBlockMenu(block, location!, { host: options.host })
               : []),
             { id: 'jump', name: 'Jump to', icon: 'move_down' },
             { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
@@ -136,12 +136,14 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   }
 };
 
-function createActiveBlockMenu(block: Block, location: Location) {
+function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
+  let busy = isBlockBusy(block, location, options);
+
   return [
     ...((location.mode !== LocationMode.Paused)
-      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) }]
-      : [{ id: 'resume', name: 'Resume', icon: 'play_circle' }]),
-    { id: 'halt', name: 'Halt', icon: 'block' }
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
+      : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }]),
+    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy }
   ];
 }
 
@@ -151,7 +153,11 @@ function createDefaultPoint(block: Block, key: null, getChildPoint: (block: Prot
   };
 }
 
-function isBlockPaused(_block: Block, location: Location) {
+function isBlockBusy(_block: Block, location: Location, _options: { host: Host; }) {
+  return ![LocationMode.Normal, LocationMode.Paused].includes(location.mode);
+}
+
+function isBlockPaused(_block: Block, location: Location, _options: { host: Host; }) {
   return (location.mode === LocationMode.Paused);
 }
 
@@ -187,6 +193,7 @@ export default {
   getBlockLocationLabelSuffix,
   getChildrenExecutionKeys,
   graphRenderer,
+  isBlockBusy,
   isBlockPaused,
   namespace,
   onSelectBlockMenu

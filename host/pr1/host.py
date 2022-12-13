@@ -409,7 +409,7 @@ class Host:
 
       case "sendMessageToActiveBlock":
         chip = self.chips[request["chipId"]]
-        chip.master.send_message(request["path"], request["message"])
+        chip.master.send_message(request["path"], [None] * len(request["path"]), request["message"]) # TODO: Set real execution path
         return None
 
       case "upgradeChip":

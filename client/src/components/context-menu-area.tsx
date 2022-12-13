@@ -16,6 +16,7 @@ export type ContextMenuAreaProps = React.PropsWithChildren<{
 
 export function ContextMenuArea(props: ContextMenuAreaProps) {
   let childRef = React.useRef<HTMLElement>(null);
+  let closeRef = React.useRef<(() => void) | null>(null);
   let formerFocusRef = React.useRef<Element | null>(null);
   let triggerRef = React.useRef<any>(null);
 
@@ -29,6 +30,21 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
     });
   }, []);
 
+  React.useEffect(() => {
+    if (closeRef.current) {
+      closeRef.current();
+      close();
+    }
+  }, [props.createMenu]);
+
+  let close = () => {
+    childRef.current!.classList.remove('_context');
+
+    if (formerFocusRef.current instanceof HTMLElement) {
+      formerFocusRef.current.focus();
+    }
+  };
+
   let child = props.children as any;
 
   return (
@@ -41,13 +57,11 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
             <ContextMenu
               createMenu={props.createMenu}
               onClose={(_selected) => {
-                childRef.current!.classList.remove('_context');
-
-                if (formerFocusRef.current instanceof HTMLElement) {
-                  formerFocusRef.current.focus();
-                }
+                close();
               }}
               onSelect={(path) => props.onSelect(List(path))}
+
+              closeRef={closeRef}
               triggerRef={triggerRef} />
           );
         }}

@@ -52,6 +52,8 @@ export interface ContextMenuProps {
   createMenu(event: React.MouseEvent): MenuDef;
   onClose(selected: boolean): void;
   onSelect(path: MenuEntryPathLike): void;
+
+  closeRef: React.MutableRefObject<(() => void) | null>;
   triggerRef: React.MutableRefObject<(event: React.MouseEvent) => void>;
 }
 
@@ -134,6 +136,16 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: ContextM
 
   //   setOpen(true);
   // }
+
+  React.useEffect(() => {
+    props.closeRef.current = () => {
+      setMenu(null);
+    };
+
+    return () => {
+      props.closeRef.current = null;
+    };
+  }, [props.closeRef]);
 
   props.triggerRef.current = (event) => {
     event.preventDefault();

@@ -51,10 +51,7 @@ class SegmentTransform(BaseTransform):
     if transforms:
       return Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
 
-    return Analysis(), SegmentBlock(
-      process=self._process,
-      state=state
-    )
+    return Analysis(), SegmentBlock(process=self._process)
 
 
 class SegmentProgramMode(IntEnum):
@@ -200,37 +197,11 @@ class SegmentBlock(BaseBlock):
   Point: type[SegmentProgramPoint] = SegmentProgramPoint
   Program = SegmentProgram
 
-  def __init__(self, process: SegmentProcessData, state: BlockState):
+  def __init__(self, process: SegmentProcessData):
     self._process = process
-    self.state: BlockState = state
-
-  def linearize(self, context, parent_state):
-    return Analysis(), [LinearSegment(self._process, parent_state | self.state)]
-
-    # analysis = Analysis()
-    # state = dict()
-
-    # for namespace, unit_state in self._segment.state.items():
-    #   if unit_state and hasattr(unit_state, 'assemble'):
-    #     unit_analysis, unit_state_assembled = unit_state.assemble(context)
-    #     analysis += unit_analysis
-
-    #     if unit_state_assembled is Ellipsis:
-    #       return analysis, Ellipsis
-
-    #     state[namespace] = unit_state_assembled
-    #   else:
-    #     state[namespace] = unit_state
-
-    # return analysis, [Segment(
-    #   process_data=self._segment.process_data,
-    #   process_namespace=self._segment.process_namespace,
-    #   state=BlockState(state)
-    # )]
 
   def export(self):
     return {
       "namespace": "segment",
-      "process": self._process.export(),
-      "state": self.state.export()
+      "process": self._process.export()
     }

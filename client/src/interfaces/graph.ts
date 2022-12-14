@@ -10,6 +10,7 @@ export interface GraphBlockMetrics {
   start: Point;
   end: Point;
 
+  compactable?: unknown;
   size: Size;
 }
 

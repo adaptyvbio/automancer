@@ -131,25 +131,19 @@ class BaseProgramPoint(Protocol):
     ...
 
 class BaseBlock(Protocol):
-  def __init__(self):
-    self.state: Optional[BlockState]
-
-  def linearize(self, context, parent_state) -> Any:
-    ...
+  Point: type[BaseProgramPoint]
+  Program: type[BlockProgram]
 
   def export(self):
     ...
-
-  Point: type[BaseProgramPoint]
-  Program: type[BlockProgram]
 
 BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 
 class BaseParser:
   namespace: str
   priority = 0
-  root_attributes: dict[str, lang.Attribute]
-  segment_attributes: dict[str, lang.Attribute]
+  root_attributes = dict[str, lang.Attribute]()
+  segment_attributes = dict[str, lang.Attribute]()
 
   def __init__(self, fiber: 'FiberParser'):
     pass
@@ -320,10 +314,12 @@ class FiberParser:
     print("Errors >", self.analysis.errors)
     print()
 
+    import json
+
     if not isinstance(entry_block, EllipsisType):
       print("<= ENTRY =>")
-      print(entry_block)
-      pprint(entry_block.export())
+      # print(entry_block)
+      print(json.dumps(entry_block.export(), indent=2))
       print()
 
       # print("<= LINEARIZATION =>")
@@ -364,7 +360,7 @@ class FiberParser:
   def parse_block_attrs(self, attrs: Any, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs, *, allow_expr: bool = False) -> BlockData | EllipsisType:
     runtime_envs = runtime_envs.copy()
     state = BlockState()
-    transforms: list[BaseTransform] = list()
+    transforms: list[BaseTransform] = []
 
     for parser in self._parsers:
       analysis, block_data = parser.parse_block(attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs)
@@ -417,7 +413,7 @@ class FiberParser:
 
     return UnresolvedBlockDataLiteral(attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 
-  def execute(self, state: Optional[BlockState], transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
+  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> BaseBlock | EllipsisType:
     if not transforms:
       self.analysis.errors.append(MissingProcessError(origin_area))
       return Ellipsis

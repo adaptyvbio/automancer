@@ -73,7 +73,7 @@ class SequenceTransform(BaseTransform):
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)
 
-    return analysis, SequenceBlock(children, state=state) if children else Ellipsis
+    return analysis, SequenceBlock(children) if children else Ellipsis
 
 
 class SequenceProgramMode(IntEnum):
@@ -260,32 +260,14 @@ class SequenceBlock(BaseBlock):
   Point: type[SequenceProgramPoint] = SequenceProgramPoint
   Program = SequenceProgram
 
-  def __init__(self, children: list[BaseBlock], state: BlockState):
+  def __init__(self, children: list[BaseBlock]):
     self._children = children
-    self.state: BlockState = state
 
   def __getitem__(self, key):
     return self._children[key]
 
-  def linearize(self, context, parent_state):
-    analysis = lang.Analysis()
-    output = list()
-
-    for block in self._children:
-      item_analysis, item = block.linearize(context, parent_state | self.state)
-      analysis += item_analysis
-
-      if item is Ellipsis:
-        continue
-
-      output += item
-
-    return analysis, output
-
   def export(self):
     return {
       "namespace": "sequence",
-      "state": self.state.export(),
-
       "children": [child.export() for child in self._children]
     }

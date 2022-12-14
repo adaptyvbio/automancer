@@ -13,6 +13,7 @@ setup(
       "repeat = pr1_repeat",
       "segment = pr1_segment",
       "sequence = pr1_sequence",
+      "state = pr1_state",
       "timer = pr1_timer"
     ]
   },
@@ -21,6 +22,7 @@ setup(
     "pr1_repeat.client": ["*"],
     "pr1_segment.client": ["*"],
     "pr1_sequence.client": ["*"],
+    "pr1_state.client": ["*"],
     "pr1_timer.client": ["*"]
   }
 )

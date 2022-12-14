@@ -11,6 +11,7 @@ export interface Block extends ProtocolBlock {
 
 export interface BlockMetrics extends GraphBlockMetrics {
   child: GraphBlockMetrics;
+  label: string;
 }
 
 export interface Location {
@@ -35,8 +36,13 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, options) {
     let childMetrics = options.computeMetrics(block.child, [...ancestors, block]);
 
+    let label = ancestors.at(-1)?.state['name'].value
+      ?? getBlockExplicitLabel(block, options.host)
+      ?? getBlockDefaultLabel(block);
+
     return {
       child: childMetrics,
+      label,
 
       start: {
         x: childMetrics.start.x + 1,
@@ -54,7 +60,6 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   },
   render(block, path: ProtocolBlockPath, metrics, position, location, options) {
     // let label = (block.state['name'] as { value: string | null; }).value;
-    let label = getBlockExplicitLabel(block, options.host);
 
     return (
       <>
@@ -62,7 +67,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
           cellSize={{ width: metrics.size.width, height: metrics.size.height }}
           position={position}
           settings={options.settings}
-          title={label ?? getBlockDefaultLabel(block)} />
+          title={metrics.label} />
         {options.render(block.child, [...path, null], metrics.child, {
           x: position.x + 1,
           y: position.y + 2

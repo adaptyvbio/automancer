@@ -184,11 +184,12 @@ class Host:
     from .fiber.parsers.score import ScoreParser
     from .fiber.parsers.sequence import SequenceParser
     from .fiber.parsers.shorthands import ShorthandsParser
+    from .fiber.parsers.state import StateParser
 
     parser = FiberParser(
       source,
       host=self,
-      Parsers=[DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, NameParser, DevicesParser, ScoreParser]
+      Parsers=[StateParser, DoParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, NameParser, DevicesParser, ScoreParser]
       # parsers={ namespace: unit.Parser for namespace, unit in self.units.items() if hasattr(unit, 'Parser') }
     )
 

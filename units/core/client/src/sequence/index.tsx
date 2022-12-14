@@ -46,14 +46,13 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
     let linksCompact: boolean[] = [];
 
     let xs = 0;
-    let wasSegment = false;
+    let wasCompactable = false;
 
     let childrenX = childrenMetrics.map((childMetrics, childIndex) => {
       let child = block.children[childIndex];
-      let isSegment = (child.namespace === 'segment');
 
       if (childIndex > 0) {
-        let compact = options.settings.allowCompactActions && wasSegment && isSegment;
+        let compact = options.settings.allowCompactActions && wasCompactable && childMetrics.compactable;
         linksCompact.push(compact);
 
         if (!compact) {
@@ -63,7 +62,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         }
       }
 
-      wasSegment = isSegment;
+      wasCompactable = !!childMetrics.compactable;
 
       let x = xs;
 

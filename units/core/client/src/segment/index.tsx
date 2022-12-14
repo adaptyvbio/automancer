@@ -4,7 +4,6 @@ import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, Grap
 export interface Block extends ProtocolBlock {
   namespace: typeof namespace;
   process: ProtocolProcess;
-  state: ProtocolState;
 }
 
 export interface BlockMetrics extends GraphBlockMetrics {
@@ -38,14 +37,22 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       host: options.host
     };
 
-    let name = (block.state['name'] as { value: string | null; }).value;
+    let ancestor = ancestors.at(-1);
+
+    let state = (ancestor?.namespace === 'state')
+      ? ancestor.state as ProtocolState
+      : null;
+
+    let name = (state?.['name'].value ?? null);
     let features = [
       ...(options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, createFeaturesOptions)
         ?? [{ icon: 'not_listed_location', label: 'Unknown process' }])
         .map((feature) => ({ ...feature, accent: true })),
-      ...Object.values(options.host.units).flatMap((unit) => {
-        return unit?.createStateFeatures?.(block.state, null, null, createFeaturesOptions) ?? [];
-      })
+      ...(state
+          ? Object.values(options.host.units).flatMap((unit) => {
+            return unit?.createStateFeatures?.(state, null, null, createFeaturesOptions) ?? [];
+          })
+          : [])
     ];
 
     let featureCount = features.length;
@@ -63,6 +70,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       features,
       name,
 
+      compactable: true,
       start: { x: 0, y: 0 },
       end: options.settings.vertical
         ? { x: 0, y: height }

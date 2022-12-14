@@ -10,6 +10,7 @@ import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
 import { renderLabel } from './block-inspector';
 import { Button } from './button';
+import { ErrorBoundary } from './error-boundary';
 
 import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
@@ -133,11 +134,14 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, {
                   host: this.props.host
                 }).map((feature) => ({ ...feature, accent: true }))]} />
-                <ProcessComponent
-                  host={this.props.host}
-                  processData={process!.data}
-                  processLocation={getSegmentBlockProcessState(segmentLocation, this.props.host)}
-                  time={segmentLocation.time} />
+
+                <ErrorBoundary>
+                  <ProcessComponent
+                    host={this.props.host}
+                    processData={process!.data}
+                    processLocation={getSegmentBlockProcessState(segmentLocation, this.props.host)}
+                    time={segmentLocation.time} />
+                </ErrorBoundary>
               </>
             );
           })()}

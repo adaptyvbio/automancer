@@ -1,11 +1,16 @@
-.eboundary {
+.root {
   display: flex;
 
-  margin: 2rem 0;
-  padding: 0 1rem;
+  margin: 1rem 0;
+  padding: 2rem 1rem;
 
   background-color: #ff413633;
   border-radius: 6px;
+
+  &Wide {
+    min-height: 220px;
+    margin: 2rem 0;
+  }
 
   p {
     margin: auto;

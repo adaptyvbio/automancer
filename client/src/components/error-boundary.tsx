@@ -1,5 +1,9 @@
 import * as React from 'react';
 
+import * as util from '../util';
+
+import styles from '../../styles/components/error-boundary.module.scss';
+
 
 export type ErrorBoundaryProps = React.PropsWithChildren<{
   getErrorMessage?(): JSX.Element;
@@ -18,7 +22,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       return (
-        <div className="eboundary" style={this.props.wide ? {} : { height: '220px' }}>
+        <div className={util.formatClass(styles.root, { [styles.rootWide]: this.props.wide })}>
           <p>{this.props.getErrorMessage?.() ?? 'An error occured.'} <button type="button" onClick={() => {
             this.setState({ hasError: false });
           }}>Retry</button></p>

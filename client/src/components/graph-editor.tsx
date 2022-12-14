@@ -5,7 +5,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 
 import { GraphBlockMetrics } from '../interfaces/graph';
-import { Point, SideFlags, Size } from '../geometry';
+import { Point, SideFlags, SideValues, Size } from '../geometry';
 import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
@@ -252,18 +252,23 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         attachmentStart: false
       });
 
-      let margin = { x: 1, y: 1 } satisfies Point;
+      let margin = {
+        bottom: 2,
+        left: 1,
+        right: 1,
+        top: 1
+      } satisfies SideValues;
 
       let min = {
-        x: (origin.x - margin.x) * settings.cellPixelSize,
-        y: (origin.y - margin.y) * settings.cellPixelSize
+        x: (origin.x - margin.left) * settings.cellPixelSize,
+        y: (origin.y - margin.top) * settings.cellPixelSize
       } satisfies Point;
 
       this.offsetBoundaries = {
         min,
         max: {
-          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.x) * settings.cellPixelSize - this.state.size.width * this.state.scale),
-          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.y) * settings.cellPixelSize - this.state.size.height) * this.state.scale
+          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - this.state.size.width * this.state.scale),
+          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - this.state.size.height * this.state.scale)
         }
       };
     } else {

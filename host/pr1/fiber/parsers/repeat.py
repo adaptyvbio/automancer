@@ -1,12 +1,17 @@
+from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Optional
+
+from ..process import ProgramExecEvent
+
+from ...devices.claim import ClaimSymbol
 
 from ...reader import LocationArea
 
 from .. import langservice as lang
 from ..eval import EvalEnv, EvalEnvs, EvalStack
 from ..expr import PythonExprEvaluator
-from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from ...util import schema as sc
 from ...util.decorators import debug
 
@@ -50,8 +55,107 @@ class RepeatTransform(BaseTransform):
 
     return lang.Analysis(), RepeatBlock(block, count=self._count, env=self._env)
 
+
+@dataclass(kw_only=True)
+class RepeatProgramLocation:
+  child: Any
+  iteration: int
+
+  def export(self):
+    return {
+      "child": self.child.export(),
+      "iteration": self.iteration
+    }
+
+@dataclass(kw_only=True)
+class RepeatProgramPoint:
+  child: Any
+  iteration: int
+
+  @classmethod
+  def import_value(cls, data: Any, /, block: 'RepeatBlock', *, master):
+    return cls(
+      child=(block._block.Point.import_value(data["child"], block._block, master=master) if data["child"] is not None else None),
+      iteration=data["iteration"]
+    )
+
+@debug
+class RepeatProgram(BlockProgram):
+  def __init__(self, block: 'RepeatBlock', master, parent):
+    self._block = block
+    self._master = master
+    self._parent = parent
+
+    self._child_program: BlockProgram
+    self._halting: bool
+    self._iteration: int
+    self._point = Optional[RepeatProgramPoint]
+
+  @property
+  def busy(self):
+    return self._child_program.busy
+
+  def get_child(self, block_key: int, exec_key: None):
+    return self._child_program
+
+  def halt(self):
+    assert not self.busy
+
+    self._child_program.halt()
+    self._halting = True
+
+  def jump(self, point: RepeatProgramPoint):
+    if point.iteration != self._iteration:
+      self._point = point
+      self.halt()
+    elif point.child:
+      self._child_program.jump(point.child)
+
+  def pause(self):
+    assert not self.busy
+    self._child_program.pause()
+
+  def resume(self):
+    pass
+
+  async def run(self, initial_point: Optional[RepeatProgramPoint], symbol: ClaimSymbol):
+    self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
+    child_block = self._block._block
+
+    while True:
+      self._child_program = child_block.Program(child_block, self._master, self)
+
+      point = self._point
+
+      self._halting = False
+      self._iteration = point.iteration
+      self._point = None
+
+      if self._iteration >= self._block._count:
+        break
+
+      async for event in self._child_program.run(point.child, symbol):
+        yield ProgramExecEvent(
+          state=RepeatProgramLocation(
+            child=event.state,
+            iteration=self._iteration
+          ),
+          stopped=event.stopped
+        )
+
+      if self._point:
+        pass
+      elif self._halting:
+        break
+      else:
+        self._point = RepeatProgramPoint(child=None, iteration=(self._iteration + 1))
+
+
 @debug
 class RepeatBlock:
+  Point = RepeatProgramPoint
+  Program = RepeatProgram
+
   def __init__(self, block: BaseBlock, count: int, env: 'RepeatEnv'):
     self.state = None
 

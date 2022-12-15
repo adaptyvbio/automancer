@@ -52,7 +52,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       let child = block.children[childIndex];
 
       if (childIndex > 0) {
-        let compact = options.settings.allowCompactActions && wasCompactable && childMetrics.compactable;
+        let compact = options.settings.allowCompactActions && wasCompactable && !!childMetrics.compactable;
         linksCompact.push(compact);
 
         if (!compact) {
@@ -100,7 +100,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         }
     };
   },
-  render(block, path, metrics, position, state, options) {
+  render(block, path, metrics, position, location, options) {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
     let linkDirection = vertical
@@ -108,8 +108,8 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       : ('horizontal' as const);
 
     let children = block.children.map((child, childIndex) => {
-      let childState = (state?.index === childIndex)
-        ? state.child
+      let childLocation = (location?.index === childIndex)
+        ? location.child
         : null;
 
       let childX = metrics.childrenX[childIndex];
@@ -118,7 +118,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       let el = options.render(child, [...path, childIndex], childSize, {
         x: position.x + childX * (1 - verticalFlag),
         y: position.y + childX * verticalFlag
-      }, childState, {
+      }, childLocation, {
         attachmentEnd: (childIndex < block.children.length - 1)
           ? !metrics.linksCompact[childIndex]
           : options.attachmentEnd,

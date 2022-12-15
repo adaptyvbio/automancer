@@ -128,7 +128,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                     host={this.props.host}
                     selectBlock={this.selectBlock.bind(this)}
                     selectedBlockPath={this.state.selectedBlockPath}
-                    state={this.master.location}
+                    location={this.master.location}
                     tree={this.master.protocol.root} />
                 )
               },

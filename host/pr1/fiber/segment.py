@@ -59,22 +59,19 @@ class SegmentProgramMode(IntEnum):
 
   Halting = 0
   Normal = 1
-  PausingProcess = 2
-  PausingState = 3
-  Paused = 4
+  Pausing = 2
+  Paused = 3
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
   mode: SegmentProgramMode
   process: Any
   time: float
-  state: Optional[Any] = None
 
   def export(self):
     return {
       "mode": self.mode,
       "process": self.process.export(),
-      "state": self.state and self.state.export(),
       "time": self.time * 1000.0
     }
 
@@ -98,7 +95,7 @@ class SegmentProgram(BlockProgram):
 
   @property
   def busy(self):
-    return self._mode in (SegmentProgramMode.PausingProcess, SegmentProgramMode.PausingState)
+    return self._mode == SegmentProgramMode.Pausing
 
   def import_message(self, message: dict):
     match message["type"]:
@@ -129,7 +126,7 @@ class SegmentProgram(BlockProgram):
   def pause(self):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
 
-    self._mode = SegmentProgramMode.PausingProcess
+    self._mode = SegmentProgramMode.Pausing
     self._process.pause()
 
   def resume(self):
@@ -150,41 +147,26 @@ class SegmentProgram(BlockProgram):
         async for event in self._process.run(point.process):
           yield event
 
-    iterator = CoupledStateIterator2[ProgramExecEvent, Any](run())
-
-    state_instance = self._master.create_instance(self._block.state, notify=iterator.notify, symbol=symbol)
-    state_location = state_instance.apply(self._block.state, resume=False)
-    iterator.notify(state_location)
-
-    async for event, state_location in iterator:
+    async for event in run():
       event_time = event.time or time.time()
 
-      if (self._mode == SegmentProgramMode.PausingProcess) and event.stopped:
-        self._mode = SegmentProgramMode.PausingState
-        await state_instance.suspend()
+      if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
+        self._mode = SegmentProgramMode.Paused
 
       if (self._mode == SegmentProgramMode.Halting) and event.stopped:
         self._mode = SegmentProgramMode.Halted
 
-      if self._mode == SegmentProgramMode.PausingState:
-        self._mode = SegmentProgramMode.Paused
-
       if (self._mode == SegmentProgramMode.Paused) and (not event.stopped):
         self._mode = SegmentProgramMode.Normal
-        state_location = state_instance.apply(self._block.state, resume=True)
 
       yield ProgramExecEvent(
         state=SegmentProgramLocation(
           mode=self._mode,
           process=event.state,
-          state=state_location,
           time=event_time
         ),
         stopped=(self._mode in (SegmentProgramMode.Paused, SegmentProgramMode.Halted))
       )
-
-    if state_instance.applied:
-      await state_instance.suspend()
 
 
 @dataclass

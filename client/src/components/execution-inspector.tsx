@@ -4,11 +4,11 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { MasterBlockLocation, Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
+import { getBlockAggregates, getBlockExplicitLabel, getBlockLabel, getBlockState, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
 import { FeatureList, SimpleFeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
-import { renderLabel } from './block-inspector';
+import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
 
@@ -20,7 +20,7 @@ export interface ExecutionInspectorProps {
   activeBlockPaths: ProtocolBlockPath[];
   chip: Chip;
   host: Host;
-  location: MasterBlockLocation;
+  location: unknown;
   protocol: Protocol;
   selectBlock(path: ProtocolBlockPath | null): void;
 }
@@ -60,41 +60,69 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
       lineLocations.push(location);
     }
 
+    let aggregates = getBlockAggregates(lineBlocks);
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, { host: this.props.host });
+
     let pausedBlockIndexRaw = lineBlocks.findIndex((block, index) => {
       let location = lineLocations[index];
       let unit = units[block.namespace];
 
-      return unit.isBlockPaused?.(block, location) ?? false;
+      return unit.isBlockPaused?.(block, location, { host: this.props.host }) ?? false;
     });
 
     let pausedBlockIndex = (pausedBlockIndexRaw >= 0) ? pausedBlockIndexRaw : null;
 
     let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
 
+    let lineStates = Array.from(lineBlocks.entries())
+      .map(([index, block]) => [index, getBlockState(block)] as [number, ProtocolState])
+      .filter(([index, state]) => state);
+
     return (
       <div className={spotlightStyles.root}>
         <div className={spotlightStyles.contents}>
-          {(lineBlocks.length > 1) && (
+          {(
             <div className={spotlightStyles.breadcrumbRoot}>
-              {lineBlocks /* .slice(0, -1) */ .map((block, index, arr) => {
-                let unit = units[block.namespace];
+              {aggregateLabelItems /* .slice(0, -1) */ .map((item, index, arr) => {
+                // let unit = units[block.namespace];
                 let location = lineLocations[index];
-                let label = getBlockLabel(block, location, this.props.host)! ?? 'Untitled step';
+                // let label = getBlockLabel(block, location, this.props.host)! ?? 'Untitled step';
                 let last = index === (arr.length - 1);
-                let menu = unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? [];
-                let blockPath = activeBlockPath.slice(0, index);
+                // let menu = unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? [];
+                // let blockPath = activeBlockPath.slice(0, index);
 
                 return (
                   <React.Fragment key={index}>
                     <ContextMenuArea
-                      createMenu={() => [
-                        { id: 'header', name: unit.getBlockClassLabel?.(block) ?? label.value, type: 'header' },
-                        // { id: 'pause', name: 'Pause', icon: 'pause_circle' },
-                        // ...((menu.length > 0) ? [{ id: 'divider', type: 'divider' }] : []),
-                        ...menu
-                      ]}
+                      createMenu={() => item.blocks.flatMap((block, blockRelIndex, arr) => {
+                        let blockIndex = item.aggregate.offset + blockRelIndex;
+                        let location = lineLocations[blockIndex];
+                        let unit = this.props.host.units[block.namespace];
+
+                        let menu = (unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? []).map((entry) => ({
+                          ...entry,
+                          id: [blockRelIndex, ...[entry.id].flat()]
+                        }));
+
+                        return (menu.length > 0)
+                          ? [
+                            { id: [blockRelIndex, 'header'], name: unit.getBlockClassLabel?.(block) ?? block.namespace, type: 'header' },
+                            ...menu
+                          ]
+                          : [];
+                      })}
                       onSelect={(path) => {
-                        let message = unit.onSelectBlockMenu?.(block, location, path);
+                        console.log(path.toJS());
+                        let blockRelIndex = path.first() as number;
+                        let block = item.blocks[blockRelIndex];
+
+                        let blockIndex = item.aggregate.offset + blockRelIndex;
+                        let blockPath = activeBlockPath.slice(0, blockIndex);
+
+                        let location = lineLocations[blockIndex];
+                        let unit = this.props.host.units[block.namespace];
+
+                        let message = unit.onSelectBlockMenu?.(block, location, path.slice(1));
 
                         if (message) {
                           this.pool.add(async () => {
@@ -104,7 +132,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                       }}>
                       <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
                         // this.props.selectBlock(this.props.blockPath!.slice(0, index));
-                      }}>{renderLabel(label)}</button>
+                      }}>{renderLabel(item.label)}</button>
                     </ContextMenuArea>
                     {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
                   </React.Fragment>
@@ -149,28 +177,26 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           <FeatureList
             hoveredGroupIndex={this.state.hoveredBlockIndex}
             pausedGroupIndex={pausedBlockIndex}
-            list={lineBlocks.flatMap((block, index) => {
-              let location = lineLocations[index];
+            list={lineStates.map(([blockIndex, state], stateIndex) => {
+              let block = lineBlocks[blockIndex];
+              let location = lineLocations[blockIndex];
               let disabled = (this.state.hoveredBlockIndex !== null)
-                ? (index >= this.state.hoveredBlockIndex)
-                : (pausedBlockIndex !== null) && (index >= pausedBlockIndex);
+                ? (blockIndex >= this.state.hoveredBlockIndex)
+                : (pausedBlockIndex !== null) && (blockIndex >= pausedBlockIndex);
 
-              return block.state
-                ? [Object.values(this.props.host.units).flatMap((unit) => {
-                  return unit?.createStateFeatures?.(
-                    block.state!,
-                    (lineBlocks
-                      .slice(index + 1, this.state.hoveredBlockIndex ?? pausedBlockIndex ?? lineBlocks.length)
-                      .map((b) => b.state)
-                      .filter((s) => s)) as ProtocolState[],
-                    location.state,
-                    { host: this.props.host }
-                  ) ?? [];
-                }).map((feature) => ({
-                  ...feature,
-                  disabled: (disabled || feature.disabled)
-                }))]
-                : [];
+              return Object.values(this.props.host.units).flatMap((unit) => {
+                return unit?.createStateFeatures?.(
+                  state,
+                  (lineStates
+                    .slice(stateIndex + 1) //, this.state.hoveredBlockIndex ?? pausedBlockIndex ?? lineBlocks.length)
+                    .map(([_blockIndex, state]) => state)),
+                  location.state,
+                  { host: this.props.host }
+                ) ?? [];
+              }).map((feature) => ({
+                ...feature,
+                disabled: (disabled || feature.disabled)
+              }));
             })}
             setHoveredGroupIndex={(hoveredBlockIndex) => void this.setState({ hoveredBlockIndex })} />
         </div>

@@ -2,11 +2,13 @@
   "scripts": {
     "build": "npm run build:js && npm run build:python",
     "build:js": "esbuild --bundle src/*/index.* --external:pr1 --external:react --format=esm --outbase=src --outdir=dist",
-    "build:python": "find dist -maxdepth 1 -mindepth 1 -exec touch {}/__init__.py \\;"
+    "build:python": "find dist -maxdepth 1 -mindepth 1 -exec touch {}/__init__.py \\;",
+    "test": "tsc"
   },
   "devDependencies": {
     "@types/react": "^18.0.16",
     "esbuild": "~0.15.16",
-    "pr1": "file:../../../client"
+    "pr1": "file:../../../client",
+    "typescript": "~4.9.0"
   }
 }

@@ -102,7 +102,7 @@ export class ChipProtocol extends React.Component<ChipProtocolProps, ChipProtoco
 
         <GraphEditor
           host={this.props.host}
-          state={master.state}
+          location={master.state}
           tree={protocol.root} />
       </div>
     );

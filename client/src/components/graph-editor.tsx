@@ -23,7 +23,7 @@ export interface GraphEditorProps {
   host: Host;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
-  state?: unknown;
+  location?: unknown;
   summary?: React.ReactNode;
   tree: ProtocolBlock | null;
 }
@@ -247,7 +247,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
       let origin = { x: 1, y: 1 } satisfies Point;
       let treeMetrics = computeMetrics(this.props.tree, []);
-      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.state ?? null, {
+      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.location ?? null, {
         attachmentEnd: false,
         attachmentStart: false
       });

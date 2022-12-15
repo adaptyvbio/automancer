@@ -40,6 +40,9 @@ export interface MasterProcessState {
 
 export type MasterStateLocation = Record<UnitNamespace, unknown> | null;
 
+/**
+ * @deprecated
+ */
 export interface MasterBlockLocation {
   state: MasterStateLocation;
 }

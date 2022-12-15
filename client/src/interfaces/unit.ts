@@ -57,7 +57,7 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
 
   createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
   createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
-  getActiveChildLocation?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
+  getActiveChildLocation?(location: Location, key: unknown): unknown;
   getBlockClassLabel?(block: Block): string | null;
   getBlockDefaultLabel?(block: Block, host: Host): string | null;
   getBlockLocationLabelSuffix?(block: Block, location: unknown): string | null;

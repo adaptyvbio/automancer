@@ -10,11 +10,15 @@
     "module": "es2020",
     "moduleResolution": "node",
     "outDir": "lib/types",
+    "rootDir": "src",
     "skipLibCheck": true,
     "strict": true,
     "target": "es2020"
   },
   "files": [
     "src/index.tsx"
+  ],
+  "include": [
+    "src"
   ]
 }

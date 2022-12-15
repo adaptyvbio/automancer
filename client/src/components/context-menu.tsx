@@ -39,7 +39,8 @@ export type MenuEntry =
   | { id: MenuEntryId; type: 'divider'; }
   | { id: MenuEntryId; type: 'header'; name: string; };
 
-export type MenuEntryId = number | string;
+export type MenuEntrySimpleId = number | string;
+export type MenuEntryId = MenuEntrySimpleId[] | MenuEntrySimpleId;
 export type MenuEntryPath = List<MenuEntryId>;
 export type MenuEntryPathLike = Iterable<MenuEntryId>;
 
@@ -211,30 +212,34 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: ContextM
                 }
               })}>
               {menu!.map((entry) => {
+                let key = Array.isArray(entry.id)
+                  ? entry.id.map((item) => item.toString()).join('__')
+                  : entry.id;
+
                 switch (entry.type) {
                   case 'divider': {
                     return (
-                      <li className="cmenu-divider" key={entry.id} />
+                      <li className="cmenu-divider" key={key} />
                     );
                   }
 
                   case 'header': {
                     return (
-                      <li className="cmenu-header" key={entry.id}>{entry.name}</li>
+                      <li className="cmenu-header" key={key}>{entry.name}</li>
                     );
                   }
 
                   case undefined:
                   case 'option': {
                     return (
-                      <li className="cmenu-x" key={entry.id}>
+                      <li className="cmenu-x" key={key}>
                         <button type="button"
                           disabled={!!entry.disabled}
                           className={util.formatClass('cmenu-item', {
                             '_open': false
                           })}
                           onClick={(!entry.children || undefined) && (() => {
-                            props.onSelect(List([entry.id]));
+                            props.onSelect(List([entry.id].flat()));
                             props.onClose(true);
                             setMenu(null);
                           })}>

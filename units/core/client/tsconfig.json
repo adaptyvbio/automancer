@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "files": [
+    "src/devices/index.tsx",
+    "src/repeat/index.tsx",
+    "src/segment/index.tsx",
+    "src/sequence/index.tsx",
+    "src/state/index.tsx",
+    "src/timer/index.tsx"
+  ]
+}

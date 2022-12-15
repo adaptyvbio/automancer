@@ -12,7 +12,7 @@ from ...devices.claim import ClaimSymbol
 from ...reader import LocationArea
 from ...util import schema as sc
 from ...util.decorators import debug
-from ...util.iterators import CoupledStateIterator2
+from ...util.iterators import CoupledStateIterator2, TriggerableIterator
 
 
 ActionInfo = tuple[BlockData, LocationArea]
@@ -82,9 +82,8 @@ class SequenceProgramMode(IntEnum):
 
   Halting = 0
   Normal = 1
-  PausingChild = 2
-  PausingState = 3
-  Paused = 4
+  Pausing = 2
+  Paused = 3
 
 @dataclass(kw_only=True)
 class SequenceProgramLocation:
@@ -92,15 +91,13 @@ class SequenceProgramLocation:
   index: int = 0
   interrupting: bool = False
   mode: SequenceProgramMode
-  state: Optional[Any]
 
   def export(self):
     return {
       "child": self.child and self.child.export(),
       "index": self.index,
       "interrupting": self.interrupting,
-      "mode": self.mode,
-      "state": self.state and self.state.export()
+      "mode": self.mode
     }
 
 @dataclass(kw_only=True)
@@ -129,6 +126,7 @@ class SequenceProgram(BlockProgram):
     self._child_program: BlockProgram
     self._child_stopped: bool
     self._interrupting = False
+    self._iterator: TriggerableIterator[ProgramExecEvent[SequenceProgramLocation]]
     self._mode: SequenceProgramMode
     self._point: Optional[SequenceProgramPoint]
 
@@ -136,8 +134,7 @@ class SequenceProgram(BlockProgram):
   def busy(self):
     return self._mode in (
       SequenceProgramMode.Halting,
-      SequenceProgramMode.PausingChild,
-      SequenceProgramMode.PausingState
+      SequenceProgramMode.Pausing
     ) or self._child_program.busy
 
   def get_child(self, block_key: int, exec_key: None):
@@ -173,7 +170,7 @@ class SequenceProgram(BlockProgram):
 
   def pause(self):
     assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
-    self._mode = SequenceProgramMode.PausingChild
+    self._mode = SequenceProgramMode.Pausing
 
     if not self._child_stopped:
       self._child_program.pause()
@@ -191,8 +188,6 @@ class SequenceProgram(BlockProgram):
     self._iterator.trigger()
 
   async def run(self, initial_point: Optional[SequenceProgramPoint], symbol: ClaimSymbol):
-    self._point = initial_point or SequenceProgramPoint(child=None, index=0)
-
     async def run():
       while True:
         assert self._point
@@ -218,41 +213,28 @@ class SequenceProgram(BlockProgram):
         else:
           self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
 
-    self._iterator = CoupledStateIterator2[ProgramExecEvent, Any](run())
+    self._point = initial_point or SequenceProgramPoint(child=None, index=0)
+    self._iterator = TriggerableIterator(run())
 
-    state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, symbol=symbol)
-    state_location = state_instance.apply(self._block.state, resume=False)
-    self._iterator.notify(state_location)
-
-    async for event, state_location in self._iterator:
+    async for event in self._iterator:
       self._child_stopped = event.stopped
 
-      if (self._mode == SequenceProgramMode.PausingChild) and event.stopped:
-        self._mode = SequenceProgramMode.PausingState
-        await state_instance.suspend()
-
+      if (self._mode == SequenceProgramMode.Pausing) and event.stopped:
+        self._mode = SequenceProgramMode.Paused
       if (self._mode == SequenceProgramMode.Halting) and event.stopped:
         self._mode = SequenceProgramMode.Halted
-
-      if self._mode == SequenceProgramMode.PausingState:
-        self._mode = SequenceProgramMode.Paused
-
       if ((self._mode == SequenceProgramMode.Paused) and (not event.stopped)) or (self._mode == SequenceProgramMode.Resuming):
         self._mode = SequenceProgramMode.Normal
-        state_location = state_instance.apply(self._block.state, resume=False)
 
       yield ProgramExecEvent(
         state=SequenceProgramLocation(
           child=event.state,
           index=self._child_index,
           interrupting=self._interrupting,
-          mode=self._mode,
-          state=state_location
+          mode=self._mode
         ),
         stopped=(self._mode in (SequenceProgramMode.Paused, SequenceProgramMode.Halted))
       )
-
-    await state_instance.suspend()
 
 
 @debug

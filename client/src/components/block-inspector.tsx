@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { Protocol, ProtocolBlock, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
+import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockAggregates, getBlockLabel, getBlockState, getBlockStateName, getSegmentBlockProcessData } from '../unit';
 import { SimpleFeatureList } from './features';
@@ -55,41 +55,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       .filter((state): state is ProtocolState => state !== null);
 
     let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = aggregates.flatMap((aggregate, aggregateIndex, arr) => {
-      let label = aggregate.state && getBlockStateName(aggregate.state);
-
-      if (aggregateIndex < 1) {
-        label ??= this.props.protocol.name;
-      }
-
-      if (label) {
-        return [{
-          label: {
-            explicit: true,
-            suffix: null,
-            value: label
-          },
-          offset: aggregate.offset + aggregate.blocks.length - 1
-        }];
-      } else {
-        return aggregate.blocks.flatMap((block, blockIndex) => {
-          let unit = this.props.host.units[block.namespace];
-
-          if (!unit.getBlockDefaultLabel) {
-            return [];
-          }
-
-          return [{
-            label: {
-              explicit: false,
-              suffix: null,
-              value: unit.getBlockDefaultLabel(block, this.props.host) ?? 'Block'
-            },
-            offset: aggregate.offset + blockIndex
-          }];
-        });
-      }
-    })
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, { host: this.props.host });
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
@@ -144,4 +110,48 @@ export function renderLabel(label: ReturnType<typeof getBlockLabel>) {
       {label.suffix && (' ' + label.suffix)}
     </>
   );
+}
+
+export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], protocolName: string | null, options: { host: Host; }) {
+  return aggregates.flatMap((aggregate, aggregateIndex) => {
+    let label = aggregate.state && getBlockStateName(aggregate.state);
+
+    if (aggregateIndex < 1) {
+      label ??= protocolName;
+    }
+
+    if (label) {
+      return [{
+        aggregate,
+        blocks: aggregate.blocks,
+        label: {
+          explicit: true,
+          suffix: null,
+          value: label
+        },
+        offset: aggregate.offset + aggregate.blocks.length - 1
+      }];
+    } else {
+      return aggregate.blocks.flatMap((block, blockIndex) => {
+        let unit = options.host.units[block.namespace];
+
+        if (!unit.getBlockDefaultLabel) {
+          return [];
+        }
+
+        return [{
+          aggregate,
+          blocks: blockIndex === 1 // TODO: Improve this
+            ? [aggregate.blocks[0], block]
+            : [block],
+          label: {
+            explicit: false,
+            suffix: null,
+            value: unit.getBlockDefaultLabel(block, options.host) ?? 'Block'
+          },
+          offset: aggregate.offset + blockIndex
+        }];
+      });
+    }
+  });
 }

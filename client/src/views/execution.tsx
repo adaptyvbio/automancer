@@ -91,7 +91,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
       return keys
         ? keys.flatMap((key) => getActiveBlockPaths(
             unit.getChildBlock!(block, key),
-            unit.getActiveChildState!(location, key),
+            unit.getActiveChildLocation!(location, key),
             [...path, key]
           ))
         : [path];

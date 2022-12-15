@@ -2,9 +2,9 @@ import * as React from 'react';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
+import { Protocol, ProtocolBlock, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockExplicitLabel, getBlockLabel, getSegmentBlockProcessData } from '../unit';
+import { getBlockAggregates, getBlockLabel, getBlockState, getBlockStateName, getSegmentBlockProcessData } from '../unit';
 import { SimpleFeatureList } from './features';
 
 import formStyles from '../../styles/components/form.module.scss';
@@ -35,35 +35,74 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
     }
 
     let targetBlock = this.props.protocol.root;
-    let family = [targetBlock];
+    let lineBlocks = [targetBlock];
 
     for (let key of this.props.blockPath) {
       let unit = this.props.host.units[targetBlock.namespace];
       targetBlock = unit.getChildBlock!(targetBlock, key);
-      family.push(targetBlock);
+      lineBlocks.push(targetBlock);
     }
 
-    let familyLabels = family.map((block) => {
+    let lineLabels = lineBlocks.map((block) => {
       return getBlockLabel(block, null, this.props.host);
     });
 
     let process = getSegmentBlockProcessData(targetBlock, this.props.host);
     let processUnit = process && this.props.host.units[process.namespace];
 
+    let lineStates = lineBlocks
+      .map(getBlockState)
+      .filter((state): state is ProtocolState => state !== null);
+
+    let aggregates = getBlockAggregates(lineBlocks);
+    let aggregateLabelItems = aggregates.flatMap((aggregate, aggregateIndex, arr) => {
+      let label = aggregate.state && getBlockStateName(aggregate.state);
+
+      if (aggregateIndex < 1) {
+        label ??= this.props.protocol.name;
+      }
+
+      if (label) {
+        return [{
+          label: {
+            explicit: true,
+            suffix: null,
+            value: label
+          },
+          offset: aggregate.offset + aggregate.blocks.length - 1
+        }];
+      } else {
+        return aggregate.blocks.flatMap((block, blockIndex) => {
+          let unit = this.props.host.units[block.namespace];
+
+          if (!unit.getBlockDefaultLabel) {
+            return [];
+          }
+
+          return [{
+            label: {
+              explicit: false,
+              suffix: null,
+              value: unit.getBlockDefaultLabel(block, this.props.host) ?? 'Block'
+            },
+            offset: aggregate.offset + blockIndex
+          }];
+        });
+      }
+    })
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
-        {(family.length > 1) && (
+        {(
           <div className={spotlightStyles.breadcrumbRoot}>
-            {family.slice(0, -1).map((_block, index, arr) => {
-              let label = familyLabels[index];
-              let last = index === (arr.length - 1);
+            {aggregateLabelItems.map((item, itemIndex, arr) => {
+              let last = itemIndex === (arr.length - 1);
 
               return (
-                <React.Fragment key={index}>
+                <React.Fragment key={itemIndex}>
                   <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                    this.props.selectBlock(this.props.blockPath!.slice(0, index));
-                  }}>{renderLabel(label)}</button>
+                    this.props.selectBlock(this.props.blockPath!.slice(0, item.offset));
+                  }}>{renderLabel(item.label)}</button>
                   {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
                 </React.Fragment>
               );
@@ -71,7 +110,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{renderLabel(familyLabels.at(-1))}</h2>
+          <h2 className={spotlightStyles.title}>{renderLabel(aggregateLabelItems.at(-1).label)}</h2>
         </div>
 
         {(process && processUnit) && (
@@ -80,20 +119,15 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           }).map((feature) => ({ ...feature, accent: true }))]} />
         )}
 
-        <SimpleFeatureList list={family.flatMap((block, index) => {
-          return block.state
-            ? [Object.values(this.props.host.units).flatMap((unit) => {
-              return unit?.createStateFeatures?.(
-                block.state!,
-                (family
-                  .slice(index + 1)
-                  .map((b) => b.state)
-                  .filter((s) => s)) as ProtocolState[],
-                null,
-                { host: this.props.host }
-              ) ?? [];
-            })]
-            : [];
+        <SimpleFeatureList list={lineStates.map((state, index) => {
+          return Object.values(this.props.host.units).flatMap((unit) => {
+            return unit?.createStateFeatures?.(
+              state,
+              lineStates.slice(index + 1),
+              null,
+              { host: this.props.host }
+            ) ?? [];
+          });
         })} />
       </div>
     );

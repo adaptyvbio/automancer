@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, FeatureGroupDef, ProgressBar, React, Unit, formatDuration, Host } from 'pr1';
+import { CreateFeaturesOptions, FeatureGroupDef, ProgressBar, React, AnonymousUnit, formatDuration, Host } from 'pr1';
 
 
 export interface ProcessData {
@@ -49,4 +49,4 @@ export default {
   createProcessFeatures,
   getProcessLabel,
   namespace
-} satisfies Unit
+} satisfies AnonymousUnit

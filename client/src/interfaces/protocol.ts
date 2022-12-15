@@ -8,7 +8,6 @@ export interface Protocol {
 
 export interface ProtocolBlock {
   namespace: UnitNamespace;
-  state: ProtocolState | null;
   [key: string]: unknown;
 }
 
@@ -20,6 +19,13 @@ export interface ProtocolProcess {
 }
 
 export type ProtocolState = Record<UnitNamespace, unknown>;
+
+
+export interface ProtocolBlockAggregate {
+  blocks: ProtocolBlock[];
+  offset: number;
+  state: ProtocolState | null;
+}
 
 
 export interface Master {

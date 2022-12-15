@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphRenderer, Host, ProtocolBlock, ProtocolState, Unit } from 'pr1';
+import { GraphBlockMetrics, GraphRenderer, Host, ProtocolBlock, ProtocolState, AnonymousUnit, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -8,8 +8,6 @@ export interface Block extends ProtocolBlock {
 
 export type BlockMetrics = GraphBlockMetrics;
 
-
-const namespace = 'state';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, options) {
@@ -22,18 +20,15 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 };
 
 
-function getChildBlock(block: Block, key: number) {
-  return block.child;
-}
-
-function getBlockDefaultLabel(block: Block, host: Host) {
-  return 'State';
-}
-
-
 export default {
-  getBlockDefaultLabel,
-  getChildBlock,
+  namespace: 'state',
+
   graphRenderer,
-  namespace
-} satisfies Unit
+
+  // getBlockDefaultLabel(block, host) {
+  //   return 'State';
+  // },
+  getChildBlock(block, key) {
+    return block.child;
+  }
+} satisfies Unit<Block>

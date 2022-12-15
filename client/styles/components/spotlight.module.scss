@@ -46,22 +46,6 @@
     &:global(._context) {
       background-color: lighten($highlight-blue, 50%);
     }
-
-    // &:not(:last-child) {
-    //   margin-right: 0.4rem;
-
-    //   &::after {
-    //     content: "›";
-
-    //     margin-left: 0.4rem;
-    //     pointer-events: none;
-    //   }
-    // }
-  }
-
-  // &Root:has(&Entry:hover) &Entry {
-  &Entry:is(:hover, :global(._active)) ~ :is(&Entry, &Icon) {
-    color: #bbb;
   }
 
   &Icon {

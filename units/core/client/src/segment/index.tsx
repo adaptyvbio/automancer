@@ -1,4 +1,4 @@
-import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, Unit } from 'pr1';
+import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, AnonymousUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -205,4 +205,4 @@ export default {
   isBlockPaused,
   namespace,
   onSelectBlockMenu
-} satisfies Unit
+} satisfies AnonymousUnit

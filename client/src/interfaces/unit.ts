@@ -37,7 +37,7 @@ export interface CreateFeaturesOptions {
   host: Host;
 }
 
-export interface Unit {
+export interface Unit<Block extends ProtocolBlock = never, Location = never, ProcessData = never> {
   namespace: UnitNamespace;
   styleSheets?: CSSStyleSheet[];
 
@@ -48,26 +48,29 @@ export interface Unit {
     time: number;
   }>;
 
-  createProcessFeatures?(processData: unknown, options: CreateFeaturesOptions): FeatureGroupDef;
+  createProcessFeatures?(processData: ProcessData, options: CreateFeaturesOptions): FeatureGroupDef;
   createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions): FeatureGroupDef;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
-  getProcessLabel?(processData: unknown): string | null;
+  getProcessLabel?(processData: ProcessData): string | null;
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 
-  createActiveBlockMenu?(block: ProtocolBlock, location: unknown, options: { host: Host; }): MenuDef;
-  createDefaultPoint?(block: ProtocolBlock, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
-  getActiveChildState?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
-  getBlockClassLabel?(block: ProtocolBlock): string | null;
-  getBlockDefaultLabel?(block: ProtocolBlock, host: Host): string | null;
-  getBlockLocationLabelSuffix?(block: ProtocolBlock, location: unknown): string | null;
-  getChildBlock?(block: ProtocolBlock, key: unknown): ProtocolBlock;
-  getChildrenExecutionKeys?(block: ProtocolBlock, location: unknown): ProtocolBlockPath | null;
-  isBlockBusy?(block: ProtocolBlock, location: unknown,  options: { host: Host; }): boolean;
-  isBlockPaused?(block: ProtocolBlock, location: unknown, options: { host: Host; }): boolean;
-  onSelectBlockMenu?(block: ProtocolBlock, location: unknown, path: MenuEntryPath): unknown | undefined;
+  createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
+  createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
+  getActiveChildLocation?(location: MasterBlockLocation, key: unknown): MasterBlockLocation;
+  getBlockClassLabel?(block: Block): string | null;
+  getBlockDefaultLabel?(block: Block, host: Host): string | null;
+  getBlockLocationLabelSuffix?(block: Block, location: unknown): string | null;
+  getChildBlock?(block: Block, key: unknown): ProtocolBlock;
+  getChildrenExecutionKeys?(block: Block, location: unknown): ProtocolBlockPath | null;
+  isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;
+  isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
+  onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 
-  graphRenderer?: GraphRenderer<ProtocolBlock, GraphBlockMetrics>;
+  graphRenderer?: GraphRenderer<Block, GraphBlockMetrics>;
 }
 
-export type Units = Record<UnitNamespace, Unit>;
+export type AnonymousUnit = Unit<ProtocolBlock | never, unknown, unknown>;
+
+
+export type Units = Record<UnitNamespace, AnonymousUnit>;

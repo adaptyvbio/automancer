@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
+import { GraphBlockMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, AnonymousUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -171,7 +171,11 @@ function getChildBlock(block: Block, key: number) {
   return block.children[key];
 }
 
-function getActiveChildState(location: Location, _key: number) {
+function getBlockDefaultLabel(block: Block, host: Host) {
+  return 'Sequence';
+}
+
+function getActiveChildLocation(location: Location, _key: number) {
   return location.child;
 }
 
@@ -236,7 +240,8 @@ export default {
   createActiveBlockMenu,
   createDefaultPoint,
   getChildBlock,
-  getActiveChildState,
+  getActiveChildLocation,
+  getBlockDefaultLabel,
   getBlockClassLabel,
   getChildrenExecutionKeys,
   graphRenderer,
@@ -245,4 +250,4 @@ export default {
   namespace,
   onSelectBlockMenu,
   getBlockLocationLabelSuffix
-} satisfies Unit
+} satisfies AnonymousUnit

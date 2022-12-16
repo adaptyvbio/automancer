@@ -19,9 +19,8 @@ export interface Location {
 export enum LocationMode {
   Halting = 0,
   Normal = 1,
-  PausingProcess = 2,
-  PausingState = 3,
-  Paused = 4
+  Pausing = 2,
+  Paused = 3
 }
 
 export interface Point {

@@ -211,7 +211,7 @@ class CoupledStateIterator(Generic[T, S]):
 class CoupledStateIterator2(Generic[T, S]):
   def __init__(self, iterator: AsyncIterator[T]):
     self._future: Optional[Future[None]] = None
-    self._iterator = iterator
+    self._iterator: Optional[AsyncIterator[T]] = iterator
     self._task: Optional[Task[T]] = None
     self._triggered = False
 
@@ -227,14 +227,24 @@ class CoupledStateIterator2(Generic[T, S]):
     try:
       self._value = task.result()
     except StopAsyncIteration:
-      assert self._future
-      self._future.set_exception(StopAsyncIteration)
+      self._iterator = None
     else:
       self._value_queue.append(self._value)
 
       if self._future:
         self._future.set_result(None)
         self._future = None
+
+  # @property
+  # def empty(self):
+  #   return self._value is None
+
+  # def iter_state(self):
+  #   while True:
+  #     for item in self._state_queue:
+  #       yield item
+
+  #     self._future = Future()
 
   def notify(self, state: S):
     self._state_queue.append(state)
@@ -264,11 +274,11 @@ class CoupledStateIterator2(Generic[T, S]):
         if self._state_queue:
           self._state = self._state_queue.pop(0)
 
-        if self._value:
+        if self._value is not None:
           return (self._value, self._state)
 
       if not self._future:
-        if not self._task:
+        if self._iterator and (not self._task):
           self._task = asyncio.create_task(anext(self._iterator)) # type: ignore
           self._task.add_done_callback(self._callback)
 

@@ -212,12 +212,13 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             setPausedGroupIndex={(aggregateIndex) => {
               this.pool.add(async () => {
                 if (aggregateIndex !== null) {
-                  let aggregate = aggregates[aggregateIndex];
-                  let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
-
                   if ((pausedAggregateIndex !== null) && (pausedAggregateIndex < aggregateIndex)) {
-                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, blockIndex - 1), { type: 'resume' });
+                    let prevAggregate = aggregates[aggregateIndex - 1];
+                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, prevAggregate.offset), { type: 'resume' });
                   } else {
+                    let aggregate = aggregates[aggregateIndex];
+                    let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
+
                     await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, blockIndex), { type: 'pause' });
                   }
                 } else {
@@ -233,7 +234,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 if (pausedAggregateIndex !== null) {
                   await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath, { type: 'resume' });
                 } else {
-                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(aggregates.at(-1).offset), { type: 'pause' });
+                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, aggregates.at(-1).offset), { type: 'pause' });
                 }
               });
             }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>

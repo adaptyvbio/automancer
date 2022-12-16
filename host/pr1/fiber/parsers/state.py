@@ -1,5 +1,7 @@
+import asyncio
 from dataclasses import dataclass
 from enum import IntEnum
+import traceback
 from types import EllipsisType
 from typing import Any, Optional
 
@@ -52,7 +54,8 @@ class StateProgramMode(IntEnum):
   Halted = -1
   Resuming = -2
 
-  Halting = 0
+  HaltingChild = 0
+  HaltingState = 5
   Normal = 1
   PausingChild = 2
   PausingState = 3
@@ -107,8 +110,12 @@ class StateProgram(BlockProgram):
   def get_child(self, block_key: None, exec_key: None):
     return self._child_program
 
+  def halt(self):
+    assert not self.busy
+    self._child_program.halt()
+
   def pause(self):
-    assert not (self.busy) and (self._mode == StateProgramMode.Normal)
+    assert (not self.busy) and (self._mode == StateProgramMode.Normal)
     self._mode = StateProgramMode.PausingChild
 
     if not self._child_stopped:
@@ -141,34 +148,78 @@ class StateProgram(BlockProgram):
     state_location = state_instance.apply(self._block.state, resume=False)
     self._iterator.notify(state_location)
 
+    async def suspend_state():
+      try:
+        await state_instance.suspend()
+      except Exception:
+        traceback.print_exc()
+      finally:
+        match self._mode:
+          case StateProgramMode.PausingState:
+            self._mode = StateProgramMode.Paused
+            self._iterator.trigger()
+          case StateProgramMode.HaltingState:
+            self._mode = StateProgramMode.Halted
+            self._iterator.trigger()
+
     async for event, state_location in self._iterator:
       self._child_stopped = event.stopped
 
+      # If the child was immediately paused, then no event gets emitted.
       if (self._mode == StateProgramMode.PausingChild) and event.stopped:
         self._mode = StateProgramMode.PausingState
-        await state_instance.suspend()
+        asyncio.create_task(suspend_state())
+        continue
 
-      if (self._mode == StateProgramMode.Halting) and event.stopped:
-        self._mode = StateProgramMode.Halted
+      if (self._mode in (StateProgramMode.Normal, StateProgramMode.HaltingChild)) and event.stopped:
+        if state_instance.applied:
+          # Case (1)
+          #   The state instance emits events.
+          #   Once we receive the first event, we yield a corresponding event with child=event.location and stopped=False.
+          #   Following events will be yielded with child=None (or event.location) and stopped=False.
+          #   After the state instance terminates, we will yield a final event with child=None (or event.location) and stopped=True.
+          # Case (2)
+          #   The state instance does not emit anything and is suspended silently.
+          #   We need to yield a last event with child=event.location and stopped=True.
 
-      if self._mode == StateProgramMode.PausingState:
-        self._mode = StateProgramMode.Paused
+          self._mode = StateProgramMode.HaltingState
+          asyncio.create_task(suspend_state())
+
+          # Wait for the state instance to emit an event or terminate.
+          continue
+        else:
+          # This is the last iteration of the loop. Same as case (2) above.
+          self._mode = StateProgramMode.Halted
 
       if ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming):
         self._mode = StateProgramMode.Normal
         state_location = state_instance.apply(self._block.state, resume=False)
 
       yield ProgramExecEvent(
-        state=StateProgramLocation(
-          child=event.state,
-          mode=self._mode,
+        location=StateProgramLocation(
+          child=event.location,
+          mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
           state=state_location
         ),
         stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted))
       )
 
-    if state_instance.applied:
-      await state_instance.suspend()
+      if self._mode == StateProgramMode.Halted:
+        break
+
+    # if state_instance.applied:
+    #   await state_instance.suspend()
+
+    # for state_location in self._iterator.iter_state():
+    #   yield ProgramExecEvent(
+    #     location=StateProgramLocation(
+    #       child=None,
+    #       mode=self._mode,
+    #       state=state_location
+    #     ),
+    #     partial=True,
+    #     stopped=True
+    #   )
 
 
 @debug

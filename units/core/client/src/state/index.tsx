@@ -8,7 +8,17 @@ export interface Block extends ProtocolBlock {
 
 export interface Location {
   child: unknown;
+  mode: LocationMode;
 }
+
+export enum LocationMode {
+  Halting = 0,
+  Normal = 1,
+  PausingChild = 2,
+  PausingState = 3,
+  Paused = 4
+}
+
 
 export type BlockMetrics = GraphBlockMetrics;
 
@@ -29,6 +39,16 @@ export default {
 
   graphRenderer,
 
+  createActiveBlockMenu(_block, location, _options) {
+    let busy = false;
+
+    return location.mode === LocationMode.Normal
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
+      : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }];
+  },
+  getBlockClassLabel(_block) {
+    return 'State';
+  },
   getActiveChildLocation(location, key) {
     return location.child;
   },
@@ -37,5 +57,14 @@ export default {
   },
   getChildBlock(block, _key) {
     return block.child;
-  }
+  },
+  isBlockPaused(_block, location, _options) {
+    return location.mode == LocationMode.Paused;
+  },
+  onSelectBlockMenu(block, location, path) {
+    switch (path.first()) {
+      case 'pause': return { type: 'pause' };
+      case 'resume': return { type: 'resume' };
+    }
+  },
 } satisfies Unit<Block, Location>

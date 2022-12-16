@@ -48,16 +48,19 @@ class ProgramExecEvent(Generic[T]):
     duration: Optional[ProgramExecDuration | DurationLike] = None,
     error: Optional[Exception] = None,
     pausable: Optional[bool] = None,
-    state: Optional[T] = None,
+    location: Optional[T] = None,
+    partial: bool = False,
+    # terminated: bool = False,
     stopped: bool = False,
-    time: Optional[float] = None,
-    **kwargs
+    time: Optional[float] = None
   ):
     # self.duration = duration
     # self.error = error
     # self.pausable = pausable
-    self.state = state
+    self.location = location
+    self.partial = partial
     self.stopped = stopped
+    # self.terminated = terminated
     self.time = time
 
 

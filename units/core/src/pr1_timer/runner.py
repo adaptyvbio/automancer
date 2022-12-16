@@ -71,7 +71,7 @@ class Process:
 
       yield ProgramExecEvent(
         duration=remaining_duration,
-        state=ProcessLocation(progress),
+        location=ProcessLocation(progress),
         time=task_time
       )
 
@@ -90,9 +90,12 @@ class Process:
           remaining_duration = total_duration * (1.0 - progress)
           self._progress = progress
 
+          # yield ProgramExecEvent(location=ProcessLocation(self._progress, paused=False))
+          # await asyncio.sleep(2)
+
           yield ProgramExecEvent(
             duration=remaining_duration,
-            state=ProcessLocation(progress, paused=True),
+            location=ProcessLocation(progress, paused=True),
             stopped=True,
             time=current_time
           )
@@ -110,7 +113,8 @@ class Process:
 
     yield ProgramExecEvent(
       duration=0.0,
-      state=ProcessLocation(1.0)
+      location=ProcessLocation(1.0),
+      stopped=True
     )
 
 class Runner(BaseProcessRunner):

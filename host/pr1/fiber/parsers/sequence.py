@@ -147,10 +147,6 @@ class SequenceProgram(BlockProgram):
         self.halt()
       case "jump":
         self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
-      case "pause":
-        self.pause()
-      case "resume":
-        self.resume()
       case "setInterrupt":
         self.set_interrupt(message["value"])
 
@@ -227,8 +223,8 @@ class SequenceProgram(BlockProgram):
         self._mode = SequenceProgramMode.Normal
 
       yield ProgramExecEvent(
-        state=SequenceProgramLocation(
-          child=event.state,
+        location=SequenceProgramLocation(
+          child=event.location,
           index=self._child_index,
           interrupting=self._interrupting,
           mode=self._mode

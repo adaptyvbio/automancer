@@ -136,7 +136,7 @@ class RepeatProgram(BlockProgram):
 
       async for event in self._child_program.run(point.child, symbol):
         yield ProgramExecEvent(
-          state=RepeatProgramLocation(
+          location=RepeatProgramLocation(
             child=event.state,
             iteration=self._iteration
           ),

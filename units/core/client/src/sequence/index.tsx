@@ -21,9 +21,8 @@ export interface Location {
 export enum LocationMode {
   Halting = 0,
   Normal = 1,
-  PausingChild = 2,
-  PausingState = 3,
-  Paused = 4
+  Pausing = 2,
+  Paused = 3
 }
 
 export interface Point {
@@ -184,17 +183,14 @@ function getChildrenExecutionKeys(_block: Block, state: Location) {
 }
 
 function getBlockClassLabel(_block: Block) {
-  return 'Sequence block';
+  return 'Sequence';
 }
 
 function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
   let busy = isBlockBusy(block, location, options);
 
   return [
-    ...((location.mode !== LocationMode.Paused)
-      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
-      : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }]),
-      { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy },
+    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy },
     { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
   ];
 }
@@ -224,10 +220,6 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
       return { type: 'halt' };
     case 'interrupt':
       return { type: 'setInterrupt', value: !location.interrupting }
-    case 'pause':
-      return { 'type': 'pause' };
-    case 'resume':
-      return { 'type': 'resume' };
   }
 }
 

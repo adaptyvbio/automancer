@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 import traceback
-from typing import Any, Callable, Optional
+from typing import Any, AsyncGenerator, Callable, Optional
 
 from ..units.base import BaseRunner
 
@@ -95,7 +95,7 @@ class Master:
     self.protocol = protocol
 
     self._program: BlockProgram
-    self._state: Any
+    self._location: Any
 
     self._pause_future: Optional[asyncio.Future] = None
 
@@ -115,12 +115,12 @@ class Master:
   def resume(self):
     self._program.resume()
 
-  async def run(self, initial_state = None):
+  async def run(self, initial_location = None):
     symbol = ClaimSymbol()
 
     self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
 
-    async for event in self._program.run(initial_state, symbol):
+    async for event in self._program.run(initial_location, symbol):
       yield event
 
       if event.stopped and self._pause_future:
@@ -141,8 +141,8 @@ class Master:
 
       try:
         async for event in self.run():
-          if event.state:
-            self._state = event.state
+          if event.location:
+            self._location = event.location
 
           if start_future:
             start_future.set_result(None)
@@ -165,7 +165,7 @@ class Master:
 
   def export(self):
     return {
-      "location": self._state.export(),
+      "location": self._location.export(),
       "protocol": self.protocol.export()
     }
 

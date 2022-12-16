@@ -24,6 +24,7 @@ export function FeatureList(props: {
   list: FeatureListDef;
   pausedGroupIndex: number | null;
   setHoveredGroupIndex(value: number | null): void;
+  setPausedGroupIndex(value: number | null): void;
 }) {
   let groupHovered = (props.hoveredGroupIndex !== null);
 
@@ -33,7 +34,8 @@ export function FeatureList(props: {
         freezable={true}
         hovered={props.hoveredGroupIndex === props.list.length}
         paused={props.pausedGroupIndex === props.list.length}
-        setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? props.list.length : null)} />
+        setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? props.list.length : null)}
+        setPaused={(paused) => void props.setPausedGroupIndex(paused ? props.list.length : null)} />
       {Array.from(props.list.entries()).reverse().map(([index, group]) => {
         let hovered = (props.hoveredGroupIndex === index);
 
@@ -43,7 +45,8 @@ export function FeatureList(props: {
             <FeatureListDivider
               hovered={hovered}
               paused={(!groupHovered || hovered) && (props.pausedGroupIndex === index)}
-              setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? index : null)} />
+              setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? index : null)}
+              setPaused={(paused) => void props.setPausedGroupIndex(paused ? index : null)} />
           </React.Fragment>
         );
       })}
@@ -57,6 +60,7 @@ export function FeatureListDivider(props: {
   hovered: unknown;
   paused: unknown;
   setHovered(value: boolean): void;
+  setPaused(value: boolean): void;
 }) {
   return (
     <button
@@ -65,6 +69,7 @@ export function FeatureListDivider(props: {
         '_active': props.paused,
         '_alternate': (props.paused && !props.hovered)
       })}
+      onClick={() => void props.setPaused(!props.paused)}
       onMouseEnter={() => void props.setHovered(true)}
       onMouseLeave={() => void props.setHovered(false)}>
       <div />

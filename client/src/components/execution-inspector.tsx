@@ -27,7 +27,7 @@ export interface ExecutionInspectorProps {
 
 export interface ExecutionInspectorState {
   activeBlockPathIndex: number;
-  hoveredBlockIndex: number | null;
+  hoveredAggregateIndex: number | null;
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
@@ -38,7 +38,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
     this.state = {
       activeBlockPathIndex: 0,
-      hoveredBlockIndex: null
+      hoveredAggregateIndex: null
     };
   }
 
@@ -63,20 +63,36 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     let aggregates = getBlockAggregates(lineBlocks);
     let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, { host: this.props.host });
 
-    let pausedBlockIndexRaw = lineBlocks.findIndex((block, index) => {
-      let location = lineLocations[index];
+    // let lastAggregate = aggregates.at(-1);
+
+    let pausedAggregateIndexRaw = aggregates.findIndex((aggregate) => {
+      if (!aggregate.state) {
+        return false;
+      }
+
+      let block = aggregate.blocks[0];
+      let location = lineLocations[aggregate.offset];
       let unit = units[block.namespace];
 
       return unit.isBlockPaused?.(block, location, { host: this.props.host }) ?? false;
     });
 
-    let pausedBlockIndex = (pausedBlockIndexRaw >= 0) ? pausedBlockIndexRaw : null;
-
+    let pausedAggregateIndex = (pausedAggregateIndexRaw >= 0) ? pausedAggregateIndexRaw : null;
     let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
 
-    let lineStates = Array.from(lineBlocks.entries())
-      .map(([index, block]) => [index, getBlockState(block)] as [number, ProtocolState])
-      .filter(([index, state]) => state);
+    if (process && (pausedAggregateIndex === null)) {
+      let block = lineBlocks.at(-1);
+      let location = lineLocations.at(-1);
+      let unit = units[block.namespace];
+
+      if (unit.isBlockPaused?.(block, location, { host: this.props.host })) {
+        pausedAggregateIndex = aggregates.length;
+      }
+    }
+
+    // let lineStates = Array.from(lineBlocks.entries())
+    //   .map(([index, block]) => [index, getBlockState(block)] as [number, ProtocolState])
+    //   .filter(([index, state]) => state);
 
     return (
       <div className={spotlightStyles.root}>
@@ -84,12 +100,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           {(
             <div className={spotlightStyles.breadcrumbRoot}>
               {aggregateLabelItems /* .slice(0, -1) */ .map((item, index, arr) => {
-                // let unit = units[block.namespace];
-                let location = lineLocations[index];
-                // let label = getBlockLabel(block, location, this.props.host)! ?? 'Untitled step';
                 let last = index === (arr.length - 1);
-                // let menu = unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? [];
-                // let blockPath = activeBlockPath.slice(0, index);
 
                 return (
                   <React.Fragment key={index}>
@@ -112,7 +123,6 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                           : [];
                       })}
                       onSelect={(path) => {
-                        console.log(path.toJS());
                         let blockRelIndex = path.first() as number;
                         let block = item.blocks[blockRelIndex];
 
@@ -131,7 +141,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                         }
                       }}>
                       <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                        // this.props.selectBlock(this.props.blockPath!.slice(0, index));
+                        this.props.selectBlock(activeBlockPath.slice(0, item.offset));
                       }}>{renderLabel(item.label)}</button>
                     </ContextMenuArea>
                     {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
@@ -175,21 +185,21 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           })()}
 
           <FeatureList
-            hoveredGroupIndex={this.state.hoveredBlockIndex}
-            pausedGroupIndex={pausedBlockIndex}
-            list={lineStates.map(([blockIndex, state], stateIndex) => {
-              let block = lineBlocks[blockIndex];
+            hoveredGroupIndex={this.state.hoveredAggregateIndex}
+            pausedGroupIndex={pausedAggregateIndex}
+            list={aggregates.map((aggregate, aggregateIndex) => {
+              let blockIndex = aggregate.offset;
               let location = lineLocations[blockIndex];
-              let disabled = (this.state.hoveredBlockIndex !== null)
-                ? (blockIndex >= this.state.hoveredBlockIndex)
-                : (pausedBlockIndex !== null) && (blockIndex >= pausedBlockIndex);
+              let disabled = (this.state.hoveredAggregateIndex !== null)
+                ? (blockIndex >= this.state.hoveredAggregateIndex)
+                : (pausedAggregateIndex !== null) && (blockIndex >= pausedAggregateIndex);
 
               return Object.values(this.props.host.units).flatMap((unit) => {
                 return unit?.createStateFeatures?.(
-                  state,
-                  (lineStates
-                    .slice(stateIndex + 1) //, this.state.hoveredBlockIndex ?? pausedBlockIndex ?? lineBlocks.length)
-                    .map(([_blockIndex, state]) => state)),
+                  aggregate.state!, // TODO: Remove this assumption
+                  (aggregates
+                    .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? /* pausedBlockIndex ?? */ aggregates.length)
+                    .map((aggregate) => aggregate.state!)),
                   location.state,
                   { host: this.props.host }
                 ) ?? [];
@@ -198,15 +208,39 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 disabled: (disabled || feature.disabled)
               }));
             })}
-            setHoveredGroupIndex={(hoveredBlockIndex) => void this.setState({ hoveredBlockIndex })} />
+            setHoveredGroupIndex={(hoveredAggregateIndex) => void this.setState({ hoveredAggregateIndex })}
+            setPausedGroupIndex={(aggregateIndex) => {
+              this.pool.add(async () => {
+                if (aggregateIndex !== null) {
+                  let aggregate = aggregates[aggregateIndex];
+                  let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
+
+                  if ((pausedAggregateIndex !== null) && (pausedAggregateIndex < aggregateIndex)) {
+                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, blockIndex - 1), { type: 'resume' });
+                  } else {
+                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(0, blockIndex), { type: 'pause' });
+                  }
+                } else {
+                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath, { type: 'resume' });
+                }
+              });
+            }} />
         </div>
         <div className={spotlightStyles.footerRoot}>
           <div className={formStyles.actions}>
-            <Button>Pause</Button>
+            <Button onClick={() => {
+              this.pool.add(async () => {
+                if (pausedAggregateIndex !== null) {
+                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath, { type: 'resume' });
+                } else {
+                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath.slice(aggregates.at(-1).offset), { type: 'pause' });
+                }
+              });
+            }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>
             <Button>Skip</Button>
           </div>
           <div>
-            <div className={spotlightStyles.footerStatus}>Pausing</div>
+            {/* <div className={spotlightStyles.footerStatus}>Pausing</div> */}
           </div>
         </div>
       </div>

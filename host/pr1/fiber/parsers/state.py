@@ -18,8 +18,6 @@ from ..process import ProgramExecEvent
 
 class StateParser(BaseParser):
   namespace = "state"
-  # root_attributes = dict()
-  # segment_attributes = dict()
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
@@ -52,6 +50,7 @@ class StateTransform(BaseTransform):
 
 class StateProgramMode(IntEnum):
   Halted = -1
+  Resuming = -2
 
   Halting = 0
   Normal = 1
@@ -89,12 +88,39 @@ class StateProgram(BlockProgram):
     self._parent = parent
 
     self._child_program: BlockProgram
+    self._child_stopped: bool
     self._iterator: CoupledStateIterator2[ProgramExecEvent, Any]
     self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
 
+  @property
+  def busy(self):
+    return (self._mode not in (StateProgramMode.Normal, StateProgramMode.Paused)) or self._child_program.busy
+
+  def import_message(self, message: Any):
+    match message["type"]:
+      case "pause":
+        self.pause()
+      case "resume":
+        self.resume()
+
   def get_child(self, block_key: None, exec_key: None):
     return self._child_program
+
+  def pause(self):
+    assert not (self.busy) and (self._mode == StateProgramMode.Normal)
+    self._mode = StateProgramMode.PausingChild
+
+    if not self._child_stopped:
+      self._child_program.pause()
+    else:
+      self._iterator.trigger()
+
+  def resume(self):
+    assert (not self.busy) and (self._mode == StateProgramMode.Paused)
+
+    self._mode = StateProgramMode.Resuming
+    self._iterator.trigger()
 
   async def run(self, initial_point: Optional[StateProgramPoint], symbol: ClaimSymbol):
     async def run():
@@ -128,7 +154,7 @@ class StateProgram(BlockProgram):
       if self._mode == StateProgramMode.PausingState:
         self._mode = StateProgramMode.Paused
 
-      if ((self._mode == StateProgramMode.Paused) and (not event.stopped)):
+      if ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming):
         self._mode = StateProgramMode.Normal
         state_location = state_instance.apply(self._block.state, resume=False)
 

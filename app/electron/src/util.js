@@ -54,7 +54,7 @@ async function findPythonInstallations() {
     '/usr/local/bin/python3'
   ];
 
-  let condaList = await runCommand('conda env list --json', { ignoreError: true });
+  let condaList = await runCommand('conda env list --json', { ignoreErrors: true });
 
   if (condaList) {
     possiblePythonLocations.push(...JSON.parse(condaList[0]).envs.map((env) => path.join(env, 'bin/python')));
@@ -71,28 +71,14 @@ async function findPythonInstallations() {
       continue;
     }
 
-    let [stdout, stderr] = await runCommand(`"${possibleLocation}" --version`);
-    let version = parsePythonVersion(stdout || stderr);
+    let info = await getPythonInstallationInfo(possibleLocation);
 
-    if (!version) {
+    if (!info) {
       continue;
     }
 
-    let architectures = null;
-
-    if (process.platform === 'darwin') {
-      let [stdout, _stderr] = await runCommand(`file "${possibleLocation}"`);
-      let matches = Array.from(stdout.matchAll(/executable ([a-z0-9_]+)$/gm));
-
-      architectures = matches.map((match) => match[1]);
-    }
-
-    let info = {
-      architectures,
-      version
-    };
-
     let installation = {
+      id: possibleLocation,
       info,
       leaf: true,
       path: possibleLocation,
@@ -100,7 +86,7 @@ async function findPythonInstallations() {
     };
 
     let lastInstallation = installation;
-    installations[installation.path] = installation;
+    installations[installation.id] = installation;
 
     while (true) {
       let linkPath = null;
@@ -125,13 +111,14 @@ async function findPythonInstallations() {
       }
 
       let installation = {
+        id: installationPath,
         info,
         leaf: false,
         path: installationPath,
         symlink: false
       };
 
-      installations[installation.path] = installation;
+      installations[installation.id] = installation;
       lastInstallation = installation;
     }
   };
@@ -180,6 +167,37 @@ async function getLocalHostModels() {
   };
 }
 
+async function getPythonInstallationInfo(location) {
+  let result = await runCommand(`"${location}" --version`, { ignoreErrors: true });
+
+  if (!result) {
+    return null;
+  }
+
+  let [stdout, stderr] = result;
+  let version = parsePythonVersion(stdout || stderr);
+
+  if (!version) {
+    return null;
+  }
+
+  let architectures;
+
+  if (process.platform === 'darwin') {
+    let [stdout, _stderr] = await runCommand(`file "${location}"`);
+    let matches = Array.from(stdout.matchAll(/executable ([a-z0-9_]+)$/gm));
+
+    architectures = matches.map((match) => match[1]);
+  } else {
+    architectures = null;
+  }
+
+  return {
+    architectures,
+    version
+  };
+}
+
 function getResourcePath(relativePath) {
   return app.isPackaged
     ? path.join(process.resourcesPath, relativePath)
@@ -204,7 +222,7 @@ async function runCommand(command, options) {
   return await new Promise((resolve, reject) => {
     childProcess.exec(command, (err, stdout, stderr) => {
       if (err) {
-        if (options.ignoreError) {
+        if (options?.ignoreErrors) {
           resolve(null);
         } else {
           reject(err);
@@ -224,6 +242,7 @@ exports.fsExists = fsExists;
 exports.fsMkdir = fsMkdir;
 exports.getResourcePath = getResourcePath;
 exports.getLocalHostModels = getLocalHostModels;
+exports.getPythonInstallationInfo = getPythonInstallationInfo;
 exports.parsePythonVersion = parsePythonVersion;
 exports.runCommand = runCommand;
 exports.isDarwin = isDarwin;

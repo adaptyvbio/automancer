@@ -2,17 +2,19 @@ import * as React from 'react';
 
 import * as Form from '../../components/standard-form';
 import { HostBackendOptions, HostRemoteBackendOptions } from '../../host';
-import { HostCreatorStepData, HostCreatorStepProps, PythonInstallation } from '../host-creator';
+import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
+import { PythonInstallation, PythonInstallationId } from '../interfaces';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 5;
 
+  customPythonInstallation: PythonInstallation | null;
   dataDirPath: string | null;
   label: string;
   pythonInstallationSettings: {
     architecture: string | null;
-    path: string;
+    id: PythonInstallationId;
   } | null;
 }
 
@@ -29,28 +31,30 @@ export function Component(props: HostCreatorStepProps<Data>) {
     label: `${pythonInstallation.path} (${pythonInstallation.info.version.join('.')})`
   });
 
-  let pythonInstallation = props.data.pythonInstallationSettings
-    ? props.context.pythonInstallations[props.data.pythonInstallationSettings.path]
-    : null;
+  let pythonInstallation = props.data.customPythonInstallation ?? (
+    props.data.pythonInstallationSettings
+      ? props.context.pythonInstallations[props.data.pythonInstallationSettings.id]
+      : null
+  );
 
   return (
     <form className="startup-editor-contents" onSubmit={(event) => {
       event.preventDefault();
 
-      props.setData({
-        stepIndex: 1,
-        options: {
-          ...(props.data.options as HostRemoteBackendOptions),
-          auth: {
-            methodIndex: 0,
+      // props.setData({
+      //   stepIndex: 1,
+      //   options: {
+      //     ...(props.data.options as HostRemoteBackendOptions),
+      //     auth: {
+      //       methodIndex: 0,
 
-            type: 'password',
-            password: props.data.rawPassword
-          }
-        },
-        rawOptions: props.data.rawOptions,
-        rawPassword: props.data.rawPassword
-      })
+      //       type: 'password',
+      //       password: props.data.rawPassword
+      //     }
+      //   },
+      //   rawOptions: props.data.rawOptions,
+      //   rawPassword: props.data.rawPassword
+      // });
     }}>
       <div className="startup-editor-inner">
         <header className="startup-editor-header">
@@ -65,13 +69,35 @@ export function Component(props: HostCreatorStepProps<Data>) {
             targetRef={firstInputRef} />
           <Form.Select
             label="Python location"
-            onInput={(pythonInstallationPath) => void props.setData({
-              ...props.data,
-              pythonInstallationSettings: {
-                architecture: props.context.pythonInstallations[pythonInstallationPath].info.architectures?.[0] ?? null,
-                path: pythonInstallationPath
+            onInput={(optionId) => {
+              if (optionId === '_custom') {
+                (async () => {
+                  let customPythonInstallation = await window.api.hostSettings.selectPythonInstallation();
+
+                  if (customPythonInstallation) {
+                    props.setData({
+                      ...props.data,
+                      customPythonInstallation: !(customPythonInstallation.id in props.context.pythonInstallations)
+                        ? customPythonInstallation
+                        : null,
+                      pythonInstallationSettings: {
+                        architecture: customPythonInstallation.info.architectures[0] ?? null,
+                        id: customPythonInstallation.id
+                      }
+                    });
+                  }
+                })();
+              } else {
+                props.setData({
+                  ...props.data,
+                  customPythonInstallation: null,
+                  pythonInstallationSettings: {
+                    architecture: props.context.pythonInstallations[optionId!].info.architectures?.[0] ?? null,
+                    id: optionId!
+                  }
+                });
               }
-            })}
+            }}
             options={[
               { id: '_header.main', label: 'Main locations', disabled: true },
               ...Object.values(props.context.pythonInstallations)
@@ -81,10 +107,13 @@ export function Component(props: HostCreatorStepProps<Data>) {
               ...Object.values(props.context.pythonInstallations)
                 .filter((pythonInstallation) => !pythonInstallation.leaf)
                 .map(createSelectOptionFromPythonInstallation),
-              { id: '_header.custom', label: 'Custom locations' },
+              { id: '_header.custom', label: 'Custom locations', disabled: true },
+              ...(props.data.customPythonInstallation
+                ? [createSelectOptionFromPythonInstallation(props.data.customPythonInstallation)]
+                : []),
               { id: '_custom', label: 'Custom location' }
             ]}
-            value={props.data.pythonInstallationSettings?.path ?? null} />
+            value={props.data.pythonInstallationSettings?.id ?? null} />
           <Form.Select
             label="Architecture"
             onInput={() => {}}

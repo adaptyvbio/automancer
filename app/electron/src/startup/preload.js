@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
     getCreatorContext: async () => await ipcRenderer.invoke('hostSettings.getCreatorContext'),
     revealLogsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealLogsDirectory', options),
     revealSettingsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealSettingsDirectory', options),
+    selectPythonInstallation: async () => await ipcRenderer.invoke('hostSettings.selectPythonInstallation'),
     setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options)
   }
 });

@@ -90,12 +90,12 @@ export function Form(props: React.PropsWithChildren<{
       <form onSubmit={props.onSubmit && ((event) => {
         event.preventDefault();
         props.onSubmit!();
-      })} className="sform-form">
+      })}>
         {props.children}
       </form>
     )
     : (
-      <div className="sform-form">
+      <div>
         {props.children}
       </div>
     );

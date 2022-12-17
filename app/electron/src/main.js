@@ -207,6 +207,8 @@ class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.getCreatorContext', async (_event) => {
+      // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: Infinity }));
+
       return {
         computerName: os.hostname(),
         pythonInstallations: this.pythonInstallations
@@ -245,6 +247,42 @@ class CoreApplication {
     ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
       let hostSettings = this.data.hostSettings[hostSettingsId];
       shell.showItemInFolder(hostSettings.backendOptions.dataDirPath);
+    });
+
+    ipcMain.handle('hostSettings.selectPythonInstallation', async (event) => {
+      let result = await dialog.showOpenDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        { buttonLabel: 'Select',
+          filters: [
+            ...(process.platform === 'win32'
+              ? [{ name: 'Executables', extensions: ['*.exe'] }]
+              : []),
+            { name: 'All Files', extensions: ['*'] }
+          ],
+          properties: ['dontAddToRecent', 'noResolveAliases', 'openFile'] }
+      );
+
+      if (result.canceled) {
+        return null;
+      }
+
+      let installationPath = result.filePaths[0];
+      let info = await util.getPythonInstallationInfo(installationPath);
+
+      if (!info) {
+        dialog.showErrorBox('Invalid file', 'This file does not correspond to a valid Python installation.');
+        return null;
+      }
+
+      console.log('>>>>', installationPath)
+
+      return {
+        id: installationPath,
+        info,
+        path: installationPath,
+        leaf: false,
+        symlink: false
+      };
     });
 
     ipcMain.handle('hostSettings.setDefault', async (_event, { hostSettingsId }) => {
@@ -361,7 +399,7 @@ class CoreApplication {
       let result = await dialog.showOpenDialog(
         BrowserWindow.fromWebContents(event.sender),
         { filters: ProtocolFileFilters,
-        properties: ['openFile'] }
+          properties: ['openFile'] }
       );
 
       if (result.canceled) {

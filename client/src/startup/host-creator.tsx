@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import type { HostSettings } from '../host';
 import { Pool } from '../util';
+import { PythonInstallation, PythonInstallationRecord as PythonInstallationsRecord } from './interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
@@ -11,27 +12,16 @@ import * as S4 from './steps/s4';
 import * as S5 from './steps/s5';
 
 
+export interface HostCreatorContext {
+  computerName: string;
+  pythonInstallations: PythonInstallationsRecord;
+}
+
 export interface HostCreatorProps {
   onCancel(): void;
   onDone(result: {
     settings: HostSettings;
   }): void;
-}
-
-export interface PythonInstallation {
-  info: {
-    architectures: string[] | null;
-    version: [number, number, number];
-  };
-
-  leaf: boolean;
-  path: string;
-  symlink: boolean;
-}
-
-export interface HostCreatorContext {
-  computerName: string;
-  pythonInstallations: Record<PythonInstallation['path'], PythonInstallation>;
 }
 
 export type HostCreatorData =

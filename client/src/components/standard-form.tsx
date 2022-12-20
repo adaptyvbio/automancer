@@ -30,13 +30,17 @@ export function Action(props: {
 }
 
 
-export function Checkbox(props: {
+export function Checkbox(props: React.PropsWithChildren<{
+  checked?: unknown;
+  disabled?: unknown;
   label: string;
-}) {
+  onInput?(value: boolean): void;
+}>) {
   return (
-    <label className="sform-checkbox">
-      <input type="checkbox" />
+    <label className={formStyles.fieldCheckbox}>
+      <input type="checkbox" checked={!!props.checked} disabled={!!props.disabled} onInput={() => props.onInput?.(!props.checked)} />
       <div>{props.label}</div>
+      {props.children}
     </label>
   );
 }
@@ -45,9 +49,9 @@ export function CheckboxList(props: React.PropsWithChildren<{
   label: string;
 }>) {
   return (
-    <div className="sform-group">
-      <div className="sform-label">{props.label}</div>
-      <div className="sform-checkboxlist">
+    <div className={formStyles.fieldControl}>
+      <div className={formStyles.fieldLabel}>{props.label}</div>
+      <div className={formStyles.fieldCheckboxlist}>
         {props.children}
       </div>
     </div>

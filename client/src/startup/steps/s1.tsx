@@ -30,7 +30,8 @@ export function Component(props: HostCreatorStepProps<Data>) {
         if (result.ok) {
           props.setData({
             stepIndex: 2,
-            identifier: result.identifier,
+
+            id: result.identifier,
             label: result.label,
             options: props.data.options
           });

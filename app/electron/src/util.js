@@ -168,20 +168,22 @@ async function getLocalHostModels() {
 }
 
 async function getPythonInstallationInfo(location) {
-  let result = await runCommand(`"${location}" --version`, { ignoreErrors: true });
+  let architectures, isVirtualEnv, supportsVirtualEnv, version;
 
-  if (!result) {
-    return null;
+  {
+    let result = await runCommand(`"${location}" --version`, { ignoreErrors: true });
+
+    if (!result) {
+      return null;
+    }
+
+    let [stdout, stderr] = result;
+    version = parsePythonVersion(stdout || stderr);
+
+    if (!version) {
+      return null;
+    }
   }
-
-  let [stdout, stderr] = result;
-  let version = parsePythonVersion(stdout || stderr);
-
-  if (!version) {
-    return null;
-  }
-
-  let architectures;
 
   if (process.platform === 'darwin') {
     let [stdout, _stderr] = await runCommand(`file "${location}"`);
@@ -192,8 +194,17 @@ async function getPythonInstallationInfo(location) {
     architectures = null;
   }
 
+  {
+    let [stdout, _stderr] = await runCommand(`"${location}" -c "import sys; print('Yes' if sys.base_prefix != sys.prefix else 'No')"`)
+    isVirtualEnv = (stdout == "Yes\n")
+  }
+
+  supportsVirtualEnv = (await runCommand(`"${location}" -m venv -h`, { ignoreErrors: true })) !== null;
+
   return {
     architectures,
+    isVirtualEnv,
+    supportsVirtualEnv,
     version
   };
 }
@@ -220,7 +231,7 @@ function parsePythonVersion(input) {
 
 async function runCommand(command, options) {
   return await new Promise((resolve, reject) => {
-    childProcess.exec(command, (err, stdout, stderr) => {
+    childProcess.exec(command, { timeout: 1000 }, (err, stdout, stderr) => {
       if (err) {
         if (options?.ignoreErrors) {
           resolve(null);

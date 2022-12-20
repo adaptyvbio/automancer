@@ -82,20 +82,21 @@ $field-hgap: 0.8rem;
   }
 
 
-  &-checkboxlist {
+  &Checkboxlist {
     display: flex;
     flex-direction: column;
-    row-gap: 0.2rem;
+    row-gap: 0.4rem;
   }
 
-  &-checkbox {
+  &Checkbox {
     display: grid;
     align-items: center;
     grid-template-columns: auto 1fr;
-    column-gap: 0.4rem;
+    column-gap: 0.8rem;
 
     input {
       width: auto;
+      accent-color: $app-blue;
       appearance: auto;
 
       &:focus-visible {
@@ -104,9 +105,14 @@ $field-hgap: 0.8rem;
       }
     }
 
-    div {
+    > :nth-child(2) {
       color: $main-color;
       font-weight: 500;
+    }
+
+    > :nth-child(n+3) {
+      grid-column: 2;
+      color: #666;
     }
   }
 

@@ -41,13 +41,13 @@ export function Component(props: HostCreatorStepProps<Data>) {
     }}>
       <div className="startup-editor-inner">
         <h2>New setup</h2>
-        <Form.Form>
+        <div>
           <Form.TextField
             label="Password"
             onInput={(password) => void props.setData({ ...props.data, rawPassword: password })}
             value={props.data.rawPassword}
             targetRef={firstInputRef} />
-        </Form.Form>
+        </div>
       </div>
       <div className="startup-editor-action-root">
         <div className="startup-editor-action-list">

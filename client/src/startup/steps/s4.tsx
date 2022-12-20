@@ -19,12 +19,23 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
       switch (props.data.mode) {
         case 'development': {
+          let pythonInstallations = Object.values(props.context.pythonInstallations);
+          let pythonInstallationId = (
+            pythonInstallations.find((pythonInstallation) => pythonInstallation.leaf) ?? pythonInstallations[0]
+          )?.id;
+
           props.setData({
             stepIndex: 5,
 
-            dataDirPath: null,
+            customPythonInstallation: null,
             label: props.context.computerName,
-            pythonInstallationPath: null
+            pythonInstallationSettings: pythonInstallationId
+              ? {
+                architecture: '_auto',
+                id: pythonInstallationId,
+                virtualEnv: false
+              }
+              : null
           });
 
           break;

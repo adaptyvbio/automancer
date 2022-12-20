@@ -8,9 +8,8 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 export interface Data extends HostCreatorStepData {
   stepIndex: 2;
 
-  identifier: string;
+  id: string;
   label: string;
-  options: HostBackendOptions;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -23,23 +22,25 @@ export function Component(props: HostCreatorStepProps<Data>) {
         </header>
         <div className="startup-editor-status">
           <LargeIcon name="success" />
-          <p>Succesfully connected to "{props.data.label}"</p>
+          <p>Succesfully added "{props.data.label}"</p>
         </div>
       </div>
       <div className="startup-editor-action-root">
         <div className="startup-editor-action-list" />
         <div className="startup-editor-action-list">
           <button type="button" className="startup-editor-action-item" onClick={() => {
-            props.done({
-              settings: {
-                id: crypto.randomUUID(),
-                builtin: false,
-                locked: false,
-                label: props.data.label,
+            props.launch(props.data.id);
 
-                backendOptions: props.data.options
-              }
-            });
+            // props.done({
+            //   settings: {
+            //     id: crypto.randomUUID(),
+            //     builtin: false,
+            //     locked: false,
+            //     label: props.data.label,
+
+            //     backendOptions: props.data.options
+            //   }
+            // });
           }}>Finish</button>
         </div>
       </div>

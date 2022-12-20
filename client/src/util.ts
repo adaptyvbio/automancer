@@ -324,3 +324,9 @@ export class Pool {
     return promise;
   }
 }
+
+export function usePool() {
+  let ref = React.useRef<Pool>();
+  ref.current ??= new Pool();
+  return ref.current;
+}

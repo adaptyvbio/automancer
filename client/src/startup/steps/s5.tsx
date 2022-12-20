@@ -3,24 +3,24 @@ import * as React from 'react';
 import * as Form from '../../components/standard-form';
 import { HostBackendOptions, HostRemoteBackendOptions } from '../../host';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { PythonInstallation, PythonInstallationId } from '../interfaces';
+import { DevelopmentSetupOptions, PythonInstallation, PythonInstallationId } from '../interfaces';
+import * as util from '../../util';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 5;
 
   customPythonInstallation: PythonInstallation | null;
-  dataDirPath: string | null;
   label: string;
   pythonInstallationSettings: {
-    architecture: string | null;
+    architecture: string;
     id: PythonInstallationId;
+    virtualEnv: boolean;
   } | null;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
   let firstInputRef = React.createRef<HTMLInputElement>();
-  window.api.hostSettings.getCreatorContext();
 
   React.useEffect(() => {
     firstInputRef.current!.select();
@@ -28,7 +28,10 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
   let createSelectOptionFromPythonInstallation = (pythonInstallation: PythonInstallation) => ({
     id: pythonInstallation.path,
-    label: `${pythonInstallation.path} (${pythonInstallation.info.version.join('.')})`
+    label: `${pythonInstallation.path} (${[
+      pythonInstallation.info.version.join('.'),
+      ...(pythonInstallation.info.isVirtualEnv ? ['virtual environment'] : [])
+    ].join(', ')})`
   });
 
   let pythonInstallation = props.data.customPythonInstallation ?? (
@@ -41,27 +44,31 @@ export function Component(props: HostCreatorStepProps<Data>) {
     <form className="startup-editor-contents" onSubmit={(event) => {
       event.preventDefault();
 
-      // props.setData({
-      //   stepIndex: 1,
-      //   options: {
-      //     ...(props.data.options as HostRemoteBackendOptions),
-      //     auth: {
-      //       methodIndex: 0,
+      let installationSettings = props.data.pythonInstallationSettings!;
 
-      //       type: 'password',
-      //       password: props.data.rawPassword
-      //     }
-      //   },
-      //   rawOptions: props.data.rawOptions,
-      //   rawPassword: props.data.rawPassword
-      // });
+      let options = {
+        customPythonInstallation: props.data.customPythonInstallation,
+        label: props.data.label.trim(),
+        pythonInstallationSettings: {
+          architecture: installationSettings.architecture !== '_auto'
+            ? installationSettings.architecture
+            : null,
+          id: installationSettings.id,
+          virtualEnv: installationSettings.virtualEnv
+        }
+      } satisfies DevelopmentSetupOptions;
+
+      props.setData({
+        stepIndex: 6,
+        options
+      });
     }}>
       <div className="startup-editor-inner">
         <header className="startup-editor-header">
           <div className="startup-editor-subtitle">New setup</div>
           <h2>Set parameters</h2>
         </header>
-        <Form.Form>
+        <div>
           <Form.TextField
             label="Setup name"
             onInput={(label) => void props.setData({ ...props.data, label })}
@@ -81,8 +88,9 @@ export function Component(props: HostCreatorStepProps<Data>) {
                         ? customPythonInstallation
                         : null,
                       pythonInstallationSettings: {
-                        architecture: customPythonInstallation.info.architectures[0] ?? null,
-                        id: customPythonInstallation.id
+                        architecture: '_auto',
+                        id: customPythonInstallation.id,
+                        virtualEnv: false
                       }
                     });
                   }
@@ -92,8 +100,9 @@ export function Component(props: HostCreatorStepProps<Data>) {
                   ...props.data,
                   customPythonInstallation: null,
                   pythonInstallationSettings: {
-                    architecture: props.context.pythonInstallations[optionId!].info.architectures?.[0] ?? null,
-                    id: optionId!
+                    architecture: '_auto',
+                    id: optionId!,
+                    virtualEnv: false
                   }
                 });
               }
@@ -116,19 +125,50 @@ export function Component(props: HostCreatorStepProps<Data>) {
             value={props.data.pythonInstallationSettings?.id ?? null} />
           <Form.Select
             label="Architecture"
-            onInput={() => {}}
-            options={pythonInstallation?.info.architectures?.map((architecture) => ({
-              id: architecture,
-              label: architecture
-            })) ?? [{ id: '_', label: 'Automatic' }]}
+            onInput={(architecture) => void props.setData({
+              ...props.data,
+              pythonInstallationSettings: {
+                ...props.data.pythonInstallationSettings!,
+                architecture
+              }
+            })}
+            options={[
+              { id: '_auto', label: 'Automatic' },
+              ...(pythonInstallation?.info.architectures?.map((architecture) => ({
+                id: architecture,
+                label: architecture
+              })) ?? [])
+            ]}
             disabled={!pythonInstallation}
-            value={null} />
-          <Form.Select
+            value={props.data.pythonInstallationSettings?.architecture ?? '_'} />
+          <Form.CheckboxList label="Virtual environment">
+            {/* <pre>{JSON.stringify(pythonInstallation?.info, null, 2)}</pre>
+            <pre>{JSON.stringify(props.data, null, 2)}</pre> */}
+            <Form.Checkbox
+              checked={pythonInstallation?.info.supportsVirtualEnv && (props.data.pythonInstallationSettings?.virtualEnv || pythonInstallation.info.isVirtualEnv)}
+              disabled={!pythonInstallation || pythonInstallation.info.isVirtualEnv || !pythonInstallation.info.supportsVirtualEnv}
+              label="Create a virtual environment"
+              onInput={(value) => void props.setData({
+                ...props.data,
+                pythonInstallationSettings: {
+                  ...props.data.pythonInstallationSettings!,
+                  virtualEnv: value
+                }
+              })}>
+              {!pythonInstallation?.info.supportsVirtualEnv && (
+                <p>Virtual environments are not supported in this Python installation. Install venv to add their support.</p>
+              )}
+              {pythonInstallation?.info.isVirtualEnv && (
+                <p>This installation is already a virtual environment.</p>
+              )}
+            </Form.Checkbox>
+          </Form.CheckboxList>
+          {/* <Form.Select
             label="Data location"
             onInput={() => {}}
             options={[]}
-            value={null} />
-        </Form.Form>
+            value={null} /> */}
+        </div>
       </div>
       <div className="startup-editor-action-root">
         <div className="startup-editor-action-list">
@@ -140,7 +180,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           }}>Back</button>
         </div>
         <div className="startup-editor-action-list">
-          <button type="submit" className="startup-editor-action-item">Next</button>
+          <button type="submit" className="startup-editor-action-item" disabled={!pythonInstallation || !props.data.label.trim()}>Next</button>
         </div>
       </div>
     </form>

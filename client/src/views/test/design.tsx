@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
+import * as Form from '../../components/standard-form';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
 import formStyles from '../../../styles/components/form.module.scss';
@@ -42,6 +43,22 @@ export class ViewDesign extends React.Component<any, any> {
               <div className={formStyles.fieldLabel}>Setup name</div>
               <input type="text" className={formStyles.fieldTextfield} />
             </label>
+
+            <Form.CheckboxList label="Virtual environment">
+              <Form.Checkbox label="Create a virtual environment">
+                <p>Virtual environments are not supported in this Python installation. Install venv to add their support.</p>
+              </Form.Checkbox>
+              <Form.Checkbox label="Create a virtual environment">
+                <p>Virtual environments are not supported in this Python installation. Install venv to add their support.</p>
+              </Form.Checkbox>
+              <Form.Checkbox label="Create a virtual environment">
+                <p>Virtual environments are not supported in this Python installation.</p>
+                <p>Install venv to add their support.</p>
+              </Form.Checkbox>
+              <Form.Checkbox label="Create a virtual environment" />
+              <Form.Checkbox label="Create a virtual environment" />
+              <Form.Checkbox label="Create a virtual environment" checked disabled={true} />
+            </Form.CheckboxList>
 
             <h2>Settings super super long super super long super super long</h2>
 

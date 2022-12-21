@@ -210,9 +210,11 @@ async function getPythonInstallationInfo(location) {
 }
 
 function getResourcePath(relativePath) {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, relativePath)
-    : path.join(__dirname, '../../tmp/resources', relativePath);
+  return path.join(__dirname, '../..', relativePath);
+
+  // return app.isPackaged
+  //   ? path.join(process.resourcesPath, 'app', relativePath)
+  //   : path.join(__dirname, '..', relativePath);
 }
 
 function parsePythonVersion(input) {
@@ -229,9 +231,13 @@ function parsePythonVersion(input) {
   return null;
 }
 
-async function runCommand(command, options) {
+async function runCommand(rawCommand, options) {
+  let command = (options?.architecture && isDarwin)
+    ? `arch -arch "${options.architecture}" ${rawCommand}`
+    : rawCommand;
+
   return await new Promise((resolve, reject) => {
-    childProcess.exec(command, { timeout: 1000 }, (err, stdout, stderr) => {
+    childProcess.exec(command, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
       if (err) {
         if (options?.ignoreErrors) {
           resolve(null);

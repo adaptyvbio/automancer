@@ -1,8 +1,8 @@
 import * as React from 'react';
 
+import type { LocalHostOptions, PythonInstallation, PythonInstallationRecord } from './interfaces';
 import type { HostSettings } from '../host';
 import { Pool } from '../util';
-import { PythonInstallation, PythonInstallationRecord as PythonInstallationsRecord } from './interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
@@ -15,14 +15,13 @@ import * as S6 from './steps/s6';
 
 export interface HostCreatorContext {
   computerName: string;
-  pythonInstallations: PythonInstallationsRecord;
+  pythonInstallations: PythonInstallationRecord;
 }
 
 export interface HostCreatorProps {
-  onCancel(): void;
-  onDone(result: {
-    settings: HostSettings;
-  }): void;
+  cancel(): void;
+  createLocalHost(options: LocalHostOptions): Promise<{ ok: boolean; id: string; }>;
+  launchHost(hostSettingsId: HostSettings['id']): void;
 }
 
 export type HostCreatorData =
@@ -78,9 +77,10 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
 
     return (
       <Step
-        cancel={this.props.onCancel}
+        cancel={this.props.cancel}
         context={this.state.context}
-        done={this.props.onDone}
+        createLocalHost={this.props.createLocalHost}
+        launchHost={this.props.launchHost}
         data={this.state.data}
         setData={(data) => {
           this.setState({
@@ -96,12 +96,7 @@ export interface HostCreatorStepData {
   stepIndex: number;
 }
 
-export interface HostCreatorStepProps<Data = HostCreatorData> {
-  cancel(): void;
-  done(result: {
-    settings: HostSettings;
-  }): void;
-
+export type HostCreatorStepProps<Data = HostCreatorData> = HostCreatorProps & {
   context: HostCreatorContext;
   data: Data;
   setData(data: HostCreatorData | Omit<Data, 'stepIndex'>): void;

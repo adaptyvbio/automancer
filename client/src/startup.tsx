@@ -3,7 +3,7 @@
 import '@fontsource/space-mono/latin-400.css';
 import * as React from 'react';
 
-import { HostCreator } from './startup/host-creator';
+import { HostCreator, HostCreatorProps } from './startup/host-creator';
 import type { HostId } from './backends/common';
 import * as util from './util';
 import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
@@ -18,6 +18,7 @@ interface StartupProps {
   hostSettings: HostSettingsRecord;
 
   createHostSettings(options: { settings: HostSettings; }): void;
+  createLocalHost: HostCreatorProps['createLocalHost'];
   deleteHostSettings(settingsId: string): void;
   launchHost(settingsId: string): void;
   setDefaultHostSettings(settingsId: string | null): void;
@@ -34,6 +35,7 @@ interface StartupState {
 
 export class Startup extends React.Component<StartupProps, StartupState> {
   controller = new AbortController();
+  pool = new util.Pool();
 
   constructor(props: StartupProps) {
     super(props);
@@ -95,12 +97,13 @@ export class Startup extends React.Component<StartupProps, StartupState> {
               <div className="startup-editor-dragregion" />
               {this.state.hostCreatorVisible && (
                 <HostCreator
-                  onCancel={() => {
+                  cancel={() => {
                     this.resetHostCreator();
                   }}
-                  onDone={({ settings }) => {
+                  createLocalHost={this.props.createLocalHost}
+                  launchHost={(hostSettingsId) => {
                     this.resetHostCreator();
-                    this.props.createHostSettings({ settings });
+                    window.api.hostSettings.launchHost(hostSettingsId);
                   }}
                   key={this.state.hostCreatorIndex} />
               )}
@@ -128,7 +131,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
               <div className="startup-right-entry-list">
                 {Object.values(this.props.hostSettings).map((hostSettings) => {
                   let isDefault = (this.props.defaultSettingsId === hostSettings.id);
-                  let isLocal = (hostSettings.backendOptions.type === 'internal');
+                  let isLocal = (hostSettings.options.type === 'local');
 
                   return (
                     <ContextMenuArea
@@ -144,7 +147,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                         ...(this.props.revealHostLogsDirectory || this.props.revealHostSettingsDirectory
                           ? [{ id: 'divider2', type: 'divider' }]
                           : []),
-                        { id: 'delete', name: 'Delete', icon: 'delete', disabled: hostSettings.builtin },
+                        { id: 'delete', name: 'Delete', icon: 'delete' },
                       ] as MenuDef}
                       onSelect={(path) => {
                         switch (path.first()!) {

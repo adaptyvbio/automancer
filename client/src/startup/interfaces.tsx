@@ -16,7 +16,7 @@ export interface PythonInstallation {
 export type PythonInstallationRecord = Record<PythonInstallationId, PythonInstallation>;
 
 
-export interface DevelopmentSetupOptions {
+export interface LocalHostOptions {
   customPythonInstallation: PythonInstallation | null;
   label: string;
   pythonInstallationSettings: {

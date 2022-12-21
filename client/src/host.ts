@@ -50,7 +50,7 @@ export interface HostSettings {
   label: string | null;
   locked: boolean;
 
-  backendOptions: HostBackendOptions;
+  options: HostBackendOptions;
 }
 
 export type HostSettingsRecord = Record<string, HostSettings>;
@@ -61,12 +61,9 @@ export interface HostSettingsData {
 }
 
 export function formatHostSettings(hostSettings: HostSettings): string | null {
-  switch (hostSettings.backendOptions.type) {
-    case 'internal': return {
-      'alpha': 'Embedded',
-      'beta': 'Local Python'
-    }[hostSettings.backendOptions.model] ?? null;
-    case 'remote': return `${hostSettings.backendOptions.address}:${hostSettings.backendOptions.port}`;
+  switch (hostSettings.options.type) {
+    case 'local': return 'Local';
+    case 'remote': return `${hostSettings.options.address}:${hostSettings.options.port}`;
     default: return null;
   }
 }

@@ -3,15 +3,12 @@ import '../shared/preload';
 
 
 contextBridge.exposeInMainWorld('api', {
-  launchHost: (settingsId) => {
-    ipcRenderer.send('launch-host', settingsId);
-  },
-  ready: () => {
-    ipcRenderer.send('ready');
-  },
+  launchHost: (options) => void ipcRenderer.send('launchHost', options),
+  ready: () => void ipcRenderer.send('ready'),
 
   hostSettings: {
     create: async (options) => await ipcRenderer.invoke('hostSettings.create', options),
+    createLocalHost: async (options) => await ipcRenderer.invoke('hostSettings.createLocalHost', options),
     delete: async (options) => await ipcRenderer.invoke('hostSettings.delete', options),
     query: async () => await ipcRenderer.invoke('hostSettings.query'),
     getCreatorContext: async () => await ipcRenderer.invoke('hostSettings.getCreatorContext'),

@@ -65,7 +65,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async initializeHost() {
-    let backendOptions = this.props.hostSettings.backendOptions;
+    let backendOptions = this.props.hostSettings.options;
     let backend = (await this.appBackend.createBackend?.(backendOptions))
       ?? (await createBackend(backendOptions));
 

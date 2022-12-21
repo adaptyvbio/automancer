@@ -26,22 +26,15 @@ export function Component(props: HostCreatorStepProps<Data>) {
         </div>
       </div>
       <div className="startup-editor-action-root">
-        <div className="startup-editor-action-list" />
         <div className="startup-editor-action-list">
           <button type="button" className="startup-editor-action-item" onClick={() => {
-            props.launch(props.data.id);
-
-            // props.done({
-            //   settings: {
-            //     id: crypto.randomUUID(),
-            //     builtin: false,
-            //     locked: false,
-            //     label: props.data.label,
-
-            //     backendOptions: props.data.options
-            //   }
-            // });
-          }}>Finish</button>
+            props.cancel();
+          }}>Close</button>
+        </div>
+        <div className="startup-editor-action-list">
+          <button type="button" className="startup-editor-action-item" onClick={() => {
+            props.launchHost(props.data.id);
+          }}>Launch</button>
         </div>
       </div>
     </div>

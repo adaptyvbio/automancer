@@ -3,7 +3,7 @@ import * as React from 'react';
 import * as Form from '../../components/standard-form';
 import { HostBackendOptions, HostRemoteBackendOptions } from '../../host';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { DevelopmentSetupOptions, PythonInstallation, PythonInstallationId } from '../interfaces';
+import { LocalHostOptions, PythonInstallation, PythonInstallationId } from '../interfaces';
 import * as util from '../../util';
 
 
@@ -56,7 +56,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           id: installationSettings.id,
           virtualEnv: installationSettings.virtualEnv
         }
-      } satisfies DevelopmentSetupOptions;
+      } satisfies LocalHostOptions;
 
       props.setData({
         stepIndex: 6,

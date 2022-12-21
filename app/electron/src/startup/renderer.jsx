@@ -48,14 +48,19 @@ class App extends React.Component {
               await this.query();
             });
           }}
+          createLocalHost={async (options) => {
+            let result = await window.api.hostSettings.createLocalHost(options);
+            await this.query();
+            return result;
+          }}
           deleteHostSettings={(hostSettingsId) => {
             this.pool.add(async () => {
               await window.api.hostSettings.delete({ hostSettingsId });
               await this.query();
             });
           }}
-          launchHost={(settingsId) => {
-            window.api.launchHost(settingsId);
+          launchHost={(hostSettingsId) => {
+            window.api.launchHost({ hostSettingsId });
           }}
           revealHostLogsDirectory={(hostSettingsId) => {
             window.api.hostSettings.revealLogsDirectory({ hostSettingsId });

@@ -15,7 +15,7 @@ const ProtocolFileFilters = [
 ];
 
 
-class CoreApplication {
+export class CoreApplication {
   static version = 1;
 
   pool = new util.Pool();
@@ -192,18 +192,84 @@ class CoreApplication {
 
     // Host settings management
 
-    ipcMain.handle('hostSettings.create', async (_event, { hostSettings }) => {
+    ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
+      let hostSettingsId = crypto.randomUUID();
+
       await this.setData({
         hostSettings: {
           ...this.data.hostSettings,
-          [hostSettings.id]: hostSettings
+          [hostSettingsId]: {
+            id: hostSettingsId,
+            label: options.label,
+            options: {
+              type: 'remote',
+              auth: options.auth,
+              address: options.address,
+              port: options.port
+            }
+          }
         }
       });
+
+      return {
+        ok: true,
+        id: hostSettingsId
+      };
+    });
+
+    ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
+      let pythonInstallation = options.customPythonInstallation ?? this.pythonInstallations[options.pythonInstallationSettings.id];
+
+      let hostSettingsId = crypto.randomUUID();
+      let hostDirPath = path.join(this.hostsDirPath, hostSettingsId);
+      let envPath = path.join(hostDirPath, 'env');
+
+      let architecture = options.pythonInstallationSettings.architecture;
+      let pythonPath = pythonInstallation.path;
+
+      await fs.mkdir(hostDirPath, { recursive: true });
+
+      if (options.pythonInstallationSettings.virtualEnv) {
+        await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
+        pythonPath = path.join(envPath, 'bin/python');
+
+        let corePackagesDirPath = util.getResourcePath('packages');
+        for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
+          await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
+        }
+      }
+
+      await this.setData({
+        hostSettings: {
+          ...this.data.hostSettings,
+          [hostSettingsId]: {
+            id: hostSettingsId,
+            label: options.label,
+            options: {
+              type: 'local',
+              architecture: options.pythonInstallationSettings.architecture,
+              corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
+              dirPath: hostDirPath,
+              id: crypto.randomUUID(),
+              pythonPath
+            }
+          }
+        }
+      });
+
+      return {
+        ok: true,
+        id: hostSettingsId
+      };
     });
 
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
-      let { [hostSettingsId]: _, ...hostSettings } = this.data.hostSettings;
+      let { [hostSettingsId]: deletedHostSettings, ...hostSettings } = this.data.hostSettings;
       await this.setData({ hostSettings });
+
+      if (deletedHostSettings.options.type === 'local') {
+        await shell.trashItem(deletedHostSettings.options.dirPath);
+      }
     });
 
     ipcMain.handle('hostSettings.getCreatorContext', async (_event) => {
@@ -218,22 +284,7 @@ class CoreApplication {
     ipcMain.handle('hostSettings.query', async (_event) => {
       return {
         defaultHostSettingsId: this.data.defaultHostSettingsId,
-        hostSettings: Object.fromEntries(
-          Object.entries(this.data.hostSettings).map(([hostSettingsId, hostSettings]) => {
-            let backendOptions = (() => {
-              switch (hostSettings.backendOptions.type) {
-                case 'alpha':
-                  return { type: 'internal', id: hostSettings.id, model: 'alpha' };
-                case 'beta':
-                  return { type: 'internal', id: hostSettings.id, model: 'beta' };
-                default:
-                  return hostSettings.backendOptions;
-              }
-            })();
-
-            return [hostSettingsId, { ...hostSettings, backendOptions }];
-          })
-        )
+        hostSettings: this.data.hostSettings
       };
     });
 
@@ -246,7 +297,7 @@ class CoreApplication {
 
     ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
       let hostSettings = this.data.hostSettings[hostSettingsId];
-      shell.showItemInFolder(hostSettings.backendOptions.dataDirPath);
+      shell.showItemInFolder(hostSettings.options.dirPath);
     });
 
     ipcMain.handle('hostSettings.selectPythonInstallation', async (event) => {
@@ -273,8 +324,6 @@ class CoreApplication {
         dialog.showErrorBox('Invalid file', 'This file does not correspond to a valid Python installation.');
         return null;
       }
-
-      console.log('>>>>', installationPath)
 
       return {
         id: installationPath,
@@ -563,56 +612,14 @@ class CoreApplication {
         throw new Error('App version mismatch');
       }
     } else {
-      let data = {
+      await this.setData({
+        embeddedPythonInstallation: null,
         defaultHostSettingsId: null,
         drafts: {},
         hostSettings: {},
         preferences: {},
         version: CoreApplication.version
-      };
-
-      let alphaModel = this.localHostModels.alpha;
-      let betaModel = this.localHostModels.beta;
-
-      if (alphaModel) {
-        let hostSettingsId = crypto.randomUUID();
-        let hostDataDirPath = path.join(this.hostsDirPath, hostSettingsId);
-
-        data.hostSettings[hostSettingsId] = {
-          id: hostSettingsId,
-          builtin: true,
-          label: 'Main setup',
-          backendOptions: {
-            type: 'alpha',
-            dataDirPath: hostDataDirPath
-          }
-        };
-      }
-
-      if (betaModel) {
-        let pythonInstallation = this.pythonInstallations.find((installation) =>
-          (installation.version[0] === betaModel.version[0])
-          && (installation.version[1] >= betaModel.version[1])
-        );
-
-        if (pythonInstallation) {
-          let hostSettingsId = crypto.randomUUID();
-          let hostDataDirPath = path.join(this.hostsDirPath, hostSettingsId);
-
-          data.hostSettings[hostSettingsId] = {
-            id: hostSettingsId,
-            builtin: true,
-            label: 'Development setup',
-            backendOptions: {
-              type: 'beta',
-              dataDirPath: hostDataDirPath,
-              pythonLocation: pythonInstallation.location
-            }
-          };
-        }
-      }
-
-      await this.setData(data);
+      });
     }
   }
 

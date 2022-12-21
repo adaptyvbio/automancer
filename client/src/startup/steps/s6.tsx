@@ -3,13 +3,13 @@ import * as React from 'react';
 import { LargeIcon } from '../../components/large-icon';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 import * as util from '../../util';
-import { DevelopmentSetupOptions } from '../interfaces';
+import { LocalHostOptions } from '../interfaces';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 6;
 
-  options: DevelopmentSetupOptions;
+  options: LocalHostOptions;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -18,7 +18,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
   React.useEffect(() => {
     pool.add(async () => {
-      let result = await window.api.hostSettings.createDevelopmentSetup(props.data.options);
+      let result = await props.createLocalHost(props.data.options);
 
       if (result.ok) {
         props.setData({

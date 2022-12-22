@@ -1,14 +1,14 @@
-import { Set as ImSet, List } from 'immutable';
+import { List, Set as ImSet } from 'immutable';
 import * as React from 'react';
 
-import type { Host, HostSettingsRecord } from '../host';
 import type { Route } from '../application';
-import { ChipCondition, Chip, HostId } from '../backends/common';
 import type { Draft, DraftId } from '../draft';
+import type { Host } from '../host';
+import { HostInfo } from '../interfaces/host';
 import * as util from '../util';
+import { ContextMenuArea } from './context-menu-area';
 
 import styles from '../../styles/components/sidebar.module.scss';
-import { ContextMenuArea } from './context-menu-area';
 
 
 const CollapsedStorageKey = 'sidebarCollapsed';
@@ -20,7 +20,7 @@ export interface SidebarProps {
   setStartup?(): void;
 
   host: Host | null;
-  title: string;
+  hostInfo: HostInfo;
 
   drafts: Record<DraftId, Draft>;
   openDraftIds: ImSet<DraftId>;
@@ -157,10 +157,9 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               </select>
             )} */}
             <div className={styles.headerValueRoot}>
-              <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
-              <div className={styles.headerValueTitle}>Setup Alpha 1</div>
-              {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
-              <div className={styles.headerValueSubtitle}>localhost:4567</div>
+              <img src={this.props.hostInfo.imageUrl!} className={styles.headerValueIcon} />
+              <div className={styles.headerValueTitle}>{this.props.hostInfo.title}</div>
+              <div className={styles.headerValueSubtitle}>{this.props.hostInfo.subtitle}</div>
               <div className={styles.headerValueExpand}>
                 <span className="material-symbols-sharp">unfold_more</span>
               </div>

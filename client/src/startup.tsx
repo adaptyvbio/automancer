@@ -6,16 +6,17 @@ import * as React from 'react';
 import { HostCreator, HostCreatorProps } from './startup/host-creator';
 import type { HostId } from './backends/common';
 import * as util from './util';
-import { type HostSettings, type HostSettingsRecord, formatHostSettings } from './host';
+import { formatHostSettings } from './host';
 import { ContextMenuArea } from './components/context-menu-area';
 import { MenuDef } from './components/context-menu';
+import { HostSettings, HostSettingsCollection } from './interfaces/host';
 
 import logoUrl from '../static/logo.jpeg';
 
 
 interface StartupProps {
   defaultSettingsId: string | null;
-  hostSettings: HostSettingsRecord;
+  hostSettings: HostSettingsCollection;
 
   createHostSettings(options: { settings: HostSettings; }): void;
   createLocalHost: HostCreatorProps['createLocalHost'];

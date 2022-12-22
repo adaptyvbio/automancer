@@ -4,8 +4,8 @@ import { HostState } from './common';
 import { InboundMessage, MessageBackend } from './message';
 import type { Deferred } from '../util';
 import * as util from '../util';
-import { HostRemoteBackendOptions } from '../host';
 import { Unit, UnitInfo } from '../units';
+import { HostSettingsOptionsRemote } from '../interfaces/host';
 
 
 interface WebsocketBackendInfo {
@@ -16,14 +16,14 @@ interface WebsocketBackendInfo {
 }
 
 export default class WebsocketBackend extends MessageBackend {
-  #options: HostRemoteBackendOptions;
+  #options: HostSettingsOptionsRemote;
   #socket!: ModernWebsocket;
 
   closed!: Promise<void>;
   info!: WebsocketBackendInfo;
   state!: HostState;
 
-  constructor(options: HostRemoteBackendOptions) {
+  constructor(options: HostSettingsOptionsRemote) {
     super();
     this.#options = options;
   }
@@ -83,7 +83,7 @@ export default class WebsocketBackend extends MessageBackend {
   }
 
 
-  static async test(options: HostRemoteBackendOptions): Promise<(
+  static async test(options: HostSettingsOptionsRemote): Promise<(
     { ok: true;
       identifier: string;
       label: string; }

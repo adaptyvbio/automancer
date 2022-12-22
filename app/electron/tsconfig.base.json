@@ -4,11 +4,18 @@
     "checkJs": true,
     "declaration": true,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react",
     "module": "es2020",
     "moduleResolution": "node",
     "noEmit": true,
+    "paths": {
+      "pr1": ["../../client/src/index.tsx"]
+    },
     "skipLibCheck": true,
     "strict": true,
     "target": "es2020"
-  }
+  },
+  "references": [
+    { "path": "../../client" }
+  ]
 }

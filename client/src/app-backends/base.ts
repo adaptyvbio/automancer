@@ -1,6 +1,6 @@
-import type { HostBackendOptions, HostSettings, HostSettingsData, HostSettingsRecord } from '../host';
 import type { DraftId, DraftPrimitive } from '../draft';
 import { BaseBackend } from '../backends/base';
+import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
 
 
 export interface DraftItem {
@@ -33,10 +33,10 @@ export interface DraftItem {
 export interface AppBackend {
   initialize(): Promise<void>;
 
-  deleteHostSettings(settingsId: string): Promise<void>;
+  deleteHostSettings(hostSettingsId: HostSettingsId): Promise<void>;
   getHostSettingsData(): Promise<HostSettingsData>;
-  setDefaultHostSettings(settingsId: string | null): Promise<void>;
-  setHostSettings(settings: HostSettings): Promise<void>;
+  setDefaultHostSettings(hostSettingsId: HostSettingsId | null): Promise<void>;
+  setHostSettings(hostSettings: HostSettings): Promise<void>;
 
   createDraft(options: { directory: boolean; source: string; }): Promise<DraftItem | null>;
   deleteDraft(draftId: DraftId): Promise<void>;

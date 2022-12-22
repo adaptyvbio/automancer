@@ -4,7 +4,7 @@ import { DraftId, DraftPrimitive } from '../draft';
 import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
 import { HostId } from '../backends/common';
-import type { HostSettings } from '../host';
+import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
 
 
 interface MainEntry {
@@ -30,10 +30,7 @@ interface DraftEntry {
   };
 }
 
-interface HostSettingsEntry {
-  defaultHostSettingsId: HostId | null;
-  hosts: Record<HostId, HostSettings>;
-}
+type HostSettingsEntry = HostSettingsData;
 
 
 export class BrowserAppBackend implements AppBackend {
@@ -43,10 +40,7 @@ export class BrowserAppBackend implements AppBackend {
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
-  constructor() {
-  }
-
-  async deleteHostSettings(settingsId: string) {
+  async deleteHostSettings(hostSettingsId: HostSettingsId) {
     await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => {
       let { [settingsId]: _, ...hosts } = hostSettingsEntry!.hosts;
 
@@ -58,21 +52,37 @@ export class BrowserAppBackend implements AppBackend {
   }
 
   async getHostSettingsData() {
-    let hostSettingsEntry = await idb.get<HostSettingsEntry>('hosts', this.#store);
+    return {
+      defaultHostSettingsId: 'foo',
+      hosts: {
+        'foo': {
+          id: 'foo',
+          label: 'PC',
+          options: {
+            type: 'remote' as const,
+            auth: null,
+            address: 'localhost',
+            port: 4567
+          }
+        }
+      }
+    };
 
-    if (!hostSettingsEntry) {
-      hostSettingsEntry = {
-        defaultHostSettingsId: null,
-        hosts: {}
-      };
+    // let hostSettingsEntry = await idb.get<HostSettingsEntry>('hosts', this.#store);
 
-      await idb.set('hosts', hostSettingsEntry, this.#store);
-    }
+    // if (!hostSettingsEntry) {
+    //   hostSettingsEntry = {
+    //     defaultHostSettingsId: null,
+    //     hosts: {}
+    //   };
 
-    return hostSettingsEntry;
+    //   await idb.set('hosts', hostSettingsEntry, this.#store);
+    // }
+
+    // return hostSettingsEntry;
   }
 
-  async setDefaultHostSettings(settingsId: string | null) {
+  async setDefaultHostSettings(hostSettingsId: HostSettingsId | null) {
     await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => ({
       ...hostSettingsEntry!,
       defaultHostSettingsId: settingsId

@@ -156,7 +156,11 @@ class App extends React.Component {
         <Application
           appBackend={this.appBackend}
           backend={this.backend}
-          hostSettingsLabel={this.state.hostSettings.label}
+          hostInfo={{
+            imageUrl: null,
+            subtitle: 'Local',
+            title: this.state.hostSettings.label
+          }}
           onHostStarted={() => {
             window.api.ready();
           }} />

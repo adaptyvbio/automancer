@@ -3,6 +3,7 @@ import * as React from 'react';
 import type { AppBackend } from './app-backends/base';
 import { BrowserAppBackend } from './app-backends/browser';
 import { Application } from './application';
+import WebsocketBackend from './backends/websocket';
 import type { Host, HostSettingsData, HostSettingsRecord } from './host';
 import { Startup } from './startup';
 import { Pool } from './util';
@@ -31,6 +32,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
   componentDidMount() {
     this.pool.add(async () => {
       let hostSettingsData = await this.appBackend.getHostSettingsData();
+      console.log(hostSettingsData);
 
       this.setState({
         currentSettingsId: hostSettingsData.defaultHostSettingsId,
@@ -45,11 +47,17 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
     }
 
     if (this.state.currentSettingsId) {
+      let hostSettings = this.state.hostSettingsData.hosts[this.state.currentSettingsId];
+
       return (
         <Application
           appBackend={this.appBackend}
-          hostSettings={this.state.hostSettingsData.hosts[this.state.currentSettingsId]}
-          hostSettingsRecord={this.state.hostSettingsData.hosts}
+          backend={new WebsocketBackend(hostSettings.options)}
+          hostInfo={{
+            imageUrl: null,
+            subtitle: 'localhost:4567',
+            title: hostSettings.label
+          }}
           setStartup={() => void this.setState({ currentSettingsId: null })}
           key={this.state.currentSettingsId} />
       );

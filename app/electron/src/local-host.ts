@@ -6,8 +6,9 @@ import { EOL } from 'os';
 import path from 'path';
 import readline from 'readline';
 
+import type { HostSettings } from 'pr1';
+
 import type { HostWindow } from './host';
-import type { HostSettings } from './interfaces';
 import type { CoreApplication } from './main';
 import * as util from './util';
 

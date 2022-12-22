@@ -19,6 +19,7 @@ import { ViewSplit2 } from './views/test/split2';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 import { BaseBackend } from './backends/base';
+import { HostInfo } from './interfaces/host';
 
 import styles from '../styles/components/application.module.scss';
 
@@ -29,7 +30,7 @@ export type Route = (number | string)[];
 export interface ApplicationProps {
   appBackend: AppBackend;
   backend: BaseBackend;
-  hostSettingsLabel: string;
+  hostInfo: HostInfo;
 
   onHostStarted?(): void;
   setStartup?(): void;
@@ -518,7 +519,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           setStartup={this.props.setStartup}
 
           host={this.state.host}
-          title={this.props.hostSettingsLabel}
+          hostInfo={this.props.hostInfo}
 
           drafts={this.state.drafts}
           openDraftIds={this.state.openDraftIds} />

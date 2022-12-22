@@ -1,7 +1,8 @@
 import { BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
 
-import { HostSettings } from '../interfaces';
+import { HostSettings } from 'pr1';
+
 import { LocalHost } from '../local-host';
 import { CoreApplication } from '../main';
 import { defer, Pool } from '../util';

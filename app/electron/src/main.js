@@ -21,7 +21,7 @@ const ProtocolFileFilters = [
 export class CoreApplication {
   static version = 1;
 
-  logger = new uol.Logger({ levels: uol.StdLevels.Python });
+  logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
   pool = new util.Pool();
 
   constructor(coreApp) {

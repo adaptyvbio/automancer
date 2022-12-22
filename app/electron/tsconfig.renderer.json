@@ -1,17 +1,8 @@
 {
   "extends": "./tsconfig.base.json",
 
-  "compilerOptions": {
-    "jsx": "react",
-    "paths": {
-      "pr1": ["../../client/src/index.tsx"]
-    }
-  },
   "files": [
     "src/host/renderer.jsx",
     "src/startup/renderer.jsx"
-  ],
-  "references": [
-    { "path": "../../client" }
   ]
 }

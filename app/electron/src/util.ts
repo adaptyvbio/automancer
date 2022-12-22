@@ -1,43 +1,46 @@
-const childProcess = require('child_process');
-const fs = require('fs/promises');
-const { app } = require('electron');
-const path = require('path');
-const which = require('which');
+import childProcess from 'child_process';
+import fs from 'fs/promises';
+import path from 'path';
+import which from 'which';
+
+import { PythonInstallation } from './interfaces';
 
 
-const isDarwin = (process.platform === 'darwin');
+export const isDarwin = (process.platform === 'darwin');
 
 
-class Pool {
-  constructor() {
-    this._promises = new Set();
-  }
+export class Pool {
+  #promises = new Set<Promise<unknown>>();
 
-  add(generator) {
-    let promise = generator();
+  add(generator: (() => Promise<unknown>) | Promise<unknown>) {
+    let promise = typeof generator === 'function'
+      ? generator()
+      : generator;
 
     promise.finally(() => {
-      this._promises.delete(promise);
+      this.#promises.delete(promise);
     });
 
-    this._promises.add(promise);
+    this.#promises.add(promise);
   }
 
   get empty() {
-    return (this._promises.size < 1);
+    return (this.#promises.size < 1);
   }
 
   async wait() {
     while (!this.empty) {
-      await Promise.allSettled(this._promises);
+      await Promise.allSettled(this.#promises);
     }
   }
 }
 
 
-function defer() {
-  let resolve, reject;
-  let promise = new Promise((res, rej) => {
+export function defer<T>() {
+  let resolve!: (value: PromiseLike<T> | T) => void;
+  let reject!: (err?: any) => void;
+
+  let promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
   });
@@ -45,7 +48,7 @@ function defer() {
   return { promise, resolve, reject };
 }
 
-async function findPythonInstallations() {
+export async function findPythonInstallations() {
   let possiblePythonLocations = [
     'python3',
     'python',
@@ -57,14 +60,14 @@ async function findPythonInstallations() {
   let condaList = await runCommand('conda env list --json', { ignoreErrors: true });
 
   if (condaList) {
-    possiblePythonLocations.push(...JSON.parse(condaList[0]).envs.map((env) => path.join(env, 'bin/python')));
+    possiblePythonLocations.push(...JSON.parse(condaList[0]).envs.map((env: string) => path.join(env, 'bin/python')));
   }
 
   possiblePythonLocations = (await Promise.all(
     possiblePythonLocations.map(async (possibleLocation) => await which(possibleLocation).catch(() => null))
-  )).filter((possibleLocation) => possibleLocation);
+  )).filter((possibleLocation): possibleLocation is string => possibleLocation !== null);
 
-  let installations = {};
+  let installations: Record<PythonInstallation['id'], PythonInstallation> = {};
 
   for (let possibleLocation of possiblePythonLocations) {
     if (possibleLocation in installations) {
@@ -94,7 +97,7 @@ async function findPythonInstallations() {
       try {
         linkPath = await fs.readlink(lastInstallation.path);
       } catch (err) {
-        if (err.code === 'EINVAL') {
+        if ((err as { code: string; }).code === 'EINVAL') {
           break;
         }
 
@@ -116,25 +119,21 @@ async function findPythonInstallations() {
         leaf: false,
         path: installationPath,
         symlink: false
-      };
+      } satisfies PythonInstallation;
 
       installations[installation.id] = installation;
       lastInstallation = installation;
     }
   };
 
-  // TODO: Add support for virtual environments
-  // TODO: Add support for system installations
-  // Use arch -x84_64 <command>
-
   return installations;
 }
 
-async function fsExists(path) {
+export async function fsExists(path: string) {
   try {
     await fs.stat(path)
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    if ((err as { code: string; }).code === 'ENOENT') {
       return false;
     }
 
@@ -144,30 +143,13 @@ async function fsExists(path) {
   return true;
 }
 
-async function fsMkdir(dirPath) {
+export async function fsMkdir(dirPath: string) {
   if (!(await fsExists(dirPath))) {
     await fs.mkdir(dirPath, { recursive: true });
   }
 }
 
-async function getLocalHostModels() {
-  let alphaPath = this.getResourcePath('alpha');
-  let betaPath = this.getResourcePath('beta');
-
-  return {
-    alpha: await fsExists(alphaPath)
-      ? { executablePath: path.join(alphaPath, 'contents/contents') }
-      : null,
-    beta: await fsExists(betaPath)
-      ? {
-        packagesPath: path.join(betaPath, 'packages'),
-        version: parsePythonVersion((await fs.readFile(path.join(betaPath, 'version.txt'))).toString())
-      }
-      : null
-  };
-}
-
-async function getPythonInstallationInfo(location) {
+export async function getPythonInstallationInfo(location: string): Promise<PythonInstallation['info'] | null> {
   let architectures, isVirtualEnv, supportsVirtualEnv, version;
 
   {
@@ -209,7 +191,7 @@ async function getPythonInstallationInfo(location) {
   };
 }
 
-function getResourcePath(relativePath) {
+export function getResourcePath(relativePath: string) {
   return path.join(__dirname, '../..', relativePath);
 
   // return app.isPackaged
@@ -217,7 +199,7 @@ function getResourcePath(relativePath) {
   //   : path.join(__dirname, '..', relativePath);
 }
 
-function parsePythonVersion(input) {
+export function parsePythonVersion(input: string): [number, number, number] | null {
   let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(input);
 
   if (match) {
@@ -231,12 +213,17 @@ function parsePythonVersion(input) {
   return null;
 }
 
-async function runCommand(rawCommand, options) {
+export async function runCommand(rawCommand: string, options?: { ignoreErrors: true; }): Promise<[string, string]>;
+export async function runCommand(rawCommand: string, options?: {
+  architecture?: string | null;
+  ignoreErrors?: unknown;
+  timeout?: number;
+}) {
   let command = (options?.architecture && isDarwin)
     ? `arch -arch "${options.architecture}" ${rawCommand}`
     : rawCommand;
 
-  return await new Promise((resolve, reject) => {
+  return await new Promise<[string, string] | null>((resolve, reject) => {
     childProcess.exec(command, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
       if (err) {
         if (options?.ignoreErrors) {
@@ -250,16 +237,3 @@ async function runCommand(rawCommand, options) {
     });
   });
 }
-
-
-exports.Pool = Pool;
-exports.defer = defer;
-exports.findPythonInstallations = findPythonInstallations;
-exports.fsExists = fsExists;
-exports.fsMkdir = fsMkdir;
-exports.getResourcePath = getResourcePath;
-exports.getLocalHostModels = getLocalHostModels;
-exports.getPythonInstallationInfo = getPythonInstallationInfo;
-exports.parsePythonVersion = parsePythonVersion;
-exports.runCommand = runCommand;
-exports.isDarwin = isDarwin;

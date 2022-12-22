@@ -43,8 +43,8 @@ export class Startup extends React.Component<StartupProps, StartupState> {
     this.state = {
       fullDisplay: false,
       hostCreatorIndex: 0,
-      hostCreatorOpen: true,
-      hostCreatorVisible: true
+      hostCreatorOpen: false,
+      hostCreatorVisible: false
     };
   }
 
@@ -103,7 +103,7 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                   createLocalHost={this.props.createLocalHost}
                   launchHost={(hostSettingsId) => {
                     this.resetHostCreator();
-                    window.api.hostSettings.launchHost(hostSettingsId);
+                    this.props.launchHost(hostSettingsId);
                   }}
                   key={this.state.hostCreatorIndex} />
               )}

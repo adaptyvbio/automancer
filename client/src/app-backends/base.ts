@@ -45,8 +45,6 @@ export interface AppBackend {
   requestDraft?(draftId: DraftId): Promise<void>;
 
   notify(message: string): Promise<void>;
-
-  createBackend?(options: HostBackendOptions): Promise<BaseBackend | null>;
 }
 
 export interface AppBackendClass {

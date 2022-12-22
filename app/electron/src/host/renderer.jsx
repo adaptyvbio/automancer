@@ -46,8 +46,8 @@ class ElectronAppBackend {
 
 
   async createBackend(options) {
-    if (options.type === 'internal') {
-      return new InternalBackend({ hostSettingsId: options.id });
+    if (options.type === 'local') {
+      return new LocalHostBackend({ hostSettingsId: options.id });
     }
 
     return null;
@@ -128,6 +128,7 @@ class App extends React.Component {
     super(props);
 
     this.appBackend = new ElectronAppBackend();
+    this.backend = null;
     this.hostSettingsId = new URL(location).searchParams.get('hostSettingsId');
 
     this.state = {
@@ -137,11 +138,11 @@ class App extends React.Component {
 
   componentDidMount() {
     this.pool.add(async () => {
-      let { hostSettings } = await window.api.hostSettings.query();
+      let { hostSettings: hostSettingsCollection } = await window.api.hostSettings.query();
+      let hostSettings = hostSettingsCollection[this.hostSettingsId];
 
-      this.setState({
-        hostSettings
-      });
+      this.setState({ hostSettings });
+      this.backend = new LocalHostBackend(hostSettings);
     });
   }
 
@@ -154,8 +155,8 @@ class App extends React.Component {
       <NativeContextMenuProvider>
         <Application
           appBackend={this.appBackend}
-          hostSettings={this.state.hostSettings[this.hostSettingsId]}
-          hostSettingsRecord={this.state.hostSettings}
+          backend={this.backend}
+          hostSettingsLabel={this.state.hostSettings.label}
           onHostStarted={() => {
             window.api.ready();
           }} />
@@ -167,24 +168,24 @@ class App extends React.Component {
 root.render(<App />);
 
 
-class InternalBackend extends MessageBackend {
-  constructor(options) {
+class LocalHostBackend extends MessageBackend {
+  constructor(hostSettings) {
     super();
 
     this.closed = new Promise(() => {});
-    this.hostSettingsId = options.hostSettingsId;
+    this.hostSettings = hostSettings;
   }
 
   async _start(listener) {
-    window.api.internalHost.onMessage((message) => {
+    window.api.localHost.onMessage((message) => {
       listener(message);
     });
 
-    await window.api.internalHost.ready(this.hostSettingsId);
+    await window.api.localHost.ready(this.hostSettings.id);
   }
 
   async _send(message) {
-    window.api.internalHost.sendMessage(this.hostSettingsId, message);
+    window.api.localHost.sendMessage(this.hostSettings.id, message);
   }
 
   async loadUnit(unitInfo) {

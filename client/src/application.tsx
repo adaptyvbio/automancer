@@ -18,6 +18,7 @@ import { ViewSplit } from './views/test/split';
 import { ViewSplit2 } from './views/test/split2';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
+import { BaseBackend } from './backends/base';
 
 import styles from '../styles/components/application.module.scss';
 
@@ -27,8 +28,8 @@ export type Route = (number | string)[];
 
 export interface ApplicationProps {
   appBackend: AppBackend;
-  hostSettings: HostSettings;
-  hostSettingsRecord: HostSettingsRecord;
+  backend: BaseBackend;
+  hostSettingsLabel: string;
 
   onHostStarted?(): void;
   setStartup?(): void;
@@ -65,9 +66,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async initializeHost() {
-    let backendOptions = this.props.hostSettings.options;
-    let backend = (await this.appBackend.createBackend?.(backendOptions))
-      ?? (await createBackend(backendOptions));
+    let backend = this.props.backend;
 
     try {
       await backend.start();
@@ -519,11 +518,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           setStartup={this.props.setStartup}
 
           host={this.state.host}
-          hostSettingsRecord={this.props.hostSettingsRecord}
-          selectedHostSettingsId={this.props.hostSettings.id}
-          onSelectHost={(id) => {
-            // this.setState({ selectedHostId: id });
-          }}
+          title={this.props.hostSettingsLabel}
 
           drafts={this.state.drafts}
           openDraftIds={this.state.openDraftIds} />

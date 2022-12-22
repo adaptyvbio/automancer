@@ -1,9 +1,12 @@
+import 'source-map-support/register';
+
 const chokidar = require('chokidar');
 const crypto = require('crypto');
 const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const os = require('os');
+const uol = require('uol');
 
 const { HostWindow } = require('./host');
 const { StartupWindow } = require('./startup');
@@ -18,6 +21,7 @@ const ProtocolFileFilters = [
 export class CoreApplication {
   static version = 1;
 
+  logger = new uol.Logger({ levels: uol.StdLevels.Python });
   pool = new util.Pool();
 
   constructor(coreApp) {
@@ -60,6 +64,12 @@ export class CoreApplication {
     this.app.on('second-instance', () => {
       this.createStartupWindow();
     });
+
+
+    this.logger
+      .use(uol.format())
+      .pipe(new uol.ConcatTransformer())
+      .pipe(process.stderr);
 
 
     if (util.isDarwin) {
@@ -136,12 +146,12 @@ export class CoreApplication {
       return;
     }
 
-    this.localHostModels = await util.getLocalHostModels();
     this.pythonInstallations = await util.findPythonInstallations();
-    // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: null }));
 
     await app.whenReady();
     await this.loadData();
+
+    this.logger.info('Ready');
 
 
     // Window management
@@ -341,7 +351,7 @@ export class CoreApplication {
 
     // Other
 
-    ipcMain.on('launch-host', async (_event, hostSettingsId) => {
+    ipcMain.on('launchHost', async (_event, { hostSettingsId }) => {
       this.launchHost(hostSettingsId);
     });
 
@@ -567,12 +577,12 @@ export class CoreApplication {
 
     // Internal host
 
-    ipcMain.handle('internalHost.ready', async (_event, hostSettingsId) => {
-      await this.hostWindows[hostSettingsId].internalHost.ready();
+    ipcMain.handle('localHost.ready', async (_event, hostSettingsId) => {
+      await this.hostWindows[hostSettingsId].localHost.ready();
     });
 
-    ipcMain.on('internalHost.message', async (_event, hostSettingsId, message) => {
-      this.hostWindows[hostSettingsId].internalHost.sendMessage(message);
+    ipcMain.on('localHost.message', async (_event, hostSettingsId, message) => {
+      this.hostWindows[hostSettingsId].localHost.sendMessage(message);
     });
 
 
@@ -585,6 +595,8 @@ export class CoreApplication {
 
 
   launchHost(hostSettingsId) {
+    this.logger.info(`Launching host settings with id '${hostSettingsId}`);
+
     let existingWindow = this.hostWindows[hostSettingsId];
 
     if (existingWindow) {
@@ -602,16 +614,24 @@ export class CoreApplication {
 
 
   async loadData() {
+    this.logger.info('Loading app data');
+
     await fs.mkdir(this.dataDirPath, { recursive: true });
 
     if (await util.fsExists(this.dataPath)) {
+      this.logger.debug('Reading app data');
+
       let buffer = await fs.readFile(this.dataPath);
       this.data = JSON.parse(buffer.toString());
 
-      if (this.data.version !== CoreApplication.version) {
-        throw new Error('App version mismatch');
+      if (this.data.version !== this.constructor.version) {
+        this.logger.critical(`App version mismatch, found: ${this.data.version}, current: ${this.constructor.version}`)
+        dialog.showErrorBox('App data version mismatch', 'The app is outdated.');
+        process.exit(1);
       }
     } else {
+      this.logger.debug('Creating app data');
+
       await this.setData({
         embeddedPythonInstallation: null,
         defaultHostSettingsId: null,

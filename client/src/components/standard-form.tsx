@@ -38,7 +38,7 @@ export function Checkbox(props: React.PropsWithChildren<{
 }>) {
   return (
     <label className={formStyles.fieldCheckbox}>
-      <input type="checkbox" checked={!!props.checked} disabled={!!props.disabled} onInput={() => props.onInput?.(!props.checked)} />
+      <input type="checkbox" checked={!!props.checked} disabled={!!props.disabled} onChange={() => props.onInput?.(!props.checked)} />
       <div>{props.label}</div>
       {props.children}
     </label>

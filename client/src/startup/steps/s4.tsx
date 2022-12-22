@@ -4,7 +4,7 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 import { Selector } from '../selector';
 
 
-export type HostSettingsMode = 'default' | 'development' | 'remote';
+export type HostSettingsMode = 'advanced' | 'automatic' | 'remote';
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 4;
@@ -18,7 +18,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
       event.preventDefault();
 
       switch (props.data.mode) {
-        case 'development': {
+        case 'advanced': {
           let pythonInstallations = Object.values(props.context.pythonInstallations);
           let pythonInstallationId = (
             pythonInstallations.find((pythonInstallation) => pythonInstallation.leaf) ?? pythonInstallations[0]
@@ -56,18 +56,18 @@ export function Component(props: HostCreatorStepProps<Data>) {
       <div className="startup-editor-inner">
         <header className="startup-editor-header">
           <div className="startup-editor-subtitle">New setup</div>
-          <h2>Select a setup type</h2>
+          <h2>Select a setup configuration</h2>
         </header>
         <Selector
           entries={[
-            { id: 'default',
-              name: 'Default setup',
+            { id: 'automatic',
+              name: 'Default configuration',
               description: 'Create a setup with default settings',
               icon: 'local_shipping',
               disabled: true },
-            { id: 'development',
-              name: 'Development setup',
-              description: 'Create a setup based on an existing Python installation',
+            { id: 'advanced',
+              name: 'Advanced configuration',
+              description: 'Create a setup with advanced settings',
               icon: 'architecture' },
             { id: 'remote',
               name: 'Remote setup',

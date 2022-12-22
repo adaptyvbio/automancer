@@ -20,9 +20,7 @@ export interface SidebarProps {
   setStartup?(): void;
 
   host: Host | null;
-  hostSettingsRecord: HostSettingsRecord;
-  selectedHostSettingsId: string | null;
-  onSelectHost(id: HostId | null): void;
+  title: string;
 
   drafts: Record<DraftId, Draft>;
   openDraftIds: ImSet<DraftId>;
@@ -50,9 +48,6 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
   }
 
   render() {
-    let hostSettings = this.props.hostSettingsRecord[this.props.selectedHostSettingsId!];
-    let hostSettingsRecord = Object.values(this.props.hostSettingsRecord);
-
     let currentRoute = this.props.currentRoute;
     let currentRouteList = currentRoute && List(currentRoute);
 
@@ -151,7 +146,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
         onSelect={() => {}}>
         <aside className={util.formatClass(styles.root, { [styles.rootCollapsed]: this.state.collapsed })}>
           <div className={styles.headerRoot}>
-            {(hostSettingsRecord.length > 0) && (
+            {/* {(hostSettingsRecord.length > 0) && (
               <select className={styles.headerSelect} value={this.props.selectedHostSettingsId ?? ''} onChange={(event) => {
                 this.props.onSelectHost(event.currentTarget.value || null);
               }}>
@@ -160,17 +155,15 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
                   <option key={hostSettings.id} value={hostSettings.id}>{hostSettings.label ?? hostSettings.id}</option>
                 ))}
               </select>
-            )}
+            )} */}
             <div className={styles.headerValueRoot}>
               <img src="http://localhost:8081/adaptyv.png" className={styles.headerValueIcon} />
               <div className={styles.headerValueTitle}>Setup Alpha 1</div>
               {/* <div className={styles.headerValueTitle}>{this.props.host?.state.info.name ?? '–'}</div> */}
               <div className={styles.headerValueSubtitle}>localhost:4567</div>
-              {(hostSettingsRecord.length > 0) && (
-                <div className={styles.headerValueExpand}>
-                  <span className="material-symbols-sharp">unfold_more</span>
-                </div>
-              )}
+              <div className={styles.headerValueExpand}>
+                <span className="material-symbols-sharp">unfold_more</span>
+              </div>
             </div>
           </div>
           <nav className={styles.navRoot}>

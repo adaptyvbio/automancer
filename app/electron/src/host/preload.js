@@ -51,17 +51,17 @@ contextBridge.exposeInMainWorld('api', {
       return await ipcRenderer.invoke('drafts.write', draftId, primitive);
     }
   },
-  internalHost: {
+  localHost: {
     ready: async (hostSettingsId) => {
-      await ipcRenderer.invoke('internalHost.ready', hostSettingsId);
+      await ipcRenderer.invoke('localHost.ready', hostSettingsId);
     },
     onMessage: (callback) => {
-      ipcRenderer.on('internalHost.message', (_event, message) => {
+      ipcRenderer.on('localHost.message', (_event, message) => {
         callback(message);
       });
     },
     sendMessage: (hostSettingsId, message) => {
-      ipcRenderer.send('internalHost.message', hostSettingsId, message);
+      ipcRenderer.send('localHost.message', hostSettingsId, message);
     }
   },
   hostSettings: {

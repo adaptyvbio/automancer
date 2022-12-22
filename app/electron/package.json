@@ -14,7 +14,10 @@
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron .",
-    "test": "tsc"
+    "test": "npm run test:app && npm run test:preload && npm run test:renderer",
+    "test:app": "tsc --project tsconfig.app.json",
+    "test:preload": "tsc --project tsconfig.preload.json",
+    "test:renderer": "tsc --project tsconfig.renderer.json"
   },
   "dependencies": {
     "chokidar": "^3.5.3",

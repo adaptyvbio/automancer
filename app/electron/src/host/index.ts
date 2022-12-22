@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog } from 'electron';
-import path from 'path';
+import * as path from 'path';
 
 import { HostSettings } from '../interfaces';
 import { LocalHost } from '../local-host';

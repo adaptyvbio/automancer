@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
+import assert from 'assert';
 
 import { HostSettings } from 'pr1';
 
@@ -14,7 +15,7 @@ export class HostWindow {
   private localHost: LocalHost | null = null;
   private logger = this.app.logger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
-  window!: BrowserWindow;
+  window: BrowserWindow | null = null;
 
   private closingDeferred = defer<void>();
 
@@ -37,27 +38,44 @@ export class HostWindow {
       this.logger.debug('Starting the corresponding local host');
 
       this.localHost = new LocalHost(this.app, this, this.hostSettings);
-      await this.localHost.start();
 
-      this.localHost.closed.then((err) => {
+      let waitClosed = async () => {
+        let err = await this.localHost!.closed;
+
         this.localHost = null;
 
         if (err) {
-          dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly` + (err.code ? ` with code ${err.code}` : ''), 'See the log file for details.');
+          dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly with code ${err.code}`, 'See the log file for details.');
+          // let { response } = await dialog.showMessageBox(this.window, {
+          //   message: `Host "${this.hostSettings.label}" terminated unexpectedly`,
+          //   buttons: ['Ok', 'Open log file'],
+          //   title: 'Error',
+          //   defaultId: 0,
+          //   detail: err.code ? `Code: ${err.code}` : undefined
+          // });
         }
 
         if (!this.closing) {
           this.closingDeferred.resolve();
-          this.window!.close();
+          this.window?.close();
         }
-      });
+      };
+
+      if (!(await this.localHost.start())) {
+        this.logger.debug('Aborting window creation');
+        await waitClosed();
+
+        return;
+      }
+
+      this.pool.add(waitClosed);
     }
 
 
     this.logger.debug('Creating the Electron window');
 
     this.window = new BrowserWindow({
-      // show: false,
+      show: false,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, '../preload/host/preload.js')
@@ -65,7 +83,7 @@ export class HostWindow {
     });
 
     this.window.maximize();
-    // this.window.hide();
+    this.window.hide();
     this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
@@ -79,6 +97,8 @@ export class HostWindow {
   }
 
   focus() {
+    assert(this.window);
+
     if (this.window.isMinimized()) {
       this.window.restore();
     }

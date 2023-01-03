@@ -17,13 +17,12 @@ export class LocalHost {
   closed!: Promise<{ code: number; } | null>;
   private process!: ReturnType<typeof childProcess.spawn>;
   private logger = this.app.logger.getChild(['localHost', this.hostSettings.id.slice(0, 8)]);
-  private stateMessage: any | null;
+  private stateMessage: any | null = null;
+  private windowReady: boolean = false;
 
   constructor(private app: CoreApplication, private hostWindow: HostWindow, private hostSettings: HostSettings) {
     this.hostSettings = hostSettings;
     this.hostWindow = hostWindow;
-
-    this.stateMessage = null;
   }
 
   async start() {
@@ -57,32 +56,63 @@ export class LocalHost {
     // TODO: Add architecture
     this.process = childProcess.spawn(hostOptions.pythonPath, args, { env });
 
-    // this.process.stderr!.pipe(process.stderr);
 
+    // Wait for the process to close
 
-    let remainingData = '';
+    this.closed = new Promise((resolve) => {
+      this.process.on('close', (code, _signal) => {
+        let message = 'Process closed' + (code !== null ? ` with code ${code}` : '');
 
-    this.process.stderr!.on('data', (chunk: Buffer) => {
-      let events = (remainingData + chunk.toString()).split(EOL);
-
-      remainingData = events.at(-1)!;
-
-      for (let event of events.slice(0, 1)) {
-        if (event.includes('::')) {
-          let [rawLevelName, rawNamespace, ...rest] = event.split('::');
-
-          let levelName = rawLevelName.trim().toLowerCase();
-          let message = rest.join('::').trim();
-          let namespace = rawNamespace.trim().split('.');
-
-          this.logger.getChild(namespace).log(levelName as any, message);
+        if ((code ?? 0) > 0) {
+          this.logger.error(message);
         } else {
-          console.error(event);
+          this.logger.info(message);
         }
-      }
+
+        resolve((code !== null) && (code !== 0) ? { code } : null);
+      });
     });
 
 
+    // Listen for debug and log messages
+
+    {
+      let isDebugData = false;
+      let remainingData = '';
+
+      this.process.stderr!.on('data', (chunk: Buffer) => {
+        let events = (remainingData + chunk.toString()).split(EOL);
+
+        remainingData = events.at(-1)!;
+
+        for (let event of events) {
+          if (event.length > 0) {
+            let isLog = event.includes('::');
+
+            if (isLog) {
+              let [rawLevelName, rawNamespace, ...rest] = event.split('::');
+
+              let levelName = rawLevelName.trim().toLowerCase();
+              let message = rest.join('::').trim();
+              let namespace = rawNamespace.trim().split('.');
+
+              this.logger.getChild(namespace).log(levelName as any, message);
+            } else {
+              if (isDebugData) {
+                this.logger.debug(event);
+              } else {
+                this.logger.error(event);
+              }
+            }
+
+            isDebugData = !isLog;
+          }
+        }
+      });
+    }
+
+
+    // TODO: Remove ansi escape codes
     this.process.stderr!.pipe(fs.createWriteStream(logFilePath));
 
 
@@ -94,54 +124,89 @@ export class LocalHost {
     });
 
     let iter = rl[Symbol.asyncIterator]();
-
     await iter.next();
-    this.stateMessage = JSON.parse((await iter.next()).value);
+
+    let isDebugData = false;
+
+    let processMsg = async (msg: string) => {
+      let message;
+
+      try {
+        message = JSON.parse(msg);
+      } catch (err) {
+        if (isDebugData) {
+          this.logger.debug(msg);
+        } else {
+          this.logger.error(msg);
+        }
+
+        isDebugData = true;
+        return false;
+      }
+
+      isDebugData = false;
+
+      switch (message.type) {
+        case 'owner.open': {
+          await shell.openPath(message.path);
+          break;
+        }
+
+        case 'owner.reveal': {
+          shell.showItemInFolder(message.path);
+          break;
+        }
+
+        case 'owner.trash': {
+          await shell.trashItem(message.path);
+          break;
+        }
+
+        default: {
+          if (message.type === 'state') {
+            this.stateMessage = message;
+          }
+
+          if (this.windowReady) {
+            this.hostWindow.window!.webContents.send('localHost.message', message);
+          }
+
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    let broken = false;
+
+    for await (let msg of iter) {
+      if (await processMsg(msg)) {
+        broken = true;
+        break;
+      }
+    }
+
+    if (!broken) {
+      this.logger.error('Failed to obtain the initial state');
+      return false;
+    }
 
     (async () => {
       for await (let msg of iter) {
-        let message = JSON.parse(msg);
-
-        switch (message.type) {
-          case 'owner.open': {
-            await shell.openPath(message.path);
-            break;
-          }
-
-          case 'owner.reveal': {
-            shell.showItemInFolder(message.path);
-            break;
-          }
-
-          case 'owner.trash': {
-            await shell.trashItem(message.path);
-            break;
-          }
-
-          default: {
-            if (message.type === 'state') {
-              this.stateMessage = message;
-            }
-
-            this.hostWindow.window.webContents.send('localHost.message', message);
-            break;
-          }
-        }
+        processMsg(msg);
       }
-    })();
-
-
-    // Wait for the process to close
-
-    this.closed = new Promise((resolve) => {
-      this.process.on('close', (code, _signal) => {
-        resolve((code !== null) && (code !== 0) ? { code } : null);
-      });
+    })().catch((err) => {
+      this.logger.error('An error occured while processing messages (shown below).');
+      this.logger.error(err.message);
     });
+
+    return true;
   }
 
   async ready() {
-    this.hostWindow.window.webContents.send('localHost.message', this.stateMessage);
+    this.windowReady = true;
+    this.hostWindow.window!.webContents.send('localHost.message', this.stateMessage);
   }
 
   sendMessage(message: object) {

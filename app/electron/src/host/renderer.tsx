@@ -1,22 +1,17 @@
-import { Application, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+/// <reference path="preload.ts" />
+
+import { AppBackend, Application, DraftId, HostSettings, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+
 import { NativeContextMenuProvider } from '../shared/context-menu';
+import { DraftEntry } from '../interfaces';
 
 
-let root = ReactDOM.createRoot(document.getElementById('root'));
-
-
-class ElectronAppBackend {
-  #draftListeners;
-
-  constructor() {
-    this.#draftListeners = new Set();
-  }
-
+class ElectronAppBackend implements AppBackend {
   async initialize() {
 
   }
 
-  async createDraft(options) {
+  async createDraft(options: { directory: boolean; source: string; }) {
     let draftEntry = await window.api.drafts.create(options.source);
 
     if (!draftEntry) {
@@ -26,7 +21,7 @@ class ElectronAppBackend {
     return new DraftItem(draftEntry);
   }
 
-  async deleteDraft(draftId) {
+  async deleteDraft(draftId: DraftId) {
     await window.api.drafts.delete(draftId);
   }
 
@@ -34,7 +29,7 @@ class ElectronAppBackend {
     return (await window.api.drafts.list()).map((draftEntry) => new DraftItem(draftEntry));
   }
 
-  async loadDraft(options) {
+  async loadDraft(options: { directory: boolean; }) {
     let draftEntry = await window.api.drafts.load();
 
     if (!draftEntry) {
@@ -43,31 +38,21 @@ class ElectronAppBackend {
 
     return new DraftItem(draftEntry);
   }
-
-
-  async createBackend(options) {
-    if (options.type === 'local') {
-      return new LocalHostBackend({ hostSettingsId: options.id });
-    }
-
-    return null;
-  }
 }
 
 
 class DraftItem {
-  kind = 'own';
+  kind = 'own' as const;
+  lastModified: number;
   readable = true;
   readonly = false;
   revision = 0;
-  source = null;
+  source: string | null = null;
   volumeInfo = null;
   writable = true;
 
-  constructor(draftEntry) {
-    this._entry = draftEntry;
-
-    this.lastModified = draftEntry.lastModified;
+  constructor(private _entry: DraftEntry) {
+    this.lastModified = this._entry.lastModified;
   }
 
   get id() {
@@ -76,7 +61,7 @@ class DraftItem {
 
   get locationInfo() {
     return {
-      type: 'file',
+      type: 'file' as const,
       name: this.mainFilePath
     };
   }
@@ -90,15 +75,15 @@ class DraftItem {
   }
 
 
-  async openFile(filePath) {
+  async openFile(filePath: string) {
     await window.api.drafts.openFile(this._entry.id, filePath);
   }
 
-  async revealFile(filePath) {
+  async revealFile(filePath: string) {
     await window.api.drafts.revealFile(this._entry.id, filePath);
   }
 
-  async watch(handler, options) {
+  async watch(handler: () => void, options: { signal: AbortSignal; }) {
     await window.api.drafts.watch(this._entry.id, (change) => {
       this.lastModified = change.lastModified;
       this.revision = change.lastModified;
@@ -121,15 +106,22 @@ class DraftItem {
 }
 
 
-class App extends React.Component {
+interface AppProps {
+
+}
+
+interface AppState {
+  hostSettings: HostSettings | null;
+}
+
+class App extends React.Component<AppProps, AppState> {
+  appBackend = new ElectronAppBackend();
+  backend: LocalHostBackend | null = null;
+  hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId')!;
   pool = new Pool();
 
-  constructor(props) {
+  constructor(props: AppProps) {
     super(props);
-
-    this.appBackend = new ElectronAppBackend();
-    this.backend = null;
-    this.hostSettingsId = new URL(location).searchParams.get('hostSettingsId');
 
     this.state = {
       hostSettings: null
@@ -155,7 +147,7 @@ class App extends React.Component {
       <NativeContextMenuProvider>
         <Application
           appBackend={this.appBackend}
-          backend={this.backend}
+          backend={this.backend!}
           hostInfo={{
             imageUrl: null,
             subtitle: 'Local',
@@ -169,15 +161,16 @@ class App extends React.Component {
   }
 }
 
+
+let root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);
 
 
 class LocalHostBackend extends MessageBackend {
-  constructor(hostSettings) {
-    super();
+  closed = new Promise<void>(() => {});
 
-    this.closed = new Promise(() => {});
-    this.hostSettings = hostSettings;
+  constructor(private hostSettings: HostSettings) {
+    super();
   }
 
   async _start(listener) {

@@ -11,6 +11,8 @@ import '../styles/main.scss';
 import 'material-symbols';
 
 export { Application } from './application';
+export * from './app-backends/base';
+export * from './app-backends/browser';
 export * from './backends/common';
 export { MessageBackend } from './backends/message';
 export * from './contexts';

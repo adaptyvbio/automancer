@@ -23,9 +23,9 @@ export interface DraftItem {
   } | null;
   writable: boolean;
 
-  openFile?(filePath?: string): Promise<void>;
+  openFile?(filePath: string): Promise<void>;
   request?(): Promise<void>;
-  revealFile?(filePath?: string): Promise<void>;
+  revealFile?(filePath: string): Promise<void>;
   watch(handler: () => void, options: { signal: AbortSignal; }): Promise<void>;
   write(primitive: DraftPrimitive): Promise<void>;
 }

@@ -2,7 +2,7 @@
   "extends": "./tsconfig.base.json",
 
   "files": [
-    "src/host/renderer.jsx",
+    "src/host/renderer.tsx",
     "src/startup/renderer.jsx"
   ]
 }

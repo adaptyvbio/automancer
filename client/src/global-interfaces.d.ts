@@ -21,7 +21,6 @@ declare global {
   }
 
   interface Window {
-    readonly api: any;
     MonacoEnvironment?: monaco.Environment | undefined;
   }
 

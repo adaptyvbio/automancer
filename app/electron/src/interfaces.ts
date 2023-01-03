@@ -1,3 +1,10 @@
+export interface DraftEntry {
+  id: string;
+  lastModified: number;
+  name: string;
+  path: string;
+}
+
 export interface PythonInstallation {
   id: string;
   leaf: boolean;

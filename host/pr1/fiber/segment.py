@@ -148,10 +148,9 @@ class SegmentProgram(BlockProgram):
           yield event
 
     async for event in run():
-      assert self._mode != SegmentProgramMode.Halted
+      # assert self._mode != SegmentProgramMode.Halted
 
       event_time = event.time or time.time()
-      # halted = (self._mode == SegmentProgramMode.Halting) and event.stopped
 
       if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
         self._mode = SegmentProgramMode.Paused
@@ -159,16 +158,21 @@ class SegmentProgram(BlockProgram):
       if (self._mode == SegmentProgramMode.Paused) and (not event.stopped):
         self._mode = SegmentProgramMode.Normal
 
+      halted = (self._mode == SegmentProgramMode.Halting) and event.stopped
+
       yield ProgramExecEvent(
         location=SegmentProgramLocation(
           mode=self._mode,
           process=event.location,
           time=event_time
         ),
-        stopped=event.stopped # ((self._mode == SegmentProgramMode.Paused) or halted)
+        stopped=event.stopped,
+
+        # Allow processes to implicitly have terminated=True when halted
+        terminated=(event.terminated or halted)
       )
 
-      if (self._mode == SegmentProgramMode.Halting) and event.stopped:
+      if halted:
         self._mode = SegmentProgramMode.Halted
 
 

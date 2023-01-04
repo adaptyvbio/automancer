@@ -90,7 +90,7 @@ class Process:
           remaining_duration = total_duration * (1.0 - progress)
           self._progress = progress
 
-          # yield ProgramExecEvent(location=ProcessLocation(self._progress, paused=False))
+          # yield ProgramExecEvent(location=ProcessLocation(self._progress, paused=True))
           # await asyncio.sleep(2)
 
           yield ProgramExecEvent(
@@ -104,8 +104,18 @@ class Process:
             try:
               await self._resume_future
             except asyncio.CancelledError:
+              # The process is halting while being paused.
+
+              yield ProgramExecEvent(
+                duration=remaining_duration,
+                location=ProcessLocation(progress, paused=True),
+                stopped=True,
+                time=current_time
+              )
+
               return
           else:
+            # The process is halting.
             return
       else:
         self._task = None
@@ -114,7 +124,8 @@ class Process:
     yield ProgramExecEvent(
       duration=0.0,
       location=ProcessLocation(1.0),
-      stopped=True
+      stopped=True,
+      terminated=True
     )
 
 class Runner(BaseProcessRunner):

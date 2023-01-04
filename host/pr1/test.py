@@ -62,35 +62,38 @@ async def main():
   from .fiber.parsers.score import ScoreParser
   from .fiber.parsers.sequence import SequenceParser
   from .fiber.parsers.shorthands import ShorthandsParser
+  from .fiber.parsers.state import StateParser
 
   parser = FiberParser("""
 name: Foobar
 
 steps:
-  # actions:
-  #   - activate: 2s
-  #     Mock.valueBool: false
-    # - activate: 2s
   actions:
-    - activate: 2s
-      Mock.valueBool: false
-
-    # - activate: 2s
-    #   Mock.valueBool: false
-  Mock.valueBool: true
-
+    - activate: 1s
+    - activate: 1s
   # actions:
-    # - activate: 500 ms
-    # - activate: 1 s
-      # RB.relay0: true
-      # Mock.valueBool: true
+  #   - activate: 1s
+  #   - activate: 1s
+  # Mock.valueBool: true
+
+  # repeat: 3
+  # actions:
+  #   - activate: 1 s
+  #     Mock.valueBool: true
+  #     repeat: 2
+  # Mock.valueBool: false
+  # repeat: 1
+
     # - activate: 1 s
     #   Mock.valueBool: false
     # - activate: 1 s
 """,
     host=host,
-    Parsers=[SequenceParser, ShorthandsParser, AcmeParser, DevicesParser, ScoreParser]
+    Parsers=[StateParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, DevicesParser, ScoreParser]
   )
+
+
+  # return
 
   from .fiber.master2 import Master
 
@@ -105,8 +108,8 @@ steps:
         # continue
 
         print("[Info]")
-        # print("  Raw:", info)
-        print("  Exported:", info.state.export())
+        print("  Raw:", info)
+        print("  Exported:", info.location.export())
         print()
 
     async def b():
@@ -117,7 +120,7 @@ steps:
       # claim.release()
 
       print("[Pausing]")
-      await asyncio.sleep(1)
+      await asyncio.sleep(0.5)
       master.halt()
       # master.pause()
       # await asyncio.sleep(1)

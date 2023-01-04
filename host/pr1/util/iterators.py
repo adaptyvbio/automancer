@@ -209,7 +209,7 @@ class CoupledStateIterator(Generic[T, S]):
 
 
 class CoupledStateIterator2(Generic[T, S]):
-  def __init__(self, iterator: AsyncIterator[T]):
+  def __init__(self, iterator: AsyncIterator[T], /):
     self._future: Optional[Future[None]] = None
     self._iterator: Optional[AsyncIterator[T]] = iterator
     self._task: Optional[Task[T]] = None
@@ -245,6 +245,17 @@ class CoupledStateIterator2(Generic[T, S]):
   #       yield item
 
   #     self._future = Future()
+
+  async def close_value(self):
+    assert self._iterator
+    assert not self._task
+
+    try:
+      await anext(self._iterator)
+    except StopAsyncIteration:
+      self._iterator = None
+    else:
+      raise Exception()
 
   def notify(self, state: S):
     self._state_queue.append(state)
@@ -287,7 +298,7 @@ class CoupledStateIterator2(Generic[T, S]):
 
 
 class TriggerableIterator(Generic[T]):
-  def __init__(self, iterator: AsyncIterator[T]):
+  def __init__(self, iterator: AsyncIterator[T], /):
     self._done = False
     self._future: Optional[Future[None]] = None
     self._iterator = iterator
@@ -337,6 +348,35 @@ class TriggerableIterator(Generic[T]):
 
     assert self._value is not None
     return self._value
+
+
+class AltIterator(Generic[T]):
+  def __init__(self, iterator: AsyncIterator[T], /):
+    self._iterator = iterator
+    self._value = Optional[T]
+
+  def __aiter__(self):
+    return self
+
+  async def __anext__(self):
+    if not self._iterator:
+      raise StopAsyncIteration
+
+    try:
+      self._value = await anext(self._iterator)
+    except StopAsyncIteration:
+      self._iterator = None
+      return True, self._value
+    else:
+      return False, self._value
+
+# async def alt_iterator(iterator: AsyncIterator) -> AsyncGenerator[Any]:
+#   value = None
+
+#   async for value in iterator:
+#     yield False, value
+
+#   yield True, value
 
 
 if __name__ == '__main__':

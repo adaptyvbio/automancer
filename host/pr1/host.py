@@ -82,7 +82,11 @@ class Host:
       conf = {
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
-        'units': None,
+        'units': {
+          'template': {
+            'enabled': False
+          }
+        },
         'version': 1
       }
 

@@ -98,6 +98,12 @@ class StateInstance:
     del self._location
     del self._tasks
 
+    # self._location = StateLocation({ 'a': 34 })
+    # self._notify()
+    # await asyncio.sleep(1)
+    # self._location = StateLocation({ 'a': 100 })
+    # self._notify()
+
 
 class Runner(BaseRunner):
   StateInstance = StateInstance

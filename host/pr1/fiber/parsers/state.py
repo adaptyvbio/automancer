@@ -112,6 +112,7 @@ class StateProgram(BlockProgram):
 
   def halt(self):
     assert not self.busy
+    self._mode = StateProgramMode.HaltingChild
     self._child_program.halt()
 
   def pause(self):
@@ -171,7 +172,9 @@ class StateProgram(BlockProgram):
         asyncio.create_task(suspend_state())
         continue
 
-      if (self._mode in (StateProgramMode.Normal, StateProgramMode.HaltingChild)) and event.stopped:
+      # if ((self._mode == StateProgramMode.Normal) and event.terminated) \
+      #   or ((self._mode == StateProgramMode.HaltingChild) and event.stopped):
+      if event.terminated: # and self._mode in (StateProgramMode.HaltingChild, StateProgramMode.Normal):
         if state_instance.applied:
           # Case (1)
           #   The state instance emits events.
@@ -201,25 +204,12 @@ class StateProgram(BlockProgram):
           mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
           state=state_location
         ),
-        stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted))
+        stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
+        terminated=(self._mode == StateProgramMode.Halted)
       )
 
       if self._mode == StateProgramMode.Halted:
         break
-
-    # if state_instance.applied:
-    #   await state_instance.suspend()
-
-    # for state_location in self._iterator.iter_state():
-    #   yield ProgramExecEvent(
-    #     location=StateProgramLocation(
-    #       child=None,
-    #       mode=self._mode,
-    #       state=state_location
-    #     ),
-    #     partial=True,
-    #     stopped=True
-    #   )
 
 
 @debug

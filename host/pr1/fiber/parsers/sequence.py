@@ -229,7 +229,8 @@ class SequenceProgram(BlockProgram):
           interrupting=self._interrupting,
           mode=self._mode
         ),
-        stopped=(self._mode in (SequenceProgramMode.Paused, SequenceProgramMode.Halted))
+        stopped=(self._mode in (SequenceProgramMode.Paused, SequenceProgramMode.Halted)),
+        terminated=(event.terminated and ((self._point and self._point.index >= len(self._block._children)) or (self._child_index + 1 >= len(self._block._children)) or (self._mode == SequenceProgramMode.Halted)))
       )
 
 

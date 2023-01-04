@@ -1,12 +1,10 @@
-from collections import namedtuple
 import functools
 import pickle
+from collections import namedtuple
 from typing import Any, Optional
 
-from ..fiber.langservice import Attribute
-
 from .. import logger as root_logger
-
+from ..fiber.langservice import AnyType
 
 # used?
 Device = namedtuple("Device", ["description", "build", "id", "name"])
@@ -90,6 +88,8 @@ class BaseProcessRunner(BaseRunner):
 
 
 class BaseExecutor:
+  options_type = AnyType()
+
   """
   Constructs an executor.
 
@@ -100,6 +100,9 @@ class BaseExecutor:
   """
   def __init__(self, conf, *, host):
     pass
+
+  def load(self):
+    return None
 
   """
   Initializes the executor.

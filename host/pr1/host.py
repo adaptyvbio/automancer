@@ -1,17 +1,22 @@
-from graphlib import TopologicalSorter
 import asyncio
 import platform
 import shutil
 import sys
 import time
+from types import EllipsisType
 import uuid
+from graphlib import TopologicalSorter
+
+from pint import UnitRegistry
+
+from .fiber.langservice import Analysis, print_analysis
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.node import BaseNode, CollectionNode, DeviceNode
 from .draft import Draft
-from .fiber.parser import FiberParser
 from .fiber.master2 import Master
+from .fiber.parser import AnalysisContext, FiberParser
 from .protocol import Protocol
 from .unit import UnitManager
 from .util import schema as sc
@@ -99,13 +104,24 @@ class Host:
 
     # -- Load units ---------------------------------------
 
+    self.executors = dict()
     self.manager = UnitManager(conf['units'] or dict())
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 
-    self.executors = {
-      name: unit.Executor(self.manager.units_info[name].options, host=self) for name, unit in self.manager.units.items() if hasattr(unit, 'Executor')
-    }
+    self.ureg = UnitRegistry(autoconvert_offset_to_baseunit=True)
+    self.analysis_context = AnalysisContext(ureg=self.ureg)
+
+    analysis = Analysis()
+
+    for namespace in self.manager.units.keys():
+      unit_analysis, executor = self.manager.create_executor(namespace, host=self)
+      analysis += unit_analysis
+
+      if executor and not isinstance(executor, EllipsisType):
+        self.executors[namespace] = executor
+
+    print_analysis(analysis, logger=logger)
 
 
   @property
@@ -157,7 +173,7 @@ class Host:
     logger.info("Destroying host")
 
     for chip in self.chips.values():
-      if chip.master:
+      if isinstance(chip, Chip) and chip.master:
         logger.info(f"Halting master running '{chip.master.protocol.name}' on chip '{chip.id}'")
         await chip.master.wait_halt()
 
@@ -213,6 +229,8 @@ class Host:
 
     self.manager.reload()
 
+    analysis = Analysis()
+
     for unit_info in self.manager.units_info.values():
       namespace = unit_info.namespace
 
@@ -221,9 +239,12 @@ class Host:
           await self.executors[namespace].destroy()
           del self.executors[namespace]
 
-        if hasattr(unit_info.unit, 'Executor'):
-          self.executors[namespace] = unit_info.unit.Executor(unit_info.options, host=self)
-          await self.executors[namespace].initialize()
+        unit_analysis, executor = self.manager.create_executor(namespace, host=self)
+        analysis += unit_analysis
+
+        if executor and not isinstance(executor, EllipsisType):
+          self.executors[namespace] = executor
+          await executor.initialize()
 
         for chip in set(self.chips.values()):
           self.chips[chip.id] = Chip.try_unserialize(chip.dir, host=self)
@@ -245,6 +266,8 @@ class Host:
         #     chip.runners[namespace] = runner
 
         #   # <- Save chip
+
+    print_analysis(analysis, logger=logger)
 
   def get_state(self):
     return {

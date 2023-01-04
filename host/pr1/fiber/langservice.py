@@ -1,12 +1,16 @@
 import builtins
+from logging import Logger
+from types import EllipsisType
 import pint
 from collections import namedtuple
 from pint import Quantity, Unit
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Protocol, cast
+
+from ..util.parser import check_identifier
 
 from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedValue, LocationRange
+from ..reader import LocatedError, LocatedValue, LocationArea, LocationRange
 
 
 class Analysis:
@@ -114,12 +118,25 @@ class MissingKeyError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Missing key '{self.key}'", ranges=self.target.area.ranges)
 
+class InvalidIdentifierError(LangServiceError):
+  def __init__(self, target: LocatedValue, /):
+    self.target = target
+
+class InvalidEnumValueError(LangServiceError):
+  def __init__(self, target: LocatedValue, /):
+    self.target = target
+
+
+class Type(Protocol):
+  def analyze(self, obj: Any, context: Any) -> tuple[Analysis, Any | EllipsisType]:
+    ...
 
 CompletionKind = Literal['class', 'constant', 'enum', 'field', 'property']
 
 class Attribute:
   def __init__(
     self,
+    type: Type,
     *,
     deprecated: bool = False,
     description: Optional[str] = None,
@@ -127,8 +144,7 @@ class Attribute:
     kind: CompletionKind = 'field',
     label: Optional[str] = None,
     optional: bool = False,
-    signature: Optional[str] = None,
-    type: Any
+    signature: Optional[str] = None
   ):
     self._deprecated = deprecated
     self._description = description
@@ -162,11 +178,12 @@ class CompositeDict:
   _native_namespace = "_"
   _separator = "/"
 
-  def __init__(self, attrs: dict[str, Attribute] = dict(), *, foldable = False):
+  def __init__(self, attrs: dict[str, Attribute | Type] = dict(), /, *, foldable = False, strict = False):
     self._foldable = foldable
+    self._strict = strict
 
     self._attributes = {
-      attr_name: { self._native_namespace: attr } for attr_name, attr in attrs.items()
+      attr_name: { self._native_namespace: attr if isinstance(attr, Attribute) else Attribute(cast(Type, attr)) } for attr_name, attr in attrs.items()
     }
 
     self._namespaces = {self._native_namespace}
@@ -218,6 +235,7 @@ class CompositeDict:
 
   def analyze(self, obj, context):
     analysis = Analysis()
+    strict_failed = False
 
     primitive_analysis, obj = PrimitiveType(dict).analyze(obj, context)
     analysis += primitive_analysis
@@ -263,14 +281,19 @@ class CompositeDict:
         continue
 
       attr = attr_entries[namespace]
-      attr_analysis, attr_values[namespace][attr_name] = attr.analyze(obj_value, obj_key, context)
+      attr_analysis, attr_value = attr.analyze(obj_value, obj_key, context)
+      attr_values[namespace][attr_name] = attr_value
+
+      if isinstance(attr_value, EllipsisType):
+        strict_failed = True
 
       analysis += attr_analysis
 
     for attr_name, attr_entries in self._attributes.items():
       for namespace, attr in attr_entries.items():
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError(f"{namespace}{self._separator}{attr_name}", obj))
+          analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
+          strict_failed = True
 
 
     completion_items = list()
@@ -299,7 +322,7 @@ class CompositeDict:
       ]
     ))
 
-    return analysis, attr_values
+    return analysis, attr_values if not (self._strict and strict_failed) else Ellipsis
 
   def merge(self, attr_values1, attr_values2):
     return {
@@ -308,13 +331,17 @@ class CompositeDict:
 
 
 class SimpleDict(CompositeDict):
-  def __init__(self, attrs, *, foldable = False):
-    super().__init__(attrs, foldable=foldable)
+  def __init__(self, attrs: dict[str, Attribute | Type], /, *, foldable = False, strict = False):
+    super().__init__(attrs, foldable=foldable, strict=strict)
 
   def analyze(self, obj, context):
     analysis, output = super().analyze(obj, context)
 
-    return analysis, output[self._native_namespace]
+    return analysis, output[self._native_namespace] if not isinstance(output, EllipsisType) else Ellipsis
+
+class DictType(SimpleDict):
+  def __init__(self, attrs, *, foldable = False):
+    super().__init__(attrs, foldable=foldable, strict=True)
 
 
 class InvalidPrimitiveError(LangServiceError):
@@ -349,7 +376,7 @@ class AnyType:
     return Analysis(), obj
 
 class PrimitiveType:
-  def __init__(self, primitive):
+  def __init__(self, primitive: Any, /):
     self._primitive = primitive
 
   def analyze(self, obj, context):
@@ -366,11 +393,34 @@ class PrimitiveType:
           return Analysis(), LocatedValue.new((obj.value == "true"), area=obj.area)
         else:
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
-        return Analysis()
       case _ if not isinstance(obj.value, self._primitive):
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _:
         return Analysis(), obj
+
+class ListType(PrimitiveType):
+  def __init__(self, item_type: Type):
+    super().__init__(list)
+    self._item_type = item_type
+
+  def analyze(self, obj, context):
+    analysis, obj = super().analyze(obj, context)
+
+    if isinstance(obj, EllipsisType):
+      return analysis, Ellipsis
+
+    assert isinstance(obj, list)
+    result = list()
+
+    for item in obj:
+      item_analysis, item_result = self._item_type.analyze(item, context)
+
+      analysis += item_analysis
+
+      if not isinstance(item_result, EllipsisType):
+        result.append(item_result)
+
+    return analysis, result
 
 class LiteralOrExprType:
   def __init__(self, obj_type, /, *, field = True, static = False):
@@ -408,8 +458,8 @@ class QuantityType(LiteralOrExprType):
   def analyze(self, obj, context):
     if isinstance(obj, str):
       try:
-        value = context.ureg(obj.value)
-      except pint.errors.UndefinedUnitError:
+        value = context.ureg.Quantity(obj.value)
+      except pint.PintError:
         return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
     else:
       value = obj
@@ -423,3 +473,65 @@ class QuantityType(LiteralOrExprType):
         return Analysis(errors=[MissingUnitError(obj, self._unit)]), Ellipsis
       case _:
         return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
+
+class ArbitraryQuantityType:
+  def analyze(self, obj, context):
+    try:
+      return Analysis(), context.ureg.Quantity(obj.value)
+    except pint.PintError:
+      return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+
+
+class StrType(PrimitiveType):
+  def __init__(self):
+    super().__init__(str)
+
+class IdentifierType(StrType):
+  def __init__(self, *, allow_leading_digit = False):
+    super().__init__()
+    self._allow_leading_digit = allow_leading_digit
+
+  def analyze(self, obj, context):
+    analysis, obj_new = super().analyze(obj, context)
+
+    if isinstance(obj_new, EllipsisType):
+      return analysis, Ellipsis
+
+    try:
+      check_identifier(obj_new, allow_leading_digit=self._allow_leading_digit)
+    except LocatedError:
+      analysis.errors.append(InvalidIdentifierError(obj))
+      return analysis, Ellipsis
+
+    return analysis, obj_new
+
+class EnumType:
+  def __init__(self, *variants: str):
+    self._variants = variants
+
+  def analyze(self, obj, context):
+    analysis = Analysis()
+
+    if not obj in self._variants:
+      analysis.errors.append(InvalidEnumValueError(obj))
+      return analysis, Ellipsis
+
+    return analysis, obj
+
+# class LiteralStrType(StrType):
+#   def __init__(self, value: str, /):
+#     self._value = value
+
+#   def analyze(self, obj, context):
+#     if obj != self._value:
+
+
+def print_analysis(analysis: Analysis, /, logger: Logger):
+  for error in analysis.errors:
+    diagnostic = error.diagnostic()
+    area = LocationArea(diagnostic.ranges)
+
+    logger.error(diagnostic.message)
+
+    for line in area.format().splitlines():
+      logger.debug(line)

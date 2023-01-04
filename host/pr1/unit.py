@@ -1,14 +1,29 @@
+from dataclasses import dataclass
 import importlib
 import importlib.metadata
 import importlib.util
 import inspect
 import sys
+from types import EllipsisType
+from typing import Any
 
 from . import logger
+from .fiber.langservice import Analysis
 
 
+Unit = Any
+
+@dataclass
 class UnitInfo:
-  def __init__(self, *, module, path, source_name, unit):
+  development: bool
+  enabled: bool
+  module: str
+  options: Any
+  path: str
+  source_name: str
+  unit: Any
+
+  def __init__(self, *, module: str, path: str, source_name: str, unit: Any):
     self.development = False
     self.enabled = True
     self.module = module
@@ -44,6 +59,27 @@ class UnitManager:
     self.load(conf)
     self.revision = 0
 
+  def create_executor(self, namespace: str, /, *, host):
+    info = self.units_info[namespace]
+
+    if hasattr(info.unit, 'Executor'):
+      Executor = info.unit.Executor
+      analysis, conf = Executor.options_type.analyze(info.options, host.analysis_context)
+
+      if isinstance(conf, EllipsisType):
+        logger.error(f"Failed to load configuration of unit '{namespace}'")
+        return analysis, Ellipsis
+
+      executor = Executor(conf, host=host)
+      analysis_load = executor.load()
+
+      if analysis_load:
+        analysis += analysis_load
+
+      return analysis, executor
+
+    return Analysis(), None
+
   def load(self, conf):
     units_info = list()
 
@@ -76,8 +112,8 @@ class UnitManager:
         unit=unit
       ))
 
-    self.units = dict()
-    self.units_info = dict()
+    self.units = dict[str, Unit]()
+    self.units_info = dict[str, UnitInfo]()
 
     for unit_info in units_info:
       namespace = unit_info.namespace
@@ -96,7 +132,7 @@ class UnitManager:
         unit_conf = conf[namespace]
         unit_info.development = unit_conf.get('development', False)
         unit_info.enabled = unit_conf.get('enabled', True)
-        unit_info.options = unit_conf.get('options', dict())
+        unit_info.options = unit_conf.get('options')
 
       self.units_info[namespace] = unit_info
 

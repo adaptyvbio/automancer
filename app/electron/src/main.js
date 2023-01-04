@@ -228,6 +228,8 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
+      // TODO: Add error handling
+
       let pythonInstallation = options.customPythonInstallation ?? this.pythonInstallations[options.pythonInstallationSettings.id];
 
       let hostSettingsId = crypto.randomUUID();
@@ -249,6 +251,9 @@ export class CoreApplication {
         }
       }
 
+      let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture });
+      let conf = JSON.parse(confStdout);
+
       await this.setData({
         hostSettings: {
           ...this.data.hostSettings,
@@ -258,9 +263,10 @@ export class CoreApplication {
             options: {
               type: 'local',
               architecture: options.pythonInstallationSettings.architecture,
+              conf,
               corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
               dirPath: hostDirPath,
-              id: crypto.randomUUID(),
+              id: conf.identifier,
               pythonPath
             }
           }

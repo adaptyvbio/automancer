@@ -1,14 +1,16 @@
-from pathlib import Path
-import appdirs
 import argparse
 import asyncio
 import json
 import logging
 import os
+import platform
 import signal
 import sys
 import uuid
+from pathlib import Path
+from typing import Optional
 
+import appdirs
 from pr1 import Host, reader
 from pr1.util import schema as sc
 
@@ -18,6 +20,7 @@ from .auth import agents as auth_agents
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .client import ClientClosed
+from .conf import Conf
 from .session import Session
 from .trash import trash
 
@@ -58,107 +61,73 @@ class Backend:
       trash(path)
 
 
-conf_schema = sc.Schema({
-  'authentication': sc.Optional(sc.List(
-    sc.Or(*[Agent.conf_schema for Agent in auth_agents.values()])
-  )),
-  'features': {
-    'restart': sc.ParseType(bool),
-    'terminal': sc.ParseType(bool),
-    'write_config': sc.ParseType(bool)
-  },
-  'identifier': str,
-  'remote': sc.Optional({
-    'hostname': str,
-    'port': sc.ParseType(int),
-    'secure': sc.Optional(sc.ParseType(bool)),
-    'static_authenticate_clients': sc.Optional(sc.ParseType(bool)),
-    'static_port': sc.Optional(sc.ParseType(int)),
-    'single_client': sc.Optional(sc.ParseType(bool))
-  }),
-  'version': sc.ParseType(int)
-})
-
 class App:
-  version = 2
-
-  def __init__(self, *, data_dir = None, local = False):
+  def __init__(self, args: argparse.Namespace, /):
     logger.info(f"Running process with id {os.getpid()}")
     logger.info(f"Running Python {sys.version}")
+    logger.info(f"Running on platform {platform.platform()}")
 
 
     # Create data directory if missing
 
-    self.data_dir = Path(data_dir or appdirs.user_data_dir("PR-1", "Hsn"))
+    self.data_dir = Path(args.data_dir)
     self.data_dir.mkdir(exist_ok=True, parents=True)
+
+    conf_path = self.data_dir / "conf.json"
 
     logger.debug(f"Storing data in '{self.data_dir}'")
 
+    if args.initialize:
+      logger.info("Initializing")
 
-    # Load or create configuration
+      self.conf = Conf.create()
+      json.dump(self.conf.export(), sys.stdout)
 
-    conf_path = self.data_dir / "app.yml"
+      logger.info("Initialized")
+      sys.exit()
 
-    if conf_path.exists():
-      try:
-        conf = reader.parse((self.data_dir / "app.yml").open().read())
-        conf = conf_schema.transform(conf)
-      except reader.LocatedError as e:
-        e.display()
-        sys.exit(1)
-
-      if conf['version'] != self.version:
-        logger.error("Configuration version mismatch")
-        sys.exit(1)
-
-      conf_updated = False
+    if args.conf:
+      raw_conf = json.loads(args.conf)
+    elif conf_path.exists():
+      with conf_path.open() as conf_file:
+        raw_conf = json.load(conf_file)
     else:
-      conf = {
-        'identifier': str(uuid.uuid4()),
-        'version': self.version,
-        'features': {
-          'restart': False,
-          'terminal': False,
-          'write_config': False
-        },
-        'remote': {
-          'hostname': "localhost",
-          'port': 4567
-        }
-      }
+      logger.error("Missing configuration")
+      sys.exit(1)
 
-      conf_updated = True
+    self.conf = Conf.load(raw_conf)
 
 
     # Create authentication agents
 
-    if 'authentication' in conf:
-      for index, conf_method in enumerate(conf['authentication']):
-        Agent = auth_agents[conf_method['type']]
+    self.auth_agents = dict()
 
-        if hasattr(Agent, 'update_conf'):
-          conf_updated_method = Agent.update_conf(conf_method)
+    # if 'authentication' in conf:
+    #   for index, conf_method in enumerate(conf['authentication']):
+    #     Agent = auth_agents[conf_method['type']]
 
-          if conf_updated_method:
-            conf['authentication'][index] = conf_updated_method
-            conf_updated = True
+    #     if hasattr(Agent, 'update_conf'):
+    #       conf_updated_method = Agent.update_conf(conf_method)
 
-    self.auth_agents = [
-      auth_agents[conf_method['type']](conf_method) for conf_method in conf['authentication']
-    ] if 'authentication' in conf else None
+    #       if conf_updated_method:
+    #         conf['authentication'][index] = conf_updated_method
+    #         conf_updated = True
+
+    # self.auth_agents = [
+    #   auth_agents[conf_method['type']](conf_method) for conf_method in conf['authentication']
+    # ] if 'authentication' in conf else None
 
 
-    # Write configuration if it has been updated
+    # # Write configuration if it has been updated
 
-    if conf_updated:
-      logger.info("Writing app configuration")
-      conf_path.open("w").write(reader.dumps(conf) + "\n")
+    # if conf_updated:
+    #   logger.info("Writing app configuration")
+    #   conf_path.open("w").write(reader.dumps(conf) + "\n")
 
 
     # Create host
 
     self.clients = dict()
-    self.conf = conf
     self.host = Host(
       backend=Backend(self),
       update_callback=self.update
@@ -169,14 +138,14 @@ class App:
 
     self.bridges = set()
 
-    if local:
+    if args.local:
       self.owner_bridge = StdioBridge(self)
       self.bridges.add(self.owner_bridge)
     else:
       self.owner_bridge = None
 
-    if 'remote' in conf:
-      self.remote_bridge = WebsocketBridge(self, conf=conf['remote'])
+    if self.conf.remote:
+      self.remote_bridge = WebsocketBridge(self, conf=self.conf.remote)
       self.bridges.add(self.remote_bridge)
     else:
       self.remote_bridge = None
@@ -196,15 +165,14 @@ class App:
       requires_auth = self.auth_agents and client.remote
 
       await client.send({
+        "type": "initialize",
         "authMethods": [
           agent.export() for agent in self.auth_agents
         ] if requires_auth else None,
-        "features": {
-          "terminal": self.conf['features']['terminal'] and client.remote
-        },
-        "identifier": self.conf['identifier'],
+        "features": {},
+        "identifier": self.conf.identifier,
         "staticUrl": (self.remote_bridge.static_url if self.remote_bridge else None),
-        "version": self.version
+        "version": self.conf.version
       })
 
       if requires_auth:
@@ -226,7 +194,7 @@ class App:
       })
 
       async for message in client:
-        match message['type']:
+        match message["type"]:
           case "exit":
             logger.info("Exiting after receiving an exit message")
             self.stop()
@@ -369,10 +337,13 @@ class App:
 
 def main():
   parser = argparse.ArgumentParser(description="PR–1 server")
-  parser.add_argument("--data-dir")
+
+  parser.add_argument("--conf")
+  parser.add_argument("--data-dir", required=True)
+  parser.add_argument("--initialize", action='store_true')
   parser.add_argument("--local", action='store_true')
 
   args = parser.parse_args()
 
-  app = App(data_dir=args.data_dir, local=args.local)
+  app = App(args)
   app.start()

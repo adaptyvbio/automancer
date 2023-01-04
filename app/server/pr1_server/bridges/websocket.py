@@ -10,6 +10,7 @@ import websockets
 from OpenSSL import SSL, crypto
 
 from .. import logger as parent_logger
+from ..conf import ConfRemote
 from ..auth import agents as auth_agents
 from ..client import BaseClient, ClientClosed
 
@@ -53,7 +54,7 @@ class Client(BaseClient):
 
 
 class WebsocketBridge:
-  def __init__(self, app, *, conf):
+  def __init__(self, app, *, conf: ConfRemote):
     self.app = app
     self.clients = set()
     self.conf = conf
@@ -62,12 +63,12 @@ class WebsocketBridge:
 
     # Certificate
 
-    if self.conf.get('secure'):
+    if self.conf.secure:
       cert_dir = (self.app.data_dir / "certificate")
       cert_path = (cert_dir / "cert.pem")
       key_path = (cert_dir / "key.pem")
 
-      hostname = self.conf['hostname']
+      hostname = self.conf.hostname
 
       if cert_dir.exists():
         cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_path.open().read())
@@ -125,7 +126,7 @@ class WebsocketBridge:
 
     @aiohttp.web.middleware
     async def middleware(request, handler):
-      if self.conf.get('static_authenticate_clients'):
+      if self.conf.static_authenticate_clients:
         authorization = request.headers.get('Authorization')
 
         if (authorization is None) or (not any(client.id == authorization for client in self.clients)):
@@ -154,7 +155,7 @@ class WebsocketBridge:
     # Data server
 
     async def handler(conn):
-      if self.conf.get('single_client'):
+      if self.conf.single_client:
         for client in list(self.clients):
           await client.conn.close()
 
@@ -166,9 +167,9 @@ class WebsocketBridge:
       finally:
         self.clients.remove(client)
 
-    hostname = self.conf['hostname']
-    data_port = self.conf['port']
-    static_port = self.conf.get('static_port', data_port + 1)
+    hostname = self.conf.hostname
+    data_port = self.conf.port
+    static_port = self.conf.static_port
 
     logger.debug(f"Data server listening on {hostname}:{data_port}")
     logger.debug(f"Static server listening on {hostname}:{static_port}")

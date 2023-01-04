@@ -48,9 +48,15 @@ export class LocalHost {
       // this.logger.debug(...);
     }
 
-    let args = ['-m', 'pr1_server', '--data-dir', hostOptions.dirPath, '--local'];
+    let args = ['-m', 'pr1_server', '--conf', JSON.stringify(hostOptions.conf), '--data-dir', hostOptions.dirPath, '--local'];
+    let executable = hostOptions.pythonPath;
 
-    this.logger.debug(`Using command "${hostOptions.pythonPath}" ${args.join(' ')}`)
+    if (hostOptions.architecture && util.isDarwin) {
+      args = ['-arch', hostOptions.architecture, executable, ...args];
+      executable = 'arch';
+    }
+
+    this.logger.debug(`Using command "${hostOptions.pythonPath} ${args.map((arg) => arg.replaceAll(' ', '\\ ')).join(' ')}"`)
     this.logger.debug(`With environment variables: ${JSON.stringify(env)}`)
 
     // TODO: Add architecture
@@ -124,7 +130,6 @@ export class LocalHost {
     });
 
     let iter = rl[Symbol.asyncIterator]();
-    await iter.next();
 
     let isDebugData = false;
 
@@ -141,7 +146,7 @@ export class LocalHost {
         }
 
         isDebugData = true;
-        return false;
+        return;
       }
 
       isDebugData = false;
@@ -170,18 +175,16 @@ export class LocalHost {
           if (this.windowReady) {
             this.hostWindow.window!.webContents.send('localHost.message', message);
           }
-
-          return true;
         }
       }
-
-      return false;
     };
 
     let broken = false;
 
     for await (let msg of iter) {
-      if (await processMsg(msg)) {
+      await processMsg(msg);
+
+      if (this.stateMessage) {
         broken = true;
         break;
       }
@@ -200,6 +203,8 @@ export class LocalHost {
       this.logger.error('An error occured while processing messages (shown below).');
       this.logger.error(err.message);
     });
+
+    this.logger.debug('Started');
 
     return true;
   }

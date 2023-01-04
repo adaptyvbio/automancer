@@ -17,6 +17,7 @@ export interface HostSettings {
 export interface HostSettingsOptionsLocal {
   type: 'local';
   architecture: string | null;
+  conf: object;
   corePackagesInstalled: boolean;
   dirPath: string;
   id: string;

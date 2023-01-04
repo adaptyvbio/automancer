@@ -213,12 +213,15 @@ export function parsePythonVersion(input: string): [number, number, number] | nu
   return null;
 }
 
-export async function runCommand(rawCommand: string, options?: { ignoreErrors: true; }): Promise<[string, string]>;
-export async function runCommand(rawCommand: string, options?: {
+export interface RunCommandOptions {
   architecture?: string | null;
   ignoreErrors?: unknown;
   timeout?: number;
-}) {
+}
+
+export async function runCommand(rawCommand: string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
+export async function runCommand(rawCommand: string, options?: RunCommandOptions): Promise<[string, string]>;
+export async function runCommand(rawCommand: string, options?: RunCommandOptions) {
   let command = (options?.architecture && isDarwin)
     ? `arch -arch "${options.architecture}" ${rawCommand}`
     : rawCommand;

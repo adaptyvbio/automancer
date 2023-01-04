@@ -95,6 +95,16 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     });
 
     // this.updateInspectorOpen();
+
+    document.body.addEventListener('keydown', (event) => {
+      if ((event.key === 's') && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+        event.preventDefault();
+
+        if (!this.state.compiling && this.state.compilation?.valid) {
+          this.setState({ startModalOpen: true });
+        }
+      }
+    }, { signal: this.controller.signal });
   }
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {

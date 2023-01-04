@@ -238,7 +238,11 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 }
               });
             }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>
-            <Button>Skip</Button>
+            <Button onClick={() => {
+              this.pool.add(async () => {
+                await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeBlockPath, { type: 'halt' });
+              });
+            }}>Skip</Button>
           </div>
           <div>
             {/* <div className={spotlightStyles.footerStatus}>Pausing</div> */}

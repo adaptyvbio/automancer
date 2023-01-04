@@ -302,7 +302,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       <div className={textEditorStyles.root}>
         <div ref={this.ref} onKeyDown={!this.props.autoSave
           ? ((event) => {
-            if ((event.key === 's') && (event.ctrlKey || event.metaKey)) {
+            if ((event.key === 's') && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
               event.preventDefault();
 
               this.pool.add(async () => {

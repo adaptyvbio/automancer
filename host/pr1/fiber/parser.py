@@ -107,7 +107,7 @@ class BlockProgram(Protocol):
   def busy(self):
     ...
 
-  def import_message(self, message: object):
+  def import_message(self, message: Any):
     ...
 
   def halt(self):

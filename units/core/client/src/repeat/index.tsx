@@ -1,4 +1,4 @@
-import { getBlockExplicitLabel, GraphBlockMetrics, GraphLink, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, ProtocolState, React } from 'pr1';
+import { getBlockExplicitLabel, GraphBlockMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -38,7 +38,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 
     let label = ancestors.at(-1)?.state['name'].value
       ?? getBlockExplicitLabel(block, options.host)
-      ?? getBlockDefaultLabel(block);
+      ?? unit.getBlockDefaultLabel(block);
 
     return {
       child: childMetrics,
@@ -78,44 +78,50 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 };
 
 
-function createDefaultPoint(block: Block, key: number, getChildPoint: (block: ProtocolBlock) => unknown) {
-  return {
-    child: getChildPoint(block.child),
-    iteration: 0
-  };
-}
+const unit = {
+  namespace: 'repeat',
 
-function getBlockDefaultLabel(block: Block) {
-  return 'Repeat ' + ({
-    1: 'once',
-    2: 'twice'
-  }[block.count] ?? `${block.count} times`);
-}
-
-function getActiveChildState(location: Location, _key: number) {
-  return location.child;
-}
-
-function getChildBlock(block: Block, _key: never) {
-  return block.child;
-}
-
-function getChildrenExecutionKeys(_block: Block, location: Location) {
-  return [location.iteration];
-}
-
-function getBlockLocationLabelSuffix(block: Block, location: Location) {
-  return `(${location.iteration}/${block.count})`;
-}
-
-
-export default {
-  createDefaultPoint,
-  getActiveChildState,
-  getBlockDefaultLabel,
-  getBlockLocationLabelSuffix,
-  getChildBlock,
-  getChildrenExecutionKeys,
   graphRenderer,
-  namespace
-}
+
+  createActiveBlockMenu(_block, _location, _options) {
+    return [
+      { id: 'halt', name: 'Skip', icon: 'double_arrow' }
+    ];
+  },
+  createDefaultPoint(block, _key: number, getChildPoint) {
+    return {
+      child: getChildPoint(block.child),
+      iteration: 0
+    };
+  },
+  getBlockClassLabel(_block) {
+    return 'Repeat';
+  },
+  getBlockDefaultLabel(block) {
+    return 'Repeat ' + ({
+      1: 'once',
+      2: 'twice'
+    }[block.count] ?? `${block.count} times`);
+  },
+  getActiveChildLocation(location, _key: number) {
+    return location.child;
+  },
+  getChildBlock(block, _key: never) {
+    return block.child;
+  },
+  getChildrenExecutionKeys(_block, location) {
+    return [location.iteration];
+  },
+  getBlockLocationLabelSuffix(block, location) {
+    return `(${location.iteration}/${block.count})`;
+  },
+  onSelectBlockMenu(_block, _location, path) {
+    switch (path.first()) {
+      case 'halt':
+        return { type: 'halt' };
+    }
+  }
+} satisfies Unit<Block, Location>
+
+
+export default unit

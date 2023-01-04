@@ -96,6 +96,11 @@ class RepeatProgram(BlockProgram):
   def get_child(self, block_key: int, exec_key: None):
     return self._child_program
 
+  def import_message(self, message: Any):
+    match message["type"]:
+      case "halt":
+        self.halt()
+
   def halt(self):
     assert not self.busy
 
@@ -135,10 +140,13 @@ class RepeatProgram(BlockProgram):
       async for event in self._child_program.run(point.child, symbol):
         yield ProgramExecEvent(
           location=RepeatProgramLocation(
-            child=event.state,
+            child=event.location,
             iteration=self._iteration
           ),
-          stopped=event.stopped
+          stopped=event.stopped,
+          terminated=(event.terminated and (
+            ((self._point.iteration if self._point else (self._iteration + 1)) >= self._block._count) or self._halting
+          ))
         )
 
       if self._point:
@@ -155,33 +163,15 @@ class RepeatBlock:
   Program = RepeatProgram
 
   def __init__(self, block: BaseBlock, count: int, env: 'RepeatEnv'):
-    self.state = None
-
     self._block = block
     self._count = count
     self._env = env
-
-  def linearize(self, context, parent_state):
-    analysis = lang.Analysis()
-    output = list()
-
-    for index in range(self._count):
-      item_analysis, item = self._block.linearize(context | { self._env: { 'index': index } }, parent_state)
-      analysis += item_analysis
-
-      if item is Ellipsis:
-        continue
-
-      output += item
-
-    return analysis, output
 
   def export(self):
     return {
       "namespace": "repeat",
       "count": self._count,
-      "child": self._block.export(),
-      "state": None
+      "child": self._block.export()
     }
 
 @debug

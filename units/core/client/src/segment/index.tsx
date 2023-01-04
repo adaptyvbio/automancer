@@ -183,6 +183,10 @@ function getChildrenExecutionKeys(block: Block, location: Location, path: Protoc
   return null;
 }
 
+function getBlockClassLabel(_block: Block) {
+  return 'Segment';
+}
+
 function getBlockDefaultLabel(block: Block, host: Host) {
   let unit = host.units[block.process.namespace];
   return unit.getProcessLabel?.(block.process.data) ?? null;
@@ -196,6 +200,7 @@ function getBlockLocationLabelSuffix(block: Block, location: Location) {
 export default {
   createActiveBlockMenu,
   createDefaultPoint,
+  getBlockClassLabel,
   getBlockDefaultLabel,
   getBlockLocationLabelSuffix,
   getChildrenExecutionKeys,

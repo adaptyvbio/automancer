@@ -60,9 +60,9 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
   getActiveChildLocation?(location: Location, key: unknown): unknown;
   getBlockClassLabel?(block: Block): string | null;
   getBlockDefaultLabel?(block: Block, host: Host): string | null;
-  getBlockLocationLabelSuffix?(block: Block, location: unknown): string | null;
+  getBlockLocationLabelSuffix?(block: Block, location: Location): string | null;
   getChildBlock?(block: Block, key: unknown): ProtocolBlock;
-  getChildrenExecutionKeys?(block: Block, location: unknown): ProtocolBlockPath | null;
+  getChildrenExecutionKeys?(block: Block, location: Location): ProtocolBlockPath | null;
   isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;

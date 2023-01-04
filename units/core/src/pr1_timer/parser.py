@@ -22,8 +22,8 @@ class TimerParser(BaseParser):
 
   root_attributes = dict()
   segment_attributes = {
-    'activate': lang.Attribute(
-      description="Activates the prototype.",
+    'wait': lang.Attribute(
+      description="Waits for a fixed delay.",
       optional=True,
       type=lang.QuantityType('second')
     )
@@ -35,8 +35,8 @@ class TimerParser(BaseParser):
   def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     attrs = block_attrs[self.namespace]
 
-    if 'activate' in attrs:
-      raw_value = attrs['activate']
+    if 'wait' in attrs:
+      raw_value = attrs['wait']
 
       if raw_value is Ellipsis:
         return lang.Analysis(), Ellipsis
@@ -44,7 +44,7 @@ class TimerParser(BaseParser):
       value = raw_value.value.m_as('ms')
 
       if value < 0:
-        return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
+        return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['wait'].area.ranges)]), Ellipsis
 
       return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(value))])
     else:

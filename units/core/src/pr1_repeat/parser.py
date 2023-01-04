@@ -2,22 +2,20 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Optional
 
-from ..process import ProgramExecEvent
-
-from ...devices.claim import ClaimSymbol
-
-from ...reader import LocationArea
-
-from .. import langservice as lang
-from ..eval import EvalEnv, EvalEnvs, EvalStack
-from ..expr import PythonExprEvaluator
-from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
-from ...util import schema as sc
-from ...util.decorators import debug
+from pr1.fiber.process import ProgramExecEvent
+from pr1.devices.claim import ClaimSymbol
+from pr1.reader import LocationArea
+from pr1.fiber import langservice as lang
+from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
+from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from pr1.util import schema as sc
+from pr1.util.decorators import debug
 
 
 class RepeatParser(BaseParser):
   namespace = "repeat"
+  priority = 800
 
   root_attributes = dict()
   segment_attributes = {

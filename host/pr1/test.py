@@ -54,15 +54,6 @@ async def main():
   await host.initialize()
 
   from .fiber.parser import FiberParser
-  from .fiber.parsers.activate import AcmeParser
-  from .fiber.parsers.condition import ConditionParser
-  from .fiber.parsers.devices import DevicesParser
-  from .fiber.parsers.do import DoParser
-  from .fiber.parsers.repeat import RepeatParser
-  from .fiber.parsers.score import ScoreParser
-  from .fiber.parsers.sequence import SequenceParser
-  from .fiber.parsers.shorthands import ShorthandsParser
-  from .fiber.parsers.state import StateParser
 
   parser = FiberParser("""
 name: Foobar
@@ -89,7 +80,7 @@ steps:
     # - activate: 1 s
 """,
     host=host,
-    Parsers=[StateParser, RepeatParser, SequenceParser, ShorthandsParser, AcmeParser, DevicesParser, ScoreParser]
+    Parsers=host.manager.Parsers
   )
 
 

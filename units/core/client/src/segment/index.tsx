@@ -42,7 +42,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       ? ancestor.state as ProtocolState
       : null;
 
-    let name = (state?.['name'].value ?? null);
+    let name = (state?.['name']?.value ?? null);
     let features = [
       ...(options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, createFeaturesOptions)
         ?? [{ icon: 'not_listed_location', label: 'Unknown process' }])

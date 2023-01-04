@@ -1,17 +1,18 @@
 from types import EllipsisType
 from typing import Any, Optional
 
-from .. import langservice as lang
-from ..eval import EvalEnvs, EvalStack
-from ..expr import PythonExprEvaluator
-from ..parser import BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
-from ...reader import LocationArea
-from ...util import schema as sc
-from ...util.decorators import debug
+from pr1.fiber import langservice as lang
+from pr1.fiber.eval import EvalEnvs, EvalStack
+from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber.parser import BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from pr1.reader import LocationArea
+from pr1.util import schema as sc
+from pr1.util.decorators import debug
 
 
 class DoParser(BaseParser):
   namespace = "do"
+  priority = 900
 
   root_attributes = dict()
   segment_attributes = {

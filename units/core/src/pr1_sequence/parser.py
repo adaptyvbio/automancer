@@ -4,21 +4,23 @@ from enum import IntEnum
 from types import EllipsisType
 from typing import Any, Optional
 
-from .. import langservice as lang
-from ..eval import EvalEnvs, EvalStack
-from ..parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
-from ..process import ProgramExecEvent
-from ...devices.claim import ClaimSymbol
-from ...reader import LocationArea
-from ...util import schema as sc
-from ...util.decorators import debug
-from ...util.iterators import CoupledStateIterator2, TriggerableIterator
+from pr1.fiber import langservice as lang
+from pr1.fiber.eval import EvalEnvs, EvalStack
+from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from pr1.fiber.process import ProgramExecEvent
+from pr1.devices.claim import ClaimSymbol
+from pr1.reader import LocationArea
+from pr1.util import schema as sc
+from pr1.util.decorators import debug
+from pr1.util.iterators import CoupledStateIterator2, TriggerableIterator
 
 
 ActionInfo = tuple[BlockData, LocationArea]
 
 class SequenceParser(BaseParser):
   namespace = "sequence"
+  priority = 700
+
   root_attributes = dict()
   segment_attributes = {
     'actions': lang.Attribute(

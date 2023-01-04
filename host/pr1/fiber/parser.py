@@ -113,8 +113,8 @@ class BlockProgram(Protocol):
   def halt(self):
     ...
 
-  def jump(self, point: Any):
-    ...
+  # def jump(self, point: Any):
+  #   ...
 
   def pause(self):
     ...
@@ -141,7 +141,7 @@ BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 
 class BaseParser:
   namespace: str
-  priority = 0
+  priority: int = 0
   root_attributes = dict[str, lang.Attribute]()
   segment_attributes = dict[str, lang.Attribute]()
 

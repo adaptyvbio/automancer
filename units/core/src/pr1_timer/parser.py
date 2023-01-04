@@ -1,23 +1,23 @@
 from types import EllipsisType
 
-from ..segment import SegmentTransform
-from ..eval import EvalEnvs, EvalStack
-from ..expr import PythonExprEvaluator
-from .. import langservice as lang
-from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
-from ...draft import DraftGenericError
-from ...util.decorators import debug
+from pr1.fiber.segment import SegmentTransform
+from pr1.fiber.eval import EvalEnvs, EvalStack
+from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber import langservice as lang
+from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
+from pr1.draft import DraftGenericError
+from pr1.util.decorators import debug
 
 
 @debug
-class AcmeProcessData:
+class TimerProcessData:
   def __init__(self, value: float):
     self._value = value
 
   def export(self):
     return { "value": self._value }
 
-class AcmeParser(BaseParser):
+class TimerParser(BaseParser):
   namespace = "timer"
 
   root_attributes = dict()
@@ -46,6 +46,6 @@ class AcmeParser(BaseParser):
       if value < 0:
         return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['activate'].area.ranges)]), Ellipsis
 
-      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, AcmeProcessData(value))])
+      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(value))])
     else:
       return lang.Analysis(), BlockUnitData()

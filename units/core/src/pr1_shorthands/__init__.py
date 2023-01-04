@@ -3,18 +3,16 @@ from pathlib import Path
 
 from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
 
-namespace = "sequence"
+namespace = "shorthands"
 version = 0
 
 metadata = Metadata(
-  description="Sequence",
+  description="Shorthands",
   icon=MetadataIcon(kind='icon', value="description"),
-  title="Sequence",
+  title="Shorthands",
   version="1.0"
 )
 
-client_path = Path(files(__name__ + '.client'))
 logger = parent_logger.getChild(namespace)
 
-from .parser import SequenceParser as Parser
-# from .runner import Runner
+from .parser import ShorthandsParser as Parser

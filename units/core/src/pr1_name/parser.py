@@ -1,11 +1,12 @@
 from types import EllipsisType
 from typing import Optional
-from ..eval import EvalEnvs, EvalStack
-from ..langservice import Analysis, Attribute, LiteralOrExprType, PrimitiveType
-from ..expr import PythonExprEvaluator
-from ..parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
-from ...util import schema as sc
-from ...util.decorators import debug
+
+from pr1.fiber.eval import EvalEnvs, EvalStack
+from pr1.fiber.langservice import Analysis, Attribute, LiteralOrExprType, PrimitiveType
+from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
+from pr1.util import schema as sc
+from pr1.util.decorators import debug
 
 
 class NameParser(BaseParser):

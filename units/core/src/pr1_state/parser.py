@@ -5,21 +5,22 @@ import traceback
 from types import EllipsisType
 from typing import Any, Optional
 
-from ...devices.claim import ClaimSymbol
-from ...reader import LocationArea
-from ...util import schema as sc
-from ...util.decorators import debug
-from ...util.iterators import CoupledStateIterator2
-from ..langservice import Analysis
-from ..eval import EvalEnvs, EvalStack
-from ..parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
+from pr1.devices.claim import ClaimSymbol
+from pr1.reader import LocationArea
+from pr1.util import schema as sc
+from pr1.util.decorators import debug
+from pr1.util.iterators import CoupledStateIterator2
+from pr1.fiber.langservice import Analysis
+from pr1.fiber.eval import EvalEnvs, EvalStack
+from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
                       BlockData, BlockProgram, BlockState, BlockUnitData,
                       BlockUnitState, FiberParser, Transforms)
-from ..process import ProgramExecEvent
+from pr1.fiber.process import ProgramExecEvent
 
 
 class StateParser(BaseParser):
   namespace = "state"
+  priority = 1000
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber

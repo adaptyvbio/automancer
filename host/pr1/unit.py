@@ -111,6 +111,20 @@ class UnitManager:
         else:
           logger.debug(f"Loaded unit '{unit_info.namespace}'")
 
+
+    ##
+    # Parser priorities
+    # - 1000 state
+    # - 900  do
+    # - 800  repeat
+    # - 700  sequence
+    # - 600  shorthands
+    # - 0    timer
+    # - 0    name
+    # - 0    [other parsers]
+
+    self.Parsers = sorted([unit.Parser for unit in self.units.values() if hasattr(unit, 'Parser')], key=(lambda Parser: Parser.priority), reverse=True)
+
   def reload(self):
     for unit_info in self.units_info.values():
       if unit_info.development and unit_info.enabled:

@@ -10,9 +10,12 @@ setup(
   entry_points={
     'pr1.units': [
       "devices = pr1_devices",
+      "do = pr1_do",
+      "name = pr1_name",
       "repeat = pr1_repeat",
       "segment = pr1_segment",
       "sequence = pr1_sequence",
+      "shorthands = pr1_shorthands",
       "state = pr1_state",
       "timer = pr1_timer"
     ]

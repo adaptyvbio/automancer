@@ -50,7 +50,9 @@ class DevicesParser(BaseParser):
           return AnyType()
 
     return { key: Attribute(
-      description=(node.label or node.id),
+      description=node.description,
+      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, ScalarWritableNode) and node.unit else None),
+      label=node.label,
       optional=True,
       type=get_type(node)
     ) for key, (node, path) in self.node_map.items() }

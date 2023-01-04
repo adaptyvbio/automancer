@@ -3,10 +3,12 @@ from typing import Any, Optional
 
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
-from pr1.devices.node import BiWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarWritableNode
+from pint import Quantity
+from pr1.devices.node import (BiWritableNode, BooleanWritableNode, DeviceNode,
+                              NodeUnavailableError, PolledReadableNode,
+                              ScalarWritableNode)
 
 from . import logger, namespace
-
 
 variants_map = {
   'bool': ua.VariantType.Boolean,
@@ -35,12 +37,21 @@ class OPCUADeviceReadableNode(PolledReadableNode):
 
 
 class OPCUADeviceWritableNode(BiWritableNode):
-  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
+  def __init__(
+    self,
+    *,
+    description: Optional[str],
+    device: 'OPCUADevice',
+    id: str,
+    label: Optional[str],
+    node: UANode,
+    type: str
+  ):
     super().__init__()
 
+    self.description = description
     self.id = id
     self.label = label
-    self.type = type
 
     self._device = device
     self._node = node
@@ -61,14 +72,16 @@ class OPCUADeviceWritableNode(BiWritableNode):
 
 
 class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
-  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
-    OPCUADeviceWritableNode.__init__(self, device=device, id=id, label=label, node=node, type=type)
+  def __init__(self, *, description: Optional[str], device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
+    OPCUADeviceWritableNode.__init__(self, description=description, device=device, id=id, label=label, node=node, type=type)
     BooleanWritableNode.__init__(self)
 
 class OPCUADeviceScalarNode(OPCUADeviceWritableNode, ScalarWritableNode):
-  def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
-    OPCUADeviceWritableNode.__init__(self, device=device, id=id, label=label, node=node, type=type)
-    ScalarWritableNode.__init__(self)
+  def __init__(self, *, description: Optional[str], device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, quantity: Optional[Quantity], type: str):
+    OPCUADeviceWritableNode.__init__(self, description=description, device=device, id=id, label=label, node=node, type=type)
+    ScalarWritableNode.__init__(self, unit=(quantity.units if quantity is not None else None))
+
+    self._magnitude = quantity.magnitude if quantity is not None else 1.0
 
 
 nodes_map: dict[str, type[OPCUADeviceWritableNode]] = {
@@ -107,13 +120,19 @@ class OPCUADevice(DeviceNode):
     def create_node(node_conf):
       Node = nodes_map[node_conf['type']]
 
-      return Node(
+      opts = dict(
+        description=(node_conf['description'].value if 'description' in node_conf else None),
         device=self,
         id=node_conf['id'].value,
         label=(node_conf['label'].value if 'label' in node_conf else None),
         node=self._client.get_node(node_conf['location'].value),
         type=node_conf['type'].value
       )
+
+      if Node == OPCUADeviceScalarNode:
+        opts['quantity'] = node_conf['unit'].value if 'unit' in node_conf else None
+
+      return Node(**opts) # type: ignore
 
     self._keepalive_node = OPCUADeviceReadableNode(
       device=self,

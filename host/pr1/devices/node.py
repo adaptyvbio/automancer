@@ -27,6 +27,7 @@ class BaseNode:
 
   def __init__(self):
     self.connected: bool
+    self.description: Optional[str]
     self.id: str
     self.label: Optional[str]
 
@@ -256,7 +257,7 @@ class ScalarWritableNode(BaseWritableNode[float]):
       "data": {
         "type": "writableScalar",
         "range": self.range,
-        "unit": self.unit,
+        "unit": None, # self.unit,
         "currentValue": self.current_value,
         "targetValue": self.target_value
       }

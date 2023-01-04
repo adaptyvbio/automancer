@@ -11,7 +11,7 @@ from . import logger
 
 class Executor(BaseExecutor):
   def __init__(self, conf, *, host: Host):
-    conf = sc.Schema({}).validate(conf)
+    conf = sc.Schema({}).transform(conf)
 
     self._host = host
     self._registration = None

@@ -18,6 +18,7 @@ class MockDevice(DeviceNode):
 
 class MockBoolNode(BooleanWritableNode):
   id = "valueBool"
+  description = None
   label = "Bool value"
 
   def __init__(self):

@@ -1,38 +1,42 @@
 import logging
+from typing import Any
 
+from pr1.fiber.langservice import (ArbitraryQuantityType, Attribute, DictType,
+                                   EnumType, IdentifierType, ListType, StrType)
+from pr1.host import Host
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
 from pr1.util.parser import Identifier
 
 from .device import OPCUADevice, variants_map
 
-
 logging.getLogger("asyncua").setLevel(logging.WARNING)
 
 
-conf_schema = sc.Schema({
-  'devices': sc.Optional(sc.List({
-    'address': str,
-    'label': sc.Optional(str),
-    'id': Identifier(),
-    'nodes': sc.Noneable(sc.List({
-      'id': str,
-      'label': sc.Optional(str),
-      'location': str,
-      'type': sc.Or(*variants_map.keys())
-    }))
-  }))
-})
-
-
 class Executor(BaseExecutor):
-  def __init__(self, conf, *, host):
-    conf = conf_schema.transform(conf)
+  options_type = DictType({
+    'devices': ListType(DictType({
+      'address': StrType(),
+      'id': IdentifierType(),
+      'label': Attribute(StrType(), optional=True),
+      'nodes': ListType(DictType({
+        'description': Attribute(StrType(), optional=True),
+        'id': StrType(),
+        'label': Attribute(StrType(), optional=True),
+        'location': StrType(),
+        'type': EnumType(*variants_map.keys()),
+        'unit': Attribute(ArbitraryQuantityType(), optional=True)
+      }))
+    }))
+  })
 
-    self._devices = dict()
+  def __init__(self, conf: Any, *, host: Host):
+    self._conf = conf
     self._host = host
 
-    for device_conf in conf.get('devices', list()):
+    self._devices = dict()
+
+    for device_conf in self._conf['devices']:
       device_id = device_conf['id']
 
       if device_id in self._host.devices:

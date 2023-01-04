@@ -159,9 +159,9 @@ class Attribute:
     analysis = Analysis()
     key_range = key.area.single_range()
 
-    if self._description or self._documentation:
+    if self._description or self._documentation or self._label:
       analysis.hovers.append(Hover(
-        contents=([f"#### {key.upper()}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
+        contents=([f"#### {self._label or key.upper()}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
         range=key_range
       ))
 
@@ -282,10 +282,12 @@ class CompositeDict:
 
       attr = attr_entries[namespace]
       attr_analysis, attr_value = attr.analyze(obj_value, obj_key, context)
-      attr_values[namespace][attr_name] = attr_value
 
-      if isinstance(attr_value, EllipsisType):
-        strict_failed = True
+      if not (isinstance(attr_value, EllipsisType) and self._strict and attr._optional):
+        attr_values[namespace][attr_name] = attr_value
+
+        if isinstance(attr_value, EllipsisType):
+          strict_failed = True
 
       analysis += attr_analysis
 
@@ -358,7 +360,7 @@ class MissingUnitError(LangServiceError):
     self.unit = unit
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Missing unit, expected '{self.unit}'", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
 
 class InvalidUnitError(LangServiceError):
   def __init__(self, target, unit):
@@ -366,7 +368,15 @@ class InvalidUnitError(LangServiceError):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Invalid unit, expected '{self.unit}'", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Invalid unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
+
+class UnknownUnitError(LangServiceError):
+  def __init__(self, target):
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Unknown unit", ranges=self.target.area.ranges)
+
 
 class AnyType:
   def __init__(self):
@@ -458,7 +468,9 @@ class QuantityType(LiteralOrExprType):
   def analyze(self, obj, context):
     if isinstance(obj, str):
       try:
-        value = context.ureg.Quantity(obj.value)
+        value = context.ureg(obj.value)
+      except pint.errors.UndefinedUnitError:
+        return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
       except pint.PintError:
         return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
     else:
@@ -477,9 +489,13 @@ class QuantityType(LiteralOrExprType):
 class ArbitraryQuantityType:
   def analyze(self, obj, context):
     try:
-      return Analysis(), context.ureg.Quantity(obj.value)
+      quantity = context.ureg.Quantity(obj.value)
+    except pint.errors.UndefinedUnitError:
+      return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
     except pint.PintError:
       return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+
+    return Analysis(), LocatedValue.new(quantity, area=obj.area)
 
 
 class StrType(PrimitiveType):

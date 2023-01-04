@@ -319,8 +319,8 @@ class FiberParser:
     if not isinstance(entry_block, EllipsisType):
       print("<= ENTRY =>")
       # print(entry_block)
-      print(json.dumps(entry_block.export(), indent=2))
-      print()
+      # print(json.dumps(entry_block.export(), indent=2))
+      # print()
 
       # print("<= LINEARIZATION =>")
       # linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self), None)

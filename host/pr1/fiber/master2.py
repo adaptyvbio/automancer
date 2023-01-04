@@ -97,6 +97,7 @@ class Master:
     self._program: BlockProgram
     self._location: Any
 
+    self._done_future: Optional[asyncio.Future] = None
     self._pause_future: Optional[asyncio.Future] = None
 
   def halt(self):
@@ -105,6 +106,14 @@ class Master:
   def pause(self):
     self._pause_future = asyncio.Future()
     self._program.pause()
+
+  async def wait_done(self):
+    assert self._done_future
+    await self._done_future
+
+  async def wait_halt(self):
+    self.halt()
+    await self.wait_done()
 
   async def wait_pause(self):
     self.pause()
@@ -151,10 +160,15 @@ class Master:
             update_callback()
 
         done_callback()
+
+        assert self._done_future
+        self._done_future.set_result(None)
       except Exception:
         traceback.print_exc()
 
     start_future = asyncio.Future()
+
+    self._done_future = asyncio.Future()
     self._task = asyncio.create_task(run_loop())
 
     await start_future

@@ -42,7 +42,7 @@ class Host:
     self.data_dir = backend.data_dir
     self.update_callback = update_callback
 
-    self.chips = dict()
+    self.chips = dict[str, Chip]()
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
@@ -155,6 +155,12 @@ class Host:
 
   async def destroy(self):
     logger.info("Destroying host")
+
+    for chip in self.chips.values():
+      if chip.master:
+        logger.info(f"Halting master running '{chip.master.protocol.name}' on chip '{chip.id}'")
+        await chip.master.wait_halt()
+
     logger.debug("Destroying executors")
 
     for executor in self.executors.values():

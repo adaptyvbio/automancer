@@ -4,6 +4,7 @@ import math
 import pickle
 import struct
 import time
+from typing import Optional
 import uuid
 from collections import namedtuple
 from enum import IntEnum
@@ -112,10 +113,12 @@ class Chip(BaseChip):
   version = 2
 
   def __init__(self, *, dir, id):
+    from .fiber.master2 import Master
+
     self.dir = dir
     self.id = id
     self.issues = list()
-    self.master = None
+    self.master: Optional[Master] = None
     self.runners = dict()
 
     self._header_path = (dir / ".header.json")

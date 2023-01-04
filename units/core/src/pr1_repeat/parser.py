@@ -118,9 +118,6 @@ class RepeatProgram(BlockProgram):
     assert not self.busy
     self._child_program.pause()
 
-  def resume(self):
-    pass
-
   async def run(self, initial_point: Optional[RepeatProgramPoint], symbol: ClaimSymbol):
     self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
     child_block = self._block._block

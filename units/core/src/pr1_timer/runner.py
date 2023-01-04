@@ -41,6 +41,7 @@ class Process:
       self._task.cancel()
     if self._resume_future:
       self._resume_future.cancel()
+      self._resume_future = None
 
   def jump(self, point: ProcessPoint):
     self._progress = point.progress
@@ -56,7 +57,9 @@ class Process:
 
   def resume(self):
     assert self._resume_future
+
     self._resume_future.set_result(None)
+    self._resume_future = None
 
   async def run(self, initial_point: Optional[ProcessPoint]):
     self._progress = initial_point.progress if initial_point else 0.0
@@ -118,8 +121,9 @@ class Process:
             # The process is halting.
             return
       else:
-        self._task = None
         break
+      finally:
+        self._task = None
 
     yield ProgramExecEvent(
       duration=0.0,

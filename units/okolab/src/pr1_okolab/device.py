@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceDisconnectedError, OkolabDeviceStatus
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, BiWritableNode
+from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, ConfigurableWritableNode
 
 from . import logger, namespace
 
@@ -44,15 +44,15 @@ class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
     except OkolabDeviceDisconnectedError as e:
       raise NodeUnavailableError() from e
 
-class TemperatureSetpointNode(ScalarWritableNode, BiWritableNode):
+class TemperatureSetpointNode(ScalarWritableNode, ConfigurableWritableNode):
   id = "setpoint"
   label = "Temperature setpoint"
 
   icon = "thermostat"
 
   def __init__(self, *, index: int, master: 'MasterDevice'):
-    ScalarWritableNode.__init__(self, range=(25.0, 60.0), unit="degC")
-    BiWritableNode.__init__(self)
+    ScalarWritableNode.__init__(self, min=25.0, max=60.0, unit="degC")
+    ConfigurableWritableNode.__init__(self)
 
     self._index = index
     self._master = master

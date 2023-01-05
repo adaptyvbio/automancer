@@ -19,6 +19,7 @@ from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext, FiberParser
 from .protocol import Protocol
 from .unit import UnitManager
+from .ureg import ureg
 from .util import schema as sc
 
 
@@ -109,7 +110,7 @@ class Host:
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 
-    self.ureg = UnitRegistry(autoconvert_offset_to_baseunit=True)
+    self.ureg = ureg
     self.analysis_context = AnalysisContext(ureg=self.ureg)
 
     analysis = Analysis()

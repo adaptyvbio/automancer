@@ -101,7 +101,7 @@ class BaseExecutor:
   def __init__(self, conf, *, host):
     pass
 
-  def load(self):
+  def load(self, context):
     return None
 
   """

@@ -32,6 +32,7 @@ logger = logging.getLogger("pr1.test")
 class Backend:
   def __init__(self) -> None:
     self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
+    self.data_dir = Path("tmp/master-host")
     logger.debug(f"Storing data in '{self.data_dir}'")
 
 
@@ -59,9 +60,9 @@ async def main():
 name: Foobar
 
 steps:
-  actions:
-    - activate: 1s
-    - activate: 1s
+  wait: 1s
+  PLC.S00: 3.66 psi
+
   # actions:
   #   - activate: 1s
   #   - activate: 1s

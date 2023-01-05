@@ -1,19 +1,19 @@
 from typing import Callable, Optional
 
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import BiWritableNode, DeviceNode, EnumNodeOption, EnumWritableNode, NodeUnavailableError
+from pr1.devices.node import ConfigurableWritableNode, DeviceNode, EnumNodeOption, EnumWritableNode, NodeUnavailableError
 
 from .amf import AMFRotaryValveDevice, AMFRotaryValveDeviceDisconnectedError
 from .. import logger, namespace
 
 
-class RotaryValveNode(EnumWritableNode, BiWritableNode):
+class RotaryValveNode(EnumWritableNode, ConfigurableWritableNode):
   id = "rotation"
   label = "Rotation"
 
   def __init__(self, *, device: 'RotaryValveDevice', valve_count: int):
     EnumWritableNode.__init__(self, options=[EnumNodeOption(f"Valve {index + 1}") for index in range(valve_count)])
-    BiWritableNode.__init__(self)
+    ConfigurableWritableNode.__init__(self)
 
     self._device = device
 

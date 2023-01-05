@@ -345,6 +345,21 @@ class DictType(SimpleDict):
   def __init__(self, attrs, *, foldable = False):
     super().__init__(attrs, foldable=foldable, strict=True)
 
+  # def analyze(self, obj, context):
+  #   analysis, value = super().analyze(obj, context)
+
+  #   if isinstance(value, EllipsisType):
+  #     return analysis, Ellipsis
+
+  #   return LocatedDict(, area=obj.area)
+
+
+class InvalidValueError(LangServiceError):
+  def __init__(self, target):
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid value", ranges=self.target.area.ranges)
 
 class InvalidPrimitiveError(LangServiceError):
   def __init__(self, target, primitive):
@@ -360,7 +375,7 @@ class MissingUnitError(LangServiceError):
     self.unit = unit
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Missing unit, expected {self.unit}", ranges=self.target.area.ranges)
 
 class InvalidUnitError(LangServiceError):
   def __init__(self, target, unit):
@@ -368,7 +383,7 @@ class InvalidUnitError(LangServiceError):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Invalid unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Invalid unit, expected {self.unit}", ranges=self.target.area.ranges)
 
 class UnknownUnitError(LangServiceError):
   def __init__(self, target):
@@ -468,7 +483,7 @@ class QuantityType(LiteralOrExprType):
   def analyze(self, obj, context):
     if isinstance(obj, str):
       try:
-        value = context.ureg(obj.value)
+        value = context.ureg.Quantity(obj.value)
       except pint.errors.UndefinedUnitError:
         return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
       except pint.PintError:
@@ -476,15 +491,19 @@ class QuantityType(LiteralOrExprType):
     else:
       value = obj
 
+    return self.check(value, self._unit, target=obj)
+
+  @staticmethod
+  def check(value: Quantity, unit: Unit | str, *, target):
     match value:
-      case Quantity() if value.check(self._unit):
-        return Analysis(), LocatedValue.new(value.to(self._unit), area=obj.area)
+      case Quantity() if value.check(unit):
+        return Analysis(), LocatedValue.new(value.to(unit), area=target.area)
+      case Quantity(dimensionless=True):
+        return Analysis(errors=[MissingUnitError(target, unit)]), Ellipsis
       case Quantity():
-        return Analysis(errors=[InvalidUnitError(obj, self._unit)]), Ellipsis
-      case builtins.float() | builtins.int():
-        return Analysis(errors=[MissingUnitError(obj, self._unit)]), Ellipsis
+        return Analysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
       case _:
-        return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
+        return Analysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
 
 class ArbitraryQuantityType:
   def analyze(self, obj, context):

@@ -71,7 +71,7 @@ class UnitManager:
         return analysis, Ellipsis
 
       executor = Executor(conf, host=host)
-      analysis_load = executor.load()
+      analysis_load = executor.load(host.analysis_context)
 
       if analysis_load:
         analysis += analysis_load

@@ -4,7 +4,7 @@ from typing import Any, Optional
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
 from pint import Quantity
-from pr1.devices.node import (BiWritableNode, BooleanWritableNode, DeviceNode,
+from pr1.devices.node import (ConfigurableWritableNode, BooleanWritableNode, DeviceNode,
                               NodeUnavailableError, PolledReadableNode,
                               ScalarWritableNode)
 
@@ -12,7 +12,12 @@ from . import logger, namespace
 
 variants_map = {
   'bool': ua.VariantType.Boolean,
+  'i16': ua.VariantType.Int16,
   'i32': ua.VariantType.Int32,
+  'i64': ua.VariantType.Int64,
+  'u16': ua.VariantType.UInt16,
+  'u32': ua.VariantType.UInt32,
+  'u64': ua.VariantType.UInt64,
   'f32': ua.VariantType.Float,
   'f64': ua.VariantType.Double
 }
@@ -36,7 +41,7 @@ class OPCUADeviceReadableNode(PolledReadableNode):
       raise NodeUnavailableError() from e
 
 
-class OPCUADeviceWritableNode(BiWritableNode):
+class OPCUADeviceWritableNode(ConfigurableWritableNode):
   def __init__(
     self,
     *,
@@ -55,7 +60,21 @@ class OPCUADeviceWritableNode(BiWritableNode):
 
     self._device = device
     self._node = node
+    self._type = type
     self._variant = variants_map[type]
+
+  @property
+  def _long_label(self):
+    return f"node {self._label}" + (f" with id '{self._node.nodeid.to_string()}'" if self._node.nodeid else str())
+
+  async def _configure(self):
+    if (variant := await self._node.read_data_type_as_variant_type()) != self._variant:
+      found_type = next((key for key, test_variant in variants_map.items() if test_variant == variant), 'unknown')
+      logger.error(f"Type mismatch of {self._long_label}, expected {self._type}, found {found_type}")
+
+      return
+
+    await super()._configure()
 
   async def _read(self):
     try:
@@ -64,11 +83,16 @@ class OPCUADeviceWritableNode(BiWritableNode):
       await self._device._lost()
       raise NodeUnavailableError() from e
     except ua.uaerrors._auto.BadNodeIdUnknown as e: # type: ignore
-      logger.error(f"Missing node {self._label}" + (f" with id '{self._node.nodeid.to_string()}'" if self._node.nodeid else str()))
+      logger.error(f"Missing {self._long_label}")
       raise NodeUnavailableError() from e
 
-  async def _write(self, value: bool):
-    await self._node.write_value(ua.DataValue(value)) # type: ignore
+  async def _write(self, raw_value: Any, /):
+    match self._type:
+      case 'i16' | 'i32' | 'i64' | 'u16' | 'u32' | 'u64': value = int(raw_value)
+      case 'f32' | 'f64': value = float(raw_value)
+      case _: value = raw_value
+
+    await self._node.write_value(ua.DataValue(ua.Variant(value, self._variant)))
 
 
 class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
@@ -76,17 +100,25 @@ class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
     OPCUADeviceWritableNode.__init__(self, description=description, device=device, id=id, label=label, node=node, type=type)
     BooleanWritableNode.__init__(self)
 
-class OPCUADeviceScalarNode(OPCUADeviceWritableNode, ScalarWritableNode):
+class OPCUADeviceScalarNode(ScalarWritableNode, OPCUADeviceWritableNode):
   def __init__(self, *, description: Optional[str], device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, quantity: Optional[Quantity], type: str):
     OPCUADeviceWritableNode.__init__(self, description=description, device=device, id=id, label=label, node=node, type=type)
-    ScalarWritableNode.__init__(self, unit=(quantity.units if quantity is not None else None))
-
-    self._magnitude = quantity.magnitude if quantity is not None else 1.0
+    ScalarWritableNode.__init__(
+      self,
+      dtype=("<" + type),
+      factor=(quantity.magnitude if quantity is not None else 1.0),
+      unit=(quantity.units if quantity is not None else None)
+    )
 
 
 nodes_map: dict[str, type[OPCUADeviceWritableNode]] = {
   'bool': OPCUADeviceBooleanNode,
+  'i16': OPCUADeviceScalarNode,
   'i32': OPCUADeviceScalarNode,
+  'i64': OPCUADeviceScalarNode,
+  'u16': OPCUADeviceScalarNode,
+  'u32': OPCUADeviceScalarNode,
+  'u64': OPCUADeviceScalarNode,
   'f32': OPCUADeviceScalarNode,
   'f64': OPCUADeviceScalarNode
 }

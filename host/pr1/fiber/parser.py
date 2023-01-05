@@ -241,7 +241,7 @@ class FiberParser:
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
     self.host = host
-    self.ureg = UnitRegistry(autoconvert_offset_to_baseunit=True)
+    self.ureg = host.ureg
 
     self.analysis = lang.Analysis()
     self.analysis_context = AnalysisContext(ureg=self.ureg)

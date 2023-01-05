@@ -2,19 +2,19 @@ import functools
 from typing import Callable, Optional
 
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import BiWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
+from pr1.devices.node import ConfigurableWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
 
 from .numato import NumatoRelayBoardDevice, NumatoRelayBoardDeviceDisconnectedError
 from .. import logger, namespace
 
 
-class RelayBoardGlobalNode(ScalarWritableNode, BiWritableNode):
+class RelayBoardGlobalNode(ScalarWritableNode, ConfigurableWritableNode):
   id = "global"
   label = "Global"
 
   def __init__(self, *, device: 'RelayBoardDevice'):
     ScalarWritableNode.__init__(self)
-    BiWritableNode.__init__(self)
+    ConfigurableWritableNode.__init__(self)
 
     self._device = device
 

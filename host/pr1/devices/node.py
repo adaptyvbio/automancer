@@ -1,9 +1,10 @@
 import asyncio
 import traceback
-from pint import Unit
+from pint import Quantity, Unit, UnitRegistry
 from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
 
 from .claim import Claimable
+from ..ureg import ureg
 
 
 T = TypeVar('T')
@@ -145,6 +146,7 @@ class BooleanReadableNode(BaseReadableNode[bool]):
 class EnumNodeOption:
   def __init__(self, label: str):
     self.label = label
+    self.value: Any
 
 class EnumReadableNode(BaseReadableNode[int]):
   def __init__(self):
@@ -239,12 +241,35 @@ class EnumWritableNode(BaseWritableNode[int]):
     }
 
 class ScalarWritableNode(BaseWritableNode[float]):
-  def __init__(self, *, range: Optional[tuple[float, float]] = None, unit: Optional[Unit | str] = None):
-    super().__init__()
+  _ureg: UnitRegistry = ureg
 
-    self.range = range
-    self.resolution = None
-    self.unit = unit
+  def __init__(
+    self,
+    *,
+    dtype: str = '<f32',
+    factor: float = 1.0,
+    max: Optional[Quantity] = None,
+    min: Optional[Quantity] = None,
+    unit: Optional[Unit | str] = None
+  ):
+    BaseWritableNode.__init__(self)
+
+    self.dtype = dtype
+    self.factor = factor
+    self.max = max
+    self.min = min
+    self.unit: Unit = self._ureg.Unit(self.unit or 'dimensionless') if isinstance(unit, str) else unit
+
+  async def write(self, raw_value: Quantity | float, /):
+    value: Quantity = (raw_value * self.unit) if isinstance(raw_value, float) else raw_value.to(self.unit)
+    assert value.check(self.unit)
+
+    if self.min is not None:
+      assert value >= self.min
+    if self.max is not None:
+      assert value <= self.max
+
+    await super().write(value.magnitude / self.factor)
 
   async def write_import(self, value: float):
     await self.write(value)
@@ -256,14 +281,13 @@ class ScalarWritableNode(BaseWritableNode[float]):
       **exported,
       "data": {
         "type": "writableScalar",
-        "range": self.range,
         "unit": None, # self.unit,
         "currentValue": self.current_value,
         "targetValue": self.target_value
       }
     }
 
-class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
+class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
   def __init__(self):
     BaseWatchableNode.__init__(self)
     BaseWritableNode.__init__(self)
@@ -310,7 +334,7 @@ class BiWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
 
   # Called by the consumer
 
-  async def write(self, value: T):
+  async def write(self, value: T, /):
     self.target_value = value
 
     if self.connected:

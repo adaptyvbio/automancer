@@ -139,6 +139,15 @@ class SegmentProgram(BlockProgram):
     Process = self._master.chip.runners[self._block._process.namespace].Process
     self._point = initial_point or SegmentProgramPoint(process=None)
 
+    self._master.host.root_node.transfer_claims()
+
+    # def x():
+    #   logger.debug("Transfering node claims")
+    #   self._master.host.root_node.transfer_claims()
+
+    # loop = asyncio.get_event_loop()
+    # loop.call_soon(x)
+
     async def run():
       while self._point:
         point = self._point

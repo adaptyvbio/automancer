@@ -1,5 +1,6 @@
 import asyncio
-from typing import Optional
+import traceback
+from typing import Any, Coroutine, Literal, Optional, overload
 
 
 class ClaimSymbol:
@@ -27,7 +28,7 @@ class ClaimSymbol:
 
 
 class Claim:
-  def __init__(self, *, target: 'Claimable', symbol: Optional[ClaimSymbol]):
+  def __init__(self, *, target: 'Claimable', symbol: ClaimSymbol):
     self.target = target
     self.symbol = symbol
 
@@ -38,7 +39,7 @@ class Claim:
     return self.target._owner is self
 
   async def lost(self):
-    await asyncio.shield(self._lost_future)
+    return await asyncio.shield(self._lost_future)
 
   def release(self):
     if not self.valid:
@@ -52,32 +53,135 @@ class Claim:
   def __repr__(self):
     return f"Claim(symbol={self.symbol}, target={self.target})"
 
+
+class ClaimTransferFailUnknownError(Exception):
+  pass
+
+class ClaimTransferFailChildError(Exception):
+  pass
+
+class ClaimToken:
+  def __init__(self, target: 'Claimable', *, symbol: ClaimSymbol):
+    self._cancelled = False
+    self._claim: Optional[Claim] = None
+    self._target = target
+    self._futures = set[tuple[asyncio.Future, bool]]()
+    self._symbol = symbol
+    self._task = asyncio.create_task(self._loop())
+
+  async def _loop(self):
+    try:
+      while True:
+        try:
+          self._claim = await self._target.claim(self._symbol, err=True)
+        except (ClaimTransferFailChildError, ClaimTransferFailUnknownError) as e:
+          for pair in self._futures.copy():
+            future, err = pair
+
+            if err:
+              future.set_exception(e)
+              self._futures.remove(pair)
+
+          continue
+
+        for future, _ in self._futures:
+          future.set_result(None)
+
+        self._futures.clear()
+
+        await self._claim.lost()
+        self._claim = None
+    except asyncio.CancelledError:
+      if self._claim:
+        self._claim.release()
+        self._claim = None
+    except Exception as e:
+      traceback.print_exc()
+
+  async def cancel(self):
+    if self._cancelled:
+      return
+
+    self._cancelled = True
+
+    for future, _ in self._futures:
+      future.cancel()
+
+      try:
+        await future
+      except asyncio.CancelledError:
+        pass
+
+    self._task.cancel()
+
+    try:
+      await self._task
+    except asyncio.CancelledError:
+      pass
+
+  async def wait(self, *, err: bool = False):
+    if self._claim:
+      return self._claim
+
+    future = asyncio.Future()
+    pair = (future, err)
+    self._futures.add(pair)
+
+    try:
+      await future
+    except asyncio.CancelledError:
+      self._futures.remove(pair)
+      await self.cancel()
+
+      raise
+
+    assert self._claim
+    return self._claim
+
+
 class Claimable:
-  def __init__(self, *, auto_transfer: bool = True):
+  def __init__(self, *, auto_transfer: bool = False):
     self._auto_transfer = auto_transfer
-    self._claimants = list()
+    self._claimants = list[tuple[ClaimSymbol, asyncio.Future, bool]]()
     self._owner: Optional[Claim] = None
 
-  def _designate_target(self):
-    if self._claimants:
-      symbol, future = self._claimants.pop()
+  def _designate_owner(self):
+    if self._claimants and (not self._owner or (self._claimants[-1][0] > self._owner.symbol)):
+      symbol, future, _ = self._claimants.pop()
+
+      if self._owner:
+        self._owner._lost_future.set_result(symbol > self._owner.symbol)
+
       self._owner = Claim(target=self, symbol=symbol)
       future.set_result(None)
 
+    for claimant in self._claimants.copy():
+      assert self._owner
+      symbol, future, err = claimant
+
+      if err:
+        future.set_exception(ClaimTransferFailChildError() if self._owner.symbol > symbol else ClaimTransferFailUnknownError())
+        self._claimants.remove(claimant)
+
   def _designate_target_soon(self):
     loop = asyncio.get_running_loop()
-    loop.call_soon(self._designate_target)
+    loop.call_soon(self._designate_owner)
 
-  async def claim(self, symbol: ClaimSymbol) -> Claim:
-    claim = self.claim_now(symbol)
+  @overload
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: Literal[False] = False) -> Coroutine[Any, Any, Claim]:
+    ...
 
-    if claim:
-      return claim
-    else:
-      future = asyncio.Future()
-      claimant = (symbol, future)
-      self._claimants.append(claimant)
+  @overload
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: Literal[True]) -> asyncio.Task[Claim]:
+    ...
 
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: bool = False):
+    future = asyncio.Future()
+    claimant = (symbol, future, err)
+    self._claimants.append(claimant)
+    self._claimants = sorted(self._claimants, key=(lambda claimant: claimant[0]))
+
+    async def func():
       try:
         await future
       except asyncio.CancelledError:
@@ -87,21 +191,21 @@ class Claimable:
       assert self._owner
       return self._owner
 
-  def claim_now(self, symbol: Optional[ClaimSymbol] = None, *, force = False) -> Optional[Claim]:
-    if (not self._owner) or (symbol and self._owner.symbol and (symbol > self._owner.symbol)) or force:
-      if self._owner:
-        self._owner._lost_future.set_result(None)
+    return asyncio.ensure_future(func()) if token else func()
 
-      self._owner = Claim(target=self, symbol=symbol)
-      return self._owner
-    else:
-      return None
+  def force_claim(self, symbol: ClaimSymbol) -> Claim:
+    if self._owner:
+      self._owner._lost_future.set_result(None)
+
+    self._owner = Claim(target=self, symbol=symbol)
+    return self._owner
+
+  def create_token(self, symbol: ClaimSymbol):
+    return ClaimToken(self, symbol=symbol)
 
   def transfer(self):
     assert not self._auto_transfer
-
-    if not self._owner:
-      self._designate_target()
+    self._designate_owner()
 
 
 if __name__ == '__main__':

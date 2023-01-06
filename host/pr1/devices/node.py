@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 from pint import Quantity, Unit, UnitRegistry
-from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
+from typing import Any, Callable, Generic, Optional, Protocol, Sequence, TypeVar
 
 from .claim import Claimable
 from ..ureg import ureg
@@ -11,7 +11,7 @@ T = TypeVar('T')
 
 # Misc
 
-NodePath = tuple[str]
+NodePath = Sequence[str]
 
 
 # Base nodes

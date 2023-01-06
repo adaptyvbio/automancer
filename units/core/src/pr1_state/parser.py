@@ -53,8 +53,7 @@ class StateTransform(BaseTransform):
 
     return Analysis(), StateBlock(
       child=child,
-      state=state,
-      terminal=((len(transforms) > 0) and isinstance(transforms[-1], SegmentTransform))
+      state=state
     )
 
 
@@ -141,20 +140,6 @@ class StateProgram(BlockProgram):
     self._mode = StateProgramMode.Resuming
     self._iterator.trigger()
 
-  def _apply_state(self, state: BlockState, /):
-    # print(">>>>", hasattr(self._iterator, '_state'), self._state_instance.applied)
-
-    # The value of self._mode is:
-    #   - Starting if this program applied its own state
-    #   - Normal if a child program calculated the state
-    if (self._mode == StateProgramMode.Starting) or (self._mode == StateProgramMode.Normal):
-      if not self._state_instance.applied:
-        state_location = self._state_instance.apply(state, resume=False)
-      else:
-        state_location = self._state_instance.update(state)
-
-      self._iterator.notify(state_location)
-
   async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
       while self._point:
@@ -173,19 +158,19 @@ class StateProgram(BlockProgram):
     self._iterator = CoupledStateIterator2(run())
 
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
+    self._state_instance.prepare(self._block.state)
 
-    if parent_state_program:
-      parent_state_program._state_final, self._state_excess = parent_state_program._state_excess & self._block.state
-      # print("!", self._block.terminal, parent_state_final['devices'], self._state_excess['devices'])
-      parent_state_program._apply_state(parent_state_program._state_final)
-    else:
-      self._state_excess = self._block.state
+    # state_location = await self._state_instance.apply(self._block.state, resume=False)
+    # self._iterator.notify(state_location)
 
-    if self._block.terminal:
-      self._state_final = self._state_excess
-      self._apply_state(self._state_final)
+    async def apply_state():
+      try:
+        state_location = await self._state_instance.apply(self._block.state, resume=False)
+        self._iterator.notify(state_location)
+      except Exception:
+        traceback.print_exc()
 
-    async def suspend_state(*, change_parent: bool = False):
+    async def suspend_state():
       try:
         await self._state_instance.suspend()
 
@@ -196,12 +181,10 @@ class StateProgram(BlockProgram):
           case StateProgramMode.HaltingState:
             self._mode = StateProgramMode.Halted
             self._iterator.trigger()
-
-        if change_parent and parent_state_program:
-          # This will be ignored if 'parent_state_program' is pausing
-          parent_state_program._apply_state(parent_state_program._state_excess)
       except Exception:
         traceback.print_exc()
+
+    asyncio.create_task(apply_state())
 
     async for event, state_location in self._iterator:
       self._child_stopped = event.stopped
@@ -209,7 +192,7 @@ class StateProgram(BlockProgram):
       # If the child was immediately paused, then no event gets emitted.
       if (self._mode == StateProgramMode.PausingChild) and event.stopped:
         self._mode = StateProgramMode.PausingState
-        asyncio.create_task(suspend_state(change_parent=True))
+        asyncio.create_task(suspend_state())
         continue
 
       if event.terminated:
@@ -258,10 +241,9 @@ class StateBlock(BaseBlock):
   Point: type[StateProgramPoint] = StateProgramPoint
   Program = StateProgram
 
-  def __init__(self, child: BaseBlock, state: BlockState, *, terminal: bool):
+  def __init__(self, child: BaseBlock, state: BlockState):
     self.child = child
     self.state: BlockState = state # TODO: Remove explicit type hint
-    self.terminal = terminal
 
   def export(self):
     return {

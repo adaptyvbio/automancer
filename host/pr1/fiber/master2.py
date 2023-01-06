@@ -1,15 +1,18 @@
 import asyncio
 from dataclasses import dataclass
 import traceback
-from typing import Any, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
+from .process import ProgramExecEvent
 from .eval import EvalStack
-
 from ..units.base import BaseRunner
 from .parser import BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
 from ..util.iterators import DynamicParallelIterator
+
+if TYPE_CHECKING:
+  from ..host import Host
 
 
 @dataclass
@@ -23,11 +26,12 @@ class StateLocation:
 
 
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, host):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, host: 'Host'):
     self.chip = chip
     self.host = host
     self.protocol = protocol
 
+    self._events = list[ProgramExecEvent]()
     self._program: BlockProgram
     self._location: Any
 
@@ -90,6 +94,8 @@ class Master:
 
       try:
         async for event in self.run():
+          self._events.append(event)
+
           if event.location:
             self._location = event.location
 
@@ -141,10 +147,17 @@ class StateInstanceCollection:
     self._location.unit_locations[namespace] = event
     self._notify(self._location)
 
-  def apply(self, state: BlockState, *, resume: bool):
+  def prepare(self, state: BlockState):
+    for namespace, instance in self._instances.items():
+      instance.prepare(state[namespace])
+
+  async def apply(self, state: BlockState, *, resume: bool):
     self._applied = True
-    self._location = StateLocation({ namespace: instance.apply(state[namespace], resume=resume) for namespace, instance in self._instances.items()})
     self._state = state
+    self._location = StateLocation({})
+
+    for namespace, instance in self._instances.items():
+      self._location.unit_locations[namespace] = await instance.apply(state[namespace], resume=resume)
 
     return self._location
 
@@ -159,47 +172,3 @@ class StateInstanceCollection:
 
     self._applied = False
     await asyncio.gather(*[instance.suspend() for namespace, instance in self._instances.items()])
-
-
-# class StateInstanceCollection:
-#   def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, parent: Optional['StateInstanceCollection'], symbol: ClaimSymbol):
-#     self._applied = False
-#     self._notify = notify
-#     self._runners = runners
-#     self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
-#     self._location: StateLocation
-#     self._parent = parent
-#     self._suspended = False
-
-#     self._final_state: Any
-#     self._full_state: Any
-#     self._reduced_state: Any
-
-#   @property
-#   def applied(self):
-#     return self._applied
-
-#   def _notify_unit(self, namespace: str, event: Any):
-#     self._location.unit_locations[namespace] = event
-#     self._notify(self._location)
-
-#   def apply(self, state: Any, *, resume: bool):
-#     self._full_state = state
-
-#     # self._applied = True
-#     # self._location = StateLocation({ namespace: instance.apply(state[namespace], resume=resume) for namespace, instance in self._instances.items()})
-#     # return self._location
-
-#   def reduce(self):
-#     if self._parent:
-#       self._parent.reduce()
-#       self._parent._final_state, self._reduced_state = self._parent._reduced_state & self._full_state
-#     else:
-#       self._reduced_state = self._full_state
-
-#   def update(self, state: Any):
-#     ...
-
-#   async def suspend(self):
-#     self._applied = False
-#     await asyncio.gather(*[instance.suspend() for namespace, instance in self._instances.items()])

@@ -102,7 +102,7 @@ class BlockUnitData:
     self.state = state
     self.transforms = transforms or list()
 
-class BlockProgram:
+class BlockProgram(Protocol):
   def __init__(self, block: 'BaseBlock', master: 'Master', parent: 'BlockProgram | Master'):
     self._parent: 'BlockProgram | Master'
 

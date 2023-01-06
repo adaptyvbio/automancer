@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
-from pr1.devices.claim import Claim, ClaimSymbol
+from pr1.devices.claim import Claim, ClaimSymbol, ClaimToken, ClaimTransferFailChildError, ClaimTransferFailUnknownError
 from pr1.devices.node import BaseWritableNode, NodePath
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.expr import PythonExprContext
@@ -39,7 +39,8 @@ class StateLocation:
 class StateInstanceNodeInfo:
   node: BaseWritableNode
   path: NodePath
-  task: asyncio.Task
+  task: asyncio.Task[None]
+  token: ClaimToken
   update_event: asyncio.Event
   value: Any
 
@@ -64,41 +65,40 @@ class StateInstance:
     node = self._runner._host.root_node.find(path)
     assert isinstance(node, BaseWritableNode)
 
-    initial_claim = node.claim_now(self._symbol)
-
-    if not initial_claim:
-      self._location.values[path] = NodeWriteError.Unclaimable
-
     if not node.connected:
       self._location.values[path] = NodeWriteError.Disconnected
+    else:
+      self._location.values[path] = None
 
     info = StateInstanceNodeInfo(
       node=node,
       path=path,
       task=None, # type: ignore
+      token=node.create_token(self._symbol),
       update_event=asyncio.Event(),
       value=value
     )
 
-    info.task = asyncio.create_task(self._write_node(info, initial_claim))
-
+    # info.task = asyncio.create_task(self._write_node(info))
     self._infos[path] = info
-    self._location.values[path] = None
 
 
-  async def _write_node(self, info: StateInstanceNodeInfo, initial_claim: Optional[Claim]):
-    claim = initial_claim
+  async def _node_lifecycle(self, info: StateInstanceNodeInfo):
+    claim = None
+    initial = True
     label = ".".join(info.path)
 
     try:
       while True:
-        if not claim:
-          claim = await info.node.claim(self._symbol)
+        claim = await info.token.wait()
 
-          self._location.values[info.path] = None
+        self._location.values[info.path] = None
+
+        if not initial:
           self._notify()
 
         self._logger.debug(f"Claimed node '{label}'")
+        initial = False
 
         while True:
           if isinstance(info.value, PythonExprContext):
@@ -120,10 +120,14 @@ class StateInstance:
           self._logger.debug(f"Writing node '{label}' with value {repr(value)}")
           await asyncio.shield(info.node.write(value))
 
-          index, _ = await race(claim.lost(), info.update_event.wait())
+          index, race_result = await race(claim.lost(), info.update_event.wait())
 
           # The claim was lost
           if index == 0:
+            if not race_result:
+              # The claim was not lost to a child
+              self._location.values[info.path] = NodeWriteError.Unclaimable
+
             break
 
           info.update_event.clear()
@@ -131,21 +135,35 @@ class StateInstance:
         self._logger.debug(f"Lost node '{label}'")
 
         claim = None
-        self._location.values[info.path] = NodeWriteError.Unclaimable
         self._notify()
     finally:
-      if claim and claim.valid:
-        self._logger.debug(f"Released node '{label}'")
-        claim.release()
+      await info.token.cancel()
+      self._logger.debug(f"Released node '{label}'")
 
-  def apply(self, state: DevicesState, *, resume: bool):
-    self._logger.debug("Applying state")
+  def prepare(self, state: DevicesState):
+    self._logger.debug("Preparing state")
 
     self._infos = dict()
     self._location = StateLocation(values=dict())
 
     for path, value in state.values.items():
       self._add_node(path, value)
+
+  async def apply(self, state: DevicesState, *, resume: bool):
+    self._logger.debug("Applying state")
+
+    for info in self._infos.values():
+      try:
+        await info.token.wait(err=True)
+      except ClaimTransferFailChildError:
+        pass
+      except ClaimTransferFailUnknownError:
+        self._logger.debug(f"Failed to claim '{info.node.id}'")
+        self._location.values[info.path] = NodeWriteError.Unclaimable
+
+      info.task = asyncio.create_task(self._node_lifecycle(info))
+
+    self._logger.debug("Done applying state")
 
     return self._location
 
@@ -181,6 +199,8 @@ class StateInstance:
         self._add_node(path, value)
 
   async def suspend(self):
+    self._logger.debug("Suspending")
+
     for info in self._infos.values():
       info.task.cancel()
 

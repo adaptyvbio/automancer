@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from pprint import pprint
 
+from .devices.claim import ClaimSymbol
+
 from .host import Host
 
 class ColoredFormatter(logging.Formatter):
@@ -60,14 +62,15 @@ async def main():
 name: Foobar
 
 steps:
+  Mock.valueBool: true
   actions:
     - wait: 1s
-      Mock.valueBool: %{{ index < 1 }}
-  repeat: 2
-    # - wait: 1s
-    # - wait: 1s
-    #   Mock.valueBool: false
-  Mock.valueBool: true
+      Mock.valueBool: false
+    - wait: 1s
+    - wait: 1s
+      Mock.valueBool: false
+    - wait: 1s
+
 
   # PLC.S00: 3.66 psi
 
@@ -116,6 +119,12 @@ steps:
         pass
 
     async def b():
+      await asyncio.sleep(.5)
+      claim = host.root_node.find(('Mock', 'valueBool')).force_claim(ClaimSymbol())
+      await asyncio.sleep(2)
+      claim.release()
+      host.root_node.transfer_claims()
+
       # node = host.root_node.nodes['Mock'].nodes['valueBool']
       # await asyncio.sleep(2)
       # claim = node.claim_now(force=True)

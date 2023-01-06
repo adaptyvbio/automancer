@@ -216,7 +216,7 @@ class CoupledStateIterator2(Generic[T, S]):
     self._triggered = False
 
     self._value: Optional[T] = None
-    self._state: S
+    self._state: Optional[S] = None
 
     self._value_queue = list[T]()
     self._state_queue = list[S]()
@@ -285,7 +285,7 @@ class CoupledStateIterator2(Generic[T, S]):
         if self._state_queue:
           self._state = self._state_queue.pop(0)
 
-        if self._value is not None:
+        if (self._state is not None) and (self._value is not None):
           return (self._value, self._state)
 
       if not self._future:

@@ -375,7 +375,7 @@ class MissingUnitError(LangServiceError):
     self.unit = unit
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Missing unit, expected {self.unit}", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
 
 class InvalidUnitError(LangServiceError):
   def __init__(self, target, unit):
@@ -383,7 +383,7 @@ class InvalidUnitError(LangServiceError):
     self.target = target
 
   def diagnostic(self):
-    return DraftDiagnostic(f"Invalid unit, expected {self.unit}", ranges=self.target.area.ranges)
+    return DraftDiagnostic(f"Invalid unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
 
 class UnknownUnitError(LangServiceError):
   def __init__(self, target):
@@ -477,11 +477,15 @@ class LiteralOrExprType:
     return self._type.analyze(obj, context)
 
 class QuantityType(LiteralOrExprType):
-  def __init__(self, unit: Optional[Unit | str]):
+  def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
+    self._allow_nil = allow_nil
     self._unit = unit
 
   def analyze(self, obj, context):
     if isinstance(obj, str):
+      if self._allow_nil and (obj == "nil"):
+        return Analysis(), LocatedValue.new(None, area=obj.area)
+
       try:
         value = context.ureg.Quantity(obj.value)
       except pint.errors.UndefinedUnitError:

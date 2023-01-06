@@ -24,6 +24,8 @@ variants_map = {
 
 
 class OPCUADeviceReadableNode(PolledReadableNode):
+  description = None
+
   def __init__(self, *, device: 'OPCUADevice', id: str, label: Optional[str], node: UANode):
     super().__init__(min_interval=0.2)
 
@@ -125,6 +127,7 @@ nodes_map: dict[str, type[OPCUADeviceWritableNode]] = {
 
 
 class OPCUADevice(DeviceNode):
+  description = None
   model = "Generic OPC-UA device"
   owner = namespace
 

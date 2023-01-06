@@ -10,6 +10,7 @@ from . import logger, namespace
 
 
 class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
+  description = None
   id = "boardTemperature"
   label = "Board temperature"
 
@@ -27,40 +28,36 @@ class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
 
 
 class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
+  description = None
   id = "readout"
   label = "Temperature readout"
 
-  def __init__(self, *, index: int, master: 'MasterDevice'):
+  def __init__(self, *, worker: 'WorkerDevice'):
     PolledReadableNode.__init__(self, min_interval=0.2)
     ScalarReadableNode.__init__(self)
 
-    self._index = index
-    self._master = master
+    self._worker = worker
 
   async def _read(self):
     try:
-      match self._index:
-        case 1: return await self._master._adapter.device.get_temperature1()
+      return await self._worker.get_temperature_readout()
     except OkolabDeviceDisconnectedError as e:
       raise NodeUnavailableError() from e
 
 class TemperatureSetpointNode(ScalarWritableNode, ConfigurableWritableNode):
+  description = None
   id = "setpoint"
   label = "Temperature setpoint"
 
-  icon = "thermostat"
-
-  def __init__(self, *, index: int, master: 'MasterDevice'):
-    ScalarWritableNode.__init__(self, min=25.0, max=60.0, unit="degC")
+  def __init__(self, *, worker: 'WorkerDevice'):
+    ScalarWritableNode.__init__(self, deactivatable=True, min=25.0, max=60.0, unit="degC")
     ConfigurableWritableNode.__init__(self)
 
-    self._index = index
-    self._master = master
+    self._worker = worker
 
-  async def _write(self, value: float):
+  async def _write(self, value: Optional[float], /):
     try:
-      match self._index:
-        case 1: await self._master._adapter.device.set_temperature_setpoint1(value)
+      await self._worker._set_temperature_setpoint(value)
     except OkolabDeviceDisconnectedError as e:
       raise NodeUnavailableError() from e
 
@@ -78,6 +75,7 @@ class MasterDevice(DeviceNode):
   ):
     super().__init__()
 
+    self.description = None
     self.id = id
     self.label = label
     self.model = "Generic Okolab device"
@@ -155,6 +153,7 @@ class WorkerDevice(DeviceNode):
   def __init__(
     self,
     *,
+    description: Optional[str],
     id: str,
     index: int,
     label: Optional[str],
@@ -164,25 +163,26 @@ class WorkerDevice(DeviceNode):
   ):
     super().__init__()
 
+    self.description = description
     self.id = id
     self.label = label
     self.model = f"Okolab device (type {type})"
 
+    self._enabled = False
     self._index = index
     self._master = master
     self._side = side
     self._type = type
 
-    self._node_readout = TemperatureReadoutNode(index=index, master=master)
-    self._node_setpoint = TemperatureSetpointNode(index=index, master=master)
+    self._node_readout = TemperatureReadoutNode(worker=self)
+    self._node_setpoint = TemperatureSetpointNode(worker=self)
     self._status = None
     self._status_check_task = None
 
     self.nodes = { node.id: node for node in {self._node_readout, self._node_setpoint} }
 
   async def _configure(self):
-    match self._index:
-      case 1: await self._master._adapter.device.set_device1(self._type, side=self._side)
+    await self._set_enabled(False)
 
     await self._node_readout._configure()
     await self._node_setpoint._configure()
@@ -205,8 +205,36 @@ class WorkerDevice(DeviceNode):
     if self._status_check_task:
       self._status_check_task.cancel()
 
-    await self._node_readout._unconfigure()
+    if self._node_readout.connected:
+      await self._node_readout._unconfigure()
+
     await self._node_setpoint._unconfigure()
+
+  async def get_temperature_readout(self):
+    match self._index:
+      case 1: return await self._master._adapter.device.get_temperature1()
+
+  async def _set_enabled(self, enabled: bool, /):
+    if enabled != self._enabled:
+      if not enabled:
+        await self._node_readout._unconfigure()
+
+      match self._index:
+        case 1: await self._master._adapter.device.set_device1(self._type if enabled else None, side=self._side)
+
+      if enabled:
+        await self._node_readout._configure()
+
+      self._enabled = enabled
+
+  async def _set_temperature_setpoint(self, value: Optional[float], /):
+    if value is None:
+      await self._set_enabled(False)
+    else:
+      await self._set_enabled(True)
+
+      match self._index:
+        case 1: await self._master._adapter.device.set_temperature_setpoint1(value)
 
   @property
   def connected(self):

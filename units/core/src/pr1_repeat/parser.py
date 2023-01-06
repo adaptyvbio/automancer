@@ -118,7 +118,7 @@ class RepeatProgram(BlockProgram):
     assert not self.busy
     self._child_program.pause()
 
-  async def run(self, initial_point: Optional[RepeatProgramPoint], symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[RepeatProgramPoint], parent_state_program, symbol: ClaimSymbol):
     self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
     child_block = self._block._block
 
@@ -134,7 +134,7 @@ class RepeatProgram(BlockProgram):
       if self._iteration >= self._block._count:
         break
 
-      async for event in self._child_program.run(point.child, symbol):
+      async for event in self._child_program.run(point.child, parent_state_program, symbol):
         yield ProgramExecEvent(
           location=RepeatProgramLocation(
             child=event.location,

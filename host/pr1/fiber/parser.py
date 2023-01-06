@@ -125,7 +125,7 @@ class BlockProgram:
   def resume(self):
     ...
 
-  def run(self, child: Any, /, parent_state_program, symbol) -> AsyncIterator[Any]:
+  def run(self, child: Any, /, parent_state_program, stack: EvalStack, symbol) -> AsyncIterator[Any]:
     ...
 
 class BaseProgramPoint(Protocol):
@@ -228,7 +228,8 @@ class UnresolvedBlockDataLiteral(UnresolvedBlockData):
 
 
 class FiberProtocol:
-  def __init__(self, *, name: Optional[str], root: BaseBlock):
+  def __init__(self, *, global_env: EvalEnv, name: Optional[str], root: BaseBlock):
+    self.global_env = global_env
     self.name = name
     self.root = root
 
@@ -238,6 +239,9 @@ class FiberProtocol:
       "root": self.root.export()
     }
 
+
+class GlobalEnv(EvalEnv):
+  pass
 
 class FiberParser:
   def __init__(self, text: str, *, Parsers: Sequence[type[BaseParser]], host):
@@ -276,35 +280,22 @@ class FiberParser:
     analysis, output = schema.analyze(data, self.analysis_context)
     self.analysis += analysis
 
-    class GlobalEnv(EvalEnv):
-      pass
-
-    class StageEnv(EvalEnv):
-      pass
-
     from random import random
 
     global_env = GlobalEnv()
-    stage_env = StageEnv()
 
     adoption_stack: EvalStack = {
-      global_env: dict(random=random),
-      stage_env: None
-    }
-
-    runtime_stack: EvalStack = {
-      global_env: dict(random=random),
-      stage_env: None
+      global_env: dict(random=random)
     }
 
 
     for parser in self._parsers:
       # Order is important here as enter_protocol() will also update self.analysis.
       # TODO: Improve by making enter_protocol() return an Analysis.
-      self.analysis = parser.enter_protocol(output[parser.namespace], adoption_envs=[global_env, stage_env], runtime_envs=[global_env]) + self.analysis
+      self.analysis = parser.enter_protocol(output[parser.namespace], adoption_envs=[global_env], runtime_envs=[global_env]) + self.analysis
 
     data_actions = output['_']['steps']
-    data = self.parse_block(data_actions, adoption_envs=[global_env, stage_env], adoption_stack=adoption_stack, runtime_envs=[global_env, stage_env])
+    data = self.parse_block(data_actions, adoption_envs=[global_env], adoption_stack=adoption_stack, runtime_envs=[global_env])
 
     if not isinstance(data, EllipsisType):
       entry_block = self.execute(data.state, data.transforms, origin_area=data_actions.area)
@@ -332,7 +323,7 @@ class FiberParser:
       # print()
 
     if not isinstance(entry_block, EllipsisType):
-      self.protocol = FiberProtocol(name=output['_']['name'], root=entry_block)
+      self.protocol = FiberProtocol(global_env=global_env, name=output['_']['name'], root=entry_block)
     else:
       self.protocol = None
 
@@ -366,7 +357,7 @@ class FiberParser:
     transforms: list[BaseTransform] = []
 
     for parser in self._parsers:
-      analysis, block_data = parser.parse_block(attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs)
+      analysis, block_data = parser.parse_block(attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs.copy())
       self.analysis += analysis
 
       if isinstance(block_data, EllipsisType):
@@ -425,59 +416,3 @@ class FiberParser:
     self.analysis += analysis
 
     return block
-
-
-if __name__ == "__main__":
-  from .parsers.activate import AcmeParser
-  from .parsers.condition import ConditionParser
-  from .parsers.do import DoParser
-  from .parsers.repeat import RepeatParser
-  from .parsers.score import ScoreParser
-  from .parsers.sequence import SequenceParser
-  from .parsers.shorthands import ShorthandsParser
-
-
-  p = FiberParser("""
-shorthands:
-  foo:
-    score: 16
-    activate: 42
-
-    # actions:
-    #   - score: 200
-    #   - score: 300
-    # actions:
-    #   - activate: 56
-    #   - activate: 57
-
-steps:
-  actions:
-    - activate: -45
-    - activate: 46
-  score: 3
-  # foo:
-
-  # do_before:
-  #   score: 1
-
-  # foo:
-  # - score: 6
-  # do:
-  #   score: 7
-  #   # activate: 100
-
-  # actions:
-  #   - score: 4
-  #   - activate: 3
-
-  # score: 4
-  # foo:
-  # actions:
-  #   - activate: 4
-  #   - activate: 3
-  #     score: ${{ random(100, 200) }}
-  #   - do:
-  #       activate: 5
-  #       score: 1
-  #     score: 2
-""", Parsers=[SequenceParser, RepeatParser, DoParser, ShorthandsParser, AcmeParser, ScoreParser], host=None)

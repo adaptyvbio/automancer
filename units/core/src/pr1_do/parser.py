@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.expr import PythonExprEvaluator
 from pr1.fiber.parser import BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from pr1.reader import LocationArea
 from pr1.util import schema as sc

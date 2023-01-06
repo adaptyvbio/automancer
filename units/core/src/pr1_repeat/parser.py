@@ -7,7 +7,6 @@ from pr1.devices.claim import ClaimSymbol
 from pr1.reader import LocationArea
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.expr import PythonExprEvaluator
 from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
@@ -118,7 +117,7 @@ class RepeatProgram(BlockProgram):
     assert not self.busy
     self._child_program.pause()
 
-  async def run(self, initial_point: Optional[RepeatProgramPoint], parent_state_program, symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[RepeatProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
     self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
     child_block = self._block._block
 
@@ -134,7 +133,12 @@ class RepeatProgram(BlockProgram):
       if self._iteration >= self._block._count:
         break
 
-      async for event in self._child_program.run(point.child, parent_state_program, symbol):
+      child_stack = {
+        **stack,
+        self._block._env: { 'index': self._iteration }
+      }
+
+      async for event in self._child_program.run(point.child, parent_state_program, child_stack, symbol):
         yield ProgramExecEvent(
           location=RepeatProgramLocation(
             child=event.location,

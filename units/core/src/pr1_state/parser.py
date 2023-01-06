@@ -155,7 +155,7 @@ class StateProgram(BlockProgram):
 
       self._iterator.notify(state_location)
 
-  async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
       while self._point:
         point = self._point
@@ -164,7 +164,7 @@ class StateProgram(BlockProgram):
         self._child_program = self._block.child.Program(self._block.child, master=self._master, parent=self)
         self._mode = StateProgramMode.Normal
 
-        async for event in self._child_program.run(point.child, self, symbol):
+        async for event in self._child_program.run(point.child, self, stack, symbol):
           yield event
 
     self._child_stopped = False
@@ -172,7 +172,7 @@ class StateProgram(BlockProgram):
     self._point = initial_point or StateProgramPoint(child=None)
     self._iterator = CoupledStateIterator2(run())
 
-    self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, symbol=symbol)
+    self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
 
     if parent_state_program:
       parent_state_program._state_final, self._state_excess = parent_state_program._state_excess & self._block.state

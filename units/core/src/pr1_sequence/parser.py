@@ -185,7 +185,7 @@ class SequenceProgram(BlockProgram):
     self._interrupting = value
     self._iterator.trigger()
 
-  async def run(self, initial_point: Optional[SequenceProgramPoint], parent_state_program, symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[SequenceProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
     async def run():
       while True:
         assert self._point
@@ -201,7 +201,7 @@ class SequenceProgram(BlockProgram):
         point = self._point
         self._point = None
 
-        async for event in self._child_program.run(point.child, parent_state_program, ClaimSymbol(symbol)):
+        async for event in self._child_program.run(point.child, parent_state_program, stack, ClaimSymbol(symbol)):
           yield event
 
         if self._point:

@@ -2,13 +2,16 @@ import ast
 import functools
 import re
 from enum import Enum
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
-from .eval import EvalContext, EvalEnv, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
+from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString
 from ..util.decorators import debug
+
+if TYPE_CHECKING:
+  from .langservice import Type
 
 
 expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
@@ -52,14 +55,18 @@ class PythonExprKind(Enum):
 
 
 class PythonExpr:
-  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression):
+  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression, *, type: 'Optional[Type]'):
     self.contents = contents
     self.kind = kind
     self.tree = tree
+    self.type = type
 
   @functools.cached_property
   def compiled(self):
     return compile(self.tree, filename="<string>", mode="eval")
+
+  def contextualize(self, envs: EvalEnvs):
+    return PythonExprContext(self, envs)
 
   def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
     match mode:
@@ -72,7 +79,7 @@ class PythonExpr:
     return f"{self.__class__.__name__}({repr(ast.unparse(self.tree))})"
 
   @classmethod
-  def _parse_match(cls, match: re.Match):
+  def _parse_match(cls, match: re.Match, *, type: Optional['Type']):
     from .langservice import Analysis
 
     match match.group(1):
@@ -101,11 +108,12 @@ class PythonExpr:
     return analysis, cls(
       contents=contents,
       kind=kind,
-      tree=tree
+      tree=tree,
+      type=type
     )
 
   @classmethod
-  def parse(cls, raw_str: LocatedString):
+  def parse(cls, raw_str: LocatedString, *, type: Optional['Type'] = None):
     from .langservice import Analysis
 
     match = expr_regexp_exact.search(raw_str)
@@ -113,7 +121,7 @@ class PythonExpr:
     if not match:
       return None
 
-    return cls._parse_match(match)
+    return cls._parse_match(match, type=type)
 
   @classmethod
   def parse_mixed(cls, raw_str: LocatedString):
@@ -130,7 +138,7 @@ class PythonExpr:
       output.append(raw_str[index:match_start])
       index = match_end
 
-      match_analysis, match_expr = cls._parse_match(match)
+      match_analysis, match_expr = cls._parse_match(match, type=None)
       analysis += match_analysis
       output.append(match_expr)
 
@@ -139,6 +147,37 @@ class PythonExpr:
     return analysis, output
 
 
+class PythonExprContext:
+  def __init__(self, expr: PythonExpr, /, envs: EvalEnvs):
+    self._expr = expr
+    self._envs = envs
+
+  def evaluate(self, stack: EvalStack):
+    from .langservice import Analysis
+
+    variables = dict()
+
+    for env in self._envs:
+      if stack[env] is not None:
+        variables.update(stack[env])
+
+    context = EvalContext(variables)
+
+    try:
+      result = self._expr.evaluate(context, mode='dynamic')
+    except EvalError as e:
+      return Analysis(errors=[e]), Ellipsis
+    else:
+      if self._expr.type:
+        return self._expr.type.analyze(result, context)
+      else:
+        return Analysis(), result
+
+  def export(self):
+    return f"{{{{ {self._expr.contents.value} }}}}"
+
+
+# deprecated
 class PythonExprEvaluator:
   def __init__(self, expr: PythonExpr, /, type):
     self._expr = expr

@@ -49,7 +49,8 @@ export interface UnitProtocolState {
 
 export enum NodeWriteError {
   Disconnected = 0,
-  Unclaimable = 1
+  Unclaimable = 1,
+  ExprError = 2
 }
 
 function formatError(error: NodeWriteError): Feature['error'] {
@@ -62,6 +63,11 @@ function formatError(error: NodeWriteError): Feature['error'] {
     case NodeWriteError.Unclaimable: return {
       message: 'Unclaimable',
       kind: 'shield'
+    };
+
+    case NodeWriteError.ExprError: return {
+      message: 'Expression error',
+      kind: 'error'
     };
   }
 }

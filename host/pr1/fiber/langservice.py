@@ -10,7 +10,7 @@ from ..util.parser import check_identifier
 
 from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedError, LocatedValue, LocationArea, LocationRange
+from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange
 
 
 class Analysis:
@@ -392,6 +392,13 @@ class UnknownUnitError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Unknown unit", ranges=self.target.area.ranges)
 
+class InvalidExprKind(LangServiceError):
+  def __init__(self, target):
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid expression kind", ranges=self.target.area.ranges)
+
 
 class AnyType:
   def __init__(self):
@@ -448,35 +455,41 @@ class ListType(PrimitiveType):
     return analysis, result
 
 class LiteralOrExprType:
-  def __init__(self, obj_type, /, *, field = True, static = False):
+  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, field: bool = False, static: bool = False):
     from .expr import PythonExprKind
 
     self._kinds = set()
-    self._type = obj_type
+    self._type = obj_type or cast(Type, super())
 
+    if dynamic:
+      self._kinds.add(PythonExprKind.Dynamic)
     if field:
       self._kinds.add(PythonExprKind.Field)
     if static:
       self._kinds.add(PythonExprKind.Static)
 
   def analyze(self, obj, context):
-    from .expr import PythonExpr # TODO: improve
+    from .expr import PythonExpr
 
     if isinstance(obj, str):
-      result = PythonExpr.parse(obj)
+      assert isinstance(obj, LocatedString)
+      result = PythonExpr.parse(obj, type=self._type)
 
       if result:
         analysis, expr = result
 
-        if expr is Ellipsis:
+        if isinstance(expr, EllipsisType):
           return analysis, Ellipsis
 
-        # if expr.kind in self._kinds:
-        return analysis, PythonExprEvaluator(expr, type=self._type)
+        if not (expr.kind in self._kinds):
+          analysis.errors.append(InvalidExprKind(obj))
+          return analysis, Ellipsis
+
+        return analysis, LocatedValue.new(expr, area=obj.area)
 
     return self._type.analyze(obj, context)
 
-class QuantityType(LiteralOrExprType):
+class QuantityType:
   def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
     self._allow_nil = allow_nil
     self._unit = unit

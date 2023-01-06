@@ -4,8 +4,8 @@ from types import EllipsisType
 from typing import Any, Optional
 
 from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.langservice import Analysis, AnyType, Attribute, PrimitiveType, QuantityType
-from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber.langservice import Analysis, AnyType, Attribute, LiteralOrExprType, PrimitiveType, QuantityType
+from pr1.fiber.expr import PythonExpr, PythonExprContext, PythonExprEvaluator, PythonExprKind
 from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState, FiberParser
 from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarWritableNode
 from pr1.util import schema as sc
@@ -14,6 +14,8 @@ from pr1.util.decorators import debug
 
 class DevicesParser(BaseParser):
   namespace = "devices"
+  priority = 1100
+
   root_attributes = dict()
 
   def __init__(self, fiber: FiberParser):
@@ -54,20 +56,33 @@ class DevicesParser(BaseParser):
       documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, ScalarWritableNode) and node.unit else None),
       label=node.label,
       optional=True,
-      type=get_type(node)
+      type=LiteralOrExprType(get_type(node), dynamic=True, static=True)
     ) for key, (node, path) in self.node_map.items() }
 
 
   def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[Analysis, BlockUnitData | EllipsisType]:
+    analysis = Analysis()
     attrs = block_attrs[self.namespace]
     values: dict[NodePath, Any] = dict()
 
     for attr_key, attr_value in attrs.items():
       if not isinstance(attr_value, EllipsisType):
+        real_value = attr_value.value
         node, path = self.node_map[attr_key]
-        values[path] = attr_value.value
 
-    return Analysis(), BlockUnitData(state=DevicesState(values))
+        if isinstance(real_value, PythonExpr):
+          if real_value.kind == PythonExprKind.Static:
+            eval_analysis, eval_result = real_value.contextualize(adoption_envs).evaluate(adoption_stack)
+            analysis += eval_analysis
+
+            if not isinstance(eval_result, EllipsisType):
+              values[path] = eval_result.value
+          else:
+            values[path] = real_value.contextualize(runtime_envs)
+        else:
+          values[path] = real_value
+
+    return analysis, BlockUnitData(state=DevicesState(values))
 
 
 @debug
@@ -90,6 +105,8 @@ class DevicesState(BlockUnitState):
           return f"{value:.2fP~}"
         case None:
           return "–"
+        case PythonExprContext():
+          return value.export()
         case _:
           return value
 

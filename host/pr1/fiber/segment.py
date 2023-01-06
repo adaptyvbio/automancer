@@ -6,6 +6,8 @@ import traceback
 from types import EllipsisType
 from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence
 
+from .eval import EvalStack
+
 from ..util.iterators import CoupledStateIterator2
 from ..util.ref import Ref
 from ..host import logger
@@ -133,7 +135,7 @@ class SegmentProgram(BlockProgram):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Paused)
     self._process.resume()
 
-  async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
     Process = self._master.chip.runners[self._block._process.namespace].Process
     self._point = initial_point or SegmentProgramPoint(process=None)
 

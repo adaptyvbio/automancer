@@ -62,10 +62,11 @@ name: Foobar
 steps:
   actions:
     - wait: 1s
-      Mock.valueBool: false
-    - wait: 1s
-    - wait: 1s
-      Mock.valueBool: false
+      Mock.valueBool: %{{ index < 1 }}
+  repeat: 2
+    # - wait: 1s
+    # - wait: 1s
+    #   Mock.valueBool: false
   Mock.valueBool: true
 
   # PLC.S00: 3.66 psi
@@ -92,6 +93,7 @@ steps:
   )
 
 
+  # print(parser.protocol.root)
   # return
 
   from .fiber.master2 import Master

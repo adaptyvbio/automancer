@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import traceback
 from typing import Any, AsyncGenerator, Callable, Optional
 
+from .eval import EvalStack
+
 from ..units.base import BaseRunner
 from .parser import BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
@@ -61,7 +63,13 @@ class Master:
 
     self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
 
-    async for event in self._program.run(initial_location, None, symbol):
+    from random import random
+
+    runtime_stack = {
+      self.protocol.global_env: dict(random=random)
+    }
+
+    async for event in self._program.run(initial_location, None, runtime_stack, symbol):
       yield event
 
       if event.stopped and self._pause_future:
@@ -105,9 +113,9 @@ class Master:
 
     await start_future
 
-  def create_instance(self, state: BlockState, *, notify: Callable, symbol: ClaimSymbol):
+  def create_instance(self, state: BlockState, *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
-    return StateInstanceCollection(runners, notify=notify, symbol=symbol)
+    return StateInstanceCollection(runners, notify=notify, stack=stack, symbol=symbol)
 
   def export(self):
     return {
@@ -117,11 +125,11 @@ class Master:
 
 
 class StateInstanceCollection:
-  def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, symbol: ClaimSymbol):
+  def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     self._applied = False
     self._notify = notify
     self._runners = runners
-    self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
+    self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), stack=stack, symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
     self._location: StateLocation
     self._state: BlockState
 

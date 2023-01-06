@@ -2,10 +2,13 @@ import asyncio
 from enum import IntEnum
 import time
 from dataclasses import dataclass
+from types import EllipsisType
 from typing import Any, Callable, Optional
 
 from pr1.devices.claim import Claim, ClaimSymbol
 from pr1.devices.node import BaseWritableNode, NodePath
+from pr1.fiber.eval import EvalStack
+from pr1.fiber.expr import PythonExprContext
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
 from pr1.units.base import BaseProcessRunner, BaseRunner
@@ -18,6 +21,7 @@ from .parser import DevicesState
 class NodeWriteError(IntEnum):
   Disconnected = 0
   Unclaimable = 1
+  ExprError = 2
 
 
 @dataclass
@@ -43,10 +47,11 @@ class StateInstanceNodeInfo:
 counter = 0
 
 class StateInstance:
-  def __init__(self, runner: 'Runner', *, notify: Callable, symbol: ClaimSymbol):
+  def __init__(self, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     self._location: StateLocation
     self._notify = lambda: notify(self._location)
     self._runner = runner
+    self._stack = stack
     self._symbol = symbol
 
     self._infos: dict[NodePath, StateInstanceNodeInfo]
@@ -96,17 +101,30 @@ class StateInstance:
         self._logger.debug(f"Claimed node '{label}'")
 
         while True:
-          self._logger.debug(f"Writing node '{label}' with value {repr(info.value)}")
-          await asyncio.shield(info.node.write(info.value))
+          if isinstance(info.value, PythonExprContext):
+            analysis, result = info.value.evaluate(self._stack)
+
+            if analysis.errors:
+              self._location.values[info.path] = NodeWriteError.ExprError
+
+              for err in analysis.errors:
+                logger.warn(err.diagnostic().message)
+
+            if isinstance(result, EllipsisType):
+              await asyncio.Future()
+
+            value = result
+          else:
+            value = info.value
+
+          self._logger.debug(f"Writing node '{label}' with value {repr(value)}")
+          await asyncio.shield(info.node.write(value))
 
           index, _ = await race(claim.lost(), info.update_event.wait())
 
           # The claim was lost
           if index == 0:
             break
-
-          # if lost_future.done():
-          #   break
 
           info.update_event.clear()
 

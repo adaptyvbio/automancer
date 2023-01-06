@@ -150,6 +150,7 @@ class UnitManager:
 
     ##
     # Parser priorities
+    # - 1100 [state parsers such as 'devices']
     # - 1000 state
     # - 900  do
     # - 800  repeat

@@ -3,7 +3,7 @@ from typing import Optional
 
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber.langservice import Analysis, Attribute, LiteralOrExprType, PrimitiveType
-from pr1.fiber.expr import PythonExprEvaluator
+from pr1.fiber.expr import PythonExpr
 from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
@@ -16,7 +16,7 @@ class NameParser(BaseParser):
     'name': Attribute(
       description="Sets the block's name.",
       optional=True,
-      type=LiteralOrExprType(PrimitiveType(str))
+      type=LiteralOrExprType(PrimitiveType(str), static=True)
     )
   }
 
@@ -27,9 +27,8 @@ class NameParser(BaseParser):
     attrs = block_attrs[self.namespace]
 
     if ('name' in attrs) and not isinstance(name_raw := attrs['name'], EllipsisType):
-      if isinstance(name_raw, PythonExprEvaluator):
-        name_raw.envs = adoption_envs
-        analysis, name = name_raw.evaluate(adoption_stack)
+      if isinstance(name_raw.value, PythonExpr):
+        analysis, name = name_raw.value.contextualize(adoption_envs).evaluate(adoption_stack)
 
         if isinstance(name, EllipsisType):
           return analysis, BlockUnitData(state=NameState(None))
@@ -50,4 +49,6 @@ class NameState(BlockUnitState):
     return NameState(self.value or other.value)
 
   def export(self) -> object:
-    return { "value": self.value }
+    return {
+      "value": self.value
+    }

@@ -7,7 +7,6 @@ from pr1.util import schema as sc
 from pr1.util.decorators import debug
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.expr import PythonExpr, PythonExprEvaluator
 from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms, UnresolvedBlockData
 
 

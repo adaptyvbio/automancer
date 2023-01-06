@@ -191,15 +191,17 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
               let blockIndex = aggregate.offset;
               let location = lineLocations[blockIndex];
               let disabled = (this.state.hoveredAggregateIndex !== null)
-                ? (blockIndex >= this.state.hoveredAggregateIndex)
-                : (pausedAggregateIndex !== null) && (blockIndex >= pausedAggregateIndex);
+                ? (aggregateIndex >= this.state.hoveredAggregateIndex)
+                : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
+
+              let ancestorStates = aggregates
+                .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? pausedAggregateIndex ?? aggregates.length)
+                .map((aggregate) => aggregate.state!);
 
               return Object.values(this.props.host.units).flatMap((unit) => {
                 return unit?.createStateFeatures?.(
                   aggregate.state!, // TODO: Remove this assumption
-                  (aggregates
-                    .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? /* pausedBlockIndex ?? */ aggregates.length)
-                    .map((aggregate) => aggregate.state!)),
+                  ancestorStates,
                   location.state,
                   { host: this.props.host }
                 ) ?? [];

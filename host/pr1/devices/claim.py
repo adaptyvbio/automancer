@@ -38,20 +38,23 @@ class Claim:
     return self.target._owner is self
 
   async def lost(self):
-    await self._lost_future
+    await asyncio.shield(self._lost_future)
 
   def release(self):
     if not self.valid:
       raise Exception("Claim has been released or is lost already")
 
     self.target._owner = None
-    self.target._designate_target_soon()
+
+    if self.target._auto_transfer:
+      self.target._designate_target_soon()
 
   def __repr__(self):
     return f"Claim(symbol={self.symbol}, target={self.target})"
 
 class Claimable:
-  def __init__(self):
+  def __init__(self, *, auto_transfer: bool = True):
+    self._auto_transfer = auto_transfer
     self._claimants = list()
     self._owner: Optional[Claim] = None
 
@@ -93,6 +96,12 @@ class Claimable:
       return self._owner
     else:
       return None
+
+  def transfer(self):
+    assert not self._auto_transfer
+
+    if not self._owner:
+      self._designate_target()
 
 
 if __name__ == '__main__':

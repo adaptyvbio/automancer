@@ -13,7 +13,7 @@ from .fiber.langservice import Analysis, print_analysis
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
-from .devices.node import BaseNode, CollectionNode, DeviceNode
+from .devices.node import BaseNode, CollectionNode, DeviceNode, NodePath
 from .draft import Draft
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext, FiberParser
@@ -28,11 +28,12 @@ class HostRootNode(CollectionNode):
     super().__init__()
 
     self.connected = True
+    self.description = None
     self.id = 'root'
     self.label = "Root"
     self.nodes = devices
 
-  def find(self, path: list[str]) -> BaseNode:
+  def find(self, path: NodePath) -> BaseNode:
     node = self
 
     for node_id in path:
@@ -397,7 +398,7 @@ class Host:
       def update_callback():
         self.update_callback()
 
-      chip.master = Master(draft.protocol, chip)
+      chip.master = Master(draft.protocol, chip, host=self)
       await chip.master.start(done_callback, update_callback)
 
     match request["type"]:

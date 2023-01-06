@@ -60,8 +60,15 @@ async def main():
 name: Foobar
 
 steps:
-  wait: 1s
-  PLC.S00: 3.66 psi
+  actions:
+    - wait: 1s
+      Mock.valueBool: false
+    - wait: 1s
+    - wait: 1s
+      Mock.valueBool: false
+  Mock.valueBool: true
+
+  # PLC.S00: 3.66 psi
 
   # actions:
   #   - activate: 1s
@@ -93,16 +100,18 @@ steps:
   # chip.upgrade(host=host)
 
   if parser.protocol:
-    master = Master(parser.protocol, chip=chip)
+    master = Master(parser.protocol, chip=chip, host=host)
 
     async def a():
       async for info in master.run():
         # continue
 
-        print("[Info]")
-        print("  Raw:", info)
-        print("  Exported:", info.location.export())
-        print()
+        # print("[Info]")
+        # print("  Raw:", info)
+        # print("  Exported:", info.location.export())
+        # print()
+
+        pass
 
     async def b():
       # node = host.root_node.nodes['Mock'].nodes['valueBool']
@@ -111,9 +120,9 @@ steps:
       # await asyncio.sleep(2)
       # claim.release()
 
-      print("[Pausing]")
-      await asyncio.sleep(0.5)
-      master.halt()
+      # print("[Pausing]")
+      # await asyncio.sleep(0.5)
+      # master.halt()
       # master.pause()
       # await asyncio.sleep(1)
       # print("[Resuming]")

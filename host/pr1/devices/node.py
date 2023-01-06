@@ -47,6 +47,7 @@ class BaseNode:
       "id": self.id,
       "icon": self.icon,
       "connected": self.connected,
+      "description": self.description,
       "label": self.label
     }
 
@@ -83,6 +84,20 @@ class CollectionNode(BaseWatchableNode):
 
     self.nodes: dict[str, BaseNode]
     self._listening = False
+
+  def transfer_claims(self):
+    def walk(node: BaseNode):
+      if isinstance(node, Claimable):
+        node.transfer()
+
+    self.walk(walk)
+
+  def walk(self, callback: Callable[[BaseNode], None], /):
+    for node in self.nodes.values():
+      if not isinstance(node, CollectionNode):
+        callback(node)
+      else:
+        node.walk(callback)
 
   def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
     regs = set()
@@ -198,7 +213,7 @@ class BaseWritableNode(BaseNode, Claimable, Generic[T]):
 
   # To be implemented
 
-  async def write(self, value: T):
+  async def write(self, value: Optional[T]):
     raise NotImplementedError()
 
   async def write_import(self, value: Any):
@@ -246,30 +261,36 @@ class ScalarWritableNode(BaseWritableNode[float]):
   def __init__(
     self,
     *,
+    deactivatable: bool = False,
     dtype: str = '<f32',
     factor: float = 1.0,
-    max: Optional[Quantity] = None,
-    min: Optional[Quantity] = None,
+    max: Optional[Quantity | float] = None,
+    min: Optional[Quantity | float] = None,
     unit: Optional[Unit | str] = None
   ):
     BaseWritableNode.__init__(self)
 
+    self.deactivatable = deactivatable
     self.dtype = dtype
     self.factor = factor
-    self.max = max
-    self.min = min
-    self.unit: Unit = self._ureg.Unit(self.unit or 'dimensionless') if isinstance(unit, str) else unit
+    self.unit: Unit = self._ureg.Unit(unit or 'dimensionless') if isinstance(unit, str) else unit
 
-  async def write(self, raw_value: Quantity | float, /):
-    value: Quantity = (raw_value * self.unit) if isinstance(raw_value, float) else raw_value.to(self.unit)
-    assert value.check(self.unit)
+    self.max = (max * self.unit) if isinstance(max, float) else max
+    self.min = (min * self.unit) if isinstance(min, float) else min
 
-    if self.min is not None:
-      assert value >= self.min
-    if self.max is not None:
-      assert value <= self.max
+  async def write(self, raw_value: Optional[Quantity | float], /):
+    if raw_value is not None:
+      value: Quantity = (raw_value * self.unit) if isinstance(raw_value, float) else raw_value.to(self.unit)
+      assert value.check(self.unit)
 
-    await super().write(value.magnitude / self.factor)
+      if self.min is not None:
+        assert value >= self.min
+      if self.max is not None:
+        assert value <= self.max
+
+      await super().write(value.magnitude / self.factor)
+    else:
+      await super().write(None)
 
   async def write_import(self, value: float):
     await self.write(value)

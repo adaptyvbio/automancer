@@ -12,7 +12,7 @@ from ..host import logger
 from .process import Process, ProgramExecEvent
 from .langservice import Analysis
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
-from ..devices.claim import ClaimSymbol
+from ..devices.claim import ClaimSymbol, Claimable
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocationArea
 from ..util.decorators import debug
@@ -133,7 +133,7 @@ class SegmentProgram(BlockProgram):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Paused)
     self._process.resume()
 
-  async def run(self, initial_point: Optional[SegmentProgramPoint], symbol: ClaimSymbol):
+  async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, symbol: ClaimSymbol):
     Process = self._master.chip.runners[self._block._process.namespace].Process
     self._point = initial_point or SegmentProgramPoint(process=None)
 
@@ -143,6 +143,8 @@ class SegmentProgram(BlockProgram):
         self._mode = SegmentProgramMode.Normal
         self._point = None
         self._process = Process(self._block._process.data)
+
+        # self._master.host.root_node.transfer_claims()
 
         async for event in self._process.run(point.process):
           yield event

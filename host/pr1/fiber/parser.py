@@ -1,7 +1,7 @@
 from collections import namedtuple
 from pint import UnitRegistry
 from types import EllipsisType
-from typing import Any, AsyncIterator, Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, Sequence
 
 from . import langservice as lang
 from .eval import EvalEnv, EvalEnvs, EvalStack
@@ -11,6 +11,9 @@ from ..reader import LocationArea
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..util import schema as sc
 from ..util.decorators import debug
+
+if TYPE_CHECKING:
+  from .master2 import Master
 
 
 @debug
@@ -27,10 +30,10 @@ class BlockUnitState:
     return other
 
   def __and__(self, other):
-    ...
+    return self, other
 
-  def __rand__(self, other):
-    ...
+  # def __rand__(self, other):
+  #   ...
 
   def export(self) -> object:
     ...
@@ -99,9 +102,9 @@ class BlockUnitData:
     self.state = state
     self.transforms = transforms or list()
 
-class BlockProgram(Protocol):
-  def __init__(self, block: 'BaseBlock', master: Any, parent: 'BlockProgram' | Any):
-    ...
+class BlockProgram:
+  def __init__(self, block: 'BaseBlock', master: 'Master', parent: 'BlockProgram | Master'):
+    self._parent: 'BlockProgram | Master'
 
   @property
   def busy(self):
@@ -122,7 +125,7 @@ class BlockProgram(Protocol):
   def resume(self):
     ...
 
-  def run(self, child: Any, /, symbol) -> AsyncIterator[Any]:
+  def run(self, child: Any, /, parent_state_program, symbol) -> AsyncIterator[Any]:
     ...
 
 class BaseProgramPoint(Protocol):
@@ -316,11 +319,11 @@ class FiberParser:
 
     import json
 
-    if not isinstance(entry_block, EllipsisType):
-      print("<= ENTRY =>")
-      # print(entry_block)
-      # print(json.dumps(entry_block.export(), indent=2))
-      # print()
+    # if not isinstance(entry_block, EllipsisType):
+    #   print("<= ENTRY =>")
+    #   print(entry_block)
+    #   print(json.dumps(entry_block.export(), indent=2))
+    #   print()
 
       # print("<= LINEARIZATION =>")
       # linearization_analysis, linearized = entry_block.linearize(LinearizationContext(runtime_stack, parser=self), None)

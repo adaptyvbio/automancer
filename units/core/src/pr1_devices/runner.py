@@ -9,8 +9,10 @@ from pr1.devices.node import BaseWritableNode, NodePath
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
 from pr1.units.base import BaseProcessRunner, BaseRunner
+from pr1.util.misc import race
 
-from . import namespace
+from . import logger, namespace
+from .parser import DevicesState
 
 
 class NodeWriteError(IntEnum):
@@ -29,6 +31,16 @@ class StateLocation:
       ]
     }
 
+@dataclass
+class StateInstanceNodeInfo:
+  node: BaseWritableNode
+  path: NodePath
+  task: asyncio.Task
+  update_event: asyncio.Event
+  value: Any
+
+
+counter = 0
 
 class StateInstance:
   def __init__(self, runner: 'Runner', *, notify: Callable, symbol: ClaimSymbol):
@@ -36,67 +48,131 @@ class StateInstance:
     self._notify = lambda: notify(self._location)
     self._runner = runner
     self._symbol = symbol
-    self._tasks: set[asyncio.Task]
 
-  async def _write_node(self, path: NodePath, initial_claim: Optional[Claim], node: BaseWritableNode, value: Any):
+    self._infos: dict[NodePath, StateInstanceNodeInfo]
+
+    global counter
+    self._logger = logger.getChild(f"stateInstance{counter}")
+    counter = counter + 1
+
+  def _add_node(self, path: NodePath, value: Any):
+    node = self._runner._host.root_node.find(path)
+    assert isinstance(node, BaseWritableNode)
+
+    initial_claim = node.claim_now(self._symbol)
+
+    if not initial_claim:
+      self._location.values[path] = NodeWriteError.Unclaimable
+
+    if not node.connected:
+      self._location.values[path] = NodeWriteError.Disconnected
+
+    info = StateInstanceNodeInfo(
+      node=node,
+      path=path,
+      task=None, # type: ignore
+      update_event=asyncio.Event(),
+      value=value
+    )
+
+    info.task = asyncio.create_task(self._write_node(info, initial_claim))
+
+    self._infos[path] = info
+    self._location.values[path] = None
+
+
+  async def _write_node(self, info: StateInstanceNodeInfo, initial_claim: Optional[Claim]):
     claim = initial_claim
-    print("Initial:", initial_claim, value)
+    label = ".".join(info.path)
 
     try:
       while True:
         if not claim:
-          claim = await node.claim(self._symbol)
-          print("Obtained:", claim)
+          claim = await info.node.claim(self._symbol)
 
-          self._location.values[path] = None
+          self._location.values[info.path] = None
           self._notify()
 
-        await asyncio.shield(node.write(value))
-        await claim.lost()
-        print("Lost:", claim)
+        self._logger.debug(f"Claimed node '{label}'")
+
+        while True:
+          self._logger.debug(f"Writing node '{label}' with value {repr(info.value)}")
+          await asyncio.shield(info.node.write(info.value))
+
+          index, _ = await race(claim.lost(), info.update_event.wait())
+
+          # The claim was lost
+          if index == 0:
+            break
+
+          # if lost_future.done():
+          #   break
+
+          info.update_event.clear()
+
+        self._logger.debug(f"Lost node '{label}'")
 
         claim = None
-        self._location.values[path] = NodeWriteError.Unclaimable
+        self._location.values[info.path] = NodeWriteError.Unclaimable
         self._notify()
     finally:
       if claim and claim.valid:
-        print("Release:", claim)
+        self._logger.debug(f"Released node '{label}'")
         claim.release()
 
-  def apply(self, state, *, resume: bool):
-    self._location = StateLocation(values={ path: None for path in state.values.keys() })
-    self._tasks = set()
+  def apply(self, state: DevicesState, *, resume: bool):
+    self._logger.debug("Applying state")
+
+    self._infos = dict()
+    self._location = StateLocation(values=dict())
 
     for path, value in state.values.items():
-      node = self._runner._host.root_node.find(path)
-      assert isinstance(node, BaseWritableNode)
-
-      claim = node.claim_now(self._symbol)
-
-      if not claim:
-        self._location.values[path] = NodeWriteError.Unclaimable
-
-      if not node.connected:
-        self._location.values[path] = NodeWriteError.Disconnected
-
-      self._tasks.add(asyncio.create_task(self._write_node(path, claim, node, value)))
+      self._add_node(path, value)
 
     return self._location
 
-  def update(self, state):
-    pass
+  def update(self, state: DevicesState):
+    self._logger.debug("Updating state")
+
+    async def cleanup():
+      try:
+        for info in list(self._infos.values()):
+          if not info.path in state.values:
+            info.task.cancel()
+
+            try:
+              await info.task
+            except asyncio.CancelledError:
+              pass
+
+            del self._infos[info.path]
+            del self._location.values[info.path]
+      except Exception:
+        import traceback
+        traceback.print_exc()
+
+    asyncio.create_task(cleanup())
+
+    for path, value in state.values.items():
+      info = self._infos.get(path)
+
+      if info:
+        info.update_event.set()
+        info.value = value
+      else:
+        self._add_node(path, value)
 
   async def suspend(self):
-    for task in self._tasks:
-      task.cancel()
+    for info in self._infos.values():
+      info.task.cancel()
 
       try:
-        await task
+        await info.task
       except asyncio.CancelledError:
         pass
 
+    del self._infos
     del self._location
-    del self._tasks
 
     # self._location = StateLocation({ 'a': 34 })
     # self._notify()

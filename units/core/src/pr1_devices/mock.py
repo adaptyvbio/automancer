@@ -3,6 +3,7 @@ from pr1.devices.node import BooleanWritableNode, CollectionNode, DeviceNode
 
 
 class MockDevice(DeviceNode):
+  description = None
   id = "Mock"
   label = "Mock device"
   model = "Mock device"

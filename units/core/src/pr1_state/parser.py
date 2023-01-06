@@ -6,6 +6,8 @@ from types import EllipsisType
 from typing import Any, Optional
 
 from pr1.devices.claim import ClaimSymbol
+from pr1.fiber.master2 import StateInstanceCollection
+from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocationArea
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
@@ -45,15 +47,21 @@ class StateTransform(BaseTransform):
     #     state=(state | child.state)
     #   )
 
+    # for t in transforms:
+    #   print(t)
+    # print()
+
     return Analysis(), StateBlock(
       child=child,
-      state=state
+      state=state,
+      terminal=((len(transforms) > 0) and isinstance(transforms[-1], SegmentTransform))
     )
 
 
 class StateProgramMode(IntEnum):
   Halted = -1
   Resuming = -2
+  Starting = -3
 
   HaltingChild = 0
   HaltingState = 5
@@ -96,6 +104,8 @@ class StateProgram(BlockProgram):
     self._iterator: CoupledStateIterator2[ProgramExecEvent, Any]
     self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
+    self._state_excess: BlockState
+    self._state_instance: StateInstanceCollection
 
   @property
   def busy(self):
@@ -131,7 +141,21 @@ class StateProgram(BlockProgram):
     self._mode = StateProgramMode.Resuming
     self._iterator.trigger()
 
-  async def run(self, initial_point: Optional[StateProgramPoint], symbol: ClaimSymbol):
+  def _apply_state(self, state: BlockState, /):
+    # print(">>>>", hasattr(self._iterator, '_state'), self._state_instance.applied)
+
+    # The value of self._mode is:
+    #   - Starting if this program applied its own state
+    #   - Normal if a child program calculated the state
+    if (self._mode == StateProgramMode.Starting) or (self._mode == StateProgramMode.Normal):
+      if not self._state_instance.applied:
+        state_location = self._state_instance.apply(state, resume=False)
+      else:
+        state_location = self._state_instance.update(state)
+
+      self._iterator.notify(state_location)
+
+  async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], symbol: ClaimSymbol):
     async def run():
       while self._point:
         point = self._point
@@ -140,22 +164,31 @@ class StateProgram(BlockProgram):
         self._child_program = self._block.child.Program(self._block.child, master=self._master, parent=self)
         self._mode = StateProgramMode.Normal
 
-        async for event in self._child_program.run(point.child, symbol):
+        async for event in self._child_program.run(point.child, self, symbol):
           yield event
 
+    self._child_stopped = False
+    self._mode = StateProgramMode.Starting
     self._point = initial_point or StateProgramPoint(child=None)
     self._iterator = CoupledStateIterator2(run())
 
-    state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, symbol=symbol)
-    state_location = state_instance.apply(self._block.state, resume=False)
-    self._iterator.notify(state_location)
+    self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, symbol=symbol)
 
-    async def suspend_state():
+    if parent_state_program:
+      parent_state_program._state_final, self._state_excess = parent_state_program._state_excess & self._block.state
+      # print("!", self._block.terminal, parent_state_final['devices'], self._state_excess['devices'])
+      parent_state_program._apply_state(parent_state_program._state_final)
+    else:
+      self._state_excess = self._block.state
+
+    if self._block.terminal:
+      self._state_final = self._state_excess
+      self._apply_state(self._state_final)
+
+    async def suspend_state(*, change_parent: bool = False):
       try:
-        await state_instance.suspend()
-      except Exception:
-        traceback.print_exc()
-      finally:
+        await self._state_instance.suspend()
+
         match self._mode:
           case StateProgramMode.PausingState:
             self._mode = StateProgramMode.Paused
@@ -164,19 +197,23 @@ class StateProgram(BlockProgram):
             self._mode = StateProgramMode.Halted
             self._iterator.trigger()
 
+        if change_parent and parent_state_program:
+          # This will be ignored if 'parent_state_program' is pausing
+          parent_state_program._apply_state(parent_state_program._state_excess)
+      except Exception:
+        traceback.print_exc()
+
     async for event, state_location in self._iterator:
       self._child_stopped = event.stopped
 
       # If the child was immediately paused, then no event gets emitted.
       if (self._mode == StateProgramMode.PausingChild) and event.stopped:
         self._mode = StateProgramMode.PausingState
-        asyncio.create_task(suspend_state())
+        asyncio.create_task(suspend_state(change_parent=True))
         continue
 
-      # if ((self._mode == StateProgramMode.Normal) and event.terminated) \
-      #   or ((self._mode == StateProgramMode.HaltingChild) and event.stopped):
-      if event.terminated: # and self._mode in (StateProgramMode.HaltingChild, StateProgramMode.Normal):
-        if state_instance.applied:
+      if event.terminated:
+        if self._state_instance.applied:
           # Case (1)
           #   The state instance emits events.
           #   Once we receive the first event, we yield a corresponding event with child=event.location and stopped=False.
@@ -197,7 +234,10 @@ class StateProgram(BlockProgram):
 
       if ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming):
         self._mode = StateProgramMode.Normal
-        state_location = state_instance.apply(self._block.state, resume=False)
+        state_location = self._state_instance.apply(self._state_final, resume=True)
+
+        if parent_state_program:
+          parent_state_program._apply_state(parent_state_program._state_final)
 
       yield ProgramExecEvent(
         location=StateProgramLocation(
@@ -218,9 +258,10 @@ class StateBlock(BaseBlock):
   Point: type[StateProgramPoint] = StateProgramPoint
   Program = StateProgram
 
-  def __init__(self, child: BaseBlock, state: BlockState):
+  def __init__(self, child: BaseBlock, state: BlockState, *, terminal: bool):
     self.child = child
     self.state: BlockState = state # TODO: Remove explicit type hint
+    self.terminal = terminal
 
   def export(self):
     return {

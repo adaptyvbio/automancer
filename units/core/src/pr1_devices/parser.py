@@ -44,8 +44,8 @@ class DevicesParser(BaseParser):
           return PrimitiveType(bool)
         case ScalarWritableNode(unit=None):
           return PrimitiveType(float)
-        case ScalarWritableNode(unit=unit):
-          return QuantityType(unit)
+        case ScalarWritableNode(deactivatable=deactivatable, unit=unit):
+          return QuantityType(unit, allow_nil=deactivatable)
         case _:
           return AnyType()
 
@@ -77,12 +77,9 @@ class DevicesState(BlockUnitState):
 
   def __and__(self, other: Optional['DevicesState']):
     return (
-      None,
-      DevicesState({ **self.values, **other.values }) if other is not None else self,
+      DevicesState({ key: value for key, value in self.values.items() if not (other and (key in other.values)) }),
+      other or DevicesState({})
     )
-
-  def __rand__(self, other: Optional['DevicesState']):
-    return self
 
   def export(self) -> object:
     def export_value(value):
@@ -91,6 +88,8 @@ class DevicesState(BlockUnitState):
           return "On" if value else "Off"
         case Quantity():
           return f"{value:.2fP~}"
+        case None:
+          return "–"
         case _:
           return value
 

@@ -1,10 +1,11 @@
 from collections import namedtuple
+from dataclasses import dataclass
 from enum import Enum
 import ast
 import functools
 import math
 import sys
-from typing import Any
+from typing import Any, Optional
 
 from .draft import DraftDiagnostic
 from .util.decorators import deprecated
@@ -274,18 +275,24 @@ class LocatedValue:
       case _:
         return LocatedValueContainer(obj, area)
 
+  # @deprecated
+  @staticmethod
   def create_error(message, object):
     if isinstance(object, LocatedValue):
       return object.error(message)
     else:
       return Exception(message)
 
+  # @deprecated
+  @staticmethod
   def extract(object):
     if isinstance(object, LocatedValue):
       return object.value
     else:
       return object
 
+  # @deprecated
+  @staticmethod
   def locate(object, area):
     if isinstance(object, dict):
       return LocatedDict(object, area)
@@ -294,8 +301,10 @@ class LocatedValue:
     elif isinstance(object, str):
       return LocatedString(object, area)
     else:
-      return LocatedValue(object, locrange)
+      return LocatedValue(object, area)
 
+  # @deprecated
+  @staticmethod
   def transfer(dest, source):
     if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
       return LocatedValue.locate(dest, source.area)
@@ -420,7 +429,7 @@ class LocatedList(list, LocatedValue):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
-  def __init__(self, value, area):
+  def __init__(self, value: list, area: LocationArea):
     LocatedValue.__init__(self, value, area)
     self += value
 
@@ -439,9 +448,13 @@ class Source(LocatedString):
     return Position(line, column)
 
 
+ObjectComments = tuple[list[LocatedString], list[LocatedString]]
+
 class ReliableLocatedDict(LocatedDict):
-  def __init__(self, value, /, area, *, completion_ranges = None):
+  def __init__(self, value: dict, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None):
     super().__init__(value, area)
+
+    self.comments = comments
     self.completion_ranges = completion_ranges or set()
 
 
@@ -482,22 +495,20 @@ class ReliableLocatedDict(LocatedDict):
 IndentationWidth = 2
 Whitespace = " "
 
-class Token:
-  def __init__(self, *, data, depth, key, kind, raw_value, value):
-    self.data = data
-    self.depth = depth
-    self.key = key
-    self.kind = kind
-    self.raw_value = raw_value
-    self.value = value
-
-  def __repr__(self):
-    return f"Token(depth={repr(self.depth)}, kind={repr(self.kind)}, key={repr(self.key)}, raw_value={repr(self.raw_value)}, value={repr(self.value)})"
-
 class TokenKind(Enum):
   Default = 0
   List = 1
   String = 2
+
+@dataclass
+class Token:
+  comment: Optional[LocatedString]
+  data: LocatedString # All data except for indentation, comment, and trailing whitespace
+  depth: int
+  key: Optional[LocatedString]
+  kind: TokenKind
+  raw_value: Optional[LocatedString]
+  value: Optional[LocatedString]
 
 
 class ReaderError(Exception):
@@ -533,12 +544,12 @@ class InvalidCharacterError(ReaderError):
     return DraftDiagnostic("Invalid character", ranges=self.target.area.ranges)
 
 
-def tokenize(raw_source):
-  errors = list()
-  warnings = list()
+def tokenize(raw_source: str):
+  errors = list[ReaderError]()
+  warnings = list[ReaderError]()
 
   source = Source(raw_source)
-  tokens = list()
+  tokens = list[Token]()
 
 
   # Check if all characters are ASCII
@@ -560,7 +571,7 @@ def tokenize(raw_source):
         warnings.append(InvalidCharacterError(line[start_index:]))
 
 
-  # Iterate over all lines
+  # Iterate over all lines and identify their line break
   for full_line in source.splitlines(keepends=True):
     if full_line[-1] == "\n":
       line = full_line[:-1]
@@ -569,27 +580,36 @@ def tokenize(raw_source):
       line = full_line
       line_break = str()
 
-    # Remove the comment on the line, if any
+    # Find and remove the comment on the line, if any
     comment_offset = line.find("#")
 
     if comment_offset >= 0:
+      comment = line[(comment_offset + 1):].strip()
       line = line[0:comment_offset]
+    else:
+      comment = None
 
     # Calculate the indentation
     indent_offset = len(line) - len(line.lstrip(Whitespace))
 
-    # Remove whitespace on the right of the line
+    # Remove whitespace on the right end of the line
     unstripped_line = line
     line = line.rstrip(Whitespace)
 
-    # Raise an error if there is an odd whitespace count on the left of the line and it is not empty
-    if (indent_offset % IndentationWidth > 0) and line:
-      errors.append(UnreadableIndentationError(line[indent_offset:]))
-      continue
+    # If the line only contained whitespace, that whitespace has already been removed above.
+    if indent_offset % IndentationWidth > 0:
+      # Raise an error if there is an odd whitespace count on the left end of the line and it is not empty
+      if line:
+        errors.append(UnreadableIndentationError(line[indent_offset:]))
+        continue
+      else:
+        # Otherwise suppress the comment if the line is empty
+        comment = None
 
     # Initialize a token instance
     offset = indent_offset
     token = Token(
+      comment=comment,
       data=line[offset:],
       depth=(indent_offset // IndentationWidth),
       key=None,
@@ -598,7 +618,7 @@ def tokenize(raw_source):
       value=None
     )
 
-    # Skip this line if empty
+    # Skip this line if empty or full of whitespace
     if not line:
       token.raw_value = unstripped_line
 
@@ -651,17 +671,33 @@ def tokenize(raw_source):
   return tokens, errors, warnings
 
 
-def get_offset(line, origin):
+# Removes the index of the first non-whitespace character in 'line' starting from 'origin'
+def get_offset(line: str, origin: int):
   return origin + len(line[(origin + 1):]) - len(line[(origin + 1):].lstrip(Whitespace)) + 1
 
-def is_basic_ascii(text):
+def is_basic_ascii(text: str):
   return text.isascii() and text.isprintable()
 
 
 ## Static analysis
 
+class StackEntryMode(Enum):
+  Dict = 0
+  List = 1
+  String = 2
+
 class StackEntry:
-  def __init__(self, *, key = None, area = None, mode = None, token = None, value = None):
+  def __init__(
+    self,
+    *,
+    comments: Optional[ObjectComments] = None,
+    key: Optional[LocatedString] = None,
+    area: Optional[LocationArea] = None,
+    mode: Optional[StackEntryMode] = None,
+    token: Optional[Token] = None,
+    value: Optional[dict | list | str] = None
+  ):
+    self.comments: ObjectComments = comments or (list(), list())
     self.key = key
     self.area = area
     self.mode = mode
@@ -671,14 +707,9 @@ class StackEntry:
     self.dict_ranges = set()
     self.list_ranges = set()
 
-class StackEntryMode(Enum):
-  Dict = 0
-  List = 1
-  String = 2
-
 
 class DuplicateKeyError(ReaderError):
-  def __init__(self, original, duplicate):
+  def __init__(self, original: LocatedString, duplicate: LocatedString):
     self.original = original
     self.duplicate = duplicate
 
@@ -686,55 +717,62 @@ class DuplicateKeyError(ReaderError):
     return DraftDiagnostic("Duplicate key", ranges=(self.original.area + self.duplicate.area).ranges)
 
 class InvalidIndentationError(ReaderError):
-  def __init__(self, target):
+  def __init__(self, target: LocatedString):
     self.target = target
 
   def diagnostic(self):
     return DraftDiagnostic("Invalid indentation", ranges=self.target.area.ranges)
 
 class InvalidTokenError(ReaderError):
-  def __init__(self, target):
+  def __init__(self, target: LocatedString):
     self.target = target
 
   def diagnostic(self):
     return DraftDiagnostic("Invalid token", ranges=self.target.area.ranges)
 
 
-def analyze(tokens):
-  errors = list()
-  warnings = list()
+def analyze(tokens: list[Token]):
+  errors = list[ReaderError]()
+  warnings = list[ReaderError]()
 
+  comments = list[tuple[LocatedString, int]]()
   stack = [StackEntry()]
-  whitespace_tokens = set()
+  whitespace_tokens = list[Token]()
 
-  def descend(new_depth, check = True):
+  # Pops the stack until reaching 'new_depth'
+  def descend(new_depth: int):
     depth = len(stack) - 1
-
-    if check:
-      check_diff(depth, new_depth)
+    check_diff(depth, new_depth)
 
     while len(stack) - 1 > new_depth:
       entry = stack.pop()
       head = stack[-1]
 
       if entry.mode is None:
+        assert entry.key is not None
         entry.area = entry.key.area
 
       entry_value = add_location(entry)
 
+      # Record child values when returning to their parent
       match head.mode:
         case StackEntryMode.Dict:
+          assert isinstance(head.value, dict)
           head.value[entry.key] = entry_value
         case StackEntryMode.List:
+          assert isinstance(head.value, list)
           head.value.append(entry_value)
 
-  def check_diff(old_depth, new_depth):
+  # Adds relevant completion ranges between 'new_depth' and 'old_depth' on tokens recorded in 'whitespace_tokens'
+  def check_diff(old_depth: int, new_depth: int):
     # print("!", old_depth, "<->", new_depth)
 
     for depth in range(min(old_depth, new_depth), max(old_depth, new_depth) + 1):
       entry = stack[depth]
 
       for whitespace_token in whitespace_tokens:
+        assert whitespace_token.raw_value is not None
+
         if whitespace_token.depth >= depth:
           offset = depth * IndentationWidth
           entry.dict_ranges.add(whitespace_token.raw_value[offset:offset].area.single_range())
@@ -751,20 +789,27 @@ def analyze(tokens):
         # If the token is an empty line, we can only process the completion range
         # when we reach the next valid and meaningful token.
         if token.value is None:
-          whitespace_tokens.add(token)
-        # Otherwise the token is a single string.
+          if token.comment is not None:
+            comments.append((token.comment, token.depth))
+
+          whitespace_tokens.append(token)
+        # Otherwise the token is a single string and we add it as a completion range.
         else:
           head.dict_ranges.add(token.value.area.single_range())
+          comments.clear()
 
         continue
 
     if token.depth > depth:
       errors.append(InvalidIndentationError(token.data))
+      comments.clear()
       continue
 
+    # Descend to the correct depth
     descend(token.depth)
     head = stack[-1]
 
+    # Look at the first token's kind if we do not yet know the entry's type
     if not head.mode:
       head.area = LocationArea()
 
@@ -780,23 +825,47 @@ def analyze(tokens):
           head.value = str()
 
     if head.mode == StackEntryMode.Dict:
+      assert isinstance(head.value, dict)
+
+      # Add an error if the token's kind is unexpected
       if token.kind != TokenKind.Default:
         errors.append(InvalidTokenError(token.data))
+        comments.clear()
         continue
 
+      # Add an error if the token's key already exists
       if token.key in head.value:
+        assert token.key is not None
         errors.append(DuplicateKeyError(next(key for key in head.value if key == token.key), token.key))
+        comments.clear()
         continue
 
+      # a: b
       if token.value is not None:
         head.value[token.key] = token.value
+
+      # a:
       else:
         stack.append(StackEntry(key=token.key, token=token))
+
+        if token.comment is not None:
+          stack[-1].comments[1].append(token.comment)
+
+        for comment, comment_depth in comments[::-1]:
+          if comment_depth != token.depth:
+            break
+
+          stack[-1].comments[0].insert(0, comment)
+
+        # Handle completion ranges on the empty lines before this token
         check_diff(len(stack) - 2, len(stack) - 1)
 
     elif head.mode == StackEntryMode.List:
+      assert isinstance(head.value, list)
+
       if token.kind != TokenKind.List:
         errors.append(InvalidTokenError(token.data))
+        comments.clear()
         continue
 
       # - a: ...
@@ -830,33 +899,50 @@ def analyze(tokens):
     elif head.mode == StackEntryMode.String:
       if token.kind != TokenKind.String:
         errors.append(InvalidTokenError(token.data))
+        comments.clear()
         continue
+
+      assert token.value is not None
 
       head.area += token.value.area
       head.value += token.value
 
+    comments.clear()
+
+  # Return to the root level
   descend(0)
 
   return add_location(stack[0]), errors, warnings
 
 
-def add_location(entry):
+# Finalizes created objects
+def add_location(entry: StackEntry) -> Any:
   match entry.mode:
     case StackEntryMode.Dict:
+      assert isinstance(entry.value, dict)
       area = LocationArea()
 
       for key, value in entry.value.items():
         if isinstance(value, str):
+          assert isinstance(value, LocatedString)
           area += LocationArea([(key.area + value.area).enclosing_range()])
         else:
           area += key.area
 
-      return ReliableLocatedDict(entry.value, area, completion_ranges=entry.dict_ranges)
+      return ReliableLocatedDict(
+        entry.value, area,
+        comments=entry.comments,
+        completion_ranges=entry.dict_ranges
+      )
 
     case StackEntryMode.List:
+      assert entry.area
+      assert isinstance(entry.value, list)
+
       return LocatedList(entry.value, entry.area)
 
     case StackEntryMode.String:
+      assert isinstance(entry.value, str)
       return LocatedString(entry.value, entry.area).rstrip("\n")
 
     case None:
@@ -936,8 +1022,21 @@ if __name__ == "__main__":
 
   # e: 3""")
 
-  source = f"""a:
-  x: 4
+  source = f"""
+# Cx
+  # Cy
+# C0
+# C1
+a:
+  y:
+# D
+b: # !
+  x:
+# C3
+  # C4
+  x: # C5
+  # C6
+    z: 4
   y: 5
   #
     #
@@ -947,16 +1046,20 @@ if __name__ == "__main__":
   source = Source(source)
 
   pprint(errors)
-  pprint(tokens)
+  # pprint(tokens)
 
   value, errors, warnings = analyze(tokens)
-  pprint(errors)
-  pprint(value['a'].completion_ranges)
-  print(len(source))
 
-  for r in value['a'].completion_ranges:
-    # print(repr(source[r.start]))
-    print(source[r.start-1:r.start].area.format())
+  pprint(value['a'].comments)
+  pprint(value['b'].comments)
+  # pprint(value['a']['x'].comments)
+
+  # pprint(value['a'].completion_ranges)
+  # print(len(source))
+
+  # for r in value['a'].completion_ranges:
+  #   # print(repr(source[r.start]))
+  #   print(source[r.start-1:r.start].area.format())
 
 
 if __name__ == "_main__":

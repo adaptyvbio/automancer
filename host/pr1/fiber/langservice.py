@@ -10,7 +10,7 @@ from ..util.parser import check_identifier
 
 from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange
+from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
 
 
 class Analysis:
@@ -188,6 +188,28 @@ class CompositeDict:
 
     self._namespaces = {self._native_namespace}
 
+  @property
+  def completion_items(self):
+    completion_items = list[CompletionItem]()
+
+    for attr_name, attr_entries in self._attributes.items():
+      ambiguous = (len(attr_entries) > 1)
+
+      for namespace, attr in attr_entries.items():
+        native = (namespace == self._native_namespace)
+
+        completion_items.append(CompletionItem(
+          documentation=attr._description,
+          kind=attr._kind,
+          label=attr_name,
+          namespace=(namespace if not native else None),
+          signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
+          sublabel=attr._label,
+          text=(f"{namespace}{self._separator}{attr_name}" if ambiguous and (not native) else attr_name)
+        ))
+
+    return completion_items
+
   def add(self, attrs, *, namespace):
     self._namespaces.add(namespace)
 
@@ -210,29 +232,6 @@ class CompositeDict:
 
     return namespace, attr_name, attr_entries
 
-    # if attr_entries and namespace:
-    #   return attr_entries.get(namespace)
-    # elif attr_entries and (self._main_namespace in attr_entries):
-    #   return attr_entries[self._main_namespace]
-    # else:
-    #   return attr_entries
-
-  # def analyze_backbone(self, obj):
-  #   analysis = Analysis()
-
-  #   primitive_analysis, obj = PrimitiveType(dict).analyze(obj)
-  #   analysis += primitive_analysis
-
-  #   if obj is Ellipsis:
-  #     return analysis
-
-  #   if self._foldable:
-  #     analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
-
-  #   # TODO: add completion
-
-  #   return analysis
-
   def analyze(self, obj, context):
     analysis = Analysis()
     strict_failed = False
@@ -242,6 +241,8 @@ class CompositeDict:
 
     if obj is Ellipsis:
       return analysis, obj
+
+    assert isinstance(obj, ReliableLocatedDict)
 
     if self._foldable:
       analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
@@ -297,27 +298,8 @@ class CompositeDict:
           analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
           strict_failed = True
 
-
-    completion_items = list()
-
-    for attr_name, attr_entries in self._attributes.items():
-      ambiguous = (len(attr_entries) > 1)
-
-      for namespace, attr in attr_entries.items():
-        native = (namespace == self._native_namespace)
-
-        completion_items.append(CompletionItem(
-          documentation=attr._description,
-          kind=attr._kind,
-          label=attr_name,
-          namespace=(namespace if not native else None),
-          signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
-          sublabel=attr._label,
-          text=(f"{namespace}{self._separator}{attr_name}" if ambiguous and (not native) else attr_name)
-        ))
-
     analysis.completions.append(Completion(
-      items=completion_items,
+      items=self.completion_items,
       ranges=[
         *[obj_key.area.single_range() for obj_key in obj.keys()],
         *obj.completion_ranges
@@ -441,7 +423,7 @@ class ListType(PrimitiveType):
     if isinstance(obj, EllipsisType):
       return analysis, Ellipsis
 
-    assert isinstance(obj, list)
+    assert isinstance(obj, ReliableLocatedList)
     result = list()
 
     for item in obj:
@@ -451,6 +433,12 @@ class ListType(PrimitiveType):
 
       if not isinstance(item_result, EllipsisType):
         result.append(item_result)
+
+    if obj.completion_ranges and isinstance(self._item_type, DictType):
+      analysis.completions.append(Completion(
+        items=self._item_type.completion_items,
+        ranges=list(obj.completion_ranges)
+      ))
 
     return analysis, result
 

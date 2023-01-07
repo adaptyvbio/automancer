@@ -457,6 +457,13 @@ class ReliableLocatedDict(LocatedDict):
     self.comments = comments
     self.completion_ranges = completion_ranges or set()
 
+class ReliableLocatedList(LocatedList):
+  def __init__(self, value: list, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None):
+    super().__init__(value, area)
+
+    self.comments = comments
+    self.completion_ranges = completion_ranges or set()
+
 
 ## Tokenization
 
@@ -584,7 +591,7 @@ def tokenize(raw_source: str):
     comment_offset = line.find("#")
 
     if comment_offset >= 0:
-      comment = line[(comment_offset + 1):].strip()
+      comment = line[(comment_offset + 1):].strip() or None
       line = line[0:comment_offset]
     else:
       comment = None
@@ -658,6 +665,7 @@ def tokenize(raw_source: str):
         if value:
           token.value = value
         else:
+          errors.append(InvalidLineError(token.data))
           token.raw_value = unstripped_line[offset:]
           token.value = None
 
@@ -749,7 +757,7 @@ def analyze(tokens: list[Token]):
       head = stack[-1]
 
       if entry.mode is None:
-        assert entry.key is not None
+        assert entry.key
         entry.area = entry.key.area
 
       entry_value = add_location(entry)
@@ -784,21 +792,14 @@ def analyze(tokens: list[Token]):
     depth = len(stack) - 1
     head = stack[-1]
 
-    match token.kind:
-      case TokenKind.Default if token.key is None:
-        # If the token is an empty line, we can only process the completion range
-        # when we reach the next valid and meaningful token.
-        if token.value is None:
-          if token.comment is not None:
-            comments.append((token.comment, token.depth))
+    # If the token is an empty line, we can only process the completion range
+    # when we reach the next valid and meaningful token.
+    if (token.kind == TokenKind.Default) and (not token.key) and (not token.value):
+      if token.comment is not None:
+        comments.append((token.comment, token.depth))
+        whitespace_tokens.append(token)
 
-          whitespace_tokens.append(token)
-        # Otherwise the token is a single string and we add it as a completion range.
-        else:
-          head.dict_ranges.add(token.value.area.single_range())
-          comments.clear()
-
-        continue
+      continue
 
     if token.depth > depth:
       errors.append(InvalidIndentationError(token.data))
@@ -808,6 +809,26 @@ def analyze(tokens: list[Token]):
     # Descend to the correct depth
     descend(token.depth)
     head = stack[-1]
+
+    # Calculate relevant comments for this token
+    relevant_comments = list()
+
+    for comment, comment_depth in comments[::-1]:
+      if comment_depth != token.depth:
+        break
+
+      relevant_comments.append(comment)
+
+    relevant_comments = relevant_comments[::-1]
+    comments.clear()
+
+    # If the token is a single string, we add it as a completion range.
+    # elif token.depth == depth
+    if (token.kind == TokenKind.Default) and (not token.key):
+      assert token.value
+
+      head.dict_ranges.add(token.value.area.single_range())
+      continue
 
     # Look at the first token's kind if we do not yet know the entry's type
     if not head.mode:
@@ -830,32 +851,27 @@ def analyze(tokens: list[Token]):
       # Add an error if the token's kind is unexpected
       if token.kind != TokenKind.Default:
         errors.append(InvalidTokenError(token.data))
-        comments.clear()
         continue
 
       # Add an error if the token's key already exists
       if token.key in head.value:
-        assert token.key is not None
+        assert token.key
         errors.append(DuplicateKeyError(next(key for key in head.value if key == token.key), token.key))
-        comments.clear()
         continue
 
       # a: b
-      if token.value is not None:
+      if token.value:
         head.value[token.key] = token.value
 
       # a:
       else:
-        stack.append(StackEntry(key=token.key, token=token))
+        entry = StackEntry(
+          comments=(relevant_comments, [token.comment] if token.comment else list()),
+          key=token.key,
+          token=token
+        )
 
-        if token.comment is not None:
-          stack[-1].comments[1].append(token.comment)
-
-        for comment, comment_depth in comments[::-1]:
-          if comment_depth != token.depth:
-            break
-
-          stack[-1].comments[0].insert(0, comment)
+        stack.append(entry)
 
         # Handle completion ranges on the empty lines before this token
         check_diff(len(stack) - 2, len(stack) - 1)
@@ -865,14 +881,14 @@ def analyze(tokens: list[Token]):
 
       if token.kind != TokenKind.List:
         errors.append(InvalidTokenError(token.data))
-        comments.clear()
         continue
 
       # - a: ...
       if token.key:
         # - a: b
-        if token.value is not None:
+        if token.value:
           stack.append(StackEntry(
+            comments=(relevant_comments, list()),
             mode=StackEntryMode.Dict,
             value={ token.key: token.value }
           ))
@@ -883,6 +899,7 @@ def analyze(tokens: list[Token]):
         #     ...
         else:
           stack.append(StackEntry(
+            comments=(relevant_comments, [token.comment] if token.comment else list()),
             mode=StackEntryMode.Dict,
             value=dict()
           ))
@@ -891,23 +908,27 @@ def analyze(tokens: list[Token]):
           check_diff(len(stack) - 3, len(stack) - 1)
 
       # - a
-      else:
+      elif token.value:
         head.value.append(token.value)
+
+      # -
+      else:
+        assert token.raw_value is not None
+
+        for offset in range(len(token.raw_value) + 1):
+          head.list_ranges.add(token.raw_value[offset:offset].area.single_range())
 
       head.area += token.data.area
 
     elif head.mode == StackEntryMode.String:
       if token.kind != TokenKind.String:
         errors.append(InvalidTokenError(token.data))
-        comments.clear()
         continue
 
       assert token.value is not None
 
       head.area += token.value.area
       head.value += token.value
-
-    comments.clear()
 
   # Return to the root level
   descend(0)
@@ -930,7 +951,8 @@ def add_location(entry: StackEntry) -> Any:
           area += key.area
 
       return ReliableLocatedDict(
-        entry.value, area,
+        entry.value,
+        area,
         comments=entry.comments,
         completion_ranges=entry.dict_ranges
       )
@@ -939,7 +961,12 @@ def add_location(entry: StackEntry) -> Any:
       assert entry.area
       assert isinstance(entry.value, list)
 
-      return LocatedList(entry.value, entry.area)
+      return ReliableLocatedList(
+        entry.value,
+        entry.area,
+        comments=entry.comments,
+        completion_ranges=entry.list_ranges
+      )
 
     case StackEntryMode.String:
       assert isinstance(entry.value, str)
@@ -1023,39 +1050,23 @@ if __name__ == "__main__":
   # e: 3""")
 
   source = f"""
-# Cx
-  # Cy
-# C0
-# C1
-a:
-  y:
-# D
-b: # !
-  x:
-# C3
-  # C4
-  x: # C5
-  # C6
-    z: 4
-  y: 5
-  #
-    #
+x:
+  - a:
+    b
 """
 
   tokens, errors, warnings = tokenize(source)
   source = Source(source)
 
   pprint(errors)
-  # pprint(tokens)
+  pprint(tokens)
 
   value, errors, warnings = analyze(tokens)
 
-  pprint(value['a'].comments)
-  pprint(value['b'].comments)
-  # pprint(value['a']['x'].comments)
+  pprint(errors)
 
-  # pprint(value['a'].completion_ranges)
-  # print(len(source))
+  print(value)
+  pprint(value['x'][0].completion_ranges)
 
   # for r in value['a'].completion_ranges:
   #   # print(repr(source[r.start]))

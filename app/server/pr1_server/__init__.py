@@ -6,6 +6,7 @@ import os
 import platform
 import signal
 import sys
+import traceback
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -17,12 +18,13 @@ from pr1.util import schema as sc
 logger = logging.getLogger("pr1.app")
 
 from .auth import agents as auth_agents
+from .bridges.socket import SocketBridge
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .client import ClientClosed
 from .conf import Conf
 from .session import Session
-from .trash import trash
+from .trash import trash as trash_file
 
 
 class Backend:
@@ -58,7 +60,7 @@ class Backend:
         "path": str(path)
       }))
     else:
-      trash(path)
+      trash_file(path)
 
 
 class App:
@@ -150,6 +152,9 @@ class App:
     else:
       self.remote_bridge = None
 
+    socket_bridge = SocketBridge.inet("", 17000)
+    self.bridges.add(socket_bridge)
+
 
     # Misc
 
@@ -208,12 +213,18 @@ class App:
             })
     except ClientClosed:
       logger.debug(f"Disconnected client '{client.id}'")
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      traceback.print_exc()
     finally:
       for session in client.sessions.values():
         session.close()
 
+      client.close()
       del self.clients[client.id]
-    logger.debug(f"Removed client '{client.id}'")
+
+      logger.debug(f"Removed client '{client.id}'")
 
   async def broadcast(self, message):
     for client in list(self.clients.values()):
@@ -332,6 +343,8 @@ class App:
 
   def stop(self):
     logger.info("Stopping")
+
+    assert self._main_task
     self._main_task.cancel()
 
 

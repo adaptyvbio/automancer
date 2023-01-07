@@ -243,6 +243,19 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           contents: result.hover.contents.map((str) => ({ value: str })),
           range: result.range
         };
+      },
+      provideSelectionRanges: async (model, positions, token) => {
+        if (!this.props.compilation || this.outdatedCompilation) {
+          return null;
+        }
+
+        let modelRanges = this.props.compilation.selections.map((draftRange) => getModelRangeFromDraftRange(model, draftRange));
+
+        return positions.map((position) =>
+          modelRanges
+            .filter((range) => range.containsPosition(position))
+            .map((range) => ({ range }))
+        );
       }
     }, { signal: this.controller.signal });
   }

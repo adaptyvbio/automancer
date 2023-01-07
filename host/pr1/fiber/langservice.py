@@ -7,32 +7,40 @@ from pint import Quantity, Unit
 from typing import Any, Literal, Optional, Protocol, cast
 
 from ..util.parser import check_identifier
-
-from .expr import PythonExprEvaluator
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
 
 
+class Selection:
+  def __init__(self, range: LocationRange):
+    self.range = range
+
+  def export(self):
+    return [self.range.start, self.range.end]
+
+
 class Analysis:
-  def __init__(self, *, errors = None, warnings = None, completions = None, folds = None, hovers = None):
+  def __init__(self, *, errors = None, warnings = None, completions = None, folds = None, hovers = None, selections: Optional[list[Selection]] = None):
     self.errors = errors or list()
     self.warnings = warnings or list()
 
     self.completions = completions or list()
     self.folds = folds or list()
     self.hovers = hovers or list()
+    self.selections = selections or list()
 
-  def __add__(self, other):
+  def __add__(self, other: 'Analysis'):
     return Analysis(
       errors=(self.errors + other.errors),
       warnings=(self.warnings + other.warnings),
       completions=(self.completions + other.completions),
       folds=(self.folds + other.folds),
-      hovers=(self.hovers + other.hovers)
+      hovers=(self.hovers + other.hovers),
+      selections=(self.selections + other.selections)
     )
 
   def __repr__(self):
-    return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)})"
+    return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)}, selection={repr(self.selections)})"
 
 
 CompletionItem = namedtuple("CompletionItem", ['documentation', 'kind', 'label', 'namespace', 'signature', 'sublabel', 'text'])
@@ -178,7 +186,7 @@ class CompositeDict:
   _native_namespace = "_"
   _separator = "/"
 
-  def __init__(self, attrs: dict[str, Attribute | Type] = dict(), /, *, foldable = False, strict = False):
+  def __init__(self, attrs: dict[str, Attribute | Type] = dict(), /, *, foldable: bool = True, strict: bool = False):
     self._foldable = foldable
     self._strict = strict
 
@@ -245,7 +253,9 @@ class CompositeDict:
     assert isinstance(obj, ReliableLocatedDict)
 
     if self._foldable:
-      analysis.folds.append(FoldingRange(obj.area.enclosing_range()))
+      analysis.folds.append(FoldingRange(obj.fold_range))
+
+    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
 
     attr_values = { namespace: dict() for namespace in self._namespaces }
 
@@ -413,8 +423,10 @@ class PrimitiveType:
         return Analysis(), obj
 
 class ListType(PrimitiveType):
-  def __init__(self, item_type: Type):
+  def __init__(self, item_type: Type, /, *, foldable: bool = True):
     super().__init__(list)
+
+    self._foldable = foldable
     self._item_type = item_type
 
   def analyze(self, obj, context):
@@ -424,6 +436,12 @@ class ListType(PrimitiveType):
       return analysis, Ellipsis
 
     assert isinstance(obj, ReliableLocatedList)
+
+    if self._foldable:
+      analysis.folds.append(FoldingRange(obj.fold_range))
+
+    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+
     result = list()
 
     for item in obj:

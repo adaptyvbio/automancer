@@ -37,11 +37,14 @@ export interface DraftFold {
   range: DraftRange;
 }
 
+export type DraftSelection = DraftRange;
+
 export interface DraftCompilation {
   completions: DraftCompletion[];
   diagnostics: DraftDiagnostic[];
   folds: DraftFold[];
   hovers: DraftHover[];
+  selections: DraftSelection[];
 
   protocol: Protocol | null;
   valid: boolean;

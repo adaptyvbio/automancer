@@ -13,6 +13,7 @@ class Draft:
       ],
       "folds": [fold.export() for fold in self.analysis.folds],
       "hovers": [hover.export() for hover in self.analysis.hovers],
+      "selections": [selection.export() for selection in self.analysis.selections],
 
       "protocol": self.protocol.export() if self.protocol else None,
       "valid": not self.analysis.errors

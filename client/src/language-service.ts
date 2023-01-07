@@ -6,7 +6,8 @@ export const ThemeName = 'prl-theme';
 
 export type LanguageService = monaco.languages.CompletionItemProvider
   & monaco.languages.FoldingRangeProvider
-  & monaco.languages.HoverProvider;
+  & monaco.languages.HoverProvider
+  & monaco.languages.SelectionRangeProvider;
 
 
 let currentLanguageService: LanguageService | null = null;
@@ -31,6 +32,10 @@ monaco.languages.registerFoldingRangeProvider(LanguageName, {
 
 monaco.languages.registerHoverProvider(LanguageName, {
   provideHover: async (model, position, token) => (await currentLanguageService?.provideHover(model, position, token)) ?? null
+});
+
+monaco.languages.registerSelectionRangeProvider(LanguageName, {
+  provideSelectionRanges: async (model, positions, token) => (await currentLanguageService?.provideSelectionRanges(model, positions, token)) ?? null
 });
 
 monaco.languages.setLanguageConfiguration(LanguageName, {

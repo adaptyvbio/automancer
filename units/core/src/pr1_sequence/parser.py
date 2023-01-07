@@ -29,7 +29,7 @@ class SequenceParser(BaseParser):
       kind='class',
       optional=True,
       signature="actions:\n  - <action 1>\n  - <action 2>",
-      type=lang.PrimitiveType(list)
+      type=lang.ListType(lang.AnyType())
     )
   }
 

@@ -249,8 +249,9 @@ class LocatedError(Exception):
 
 
 class LocatedValue:
-  def __init__(self, value, area):
+  def __init__(self, value, area, *, full_area: Optional[LocationArea] = None):
     self.area = area
+    self.full_area = full_area or area
     self.value = value
 
   # @deprecated
@@ -451,18 +452,22 @@ class Source(LocatedString):
 ObjectComments = tuple[list[LocatedString], list[LocatedString]]
 
 class ReliableLocatedDict(LocatedDict):
-  def __init__(self, value: dict, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None):
+  def __init__(self, value: dict, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None, fold_range: LocationRange, full_area: LocationArea):
     super().__init__(value, area)
 
     self.comments = comments
     self.completion_ranges = completion_ranges or set()
+    self.fold_range = fold_range
+    self.full_area = full_area
 
 class ReliableLocatedList(LocatedList):
-  def __init__(self, value: list, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None):
+  def __init__(self, value: list, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None, fold_range: LocationRange, full_area: LocationArea):
     super().__init__(value, area)
 
     self.comments = comments
     self.completion_ranges = completion_ranges or set()
+    self.fold_range = fold_range
+    self.full_area = full_area
 
 
 ## Tokenization
@@ -702,6 +707,7 @@ class StackEntry:
     key: Optional[LocatedString] = None,
     area: Optional[LocationArea] = None,
     mode: Optional[StackEntryMode] = None,
+    parent_key: Optional[LocatedString] = None,
     token: Optional[Token] = None,
     value: Optional[dict | list | str] = None
   ):
@@ -709,6 +715,7 @@ class StackEntry:
     self.key = key
     self.area = area
     self.mode = mode
+    self.parent_key = parent_key
     self.token = token
     self.value = value
 
@@ -795,10 +802,10 @@ def analyze(tokens: list[Token]):
     # If the token is an empty line, we can only process the completion range
     # when we reach the next valid and meaningful token.
     if (token.kind == TokenKind.Default) and (not token.key) and (not token.value):
-      if token.comment is not None:
+      if token.comment:
         comments.append((token.comment, token.depth))
-        whitespace_tokens.append(token)
 
+      whitespace_tokens.append(token)
       continue
 
     if token.depth > depth:
@@ -868,6 +875,7 @@ def analyze(tokens: list[Token]):
         entry = StackEntry(
           comments=(relevant_comments, [token.comment] if token.comment else list()),
           key=token.key,
+          parent_key=token.key,
           token=token
         )
 
@@ -918,8 +926,6 @@ def analyze(tokens: list[Token]):
         for offset in range(len(token.raw_value) + 1):
           head.list_ranges.add(token.raw_value[offset:offset].area.single_range())
 
-      head.area += token.data.area
-
     elif head.mode == StackEntryMode.String:
       if token.kind != TokenKind.String:
         errors.append(InvalidTokenError(token.data))
@@ -941,9 +947,13 @@ def add_location(entry: StackEntry) -> Any:
   match entry.mode:
     case StackEntryMode.Dict:
       assert isinstance(entry.value, dict)
+
       area = LocationArea()
+      full_area = LocationArea()
 
       for key, value in entry.value.items():
+        full_area += LocationArea([(key.full_area + value.full_area).enclosing_range()])
+
         if isinstance(value, str):
           assert isinstance(value, LocatedString)
           area += LocationArea([(key.area + value.area).enclosing_range()])
@@ -954,18 +964,28 @@ def add_location(entry: StackEntry) -> Any:
         entry.value,
         area,
         comments=entry.comments,
-        completion_ranges=entry.dict_ranges
+        completion_ranges=entry.dict_ranges,
+        fold_range=((full_area + entry.parent_key.area) if entry.parent_key else full_area).enclosing_range(),
+        full_area=full_area
       )
 
     case StackEntryMode.List:
-      assert entry.area
       assert isinstance(entry.value, list)
+
+      area = LocationArea()
+      full_area = LocationArea()
+
+      for item in entry.value:
+        full_area += item.full_area
+        area += item.area
 
       return ReliableLocatedList(
         entry.value,
-        entry.area,
+        area,
         comments=entry.comments,
-        completion_ranges=entry.list_ranges
+        completion_ranges=entry.list_ranges,
+        fold_range=((full_area + entry.parent_key.area) if entry.parent_key else full_area).enclosing_range(),
+        full_area=full_area
       )
 
     case StackEntryMode.String:
@@ -1051,8 +1071,9 @@ if __name__ == "__main__":
 
   source = f"""
 x:
-  - a:
-    b
+  a: b
+  c:
+  \x20
 """
 
   tokens, errors, warnings = tokenize(source)
@@ -1066,7 +1087,7 @@ x:
   pprint(errors)
 
   print(value)
-  pprint(value['x'][0].completion_ranges)
+  print(value['x'].completion_ranges)
 
   # for r in value['a'].completion_ranges:
   #   # print(repr(source[r.start]))

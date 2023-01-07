@@ -268,7 +268,7 @@ class FiberParser:
       'steps': lang.Attribute(
         type=lang.AnyType()
       )
-    }, foldable=True)
+    }, foldable=False)
 
     for parser in self._parsers:
       schema.add(parser.root_attributes, namespace=parser.namespace)

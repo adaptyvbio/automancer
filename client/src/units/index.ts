@@ -4,7 +4,6 @@ import type { Chip, ChipId, ProtocolLocation } from '../backends/common';
 import type { Host } from '../host';
 import type { Draft } from '../draft';
 
-import { Route } from '../application';
 import { Protocol } from '../interfaces/protocol';
 
 
@@ -85,12 +84,10 @@ export interface NavEntry<Props> {
 export interface ChipTabComponentProps {
   chipId: ChipId;
   host: Host;
-  setRoute(route: Route): void;
 }
 
 export interface GeneralTabComponentProps {
   host: Host;
-  setRoute(route: Route): void;
 }
 
 export interface Unit<Code, Matrix> {

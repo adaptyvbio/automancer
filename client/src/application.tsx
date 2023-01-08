@@ -9,9 +9,9 @@ import type { Host } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
-import { ViewDraft } from './views/draft';
+import { ViewDraft, ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
-import { ViewProtocols } from './views/protocols';
+import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
@@ -23,9 +23,8 @@ import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view
 import styles from '../styles/components/application.module.scss';
 
 
-const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign];
+const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
 
-console.log(BaseUrl)
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({
     component: View,
@@ -213,12 +212,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     return null;
   }
 
-  handleNavigation(routeData: RouteData | null) {
+  handleNavigation(url: string, routeData: RouteData | null) {
     if (routeData) {
       this.setState({
         currentRouteData: routeData
       });
     } else {
+      console.warn(`Missing view for pathname ${new URL(url).pathname}, redirecting to ${BaseUrlPathname}/chip`);
       navigation.navigate(`${BaseUrl}/chip`);
     }
   }
@@ -247,7 +247,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     navigation.addEventListener('navigate', (event: any) => {
       if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
-        let routeData = this.resolveNavigation(event.destination.url);
+        let url = event.destination.url;
+        let routeData = this.resolveNavigation(url);
 
         if (this.unsavedDataCallback) {
           let viewRouteMatch = (routeData?.route.component === this.state.currentRouteData!.route.component)
@@ -263,7 +264,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               this.pool.add(async () => {
                 if (await result) {
                   this.unsavedDataCallback = null;
-                  await navigation.navigate(event.destination.url, { info: event.info });
+                  navigation.navigate(url, { info: event.info });
                 }
               });
             }
@@ -274,7 +275,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
         event.intercept({
           handler: async () => {
-            this.handleNavigation(routeData);
+            this.handleNavigation(url, routeData);
           }
         });
       }
@@ -315,7 +316,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // Initialize the route
 
-      this.handleNavigation(this.resolveNavigation(navigation.currentEntry.url));
+      let url = navigation.currentEntry.url;
+      this.handleNavigation(url, this.resolveNavigation(url));
     });
   }
 

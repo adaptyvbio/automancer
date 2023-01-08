@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import type { Application, Route } from '../application';
 import { Chip, ChipId } from '../backends/common';
 import { BlockInspector } from '../components/block-inspector';
 import { ExecutionInspector } from '../components/execution-inspector';
@@ -13,16 +12,22 @@ import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interf
 import { MetadataTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
+import { ViewHashOptions, ViewProps } from '../interfaces/view';
+import { BaseUrl } from '../constants';
+import { ViewChips } from './chips';
+import { ViewChip } from './chip';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
 
-export interface ViewExecutionProps {
-  app: Application;
-  chipId: ChipId;
-  host: Host;
-  setRoute(route: Route): void;
+export interface ViewExecutionRoute {
+  id: '_';
+  params: {
+    chipId: ChipId;
+  };
 }
+
+export type ViewExecutionProps = ViewProps<ViewExecutionRoute>;
 
 export interface ViewExecutionState {
   selectedBlockPath: ProtocolBlockPath | null;
@@ -45,11 +50,27 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
   }
 
   get chip() {
-    return this.props.host.state.chips[this.props.chipId] as Chip;
+    return this.props.host.state.chips[this.props.route.params.chipId] as Chip;
   }
 
   get master() {
     return this.chip.master!;
+  }
+
+  componentDidRender() {
+    if (!this.chip) {
+      ViewChips.navigate();
+    } else if (!this.chip.master) {
+      ViewChip.navigate(this.chip.id);
+    }
+  }
+
+  componentDidMount() {
+    this.componentDidRender();
+  }
+
+  componentDidUpdate() {
+    this.componentDidRender();
   }
 
   jump(point: unknown) {
@@ -75,6 +96,10 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
   }
 
   render() {
+    if (!this.chip?.master) {
+      return null;
+    }
+
     let metadataTools = this.props.host.units.metadata as unknown as MetadataTools;
     let metadata = metadataTools.getChipMetadata(this.chip);
 
@@ -173,4 +198,17 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
       </main>
     );
   }
+
+
+  static hash(options: ViewHashOptions<ViewExecutionRoute>) {
+    return options.route.params.chipId;
+  }
+
+  static navigate(chipId: ChipId) {
+    return navigation.navigate(`${BaseUrl}/chip/${chipId}/execution`);
+  }
+
+  static routes = [
+    { id: '_', pattern: `/chip/:chipId/execution` }
+  ];
 }

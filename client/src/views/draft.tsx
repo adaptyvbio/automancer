@@ -1,9 +1,8 @@
 import * as React from 'react';
 import Split from 'react-split-grid';
 
-import type { Application, Route } from '../application';
+import type { Application } from '../application';
 import { Icon } from '../components/icon';
-import { DraftOverview } from '../components/draft-overview';
 import { TextEditor } from '../components/text-editor';
 import { VisualEditor } from '../components/visual-editor';
 import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
@@ -22,6 +21,10 @@ import * as format from '../format';
 import { ProtocolBlockPath } from '../interfaces/protocol';
 import { StartProtocolModal } from '../components/modals/start-protocol';
 import { ChipId } from '../backends/common';
+import { BaseUrl } from '../constants';
+import { ViewHashOptions, ViewProps } from '../interfaces/view';
+import { ViewDrafts } from './protocols';
+import { ViewExecution } from './execution';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
@@ -34,7 +37,6 @@ export interface ViewDraftProps {
   app: Application;
   draft: Draft;
   host: Host;
-  setRoute(route: Route): void;
 }
 
 export interface ViewDraftState {
@@ -270,7 +272,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                       command: {
                         type: 'set',
                         archived: false,
-                        description: null,
+                        description: '',
                         title: data.newChipTitle
                       }
                     });
@@ -283,7 +285,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                   });
 
                   setTimeout(() => {
-                    this.props.setRoute(['execution', chipId]);
+                    ViewExecution.navigate(chipId);
                   }, 500);
                 });
               }} />
@@ -411,6 +413,55 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       </main>
     );
   }
+
+
+  static navigate(draftId: DraftId) {
+    return navigation.navigate(`${BaseUrl}/draft/${draftId}`);
+  }
+}
+
+
+export interface ViewDraftWrapperRoute {
+  id: '_';
+  params: {
+    draftId: DraftId;
+  };
+}
+
+export type ViewDraftWrapperProps = ViewProps<ViewDraftWrapperRoute>;
+
+export class ViewDraftWrapper extends React.Component<ViewDraftWrapperProps, {}> {
+  get draft() {
+    return this.props.app.state.drafts[this.props.route.params.draftId];
+  }
+
+  componentDidMount() {
+    if (!this.draft) {
+      ViewDrafts.navigate();
+    }
+  }
+
+  render() {
+    if (!this.draft) {
+      return null;
+    }
+
+    return (
+      <ViewDraft
+        app={this.props.app}
+        draft={this.draft}
+        host={this.props.host} />
+    );
+  }
+
+
+  static hash(options: ViewHashOptions<ViewDraftWrapperRoute>) {
+    return options.route.params.draftId;
+  }
+
+  static routes = [
+    { id: '_', pattern: '/draft/:draftId' }
+  ];
 }
 
 

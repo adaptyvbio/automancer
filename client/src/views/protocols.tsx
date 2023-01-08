@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { Application, Route } from '../application';
+import type { Application } from '../application';
 import type { Host } from '../host';
 import type { Draft, DraftId, DraftPrimitive } from '../draft';
 import { ContextMenuArea, ContextMenuAreaProps } from '../components/context-menu-area';
@@ -10,6 +10,9 @@ import * as util from '../util';
 import { Pool } from '../util';
 import { analyzeProtocol } from '../analysis';
 import { formatDuration } from '../format';
+import { ViewProps } from '../interfaces/view';
+import { BaseUrl } from '../constants';
+import { ViewDraft } from './draft';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -21,18 +24,11 @@ const rtf = new Intl.RelativeTimeFormat('en', {
 });
 
 
-export interface ViewProtocolsProps {
-  app: Application;
-  drafts: Record<DraftId, Draft>;
-  host: Host;
-  setRoute(route: Route): void;
-}
-
-export class ViewProtocols extends React.Component<ViewProtocolsProps> {
+export class ViewDrafts extends React.Component<ViewProps, {}> {
   pool = new Pool();
 
   render() {
-    let drafts = Object.values(this.props.drafts);
+    let drafts = Object.values(this.props.app.state.drafts);
 
     return (
       <main className={viewStyles.root}>
@@ -51,7 +47,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     let draftId = await this.props.app.createDraft({ directory: false });
 
                     if (draftId) {
-                      this.props.setRoute(['protocol', draftId, 'overview']);
+                      ViewDraft.navigate(draftId);
                     }
                   });
                 }}>New file</button>
@@ -60,7 +56,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                     let draftId = await this.props.app.loadDraft({ directory: false });
 
                     if (draftId) {
-                      this.props.setRoute(['protocol', draftId, 'overview']);
+                      ViewDraft.navigate(draftId);
                     }
                   });
                 }}>Open file</button>
@@ -73,6 +69,7 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
 
                 return (
                   <DraftEntry
+                    href={`${BaseUrl}/draft/${draft.id}`}
                     name={draft.name ?? '[Untitled]'}
                     properties={[
                       ...(draft.item.locationInfo
@@ -102,9 +99,6 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
                       { id: '_divider3', type: 'divider' },
                       { id: 'remove', name: 'Remove from list', icon: 'highlight_off' }
                     ]}
-                    onClick={() => {
-                      this.props.setRoute(['protocol', draft.id, 'overview']);
-                    }}
                     onSelect={(path) => {
                       switch (path.first()) {
                         case 'remove': {
@@ -141,18 +135,26 @@ export class ViewProtocols extends React.Component<ViewProtocolsProps> {
       </main>
     );
   }
+
+
+  static navigate() {
+    return navigation.navigate(`${BaseUrl}/draft`);
+  }
+
+  static routes = [
+    { id: '_', pattern: '/draft' }
+  ];
 }
 
 
 export function DraftEntry(props: ContextMenuAreaProps & {
-  disabled?: unknown;
+  href?: string | null;
   name: string;
   properties: {
     id: string;
     label: string;
     icon: string;
   }[];
-  onClick?(event: React.SyntheticEvent): void;
 }) {
   let contents = (
     <>
@@ -177,8 +179,8 @@ export function DraftEntry(props: ContextMenuAreaProps & {
     <ContextMenuArea
       createMenu={props.createMenu}
       onSelect={props.onSelect}>
-      {!props.disabled
-        ? <button type="button" className="lproto-entry" onClick={props.onClick}>{contents}</button>
+      {props.href
+        ? <a href={props.href} className="lproto-entry">{contents}</a>
         : <div className="lproto-entry">{contents}</div>}
     </ContextMenuArea>
   );

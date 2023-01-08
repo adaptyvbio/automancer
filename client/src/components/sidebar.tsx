@@ -70,10 +70,10 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               label: 'Experiments',
               icon: 'science',
               route: '/chip' },
-            { id: 'protocol',
+            { id: 'draft',
               label: 'Protocols',
               icon: 'receipt_long',
-              route: '/protocol' }
+              route: '/draft' }
         ] },
         ...(unitEntries && (unitEntries?.length > 0)
           ? [{ id: 'unit', entries: unitEntries }]

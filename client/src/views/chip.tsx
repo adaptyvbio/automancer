@@ -11,15 +11,13 @@ import { Pool } from '../util';
 import * as util from '../util';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { MetadataTools } from '../unit';
+import { BaseUrl } from '../constants';
+import { ViewChips } from './chips';
 
 import viewStyles from '../../styles/components/view.module.scss';
-import { BaseUrl } from '../constants';
 
 
 export type ViewChipRoute = {
-  id: 'protocol';
-  params: { chipId: ChipId; };
-} | {
   id: 'settings';
   params: { chipId: ChipId; };
 } | {
@@ -54,7 +52,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
   componentDidMount() {
     if (!this.chip) {
-      navigation.navigate(`${BaseUrl}/chip`);
+      ViewChips.navigate();
     }
   }
 
@@ -126,7 +124,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
             <h1>{metadata.title}</h1>
             <BarNav
               entries={[
-                { id: 'protocol', href: this.routePrefix + '/settings', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
+                { id: 'protocol', href: this.routePrefix + '/execution', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
                 { id: 'settings', href: this.routePrefix, label: 'Settings', icon: 'settings' },
                 ...unitEntries
               ]}
@@ -140,10 +138,13 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
   }
 
 
+  static navigate(chipId: ChipId) {
+    return navigation.navigate(`${BaseUrl}/chip/${chipId}`);
+  }
+
   static routes = [
-    { id: 'protocol', pattern: '/chip/:chipId/protocol' },
-    { id: 'settings', pattern: '/chip/:chipId' },
-    { id: 'unit', pattern: '/chip/:chipId/:unitNamespace' },
+    { id: 'settings', pattern: '/chip/:chipId' }
+    // { id: 'unit', pattern: '/chip/:chipId/:unitNamespace' }
   ];
 
   static hash(options: ViewHashOptions<ViewChipRoute>) {

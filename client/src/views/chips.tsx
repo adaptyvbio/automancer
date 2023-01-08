@@ -13,9 +13,10 @@ import { formatRelativeDate } from '../format';
 import * as util from '../util';
 import { MetadataTools } from '../unit';
 import { ViewProps } from '../interfaces/view';
+import { ViewChip } from './chip';
+import { BaseUrl } from '../constants';
 
 import viewStyles from '../../styles/components/view.module.scss';
-import { BaseUrl } from '../constants';
 
 
 export class ViewChips extends React.Component<ViewProps> {
@@ -24,7 +25,7 @@ export class ViewChips extends React.Component<ViewProps> {
 
   componentDidUpdate() {
     if (this.chipIdAwaitingRedirect && (this.chipIdAwaitingRedirect in this.props.host.state.chips)) {
-      navigation.navigate(`${BaseUrl}/chip/${this.chipIdAwaitingRedirect}`);
+      ViewChip.navigate(this.chipIdAwaitingRedirect);
     }
   }
 
@@ -190,7 +191,11 @@ export class ViewChips extends React.Component<ViewProps> {
                             { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                             { id: 'delete', name: 'Move to trash', icon: 'delete' }
                           ]}
-                          disabled={!chip.readable}
+                          href={
+                            chip.readable
+                              ? `${BaseUrl}/chip/${chip.id}`
+                              : null
+                          }
                           name={metadata?.title ?? ((chip.condition === ChipCondition.Unsupported) ? '[Unsupported]' : '[Corrupted]')}
                           onSelect={(path) => {
                             switch (path.first()) {
@@ -226,7 +231,11 @@ export class ViewChips extends React.Component<ViewProps> {
   }
 
 
+  static navigate() {
+    return navigation.navigate(`${BaseUrl}/chip`);
+  }
+
   static routes = [
-    { id: 'chips', pattern: '/chip' }
+    { id: '_', pattern: '/chip' }
   ];
 }

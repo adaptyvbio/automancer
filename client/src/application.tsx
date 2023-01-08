@@ -17,11 +17,33 @@ import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
+import { BaseUrl } from './constants';
+import { ViewType } from './interfaces/view';
 
 import styles from '../styles/components/application.module.scss';
 
 
-export type Route = (number | string)[];
+const Views: ViewType[] = [ViewConf, ViewDesign];
+
+const Routes: Route[] = Views.map((View) => ({
+  component: View,
+  pattern: new URLPattern({
+    baseURL: BaseUrl,
+    id: View.route.id,
+    pathname: View.route.pattern
+  })
+}));
+
+
+export interface Route {
+  component: ViewType;
+  pattern: URLPattern;
+}
+
+export interface RouteData {
+  groups: any;
+  route: Route;
+}
 
 
 export interface ApplicationProps {
@@ -39,7 +61,7 @@ export interface ApplicationState {
   drafts: DraftsRecord;
   openDraftIds: ImSet<DraftId>;
 
-  currentRoute: Route | null;
+  currentRouteData: RouteData | null;
 }
 
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
@@ -55,7 +77,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       drafts: {},
       openDraftIds: ImSet(),
 
-      currentRoute: null
+      currentRouteData: null
     };
   }
 
@@ -158,6 +180,31 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }));
   }
 
+  async handleNavigation(url: string) {
+    let currentRoute: Route | null = null;
+    let match: any;
+
+    for (let route of Routes) {
+      match = route.pattern.exec(url);
+
+      if (match) {
+        currentRoute = route;
+        break;
+      }
+    }
+
+    if (currentRoute) {
+      this.setState({
+        currentRouteData: {
+          groups: match.pathname.groups,
+          route: currentRoute
+        }
+      });
+    } else {
+      await navigation.navigate('/design');
+    }
+  }
+
   componentDidMount() {
     window.addEventListener('beforeunload', () => {
       this.state.host?.backend.close();
@@ -179,36 +226,15 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       }
     }, { signal: this.controller.signal });
 
-    // this.props.appBackend.onDraftsUpdate(({ options, update }) => {
-    //   this.setState((state) => {
-    //     let drafts = { ...state.drafts };
-    //     let openDraftIds = state.openDraftIds;
-
-    //     for (let [draftId, draftItem] of Object.entries(update)) {
-    //       if (!draftItem) {
-    //         delete drafts[draftId];
-    //         openDraftIds = openDraftIds.remove(draftId);
-
-    //         continue;
-    //       }
-
-    //       drafts[draftId] = {
-    //         id: draftId,
-    //         ...(drafts[draftId] as Draft | undefined),
-    //         compiled: null,
-    //         item: draftItem
-    //       };
-
-    //       if (this.state.host && !options?.skipCompilation) {
-    //         this.pool.add(async () => {
-    //           await this.compileDraft(draftItem!);
-    //         });
-    //       }
-    //     }
-
-    //     return { drafts, openDraftIds };
-    //   });
-    // });
+    navigation.addEventListener('navigate', (event: any) => {
+      if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
+        event.intercept({
+          handler: async () => {
+            await this.handleNavigation(event.destination.url);
+          }
+        });
+      }
+    }, { signal: this.controller.signal });
 
     this.pool.add(async () => {
       // Initialize the app backend
@@ -245,19 +271,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // Initialize the route
 
-      let route!: Route;
-
-      try {
-        route = JSON.parse(window.sessionStorage['route']);
-      } catch {
-        route = ['chip'];
-      }
-
-      if ((route[0] === 'chip') && (route.length === 3) && !(state.chips[route[1]])) {
-        route = ['chip'];
-      }
-
-      this.setRoute(route);
+      this.handleNavigation(navigation.currentEntry.url);
     });
   }
 
@@ -394,111 +408,18 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   render() {
     let setRoute = this.setRoute.bind(this);
 
-    let contents = (() => {
-      let route = this.state.currentRoute;
+    let contents = null;
 
-      if (!route || !this.state.host?.units) {
-        return null;
-      }
+    if (this.state.currentRouteData && this.state.host?.units) {
+      let routeData = this.state.currentRouteData;
+      let Component = routeData.route.component;
 
-      if (route.length === 1) {
-        switch (route[0]) {
-          case 'chip': return (
-            <ViewChips
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
-
-          case 'conf': return (
-            <ViewConf
-              app={this}
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
-
-          case 'design': return (
-            <ViewDesign />
-          );
-
-          case 'protocol': return (
-            <ViewProtocols
-              app={this}
-              drafts={this.state.drafts}
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
-        }
-      } else if (route.length === 2) {
-        switch (route[0]) {
-          case 'execution': {
-            let chip = this.state.host.state.chips[route[1]];
-
-            if (!(chip as Chip).master) {
-              setTimeout(() => {
-                this.setRoute(['protocol']);
-              }, 100);
-
-              return <div />;
-            }
-
-            return (
-              <ViewExecution
-                app={this}
-                chipId={route[1] as ChipId}
-                host={this.state.host}
-                setRoute={setRoute} />
-            );
-          }
-        }
-      } else if (route.length === 3) {
-        switch (route[0]) {
-          case 'chip': return (
-            <ViewChip
-              chipId={route[1] as ChipId}
-              host={this.state.host}
-              tab={route[2] as string}
-              setRoute={setRoute} />
-          );
-
-          case 'protocol': {
-            let draft = this.state.drafts[route[1]];
-
-            if (!draft) {
-              this.setRoute([route[0]]);
-              return null;
-            }
-
-            // TODO: Improve
-            if (!draft.compilation) {
-              // this.pool.add(async () => {
-              //   await this.compileDraft(draft.entry);
-              // });
-            }
-
-            return (
-              <ViewDraft
-                app={this}
-                draft={draft}
-                host={this.state.host}
-                setRoute={setRoute} />
-            );
-          }
-
-          case 'unit': {
-            let unit = this.state.host!.units[route[1]];
-            let entries = (unit.getGeneralTabs?.() ?? []);
-            let entry = entries.find((entry) => entry.id === route![2]);
-            let Component = entry!.component;
-
-            return (
-              <Component
-                host={this.state.host!}
-                setRoute={this.setRoute} />
-            );
-          }
-        }
-      }
-    })();
+      contents = (
+        <Component
+          app={this}
+          host={this.state.host} />
+      );
+    }
 
     return (
       <div className={styles.root}>

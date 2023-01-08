@@ -1,7 +1,7 @@
 import * as React from 'react';
 import seqOrd from 'seq-ord';
 
-import { Application, Route } from '../application';
+import { Application } from '../application';
 import { Icon } from '../components/icon';
 import * as Form from '../components/standard-form';
 import { TitleBar } from '../components/title-bar';
@@ -9,6 +9,7 @@ import { Host } from '../host';
 import { UnitInfo, UnitNamespace } from '../units';
 import * as util from '../util';
 import { Button } from '../components/button';
+import { ViewProps } from '../interfaces/view';
 
 import descriptionStyles from '../../styles/components/description.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
@@ -16,19 +17,15 @@ import styles from '../../styles/views/conf.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 
-export interface ViewConfProps {
-  app: Application;
-  host: Host;
-  setRoute(route: Route): void;
-}
-
 export interface ViewConfState {
   reloadBannerVisible: boolean;
   selectedGroupAndSectionIds: [string, string] | null;
 }
 
-export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
-  constructor(props: ViewConfProps) {
+export class ViewConf extends React.Component<ViewProps, ViewConfState> {
+  static route = { id: '_', pattern: '/settings' };
+
+  constructor(props: ViewProps) {
     super(props);
 
     this.state = {

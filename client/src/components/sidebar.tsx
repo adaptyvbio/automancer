@@ -1,7 +1,7 @@
 import { List, Set as ImSet } from 'immutable';
 import * as React from 'react';
 
-import type { Route } from '../application';
+import type { LegacyRoute } from '../application';
 import type { Draft, DraftId } from '../draft';
 import type { Host } from '../host';
 import { HostInfo } from '../interfaces/host';
@@ -9,14 +9,15 @@ import * as util from '../util';
 import { ContextMenuArea } from './context-menu-area';
 
 import styles from '../../styles/components/sidebar.module.scss';
+import { BaseUrl } from '../constants';
 
 
 const CollapsedStorageKey = 'sidebarCollapsed';
 
 
 export interface SidebarProps {
-  currentRoute: Route | null;
-  setRoute(route: Route): void;
+  currentRoute: LegacyRoute | null;
+  setRoute(route: LegacyRoute): void;
   setStartup?(): void;
 
   host: Host | null;
@@ -55,7 +56,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
       .flatMap((unit) => (unit.getGeneralTabs?.() ?? []).map((entry) => ({
         ...entry,
         id: 'unit.' + entry.id,
-        route: ['unit', unit.namespace, entry.id]
+        route: `/unit/${unit.namespace}/${entry.id}`
       })));
 
     let groups: {
@@ -64,45 +65,21 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
         id: string;
         label: string;
         icon: string;
-        route: Route | null;
-        children?: {
-          id: string;
-          label: string;
-          route: Route | null;
-          routeRef?: Route;
-        }[] | null;
-        onClick?: () => void;
+        route: string | null;
+        onClick?(): void;
       }[];
     }[] = this.props.host
       ? [
         { id: 'main',
-        entries: [
-          { id: 'chip',
-            label: 'Experiments',
-            icon: 'science',
-            route: ['chip'],
-            children: [] /* (
-              Object.values(this.props.host.state.chips)
-                .filter((chip) => (chip.condition === ChipCondition.Ok)) as Chip[]
-            ).map((chip) => ({
-              id: chip.id,
-              label: getChipMetadata(chip).title,
-              route: ['chip', chip.id, 'settings'],
-              routeRef: ['chip', chip.id]
-            })) */
-          },
-          { id: 'protocol',
-            label: 'Protocols',
-            icon: 'receipt_long',
-            route: ['protocol'],
-            children: this.props.openDraftIds.toArray()
-              .map((draftId) => this.props.drafts[draftId])
-              .map((draft) => ({
-                id: draft.id,
-                label: draft.name ?? '[Untitled]',
-                route: ['protocol', draft.id, 'overview'],
-                routeRef: ['protocol', draft.id]
-              })) }
+          entries: [
+            { id: 'chip',
+              label: 'Experiments',
+              icon: 'science',
+              route: '/experiment' },
+            { id: 'protocol',
+              label: 'Protocols',
+              icon: 'receipt_long',
+              route: '/protocol' }
         ] },
         ...(unitEntries && (unitEntries?.length > 0)
           ? [{ id: 'unit', entries: unitEntries }]
@@ -112,11 +89,11 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
             { id: 'conf',
               label: 'Settings',
               icon: 'settings',
-              route: ['conf'] },
+              route: '/settings' },
             { id: 'design',
               label: 'Design',
               icon: 'design_services',
-              route: ['design'] },
+              route: '/design' },
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',
@@ -162,22 +139,21 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               <div className={styles.navGroup} key={group.id}>
                 {group.entries.map((entry) => {
                   return (
-                    <button
-                      type="button"
+                    <a
+                      href={BaseUrl + (entry.route ?? '#')}
                       className={util.formatClass(styles.navEntryRoot, {
-                        '_selected': entry.route && currentRouteList?.equals(List(entry.route)),
-                        '_subselected': entry.route && currentRoute && isSuperset(currentRoute, entry.route)
+                        // '_selected': entry.route && currentRouteList?.equals(List(entry.route))
                       })}
                       key={entry.id}
-                      onClick={entry.onClick || ((entry.route ?? undefined) && (() => {
-                        this.props.setRoute(entry.route!);
-                      }))}>
-                      {/* <span className={util.formatClass(styles.entryIcon, 'material-symbols-rounded')}>{entry.icon}</span> */}
+                      onClick={entry.onClick && ((event) => {
+                        event.preventDefault();
+                        entry.onClick!();
+                      })}>
                       <div className={styles.navEntryIcon}>
                         <div className="material-symbols-sharp">{entry.icon}</div>
                       </div>
                       <div className={styles.navEntryLabel}>{entry.label}</div>
-                    </button>
+                    </a>
                   );
                 })}
               </div>

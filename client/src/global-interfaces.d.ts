@@ -2,6 +2,8 @@ import * as monaco from 'monaco-editor';
 
 
 declare global {
+  const navigation: any;
+
   interface Array<T> {
     at(index: number): T;
   }
@@ -33,5 +35,10 @@ declare global {
 
   class CSSUnparsedValue {
     toString(): string;
+  }
+
+  class URLPattern {
+    constructor(options: any): URLPattern;
+    exec(input: any): any;
   }
 }

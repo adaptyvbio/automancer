@@ -3,6 +3,7 @@ import * as React from 'react';
 import { TitleBar } from '../../components/title-bar';
 import * as util from '../../util';
 import * as Form from '../../components/standard-form';
+import { ViewProps } from '../../interfaces/view';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
 import formStyles from '../../../styles/components/form.module.scss';
@@ -10,11 +11,14 @@ import viewStyles from '../../../styles/components/view.module.scss';
 
 
 
-export class ViewDesign extends React.Component<any, any> {
-  constructor(props: any) {
+export class ViewDesign extends React.Component<ViewProps, {}> {
+  static route = { id: '_', pattern: '/design' };
+
+  constructor(props: ViewProps) {
     super(props);
 
     this.state = {
+
     };
   }
 

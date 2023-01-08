@@ -10,7 +10,8 @@
     "build:css": "sass styles/main.scss:lib/styles/index.css --no-source-map",
     "build:css:watch": "sass styles/main.scss:lib/styles/index.css --watch",
     "build:types": "tsc",
-    "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular"
+    "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular",
+    "serve": "superstatic . --port 8080"
   },
   "dependencies": {
     "@floating-ui/react-dom-interactions": "^0.6.3",
@@ -41,6 +42,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "sass": "^1.52.0",
+    "superstatic": "^9.0.2",
     "typescript": "~4.9.0"
   }
 }

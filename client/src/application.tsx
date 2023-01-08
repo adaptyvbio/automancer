@@ -3,19 +3,16 @@ import * as React from 'react';
 
 import type { AppBackend, DraftItem } from './app-backends/base';
 import type { Chip, ChipId } from './backends/common';
-import { createBackend } from './backends/misc';
 import { Sidebar } from './components/sidebar';
 import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
-import type { Host, HostSettings, HostSettingsRecord } from './host';
+import type { Host } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
 import { ViewDraft } from './views/draft';
 import { ViewExecution } from './views/execution';
 import { ViewProtocols } from './views/protocols';
-import { ViewSettings } from './views/settings';
-import { ViewSplit } from './views/test/split';
-import { ViewSplit2 } from './views/test/split2';
+import { ViewConf } from './views/conf';
 import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 import { BaseBackend } from './backends/base';
@@ -412,6 +409,13 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               setRoute={setRoute} />
           );
 
+          case 'conf': return (
+            <ViewConf
+              app={this}
+              host={this.state.host}
+              setRoute={setRoute} />
+          );
+
           case 'design': return (
             <ViewDesign />
           );
@@ -422,21 +426,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
               drafts={this.state.drafts}
               host={this.state.host}
               setRoute={setRoute} />
-          );
-
-          case 'settings': return (
-            <ViewSettings
-              app={this}
-              host={this.state.host}
-              setRoute={setRoute} />
-          );
-
-          case 'test.split': return (
-            <ViewSplit />
-          );
-
-          case 'test.split2': return (
-            <ViewSplit2 />
           );
         }
       } else if (route.length === 2) {

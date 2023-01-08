@@ -63,3 +63,72 @@
     margin-top: 2.4rem;
   }
 }
+
+
+.itemlist {
+  &Root {
+    margin: 1rem 0;
+  }
+
+  &Entry {
+    display: grid;
+    align-items: center;
+    grid-template-columns: 1fr auto;
+
+    padding: 0.6rem 1.2rem;
+
+    &:not(:first-child) {
+      border-top: 1px solid #ddd;
+    }
+
+    @at-root button#{&} {
+      &:hover {
+        background-color: #f6f6f6;
+        border-radius: 4px;
+
+        &, & + * {
+          border-top-color: transparent;
+        }
+      }
+
+      &:active {
+        background-color: #eee;
+      }
+    }
+  }
+
+  &Description {
+    color: #666;
+    font-size: 0.9rem;
+
+    &::before {
+      content: "";
+      display: inline-block;
+      margin-right: 0.6ch;
+
+      width: 1ch;
+      aspect-ratio: 1;
+
+      background-color: $app-red;
+      border-radius: 50%;
+    }
+  }
+
+  &Entry:not(:hover) &Action {
+    visibility: hidden;
+  }
+
+  &Chevron {
+    color: #999;
+    font-size: 20px;
+  }
+}
+
+
+.rightactions {
+  display: flex;
+  column-gap: 0.4rem;
+  justify-content: end;
+
+  margin: 1rem 0;
+}

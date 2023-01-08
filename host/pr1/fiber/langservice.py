@@ -1,11 +1,13 @@
 import builtins
 from logging import Logger
+from tokenize import TokenError
 from types import EllipsisType
 import pint
 from collections import namedtuple
 from pint import Quantity, Unit
 from typing import Any, Literal, Optional, Protocol, cast
 
+from ..ureg import ureg
 from ..util.parser import check_identifier
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
@@ -461,11 +463,12 @@ class ListType(PrimitiveType):
     return analysis, result
 
 class LiteralOrExprType:
-  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, field: bool = False, static: bool = False):
+  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
     from .expr import PythonExprKind
 
     self._kinds = set()
     self._type = obj_type or cast(Type, super())
+    self._expr_type = expr_type or self._type
 
     if dynamic:
       self._kinds.add(PythonExprKind.Dynamic)
@@ -479,7 +482,7 @@ class LiteralOrExprType:
 
     if isinstance(obj, str):
       assert isinstance(obj, LocatedString)
-      result = PythonExpr.parse(obj, type=self._type)
+      result = PythonExpr.parse(obj, type=self._expr_type)
 
       if result:
         analysis, expr = result
@@ -498,26 +501,28 @@ class LiteralOrExprType:
 class QuantityType:
   def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
     self._allow_nil = allow_nil
-    self._unit = unit
+    self._unit: Unit = ureg.Unit(unit)
 
   def analyze(self, obj, context):
+    if self._allow_nil and ((obj == "nil") or (obj.value == None)):
+      return Analysis(), LocatedValue.new(None, area=obj.area)
+
     if isinstance(obj, str):
-      if self._allow_nil and (obj == "nil"):
-        return Analysis(), LocatedValue.new(None, area=obj.area)
+      assert isinstance(obj, LocatedString)
 
       try:
-        value = context.ureg.Quantity(obj.value)
+        value = ureg.Quantity(obj.value)
       except pint.errors.UndefinedUnitError:
         return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
-      except pint.PintError:
-        return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+      except (pint.PintError, TokenError):
+        return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
     else:
-      value = obj
+      value = obj.value
 
     return self.check(value, self._unit, target=obj)
 
   @staticmethod
-  def check(value: Quantity, unit: Unit | str, *, target):
+  def check(value: ureg.Quantity, unit: Unit, *, target: LocatedValue):
     match value:
       case Quantity() if value.check(unit):
         return Analysis(), LocatedValue.new(value.to(unit), area=target.area)

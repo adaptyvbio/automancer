@@ -1,5 +1,6 @@
 from types import EllipsisType
 
+from pr1.fiber.expr import PythonExpr
 from pr1.fiber.segment import SegmentTransform
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber import langservice as lang
@@ -24,7 +25,7 @@ class TimerParser(BaseParser):
     'wait': lang.Attribute(
       description="Waits for a fixed delay.",
       optional=True,
-      type=lang.QuantityType('second')
+      type=lang.LiteralOrExprType(lang.QuantityType('second'), static=True)
     )
   }
 
@@ -37,14 +38,25 @@ class TimerParser(BaseParser):
     if 'wait' in attrs:
       raw_value = attrs['wait']
 
-      if raw_value is Ellipsis:
+      if isinstance(raw_value, EllipsisType):
         return lang.Analysis(), Ellipsis
 
-      value = raw_value.value.m_as('ms')
+      if isinstance(raw_value.value, PythonExpr):
+        analysis, eval_result = raw_value.value.contextualize(adoption_envs).evaluate(adoption_stack)
+
+        if isinstance(eval_result, EllipsisType):
+          return analysis, Ellipsis
+
+        value = eval_result.value
+      else:
+        analysis = lang.Analysis()
+        value = raw_value.value
+
+      value = value.m_as('ms')
 
       if value < 0:
-        return lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['wait'].area.ranges)]), Ellipsis
+        return analysis + lang.Analysis(errors=[DraftGenericError("Negative value", ranges=attrs['wait'].area.ranges)]), Ellipsis
 
-      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(value))])
+      return analysis, BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(value))])
     else:
       return lang.Analysis(), BlockUnitData()

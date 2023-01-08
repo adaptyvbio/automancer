@@ -169,7 +169,7 @@ class PythonExprContext:
       return Analysis(errors=[e]), Ellipsis
     else:
       if self._expr.type:
-        return self._expr.type.analyze(result, context)
+        return self._expr.type.analyze(result, None)
       else:
         return Analysis(), result
 

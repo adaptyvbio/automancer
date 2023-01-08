@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Optional, cast
 
-from pr1.reader import LocationArea
+from pr1.reader import LocationArea, ReliableLocatedDict
 from pr1.fiber.opaque import OpaqueValue
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
@@ -24,12 +25,21 @@ class ShorthandBlock(BaseBlock):
     return self._block.export()
 
 
+@dataclass
+class ShorthandItem:
+  contents: UnresolvedBlockData | EllipsisType
+  deprecated: bool
+  description: Optional[str]
+  env: ShorthandEnv
+
+
 class ShorthandsParser(BaseParser):
   namespace = "shorthands"
   priority = 600
 
   root_attributes = {
     'shorthands': lang.Attribute(
+      description="Defines shorthands, parts of steps can be reused.",
       optional=True,
       type=lang.PrimitiveType(dict)
     )
@@ -37,21 +47,39 @@ class ShorthandsParser(BaseParser):
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
-    self._shorthands: dict[str, tuple[ShorthandEnv, UnresolvedBlockData | EllipsisType]] = dict()
+    self._shorthands = dict[str, ShorthandItem]()
 
   @property
   def segment_attributes(self):
-    return { shorthand_name: lang.Attribute(optional=True, type=lang.AnyType()) for shorthand_name in self._shorthands.keys() }
+    return {
+      shorthand_name: lang.Attribute(
+        deprecated=shorthand.deprecated,
+        description=shorthand.description,
+        optional=True,
+        type=lang.AnyType()
+      ) for shorthand_name, shorthand in self._shorthands.items()
+    }
 
   def enter_protocol(self, data_protocol: BlockAttrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     data_shorthands = data_protocol.get('shorthands', dict())
 
-    if data_shorthands is Ellipsis:
+    if isinstance(data_shorthands, EllipsisType):
       return lang.Analysis()
 
     for shorthand_name, data_shorthand in data_shorthands.items():
+      # assert isinstance(data_shorthand, ReliableLocatedDict)
+
+      # comments, _ = data_shorthand.comments
       shorthand_env = ShorthandEnv()
-      self._shorthands[shorthand_name] = (shorthand_env, self._fiber.parse_block_expr(data_shorthand, adoption_envs=[*adoption_envs, shorthand_env], runtime_envs=[*runtime_envs, shorthand_env]))
+
+      self._shorthands[shorthand_name] = ShorthandItem(
+        contents=self._fiber.parse_block_expr(data_shorthand, adoption_envs=[*adoption_envs, shorthand_env], runtime_envs=[*runtime_envs, shorthand_env]),
+        # deprecated=any(comment == "@deprecated" for comment in comments),
+        # description=(comments[0].value if data_shorthand.comments and not comments[0].startswith("@") else None),
+        deprecated=False,
+        description=None,
+        env=shorthand_env,
+      )
 
     return lang.Analysis()
 
@@ -65,25 +93,25 @@ class ShorthandsParser(BaseParser):
       if isinstance(shorthand_value, EllipsisType):
         return analysis, Ellipsis
 
-      shorthand_env, shorthand_data = self._shorthands[shorthand_name]
+      shorthand = self._shorthands[shorthand_name]
 
-      if isinstance(shorthand_data, EllipsisType):
+      if isinstance(shorthand.contents, EllipsisType):
         return analysis, Ellipsis
 
       shorthand_adoption_stack: EvalStack = {
         **adoption_stack,
-        shorthand_env: {
+        shorthand.env: {
           'arg': OpaqueValue.wrap(shorthand_value, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, fiber=self._fiber)
         }
       }
 
-      eval_analysis, eval_data = shorthand_data.evaluate(shorthand_adoption_stack)
+      eval_analysis, eval_result = shorthand.contents.evaluate(shorthand_adoption_stack)
       analysis += eval_analysis
 
-      if isinstance(eval_data, EllipsisType):
+      if isinstance(eval_result, EllipsisType):
         return analysis, Ellipsis
 
-      shorthands_data.append((shorthand_name, eval_data))
+      shorthands_data.append((shorthand_name, eval_result))
 
     if attrs:
       return lang.Analysis(), BlockUnitData(transforms=[
@@ -119,8 +147,7 @@ class ShorthandTransform(BaseTransform):
 
     for shorthand_name, _ in self._shorthands_data:
       shorthand = self._parser._shorthands[shorthand_name]
-      shorthand_env, _ = shorthand
 
-      block = ShorthandBlock(block, env=shorthand_env)
+      block = ShorthandBlock(block, env=shorthand.env)
 
     return analysis, block

@@ -17,32 +17,48 @@ import { Pool } from './util';
 import { Unit, UnitNamespace } from './units';
 import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
-import { BaseUrl } from './constants';
-import { ViewType } from './interfaces/view';
+import { BaseUrl, BaseUrlPathname } from './constants';
+import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 
 import styles from '../styles/components/application.module.scss';
 
 
-const Views: ViewType[] = [ViewConf, ViewDesign];
+const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign];
 
-const Routes: Route[] = Views.map((View) => ({
-  component: View,
-  pattern: new URLPattern({
-    baseURL: BaseUrl,
-    id: View.route.id,
-    pathname: View.route.pattern
-  })
-}));
+console.log(BaseUrl)
+const Routes: Route[] = Views.flatMap((View) =>
+  View.routes.map((route) => ({
+    component: View,
+    id: route.id,
+    pattern: new URLPattern({
+      baseURL: BaseUrl,
+      pathname: BaseUrlPathname + route.pattern
+    })
+  }))
+);
 
 
 export interface Route {
   component: ViewType;
+  id: string;
   pattern: URLPattern;
 }
 
+// export interface RouteResolution {
+//   match: any;
+//   route: Route;
+// }
+
 export interface RouteData {
-  groups: any;
+  params: any;
   route: Route;
+}
+
+function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch {
+  return {
+    id: routeData.route.id,
+    params: routeData.params
+  };
 }
 
 
@@ -67,6 +83,7 @@ export interface ApplicationState {
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
   controller = new AbortController();
   pool = new Pool();
+  unsavedDataCallback: UnsavedDataCallback | null = null;
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -180,30 +197,32 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }));
   }
 
-  async handleNavigation(url: string) {
-    let currentRoute: Route | null = null;
-    let match: any;
 
+  resolveNavigation(url: string): RouteData | null {
     for (let route of Routes) {
-      match = route.pattern.exec(url);
+      let match = route.pattern.exec(url);
 
       if (match) {
-        currentRoute = route;
-        break;
+        return {
+          params: match.pathname.groups,
+          route
+        };
       }
     }
 
-    if (currentRoute) {
+    return null;
+  }
+
+  handleNavigation(routeData: RouteData | null) {
+    if (routeData) {
       this.setState({
-        currentRouteData: {
-          groups: match.pathname.groups,
-          route: currentRoute
-        }
+        currentRouteData: routeData
       });
     } else {
-      await navigation.navigate('/design');
+      navigation.navigate(`${BaseUrl}/chip`);
     }
   }
+
 
   componentDidMount() {
     window.addEventListener('beforeunload', () => {
@@ -228,9 +247,34 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     navigation.addEventListener('navigate', (event: any) => {
       if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
+        let routeData = this.resolveNavigation(event.destination.url);
+
+        if (this.unsavedDataCallback) {
+          let viewRouteMatch = (routeData?.route.component === this.state.currentRouteData!.route.component)
+            ? createViewRouteMatchFromRouteData(routeData)
+            : null;
+
+          let result = this.unsavedDataCallback(viewRouteMatch);
+
+          if (result !== true) {
+            event.preventDefault();
+
+            if (result !== false) {
+              this.pool.add(async () => {
+                if (await result) {
+                  this.unsavedDataCallback = null;
+                  await navigation.navigate(event.destination.url, { info: event.info });
+                }
+              });
+            }
+
+            return;
+          }
+        }
+
         event.intercept({
           handler: async () => {
-            await this.handleNavigation(event.destination.url);
+            this.handleNavigation(routeData);
           }
         });
       }
@@ -271,7 +315,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // Initialize the route
 
-      this.handleNavigation(navigation.currentEntry.url);
+      this.handleNavigation(this.resolveNavigation(navigation.currentEntry.url));
     });
   }
 
@@ -396,43 +440,39 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
 
-  setRoute(route: Route) {
-    this.setState({ currentRoute: route });
-    window.sessionStorage['route'] = JSON.stringify(route);
-
-    if ((route[0] === 'protocol') && (route.length === 3)) {
-      this.setOpenDraftIds((openDraftIds) => openDraftIds.add(route[1] as DraftId));
-    }
-  }
-
   render() {
-    let setRoute = this.setRoute.bind(this);
-
     let contents = null;
+    let routeData = this.state.currentRouteData;
 
-    if (this.state.currentRouteData && this.state.host?.units) {
-      let routeData = this.state.currentRouteData;
+    if (routeData && this.state.host?.units) {
       let Component = routeData.route.component;
+      let viewRouteMatch = createViewRouteMatchFromRouteData(routeData);
+
+      let key = Component.hash?.({
+        app: this,
+        host: this.state.host,
+        route: viewRouteMatch
+      }) ?? '';
 
       contents = (
         <Component
           app={this}
-          host={this.state.host} />
+          host={this.state.host}
+          route={viewRouteMatch}
+          setUnsavedDataCallback={(callback) => {
+            this.unsavedDataCallback = callback;
+          }}
+          key={key} />
       );
     }
 
     return (
       <div className={styles.root}>
         <Sidebar
-          currentRoute={this.state.currentRoute}
-          setRoute={setRoute}
-          setStartup={this.props.setStartup}
-
           host={this.state.host}
           hostInfo={this.props.hostInfo}
 
-          drafts={this.state.drafts}
-          openDraftIds={this.state.openDraftIds} />
+          setStartup={this.props.setStartup} />
         {contents}
       </div>
     );

@@ -15,23 +15,55 @@ import descriptionStyles from '../../styles/components/description.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
 import styles from '../../styles/views/conf.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
+import { BaseUrl } from '../constants';
 
+
+export type ViewConfProps = ViewProps<{
+  id: 'main',
+  params: {};
+} | {
+  id: 'section';
+  params: {
+    0: string | undefined;
+    groupId: string;
+    sectionId: string;
+  };
+}>;
 
 export interface ViewConfState {
   reloadBannerVisible: boolean;
   selectedGroupAndSectionIds: [string, string] | null;
 }
 
-export class ViewConf extends React.Component<ViewProps, ViewConfState> {
-  static route = { id: '_', pattern: '/settings' };
+export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
+  static routes = [
+    { id: 'main', pattern: '/settings' },
+    { id: 'section', pattern: '/settings/:groupId/:sectionId/**' }
+  ];
 
-  constructor(props: ViewProps) {
+  constructor(props: ViewConfProps) {
     super(props);
 
     this.state = {
       reloadBannerVisible: true,
       selectedGroupAndSectionIds: null
     };
+
+    props.setUnsavedDataCallback((route) => {
+      if (route) {
+        return true;
+      }
+
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(true);
+        }, 1000);
+      });
+    });
+  }
+
+  componentDidUpdate(prevProps: Readonly<ViewProps>, prevState: Readonly<ViewConfState>) {
+    // TODO: Check that the selected section exists
   }
 
   render() {
@@ -76,7 +108,7 @@ export class ViewConf extends React.Component<ViewProps, ViewConfState> {
       }
     ];
 
-    let [selectedGroupId, selectedSectionId] = this.state.selectedGroupAndSectionIds ?? [null, null];
+    let route = this.props.route;
 
     return (
       <main className={viewStyles.root}>
@@ -87,16 +119,14 @@ export class ViewConf extends React.Component<ViewProps, ViewConfState> {
               {groups.map((group) => (
                 <div className={styles.selectorListGroup} key={group.id}>
                   {group.sections.map((section) => (
-                    <button type="button" className={util.formatClass(styles.selectorListEntry, {
-                      '_selected': (selectedGroupId === group.id) && (selectedSectionId === section.id)
-                    })} key={section.id} onClick={() => {
-                      this.setState({
-                        selectedGroupAndSectionIds: [group.id, section.id]
-                      });
-                    }}>
+                    <a href={`${BaseUrl}/settings/${group.id}/${section.id}`} className={util.formatClass(styles.selectorListEntry, {
+                      '_selected': (route.id === 'section')
+                        && (route.params.groupId === group.id)
+                        && (route.params.sectionId === section.id)
+                    })} key={section.id}>
                       <Icon name={section.icon} className={styles.selectorListIcon} />
                       <div className={styles.selectorListLabel}>{section.label}</div>
-                    </button>
+                    </a>
                   ))}
                 </div>
               ))}

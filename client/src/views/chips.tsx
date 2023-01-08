@@ -2,7 +2,6 @@ import * as React from 'react';
 import seqOrd from 'seq-ord';
 
 import { DraftEntry } from './protocols';
-import type { Route } from '../application';
 import type { Host } from '../host';
 import { Chip, ChipCondition, ChipId } from '../backends/common';
 import { MenuEntry } from '../components/context-menu';
@@ -12,23 +11,20 @@ import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import { formatRelativeDate } from '../format';
 import * as util from '../util';
+import { MetadataTools } from '../unit';
+import { ViewProps } from '../interfaces/view';
 
 import viewStyles from '../../styles/components/view.module.scss';
-import { MetadataTools } from '../unit';
+import { BaseUrl } from '../constants';
 
 
-export interface ViewChipsProps {
-  host: Host;
-  setRoute(route: Route): void;
-}
-
-export class ViewChips extends React.Component<ViewChipsProps> {
+export class ViewChips extends React.Component<ViewProps> {
   pool = new Pool();
   chipIdAwaitingRedirect: ChipId | null = null;
 
   componentDidUpdate() {
     if (this.chipIdAwaitingRedirect && (this.chipIdAwaitingRedirect in this.props.host.state.chips)) {
-      this.props.setRoute(['chip', this.chipIdAwaitingRedirect, 'settings']);
+      navigation.navigate(`${BaseUrl}/chip/${this.chipIdAwaitingRedirect}`);
     }
   }
 
@@ -111,8 +107,8 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                           ? [
                             { id: 'upgrade', name: 'Upgrade', icon: 'upgrade' },
                             { id: 'duplicate_upgrade', name: 'Upgrade copy', icon: 'control_point_duplicate' },
-                            { id: '_divider2', type: 'divider' }
-                          ] as MenuEntry[]
+                            { id: '_divider2', type: 'divider' as const }
+                          ]
                           : []),
                         { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                         { id: 'delete', name: 'Move to trash', icon: 'delete' }
@@ -140,9 +136,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                         }
                       }}
                       key={chip.id}>
-                      <button type="button" className="clist-entrywide" onClick={() => {
-                        this.props.setRoute(['chip', chip.id, 'settings']);
-                      }} title={chip.issues.map((issue) => issue.message).join(String.fromCharCode(10))}>
+                      <a href={`${BaseUrl}/chip/${chip.id}`} className="clist-entrywide" title={chip.issues.map((issue) => issue.message).join(String.fromCharCode(10))}>
                         <div className="clist-header">
                           <div className="clist-title">{metadata.title}</div>
                           {status && (
@@ -162,7 +156,7 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                             <img src={previewUrl} />
                           </div>
                         )}
-                      </button>
+                      </a>
                     </ContextMenuArea>
                   );
                 })}
@@ -190,8 +184,8 @@ export class ViewChips extends React.Component<ViewChipsProps> {
                               ? [
                                 { id: 'duplicate', name: 'Use as template', icon: 'content_copy' },
                                 { id: 'archive', name: 'Unarchive', icon: 'unarchive' },
-                                { id: '_divider', type: 'divider' }
-                              ] as MenuEntry[]
+                                { id: '_divider', type: 'divider' as const }
+                              ]
                               : []),
                             { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
                             { id: 'delete', name: 'Move to trash', icon: 'delete' }
@@ -230,4 +224,9 @@ export class ViewChips extends React.Component<ViewChipsProps> {
       </main>
     )
   }
+
+
+  static routes = [
+    { id: 'chips', pattern: '/chip' }
+  ];
 }

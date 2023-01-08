@@ -32,7 +32,6 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
   componentDidMount() {
     this.pool.add(async () => {
       let hostSettingsData = await this.appBackend.getHostSettingsData();
-      console.log(hostSettingsData);
 
       this.setState({
         currentSettingsId: hostSettingsData.defaultHostSettingsId,

@@ -38,8 +38,12 @@
       color: #666;
     }
 
-    &:disabled {
+    &:disabled, &._disabled {
       color: #bbb;
+    }
+
+    &._disabled {
+      pointer-events: none;
     }
 
     &::before {

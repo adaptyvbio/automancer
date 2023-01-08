@@ -1,30 +1,25 @@
 import { List, Set as ImSet } from 'immutable';
 import * as React from 'react';
 
-import type { LegacyRoute } from '../application';
+import type { Route } from '../application';
 import type { Draft, DraftId } from '../draft';
 import type { Host } from '../host';
 import { HostInfo } from '../interfaces/host';
 import * as util from '../util';
 import { ContextMenuArea } from './context-menu-area';
+import { BaseUrl } from '../constants';
 
 import styles from '../../styles/components/sidebar.module.scss';
-import { BaseUrl } from '../constants';
 
 
 const CollapsedStorageKey = 'sidebarCollapsed';
 
 
 export interface SidebarProps {
-  currentRoute: LegacyRoute | null;
-  setRoute(route: LegacyRoute): void;
-  setStartup?(): void;
-
   host: Host | null;
   hostInfo: HostInfo;
 
-  drafts: Record<DraftId, Draft>;
-  openDraftIds: ImSet<DraftId>;
+  setStartup?(): void;
 }
 
 export interface SidebarState {
@@ -49,8 +44,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
   }
 
   render() {
-    let currentRoute = this.props.currentRoute;
-    let currentRouteList = currentRoute && List(currentRoute);
+    let url = navigation.currentEntry.url;
 
     let unitEntries = this.props.host?.units && Object.values(this.props.host.units)
       .flatMap((unit) => (unit.getGeneralTabs?.() ?? []).map((entry) => ({
@@ -75,7 +69,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
             { id: 'chip',
               label: 'Experiments',
               icon: 'science',
-              route: '/experiment' },
+              route: '/chip' },
             { id: 'protocol',
               label: 'Protocols',
               icon: 'receipt_long',
@@ -110,7 +104,20 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
     return (
       <ContextMenuArea
         createMenu={(_event) => [
-          { id: 'devices', name: 'Devices', selected: true }
+          { id: '_header', name: 'Sidebar', type: 'header' },
+          ...groups.flatMap((group, groupIndex) => {
+            return [
+              ...group.entries.map((entry) => ({
+                id: [group.id, entry.id],
+                icon: entry.icon,
+                name: entry.label,
+                checked: true
+              })),
+              ...(groupIndex < (groups.length - 1)
+                ? [{ id: ['_header', groupIndex], type: 'divider' as const }]
+                : [])
+            ];
+          })
         ]}
         onSelect={() => {}}>
         <aside className={util.formatClass(styles.root, { [styles.rootCollapsed]: this.state.collapsed })}>
@@ -142,7 +149,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
                     <a
                       href={BaseUrl + (entry.route ?? '#')}
                       className={util.formatClass(styles.navEntryRoot, {
-                        // '_selected': entry.route && currentRouteList?.equals(List(entry.route))
+                        '_selected': url.startsWith(BaseUrl + entry.route)
                       })}
                       key={entry.id}
                       onClick={entry.onClick && ((event) => {

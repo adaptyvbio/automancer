@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import type { Route } from '../application';
 import type { Host } from '../host';
 import { Chip, ChipId } from '../backends/common';
 import { BarNav } from '../components/bar-nav';
@@ -10,17 +9,25 @@ import { ErrorBoundary } from '../components/error-boundary';
 import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import * as util from '../util';
-
-import viewStyles from '../../styles/components/view.module.scss';
+import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { MetadataTools } from '../unit';
 
+import viewStyles from '../../styles/components/view.module.scss';
+import { BaseUrl } from '../constants';
 
-export interface ViewChipProps {
-  chipId: ChipId;
-  host: Host;
-  tab: string;
-  setRoute(route: Route): void;
-}
+
+export type ViewChipRoute = {
+  id: 'protocol';
+  params: { chipId: ChipId; };
+} | {
+  id: 'settings';
+  params: { chipId: ChipId; };
+} | {
+  id: 'unit';
+  params: { chipId: ChipId; };
+};
+
+export type ViewChipProps = ViewProps<ViewChipRoute>;
 
 export interface ViewChipState {
 
@@ -37,25 +44,35 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
     };
   }
 
-  get chip(): Chip {
-    return this.props.host.state.chips[this.props.chipId] as Chip;
+  get chip() {
+    return this.props.host.state.chips[this.props.route.params.chipId] as Chip;
   }
 
-  componentDidUpdate() {
-    if ((this.props.tab === 'protocol') && !this.chip.master) {
-      this.props.setRoute(['chip', this.chip.id, 'settings']);
+  get routePrefix() {
+    return `${BaseUrl}/chip/${this.chip.id}`;
+  }
+
+  componentDidMount() {
+    if (!this.chip) {
+      navigation.navigate(`${BaseUrl}/chip`);
     }
   }
 
-  shouldComponentUpdate(nextProps: ViewChipProps, nextState: ViewChipState) {
-    return (nextState !== this.state)
-      || (nextProps.host.state !== this.props.host.state)
-      || (nextProps.host.units !== this.props.host.units)
-      || (nextProps.chipId !== this.props.chipId)
-      || (nextProps.tab !== this.props.tab);
-  }
+  // TODO: Redirect when on the master tab and there is no master.
+
+  // shouldComponentUpdate(nextProps: ViewChipProps, nextState: ViewChipState) {
+  //   return (nextState !== this.state)
+  //     || (nextProps.host.state !== this.props.host.state)
+  //     || (nextProps.host.units !== this.props.host.units)
+  //     || (nextProps.chipId !== this.props.chipId)
+  //     || (nextProps.tab !== this.props.tab);
+  // }
 
   render() {
+    if (!this.chip) {
+      return null;
+    }
+
     let metadataTools = this.props.host.units.metadata as unknown as MetadataTools;
     let metadata = metadataTools.getChipMetadata(this.chip);
 
@@ -65,24 +82,25 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
         ...entry,
         id: 'unit.' + entry.id,
         initialId: entry.id,
+        href: `${this.routePrefix}/${entry.id}`,
         namespace: unit.namespace
       })));
 
     let component = (() => {
-      switch (this.props.tab) {
+      switch (this.props.route.id) {
         case 'protocol': return (
           <ChipProtocol
-            chipId={this.props.chipId}
+            chipId={this.chip.id}
             host={this.props.host} />
         );
         case 'settings': return (
           <ChipSettings
-            chipId={this.props.chipId}
+            chipId={this.chip.id}
             host={this.props.host} />
         );
       }
 
-      for (let entry of unitEntries) {
+      /* for (let entry of unitEntries) {
         if (entry.id === this.props.tab) {
           let Component = entry.component;
 
@@ -97,7 +115,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
             </ErrorBoundary>
           );
         }
-      }
+      } */
     })();
 
     return (
@@ -108,24 +126,27 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
             <h1>{metadata.title}</h1>
             <BarNav
               entries={[
-                { id: 'protocol', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
-                { id: 'settings', label: 'Settings', icon: 'settings' },
-                { id: 'history', label: 'History', icon: 'history', disabled: true },
+                { id: 'protocol', href: this.routePrefix + '/settings', label: 'Protocol', icon: 'receipt_long', disabled: !this.chip.master },
+                { id: 'settings', href: this.routePrefix, label: 'Settings', icon: 'settings' },
                 ...unitEntries
               ]}
-              selectEntry={(tab) => {
-                this.props.setRoute(
-                  tab === 'protocol'
-                    ? ['execution', this.props.chipId]
-                    : ['chip', this.props.chipId, tab]
-                );
-              }}
-              selectedEntryId={this.props.tab} />
+              selectedEntryId={this.props.route.id} />
           </div>
 
           {component}
         </div>
       </main>
     );
+  }
+
+
+  static routes = [
+    { id: 'protocol', pattern: '/chip/:chipId/protocol' },
+    { id: 'settings', pattern: '/chip/:chipId' },
+    { id: 'unit', pattern: '/chip/:chipId/:unitNamespace' },
+  ];
+
+  static hash(options: ViewHashOptions<ViewChipRoute>) {
+    return options.route.params.chipId;
   }
 }

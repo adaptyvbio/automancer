@@ -10,10 +10,7 @@ import formStyles from '../../../styles/components/form.module.scss';
 import viewStyles from '../../../styles/components/view.module.scss';
 
 
-
 export class ViewDesign extends React.Component<ViewProps, {}> {
-  static route = { id: '_', pattern: '/design' };
-
   constructor(props: ViewProps) {
     super(props);
 
@@ -112,4 +109,9 @@ export class ViewDesign extends React.Component<ViewProps, {}> {
       </main>
     );
   }
+
+
+  static routes = [
+    { id: '_', pattern: '/design' }
+  ];
 }

@@ -73,7 +73,13 @@ class Master:
       self.protocol.global_env: dict(random=random)
     }
 
+    initial_event = True
+
     async for event in self._program.run(initial_location, None, runtime_stack, symbol):
+      if initial_event:
+        initial_event = False
+        self.write_state()
+
       yield event
 
       if event.stopped and self._pause_future:
@@ -127,7 +133,15 @@ class Master:
 
   def create_instance(self, state: BlockState, *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
-    return StateInstanceCollection(runners, notify=notify, stack=stack, symbol=symbol)
+    return StateInstanceCollection(state, notify=notify, runners=runners, stack=stack, symbol=symbol)
+
+  def transfer_state(self):
+    for runner in self.chip.runners.values():
+      runner.transfer_state()
+
+  def write_state(self):
+    for runner in self.chip.runners.values():
+      runner.write_state()
 
   def export(self):
     return {
@@ -137,13 +151,13 @@ class Master:
 
 
 class StateInstanceCollection:
-  def __init__(self, runners: dict[str, BaseRunner], *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
+  def __init__(self, state: BlockState, *, notify: Callable, runners: dict[str, BaseRunner], stack: EvalStack, symbol: ClaimSymbol):
     self._applied = False
     self._notify = notify
     self._runners = runners
-    self._instances = { namespace: runner.StateInstance(runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), stack=stack, symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
+    self._instances = { namespace: runner.StateInstance(state[namespace], runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), stack=stack, symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
     self._location: StateLocation
-    self._state: BlockState
+    self._state = state
 
   @property
   def applied(self):
@@ -153,17 +167,16 @@ class StateInstanceCollection:
     self._location.unit_locations[namespace] = event
     self._notify(self._location)
 
-  def prepare(self, state: BlockState):
+  def prepare(self):
     for namespace, instance in self._instances.items():
-      instance.prepare(state[namespace])
+      instance.prepare()
 
-  async def apply(self, state: BlockState, *, resume: bool):
+  def apply(self):
     self._applied = True
-    self._state = state
     self._location = StateLocation({})
 
     for namespace, instance in self._instances.items():
-      self._location.unit_locations[namespace] = await instance.apply(state[namespace], resume=resume)
+      self._location.unit_locations[namespace] = instance.apply()
 
     return self._location
 

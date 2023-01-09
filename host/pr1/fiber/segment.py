@@ -141,7 +141,7 @@ class SegmentProgram(BlockProgram):
     Process = self._master.chip.runners[self._block._process.namespace].Process
     self._point = initial_point or SegmentProgramPoint(process=None)
 
-    self._master.host.root_node.transfer_claims()
+    self._master.transfer_state()
 
     # def x():
     #   logger.debug("Transfering node claims")

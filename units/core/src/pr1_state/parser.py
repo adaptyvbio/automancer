@@ -157,12 +157,12 @@ class StateProgram(BlockProgram):
     else:
       asyncio.get_event_loop().call_soon(self._master.host.root_node.transfer_claims)
 
-  async def apply_state(self):
-    try:
-      state_location = await self._state_instance.apply(self._block.state, resume=False)
-      self._iterator.notify(state_location)
-    except Exception:
-      traceback.print_exc()
+  # async def apply_state(self):
+  #   try:
+  #     state_location = await self._state_instance.apply(self._block.state, resume=False)
+  #     self._iterator.notify(state_location)
+  #   except Exception:
+  #     traceback.print_exc()
 
   async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
@@ -182,7 +182,7 @@ class StateProgram(BlockProgram):
     self._iterator = CoupledStateIterator2(run())
 
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
-    self._state_instance.prepare(self._block.state)
+    self._state_instance.prepare()
 
     # state_location = await self._state_instance.apply(self._block.state, resume=False)
     # self._iterator.notify(state_location)
@@ -201,9 +201,11 @@ class StateProgram(BlockProgram):
       except Exception:
         traceback.print_exc()
 
-    asyncio.create_task(self.apply_state())
-
     async for event, state_location in self._iterator:
+      if state_location is None:
+        self._iterator.notify(self._state_instance.apply())
+        continue
+
       # print("Rec", self._counter, self._mode, event)
       self._child_stopped = event.stopped
 

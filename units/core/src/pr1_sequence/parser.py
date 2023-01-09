@@ -173,7 +173,11 @@ class SequenceProgram(BlockProgram):
     self._iterator.trigger()
 
   async def run(self, initial_point: Optional[SequenceProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
+    initial_event = True
+
     async def run():
+      nonlocal initial_event
+
       while True:
         assert self._point
         self._child_index = self._point.index
@@ -188,7 +192,15 @@ class SequenceProgram(BlockProgram):
         point = self._point
         self._point = None
 
+        initial_event_of_child = True
+
         async for event in self._child_program.run(point.child, parent_state_program, stack, ClaimSymbol(symbol)):
+          if (not initial_event) and initial_event_of_child:
+            self._master.write_state()
+
+          initial_event = False
+          initial_event_of_child = False
+
           yield event
 
         if self._point:

@@ -289,7 +289,7 @@ class CoupledStateIterator2(Generic[T, S]):
         if self._state_queue:
           self._state = self._state_queue.pop(0)
 
-        if (self._state is not None) and (self._value is not None):
+        if self._value is not None:
           return (self._value, self._state)
 
       if not self._future:

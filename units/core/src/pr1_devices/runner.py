@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
-from pr1.devices.claim import Claim, ClaimSymbol, ClaimToken, ClaimTransferFailChildError, ClaimTransferFailUnknownError
+from pr1.devices.claim import ClaimOwner, ClaimSymbol, PerpetualClaim, ClaimTransferFailChildError, ClaimTransferFailUnknownError
 from pr1.devices.node import BaseWritableNode, NodePath
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.expr import PythonExprContext
+from pr1.fiber.parser import BlockUnitState
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
 from pr1.units.base import BaseProcessRunner, BaseRunner
@@ -37,50 +38,29 @@ class StateLocation:
 
 @dataclass
 class StateInstanceNodeInfo:
+  claim: PerpetualClaim
   node: BaseWritableNode
   path: NodePath
   task: asyncio.Task[None]
-  token: ClaimToken
   update_event: asyncio.Event
   value: Any
 
 
-counter = 0
-
 class StateInstance:
-  def __init__(self, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
+  _next_index = 0
+
+  def __init__(self, state: DevicesState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     self._location: StateLocation
     self._notify = lambda: notify(self._location)
     self._runner = runner
     self._stack = stack
+    self._state = state
     self._symbol = symbol
 
     self._infos: dict[NodePath, StateInstanceNodeInfo]
 
-    global counter
-    self._logger = logger.getChild(f"stateInstance{counter}")
-    counter = counter + 1
-
-  def _add_node(self, path: NodePath, value: Any):
-    node = self._runner._host.root_node.find(path)
-    assert isinstance(node, BaseWritableNode)
-
-    if not node.connected:
-      self._location.values[path] = NodeWriteError.Disconnected
-    else:
-      self._location.values[path] = None
-
-    info = StateInstanceNodeInfo(
-      node=node,
-      path=path,
-      task=None, # type: ignore
-      token=node.create_token(self._symbol),
-      update_event=asyncio.Event(),
-      value=value
-    )
-
-    # info.task = asyncio.create_task(self._write_node(info))
-    self._infos[path] = info
+    self._logger = logger.getChild(f"stateInstance{self._next_index}")
+    type(self)._next_index += 1
 
 
   async def _node_lifecycle(self, info: StateInstanceNodeInfo):
@@ -140,74 +120,58 @@ class StateInstance:
       await info.token.cancel()
       self._logger.debug(f"Released node '{label}'")
 
-  def prepare(self, state: DevicesState):
+  def prepare(self):
     self._logger.debug("Preparing state")
 
     self._infos = dict()
     self._location = StateLocation(values=dict())
 
-    for path, value in state.values.items():
-      self._add_node(path, value)
+    for path, value in self._state.values.items():
+      node = self._runner._host.root_node.find(path)
+      assert isinstance(node, BaseWritableNode)
 
-  async def apply(self, state: DevicesState, *, resume: bool):
+      info = StateInstanceNodeInfo(
+        claim=node.create_claim(self._symbol),
+        node=node,
+        path=path,
+        task=None, # type: ignore
+        update_event=asyncio.Event(),
+        value=value
+      )
+
+      # info.task = asyncio.create_task(self._write_node(info))
+      self._infos[path] = info
+
+  def apply(self):
     self._logger.debug("Applying state")
 
     for info in self._infos.values():
-      try:
-        await info.token.wait(err=True)
-      except ClaimTransferFailChildError:
-        pass
-      except ClaimTransferFailUnknownError:
-        self._logger.debug(f"Failed to claim '{info.node.id}'")
+      if not info.node.connected:
+        self._location.values[info.path] = NodeWriteError.Disconnected
+      elif (not info.claim.owner) and (not info.claim.owned_by_child):
         self._location.values[info.path] = NodeWriteError.Unclaimable
+        self._logger.debug(f"Failed to claim '{info.node.id}'")
+      else:
+        self._location.values[info.path] = None
+        asyncio.create_task(info.node.write(info.value))
 
-      info.task = asyncio.create_task(self._node_lifecycle(info))
+      # info.task = asyncio.create_task(self._node_lifecycle(info))
 
     self._logger.debug("Done applying state")
-
     return self._location
-
-  def update(self, state: DevicesState):
-    self._logger.debug("Updating state")
-
-    async def cleanup():
-      try:
-        for info in list(self._infos.values()):
-          if not info.path in state.values:
-            info.task.cancel()
-
-            try:
-              await info.task
-            except asyncio.CancelledError:
-              pass
-
-            del self._infos[info.path]
-            del self._location.values[info.path]
-      except Exception:
-        import traceback
-        traceback.print_exc()
-
-    asyncio.create_task(cleanup())
-
-    for path, value in state.values.items():
-      info = self._infos.get(path)
-
-      if info:
-        info.update_event.set()
-        info.value = value
-      else:
-        self._add_node(path, value)
 
   async def suspend(self):
     self._logger.debug("Suspending")
 
     for info in self._infos.values():
-      info.task.cancel()
+      info.claim.close()
 
-      try:
-        await info.task
-      except asyncio.CancelledError:
-        pass
+      # info.task.cancel()
+
+      # try:
+      #   await info.task
+      # except asyncio.CancelledError:
+      #   pass
 
     del self._infos
     del self._location
@@ -219,9 +183,34 @@ class StateInstance:
     # self._notify()
 
 
+counter = 0
+
+class DemoStateInstance:
+  def __init__(self, state: BlockUnitState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
+    global counter
+    self._logger = logger.getChild(f"stateInstance{counter}")
+    counter = counter + 1
+
+  def prepare(self):
+    self._logger.debug('Prepare')
+
+  def apply(self):
+    self._logger.debug('Apply')
+
+  async def suspend(self):
+    self._logger.debug('Suspend')
+
+
 class Runner(BaseRunner):
   StateInstance = StateInstance
 
   def __init__(self, chip, *, host: Host):
     self._chip = chip
     self._host = host
+
+  def transfer_state(self):
+    logger.debug('Transfering claims')
+    self._host.root_node.transfer_claims()
+
+  def write_state(self):
+    logger.debug('Write state')

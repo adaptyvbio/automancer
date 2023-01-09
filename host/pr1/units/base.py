@@ -1,7 +1,7 @@
 import functools
 import pickle
 from collections import namedtuple
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
@@ -20,8 +20,8 @@ class BaseParser:
   pass
 
 
-class BaseRunner:
-  StateInstance: Optional[Any]
+class BaseRunner(Protocol):
+  StateInstance: Optional[Any] = None
   dependencies = set()
 
   def __init__(self, *, chip, host):
@@ -67,6 +67,13 @@ class BaseRunner:
     pass
 
   def update(self):
+    pass
+
+
+  def transfer_state(self):
+    pass
+
+  def write_state(self):
     pass
 
 

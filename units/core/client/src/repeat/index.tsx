@@ -121,7 +121,7 @@ const unit = {
         return { type: 'halt' };
     }
   }
-} satisfies Unit<Block, Location>
+} satisfies Unit<Block, Location>;
 
 
 export default unit

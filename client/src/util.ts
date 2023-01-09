@@ -2,6 +2,12 @@ import { List, Range, type Set as ImSet, fromJS, is } from 'immutable';
 import * as React from 'react';
 
 
+export function assert(condition: unknown): asserts condition {
+  if (!condition) {
+    throw new Error('Assertion error');
+  }
+}
+
 export function deepEqual(a: unknown, b: unknown): boolean {
   return is(fromJS(a), fromJS(b));
 }

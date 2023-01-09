@@ -1,2 +1,2 @@
-export const BaseUrlPathname = '/app';
+export const BaseUrlPathname = '';
 export const BaseUrl = location.origin + BaseUrlPathname;

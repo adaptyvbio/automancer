@@ -18,7 +18,7 @@
     font-size: 1.2rem;
   }
 
-  a {
+  p a {
     display: inline;
     color: #06c;
 
@@ -81,7 +81,7 @@
       border-top: 1px solid #ddd;
     }
 
-    @at-root button#{&} {
+    @at-root :is(a, button)#{&} {
       &:hover {
         background-color: #f6f6f6;
         border-radius: 4px;

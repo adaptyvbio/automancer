@@ -26,15 +26,19 @@ export * as util from './util';
 export { React, ReactDOM };
 
 export * from './geometry';
+export * from './components/button';
 export * from './components/context-menu';
+export * from './components/description';
 export * from './components/graph-editor';
 export * from './components/progress-bar';
+export * from './components/item-list';
 export * from './unit';
 
 export * from './interfaces/host';
 export * from './interfaces/graph';
 export * from './interfaces/protocol';
 export * from './interfaces/unit';
+export * from './interfaces/view';
 
 
 export function createBrowserApp(element: Element) {

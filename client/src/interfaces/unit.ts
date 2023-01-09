@@ -1,11 +1,12 @@
 import * as React from 'react';
 
+import type { Application } from '../application';
 import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
 import type { GraphBlockMetrics, GraphRenderer } from './graph';
-import type { MasterBlockLocation, MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
+import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
 //> General
@@ -46,6 +47,13 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
     processData: any;
     processLocation: any;
     time: number;
+  }>;
+
+  OptionsComponent?: React.ComponentType<{
+    app: Application;
+    baseUrl: string;
+    host: Host;
+    pathname: string;
   }>;
 
   createProcessFeatures?(processData: ProcessData, options: CreateFeaturesOptions): FeatureGroupDef;

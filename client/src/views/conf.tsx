@@ -10,12 +10,13 @@ import { UnitInfo, UnitNamespace } from '../units';
 import * as util from '../util';
 import { Button } from '../components/button';
 import { ViewProps } from '../interfaces/view';
+import { BaseUrl } from '../constants';
+import { Description } from '../components/description';
 
 import descriptionStyles from '../../styles/components/description.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
 import styles from '../../styles/views/conf.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
-import { BaseUrl } from '../constants';
 
 
 export type ViewConfProps = ViewProps<{
@@ -36,11 +37,6 @@ export interface ViewConfState {
 }
 
 export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
-  static routes = [
-    { id: 'main', pattern: '/settings' },
-    { id: 'section', pattern: '/settings/:groupId/:sectionId/**' }
-  ];
-
   constructor(props: ViewConfProps) {
     super(props);
 
@@ -48,18 +44,6 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
       reloadBannerVisible: true,
       selectedGroupAndSectionIds: null
     };
-
-    props.setUnsavedDataCallback((route) => {
-      if (route) {
-        return true;
-      }
-
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(true);
-        }, 1000);
-      });
-    });
   }
 
   componentDidUpdate(prevProps: Readonly<ViewProps>, prevState: Readonly<ViewConfState>) {
@@ -143,11 +127,42 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
               ))}
             </div>
           </div>
-          <div className={styles.contentsOuter}>
-            {/* <header>
-              <h2>OPC-UA</h2>
-            </header> */}
-            <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
+          {(route.id === 'section') && (
+            <div className={styles.contentsOuter}>
+              <div className={styles.contentsInner}>
+                {(() => {
+                  if (route.params.groupId === 'units') {
+                    let namespace = route.params.sectionId;
+                    let unitInfo = unitsInfo[namespace];
+
+                    let unit = this.props.host.units[namespace];
+                    let Component = unit?.OptionsComponent;
+
+                    if (Component) {
+                      return (
+                        <Component
+                          app={this.props.app}
+                          baseUrl={`${BaseUrl}/settings/units/${namespace}`}
+                          host={this.props.host}
+                          pathname={route.params[0] ?? ''} />
+                      );
+                    } else {
+                      return (
+                        <Description>
+                          <h2>{unitInfo.metadata.title}</h2>
+                          <p>This module cannot be configured here.</p>
+                        </Description>
+                      );
+                    }
+                  }
+
+                  return null;
+                })()}
+              </div>
+            </div>
+          )}
+
+            {/* <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
               <h2>OPC-UA</h2>
 
               <h3>Devices</h3>
@@ -183,11 +198,9 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
                 <div className={formStyles.checkTitle}>Automatic save</div>
                 <p className={formStyles.checkDescription}>The editor's contents will be saved automatically at regular intervals.</p>
               </label>))} */}
-            </div>
-          </div>
           {this.state.reloadBannerVisible && (
             <div className={styles.reload}>
-              <p>Reload the setup for changes to take effect.</p>
+              <p>Reload the setup to apply changes.</p>
               <Button>Reload</Button>
             </div>
           )}
@@ -195,6 +208,12 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
       </main>
     );
   }
+
+
+  static routes = [
+    { id: 'main', pattern: '/settings' },
+    { id: 'section', pattern: '/settings/:groupId/:sectionId/**' }
+  ];
 }
 
 

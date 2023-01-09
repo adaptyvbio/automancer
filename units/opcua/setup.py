@@ -12,6 +12,9 @@ setup(
       "opcua = pr1_opcua",
     ]
   },
+  package_data={
+    "pr1_ocpua.client": ["*"]
+  },
 
   install_requires=[
     "asyncua==1.0.0"

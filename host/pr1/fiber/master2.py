@@ -80,6 +80,9 @@ class Master:
         self._pause_future.set_result(True)
         self._pause_future = None
 
+  def call_resume(self):
+    asyncio.get_event_loop().call_soon(self.host.root_node.transfer_claims)
+
   def send_message(self, block_path: list, exec_path: list, message: object):
     program = self._program
 
@@ -95,6 +98,9 @@ class Master:
       try:
         async for event in self.run():
           self._events.append(event)
+
+          if event.stopped:
+            self.host.root_node.transfer_claims()
 
           if event.location:
             self._location = event.location

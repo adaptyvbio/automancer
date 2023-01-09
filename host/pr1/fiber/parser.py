@@ -123,8 +123,8 @@ class BlockProgram(Protocol):
   def pause(self):
     ...
 
-  def resume(self):
-    ...
+  def call_resume(self):
+    self._parent.call_resume()
 
   def run(self, child: Any, /, parent_state_program, stack: EvalStack, symbol) -> AsyncIterator[Any]:
     ...

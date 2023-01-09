@@ -64,16 +64,21 @@ class ClaimToken:
   def __init__(self, target: 'Claimable', *, symbol: ClaimSymbol):
     self._cancelled = False
     self._claim: Optional[Claim] = None
-    self._target = target
     self._futures = set[tuple[asyncio.Future, bool]]()
+    self._initial_task = target.claim(symbol, err=True, task=True)
     self._symbol = symbol
+    self._target = target
     self._task = asyncio.create_task(self._loop())
 
   async def _loop(self):
     try:
       while True:
         try:
-          self._claim = await self._target.claim(self._symbol, err=True)
+          if task := self._initial_task:
+            self._initial_task = None
+            self._claim = await task
+          else:
+            self._claim = await self._target.claim(self._symbol, err=True)
         except (ClaimTransferFailChildError, ClaimTransferFailUnknownError) as e:
           for pair in self._futures.copy():
             future, err = pair
@@ -168,14 +173,14 @@ class Claimable:
     loop.call_soon(self._designate_owner)
 
   @overload
-  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: Literal[False] = False) -> Coroutine[Any, Any, Claim]:
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, task: Literal[False] = False) -> Coroutine[Any, Any, Claim]:
     ...
 
   @overload
-  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: Literal[True]) -> asyncio.Task[Claim]:
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, task: Literal[True]) -> asyncio.Task[Claim]:
     ...
 
-  def claim(self, symbol: ClaimSymbol, *, err: bool = False, token: bool = False):
+  def claim(self, symbol: ClaimSymbol, *, err: bool = False, task: bool = False):
     future = asyncio.Future()
     claimant = (symbol, future, err)
     self._claimants.append(claimant)
@@ -191,7 +196,7 @@ class Claimable:
       assert self._owner
       return self._owner
 
-    return asyncio.ensure_future(func()) if token else func()
+    return asyncio.ensure_future(func()) if task else func()
 
   def force_claim(self, symbol: ClaimSymbol) -> Claim:
     if self._owner:

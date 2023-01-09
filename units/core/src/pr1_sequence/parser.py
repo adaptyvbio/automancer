@@ -80,12 +80,9 @@ class SequenceTransform(BaseTransform):
 
 class SequenceProgramMode(IntEnum):
   Halted = -1
-  Resuming = -2
 
   Halting = 0
   Normal = 1
-  Pausing = 2
-  Paused = 3
 
 @dataclass(kw_only=True)
 class SequenceProgramLocation:
@@ -134,10 +131,7 @@ class SequenceProgram(BlockProgram):
 
   @property
   def busy(self):
-    return self._mode in (
-      SequenceProgramMode.Halting,
-      SequenceProgramMode.Pausing
-    ) or self._child_program.busy
+    return (self._mode == SequenceProgramMode.Halting) or self._child_program.busy
 
   def get_child(self, block_key: int, exec_key: None):
     assert block_key == self._child_index
@@ -153,7 +147,7 @@ class SequenceProgram(BlockProgram):
         self.set_interrupt(message["value"])
 
   def halt(self):
-    assert (not self.busy) and (self._mode in (SequenceProgramMode.Normal, SequenceProgramMode.Paused))
+    assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
 
     self._mode = SequenceProgramMode.Halting
     self._child_program.halt()
@@ -168,18 +162,11 @@ class SequenceProgram(BlockProgram):
 
   def pause(self):
     assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
-    self._mode = SequenceProgramMode.Pausing
 
     if not self._child_stopped:
       self._child_program.pause()
     else:
       self._iterator.trigger()
-
-  def resume(self):
-    assert (not self.busy) and (self._mode == SequenceProgramMode.Paused)
-
-    self._mode = SequenceProgramMode.Resuming
-    self._iterator.trigger()
 
   def set_interrupt(self, value: bool, /):
     self._interrupting = value
@@ -217,12 +204,10 @@ class SequenceProgram(BlockProgram):
     async for event in self._iterator:
       self._child_stopped = event.stopped
 
-      if (self._mode == SequenceProgramMode.Pausing) and event.stopped:
-        self._mode = SequenceProgramMode.Paused
       if (self._mode == SequenceProgramMode.Halting) and event.stopped:
         self._mode = SequenceProgramMode.Halted
-      if ((self._mode == SequenceProgramMode.Paused) and (not event.stopped)) or (self._mode == SequenceProgramMode.Resuming):
-        self._mode = SequenceProgramMode.Normal
+      # if ((self._mode == SequenceProgramMode.Paused) and (not event.stopped)) or (self._mode == SequenceProgramMode.Resuming):
+      #   self._mode = SequenceProgramMode.Normal
 
       yield ProgramExecEvent(
         location=SequenceProgramLocation(
@@ -231,7 +216,7 @@ class SequenceProgram(BlockProgram):
           interrupting=self._interrupting,
           mode=self._mode
         ),
-        stopped=(self._mode in (SequenceProgramMode.Paused, SequenceProgramMode.Halted)),
+        stopped=event.stopped,
         terminated=(event.terminated and ((self._point and self._point.index >= len(self._block._children)) or (self._child_index + 1 >= len(self._block._children)) or (self._mode == SequenceProgramMode.Halted)))
       )
 

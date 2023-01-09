@@ -133,6 +133,8 @@ class SegmentProgram(BlockProgram):
 
   def resume(self):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Paused)
+
+    self.call_resume()
     self._process.resume()
 
   async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):

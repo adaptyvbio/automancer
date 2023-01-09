@@ -92,8 +92,14 @@ class StateProgramPoint:
       child=(block.child.Point.import_value(data["child"], block.child, master=master) if data["child"] is not None else None)
     )
 
+counter = 0
+
 class StateProgram(BlockProgram):
   def __init__(self, block: 'StateBlock', master, parent):
+    global counter
+    self._counter = counter
+    counter += 1
+
     self._block = block
     self._master = master
     self._parent = parent
@@ -137,8 +143,26 @@ class StateProgram(BlockProgram):
   def resume(self):
     assert (not self.busy) and (self._mode == StateProgramMode.Paused)
 
+    self.call_resume()
+
     self._mode = StateProgramMode.Resuming
     self._iterator.trigger()
+
+  def call_resume(self):
+    if self._mode == StateProgramMode.Paused:
+      self._iterator.clear()
+      self._state_instance.prepare(self._block.state)
+      asyncio.create_task(self.apply_state())
+      super().call_resume()
+    else:
+      asyncio.get_event_loop().call_soon(self._master.host.root_node.transfer_claims)
+
+  async def apply_state(self):
+    try:
+      state_location = await self._state_instance.apply(self._block.state, resume=False)
+      self._iterator.notify(state_location)
+    except Exception:
+      traceback.print_exc()
 
   async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
@@ -163,13 +187,6 @@ class StateProgram(BlockProgram):
     # state_location = await self._state_instance.apply(self._block.state, resume=False)
     # self._iterator.notify(state_location)
 
-    async def apply_state():
-      try:
-        state_location = await self._state_instance.apply(self._block.state, resume=False)
-        self._iterator.notify(state_location)
-      except Exception:
-        traceback.print_exc()
-
     async def suspend_state():
       try:
         await self._state_instance.suspend()
@@ -184,9 +201,10 @@ class StateProgram(BlockProgram):
       except Exception:
         traceback.print_exc()
 
-    asyncio.create_task(apply_state())
+    asyncio.create_task(self.apply_state())
 
     async for event, state_location in self._iterator:
+      # print("Rec", self._counter, self._mode, event)
       self._child_stopped = event.stopped
 
       # If the child was immediately paused, then no event gets emitted.
@@ -194,6 +212,9 @@ class StateProgram(BlockProgram):
         self._mode = StateProgramMode.PausingState
         asyncio.create_task(suspend_state())
         continue
+
+      if (self._mode == StateProgramMode.Normal) and event.stopped and (not event.terminated):
+        self._master.host.root_node.transfer_claims()
 
       if event.terminated:
         if self._state_instance.applied:
@@ -217,10 +238,6 @@ class StateProgram(BlockProgram):
 
       if ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming):
         self._mode = StateProgramMode.Normal
-        state_location = self._state_instance.apply(self._state_final, resume=True)
-
-        if parent_state_program:
-          parent_state_program._apply_state(parent_state_program._state_final)
 
       yield ProgramExecEvent(
         location=StateProgramLocation(

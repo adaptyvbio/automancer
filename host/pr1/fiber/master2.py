@@ -31,6 +31,7 @@ class Master:
     self.host = host
     self.protocol = protocol
 
+    self._child_stopped: bool
     self._events = list[ProgramExecEvent]()
     self._program: BlockProgram
     self._location: Any
@@ -42,8 +43,10 @@ class Master:
     self._program.halt()
 
   def pause(self):
-    self._pause_future = asyncio.Future()
     self._program.pause()
+
+    # Only set the future after in case the call was illegal and is rejected by the child program.
+    self._pause_future = asyncio.Future()
 
   async def wait_done(self):
     assert self._done_future
@@ -67,18 +70,28 @@ class Master:
 
     self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
 
+    self._child_stopped = True
+    self._will_write_state = True
+
     from random import random
 
     runtime_stack = {
       self.protocol.global_env: dict(random=random)
     }
 
-    initial_event = True
-
     async for event in self._program.run(initial_location, None, runtime_stack, symbol):
-      if initial_event:
-        initial_event = False
-        self.write_state()
+      # Write the state if the state child program was paused (but not this program) and is not anymore.
+      if self._child_stopped and (not event.stopped):
+        self.write_state(); print("Y: Master1")
+
+      # Transfer and write the state if the state child program is paused but not terminated.
+      if event.stopped and not (event.state_terminated):
+        self.transfer_state(); print("X: Master2")
+        self.write_state(); print("Y: Master2")
+
+      self._child_stopped = event.stopped
+
+      # TODO: Test with sequence as the root
 
       yield event
 
@@ -87,7 +100,7 @@ class Master:
         self._pause_future = None
 
   def call_resume(self):
-    asyncio.get_event_loop().call_soon(self.host.root_node.transfer_claims)
+    self.transfer_state(); print("X: Master1")
 
   def send_message(self, block_path: list, exec_path: list, message: object):
     program = self._program
@@ -104,9 +117,6 @@ class Master:
       try:
         async for event in self.run():
           self._events.append(event)
-
-          if event.stopped:
-            self.host.root_node.transfer_claims()
 
           if event.location:
             self._location = event.location

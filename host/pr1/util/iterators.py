@@ -250,6 +250,9 @@ class CoupledStateIterator2(Generic[T, S]):
     self._state = None
     self._value = None
 
+  def clear_state(self):
+    self._state = None
+
   async def close_value(self):
     assert self._iterator
     assert not self._task

@@ -141,14 +141,7 @@ class SegmentProgram(BlockProgram):
     Process = self._master.chip.runners[self._block._process.namespace].Process
     self._point = initial_point or SegmentProgramPoint(process=None)
 
-    self._master.transfer_state()
-
-    # def x():
-    #   logger.debug("Transfering node claims")
-    #   self._master.host.root_node.transfer_claims()
-
-    # loop = asyncio.get_event_loop()
-    # loop.call_soon(x)
+    self._master.transfer_state(); print("X: Segment")
 
     async def run():
       while self._point:
@@ -156,8 +149,6 @@ class SegmentProgram(BlockProgram):
         self._mode = SegmentProgramMode.Normal
         self._point = None
         self._process = Process(self._block._process.data)
-
-        # self._master.host.root_node.transfer_claims()
 
         async for event in self._process.run(point.process):
           yield event
@@ -178,6 +169,7 @@ class SegmentProgram(BlockProgram):
           process=event.location,
           time=event_time
         ),
+        state_terminated=event.terminated,
         stopped=event.stopped,
 
         # Allow processes to implicitly have terminated=True when halted

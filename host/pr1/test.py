@@ -59,37 +59,17 @@ async def main():
   from .fiber.parser import FiberParser
 
   parser = FiberParser("""
-name: Foobar
+name: Test
 
 steps:
-  Mock.valueBool: true
   actions:
     - wait: 1s
-      Mock.valueBool: false
-    - wait: 1s
-    - wait: 1s
-      Mock.valueBool: false
-    - wait: 1s
-
-
-  # PLC.S00: 3.66 psi
-
+    # - wait: 1s
   # actions:
-  #   - activate: 1s
-  #   - activate: 1s
-  # Mock.valueBool: true
-
-  # repeat: 3
-  # actions:
-  #   - activate: 1 s
-  #     Mock.valueBool: true
-  #     repeat: 2
-  # Mock.valueBool: false
-  # repeat: 1
-
-    # - activate: 1 s
-    #   Mock.valueBool: false
-    # - activate: 1 s
+  #   - Mock.valueBool: true
+  #     wait: 1s
+  #   - wait: 1s
+  Mock.valueBool: false
 """,
     host=host,
     Parsers=host.manager.Parsers
@@ -97,7 +77,6 @@ steps:
 
 
   # print(parser.protocol.root)
-  # return
 
   from .fiber.master2 import Master
 
@@ -119,11 +98,26 @@ steps:
         pass
 
     async def b():
-      await asyncio.sleep(.5)
-      claim = host.root_node.find(('Mock', 'valueBool')).force_claim(ClaimSymbol())
-      await asyncio.sleep(2)
-      claim.release()
-      host.root_node.transfer_claims()
+      pass
+
+      await asyncio.sleep(0.5)
+      print("\n= PAUSING\n")
+      # master._program._child_program._child_program.pause()
+      master._program._child_program._child_program._child_program.pause()
+      await asyncio.sleep(1)
+      print("\n= PAUSED\n")
+      master._program._child_program._child_program._child_program.resume()
+
+      # print("= PAUSED")
+      # await asyncio.sleep(0.5)
+      # print("= RESUMED")
+      # master._program._child_program.resume()
+      # master._program.pause()
+
+      # claim = host.root_node.find(('Mock', 'valueBool')).force_claim(ClaimSymbol())
+      # await asyncio.sleep(2)
+      # claim.release()
+      # host.root_node.transfer_claims()
 
       # node = host.root_node.nodes['Mock'].nodes['valueBool']
       # await asyncio.sleep(2)

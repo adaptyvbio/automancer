@@ -50,6 +50,7 @@ class ProgramExecEvent(Generic[T]):
     pausable: Optional[bool] = None,
     location: Optional[T] = None,
     partial: bool = False,
+    state_terminated: bool = False,
     terminated: bool = False,
     stopped: bool = False,
     time: Optional[float] = None
@@ -59,6 +60,7 @@ class ProgramExecEvent(Generic[T]):
     # self.pausable = pausable
     self.location = location
     self.partial = partial
+    self.state_terminated = state_terminated
     self.stopped = stopped
     self.terminated = terminated
     self.time = time

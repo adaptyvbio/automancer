@@ -1,6 +1,8 @@
 import asyncio
 import traceback
 from typing import Any, Callable, Coroutine, Literal, Optional, Protocol, overload
+import warnings
+import weakref
 
 
 class ClaimSymbol:
@@ -161,12 +163,19 @@ class PerpetualClaim:
     return self.owner
 
 
-# TODO: Detect leaks using 'weakref'
 class Claimable:
   def __init__(self, *, auto_transfer: bool = False):
     self._auto_transfer = auto_transfer
     self._claimants = list[tuple[ClaimSymbol, Claimant]]()
-    self._owner: Optional[ClaimOwner] = None
+    self._owner_ref: Optional[weakref.ref[ClaimOwner]] = None
+
+  @property
+  def _owner(self):
+    return self._owner_ref() if self._owner_ref else None
+
+  @_owner.setter
+  def _owner(self, value: Optional[ClaimOwner], /):
+    self._owner_ref = weakref.ref(value, self._finalize_owner) if value else None
 
   def _add_claimant_pair(self, pair: tuple[ClaimSymbol, Claimant]):
     self._claimants.append(pair)
@@ -179,8 +188,9 @@ class Claimable:
       if self._owner:
         self._owner._lost(lost_to_child=(symbol > self._owner.symbol))
 
-      self._owner = ClaimOwner(target=self, symbol=symbol)
-      claimant.succeed(self._owner)
+      owner = ClaimOwner(target=self, symbol=symbol)
+      self._owner = owner
+      claimant.succeed(owner)
 
     for pair in self._claimants.copy():
       assert self._owner
@@ -193,6 +203,9 @@ class Claimable:
   def _designate_target_soon(self):
     loop = asyncio.get_running_loop()
     loop.call_soon(self._designate_owner)
+
+  def _finalize_owner(self, ref):
+    warnings.warn(f"Claim owner leak of {self}")
 
   def claim(self, symbol: ClaimSymbol, *, raise_on_failure: bool = False):
     claimant = ClaimantWithFuture(raise_on_failure=raise_on_failure)

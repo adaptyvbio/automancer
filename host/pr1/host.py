@@ -393,10 +393,13 @@ class Host:
       assert draft.protocol
 
       def done_callback():
+        logger.info(f"Ran protocol on chip '{chip.id}'")
         chip.master = None
 
       def update_callback():
         self.update_callback()
+
+      logger.info(f"Running protocol on chip '{chip.id}'")
 
       chip.master = Master(draft.protocol, chip, host=self)
       await chip.master.start(done_callback, update_callback)

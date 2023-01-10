@@ -264,6 +264,9 @@ class CoupledStateIterator2(Generic[T, S]):
     else:
       raise Exception()
 
+  def set_state(self, state: S, /):
+    self._state = state
+
   def notify(self, state: S):
     self._state_queue.append(state)
 

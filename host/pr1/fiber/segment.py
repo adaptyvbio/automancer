@@ -169,10 +169,10 @@ class SegmentProgram(BlockProgram):
           process=event.location,
           time=event_time
         ),
-        state_terminated=event.terminated,
         stopped=event.stopped,
 
         # Allow processes to implicitly have terminated=True when halted
+        state_terminated=(event.terminated or halted),
         terminated=(event.terminated or halted)
       )
 

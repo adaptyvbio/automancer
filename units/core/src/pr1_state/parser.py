@@ -158,7 +158,7 @@ class StateProgram(BlockProgram):
       else:
         self._iterator.clear()
 
-      self._state_instance.prepare()
+      self._state_instance.prepare(resume=True)
       super().call_resume()
 
   async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
@@ -180,7 +180,7 @@ class StateProgram(BlockProgram):
     self._iterator = CoupledStateIterator2(run())
 
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
-    self._state_instance.prepare()
+    self._state_instance.prepare(resume=False)
 
     # state_location = await self._state_instance.apply(self._block.state, resume=False)
     # self._iterator.notify(state_location)
@@ -204,16 +204,16 @@ class StateProgram(BlockProgram):
       # print(">",self._counter, event, self._mode)
       # self._state_instance._instances['devices']._logger.info("Ok")
 
-      # Write the state if the state child program was paused (but not this program) and is not anymore.
-      if (self._mode == StateProgramMode.Normal) and self._child_stopped and (not event.stopped):
-        self._master.write_state(); print("Y: State1")
-
       # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
       if (self._mode == StateProgramMode.Normal) and self._child_state_terminated and (not event.state_terminated):
         self._master.write_state(); print("Y: State3")
 
+      # Write the state if the state child program was paused (but not this program) and is not anymore.
+      elif (self._mode == StateProgramMode.Normal) and self._child_stopped and (not event.stopped):
+        self._master.write_state(); print("Y: State1")
+
       # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
-      # This corresponds to a call pause() call on the state child program, causing itself and all its descendants to become paused.
+      # This corresponds to a pause() call on the state child program, causing itself and all its descendants to become paused.
       if (self._mode == StateProgramMode.Normal) and event.stopped and not (self._child_stopped) and (not event.state_terminated):
         self._master.transfer_state(); print("X: State1")
         self._master.write_state(); print("Y: State2")
@@ -247,12 +247,17 @@ class StateProgram(BlockProgram):
           # This is the last iteration of the loop. Same as case (2) above.
           self._mode = StateProgramMode.Halted
 
-      if ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming):
+      resuming = ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming)
+
+      if resuming:
         self._mode = StateProgramMode.Normal
 
-      if (self._mode != StateProgramMode.Paused) and (state_location is None):
-        state_location = self._state_instance.apply()
-        self._iterator._state = state_location # TODO: Improve
+      if (self._mode == StateProgramMode.Normal) and (state_location is None):
+        state_location = self._state_instance.apply(resume=resuming)
+        self._iterator.set_state(state_location)
+
+      if self._mode == StateProgramMode.Halted:
+        await self._state_instance.close()
 
       yield ProgramExecEvent(
         location=StateProgramLocation(

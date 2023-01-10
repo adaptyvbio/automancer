@@ -157,7 +157,7 @@ class StateInstance:
 
       # info.task = asyncio.create_task(self._node_lifecycle(info))
 
-    self._logger.debug("Done applying state")
+    self._logger.debug("Applied state")
     return self._location
 
   async def suspend(self):
@@ -189,20 +189,33 @@ class DemoStateInstance:
   def __init__(self, state: BlockUnitState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     global counter
     self._logger = logger.getChild(f"stateInstance{counter}")
+    self._index = counter
     counter = counter + 1
 
-  def prepare(self):
-    self._logger.debug('Prepare')
+    self._notify = notify
 
-  def apply(self):
-    self._logger.debug('Apply')
+  def prepare(self, *, resume: bool):
+    self._logger.debug(f'Prepare, resume={resume}')
+
+  def apply(self, *, resume: bool):
+    self._logger.debug(f'Apply, resume={resume}')
+
+    async def task():
+      await asyncio.sleep(0.7)
+      print("Notify")
+      self._notify(34)
+
+    # if self._index == 0: asyncio.create_task(task())
+
+  async def close(self):
+    self._logger.debug('Close')
 
   async def suspend(self):
     self._logger.debug('Suspend')
 
 
 class Runner(BaseRunner):
-  StateInstance = StateInstance
+  StateInstance = DemoStateInstance
 
   def __init__(self, chip, *, host: Host):
     self._chip = chip

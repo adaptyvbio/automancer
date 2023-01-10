@@ -219,7 +219,7 @@ class SequenceProgram(BlockProgram):
           mode=self._mode
         ),
         state_terminated=event.state_terminated,
-        stopped=(terminated or (event.stopped and (not event.terminated))),
+        stopped=event.stopped,
         terminated=terminated
       )
 

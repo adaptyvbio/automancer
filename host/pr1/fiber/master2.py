@@ -31,6 +31,7 @@ class Master:
     self.host = host
     self.protocol = protocol
 
+    self._child_state_terminated: bool
     self._child_stopped: bool
     self._events = list[ProgramExecEvent]()
     self._program: BlockProgram
@@ -70,6 +71,7 @@ class Master:
 
     self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
 
+    self._child_state_terminated = False
     self._child_stopped = True
     self._will_write_state = True
 
@@ -80,8 +82,12 @@ class Master:
     }
 
     async for event in self._program.run(initial_location, None, runtime_stack, symbol):
-      # Write the state if the state child program was paused (but not this program) and is not anymore.
-      if self._child_stopped and (not event.stopped):
+      # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
+      if self._child_state_terminated and (not event.state_terminated):
+        self.write_state(); print("Y: Master3")
+
+      # Write the state if the state child program was paused and is not anymore.
+      elif self._child_stopped and (not event.stopped):
         self.write_state(); print("Y: Master1")
 
       # Transfer and write the state if the state child program is paused but not terminated.
@@ -89,15 +95,17 @@ class Master:
         self.transfer_state(); print("X: Master2")
         self.write_state(); print("Y: Master2")
 
+      self._child_state_terminated = event.state_terminated
       self._child_stopped = event.stopped
-
-      # TODO: Test with sequence as the root
 
       yield event
 
       if event.stopped and self._pause_future:
         self._pause_future.set_result(True)
         self._pause_future = None
+
+    self.transfer_state()
+    self.write_state()
 
   def call_resume(self):
     self.transfer_state(); print("X: Master1")
@@ -177,27 +185,24 @@ class StateInstanceCollection:
     self._location.unit_locations[namespace] = event
     self._notify(self._location)
 
-  def prepare(self):
-    for namespace, instance in self._instances.items():
-      instance.prepare()
-
-  def apply(self):
+  def apply(self, *, resume: bool):
     self._applied = True
     self._location = StateLocation({})
 
     for namespace, instance in self._instances.items():
-      self._location.unit_locations[namespace] = instance.apply()
+      self._location.unit_locations[namespace] = instance.apply(resume=resume)
 
     return self._location
 
-  def update(self, state: BlockState):
-    assert self._applied
+  async def close(self):
+    await asyncio.gather(*[instance.close() for instance in self._instances.values()])
 
-    self._location = StateLocation({ namespace: instance.update(state[namespace]) for namespace, instance in self._instances.items()})
-    return self._location
+  def prepare(self, *, resume: bool):
+    for instance in self._instances.values():
+      instance.prepare(resume=resume)
 
   async def suspend(self):
     assert self._applied
 
     self._applied = False
-    await asyncio.gather(*[instance.suspend() for namespace, instance in self._instances.items()])
+    await asyncio.gather(*[instance.suspend() for instance in self._instances.values()])

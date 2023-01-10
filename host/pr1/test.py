@@ -86,6 +86,9 @@ steps:
   if parser.protocol:
     master = Master(parser.protocol, chip=chip, host=host)
 
+    # Remove the root state block
+    # parser.protocol.root = parser.protocol.root.child
+
     async def a():
       async for info in master.run():
         # continue
@@ -100,13 +103,20 @@ steps:
     async def b():
       pass
 
+      # await asyncio.sleep(1.0)
+      # print("\n= PAUSING\n")
+      # master._program._child_program._child_program._child_program.pause()
       await asyncio.sleep(0.5)
-      print("\n= PAUSING\n")
-      # master._program._child_program._child_program.pause()
-      master._program._child_program._child_program._child_program.pause()
-      await asyncio.sleep(1)
-      print("\n= PAUSED\n")
-      master._program._child_program._child_program._child_program.resume()
+      print("\n= HALTING\n")
+      master._program._child_program._child_program._child_program.halt()
+
+      # print("\n= PAUSING\n")
+      # master._program.pause()
+      # # master._program._child_program._child_program.pause()
+      # # master._program._child_program._child_program._child_program.pause()
+      # await asyncio.sleep(1)
+      # print("\n= PAUSED\n")
+      # master._program._child_program._child_program._child_program.resume()
 
       # print("= PAUSED")
       # await asyncio.sleep(0.5)

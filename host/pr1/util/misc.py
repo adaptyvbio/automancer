@@ -1,10 +1,13 @@
 from asyncio import Future
 import asyncio
 import hashlib
+from io import IOBase
 import logging
 import traceback
 from typing import Awaitable, Protocol
 
+
+FileObject = IOBase
 
 def fast_hash(input):
   return hashlib.sha256(input.encode("utf-8")).hexdigest()
@@ -17,6 +20,9 @@ def log_exception(logger, *, level = logging.DEBUG):
 class Exportable(Protocol):
   def export(self) -> object:
     ...
+
+class UnreachableError(Exception):
+  pass
 
 async def race(*awaitables: Awaitable):
   futures = [asyncio.ensure_future(awaitable) for awaitable in awaitables]

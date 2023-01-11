@@ -1,8 +1,7 @@
-import { CreateFeaturesOptions, FeatureGroupDef, ProgressBar, React, AnonymousUnit, formatDuration, Host } from 'pr1';
+import { CreateFeaturesOptions, FeatureGroupDef, React, AnonymousUnit, formatDuration, Host, TimedProgressBar } from 'pr1';
 
 
 export interface ProcessData {
-  type: 'duration';
   value: number;
 }
 
@@ -22,7 +21,7 @@ function ProcessComponent(props: {
 }) {
   return (
     <div>
-      <ProgressBar
+      <TimedProgressBar
         duration={props.processData.value}
         paused={props.processLocation.paused}
         time={props.time}

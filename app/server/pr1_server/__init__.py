@@ -72,7 +72,7 @@ class App:
 
     # Create data directory if missing
 
-    self.data_dir = Path(args.data_dir)
+    self.data_dir = Path(args.data_dir).resolve()
     self.data_dir.mkdir(exist_ok=True, parents=True)
 
     conf_path = self.data_dir / "conf.json"

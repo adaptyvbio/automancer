@@ -138,7 +138,7 @@ class SegmentProgram(BlockProgram):
     self._process.resume()
 
   async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
-    Process = self._master.chip.runners[self._block._process.namespace].Process
+    runner = self._master.chip.runners[self._block._process.namespace]
     self._point = initial_point or SegmentProgramPoint(process=None)
 
     self._master.transfer_state(); print("X: Segment")
@@ -148,9 +148,9 @@ class SegmentProgram(BlockProgram):
         point = self._point
         self._mode = SegmentProgramMode.Normal
         self._point = None
-        self._process = Process(self._block._process.data)
+        self._process = runner.Process(self._block._process.data, runner=runner)
 
-        async for event in self._process.run(point.process):
+        async for event in self._process.run(point.process, stack=stack):
           yield event
 
     async for event in run():

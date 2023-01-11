@@ -1,5 +1,7 @@
 import builtins
+import io
 from logging import Logger
+from pathlib import Path
 from tokenize import TokenError
 from types import EllipsisType
 import pint
@@ -386,12 +388,26 @@ class UnknownUnitError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Unknown unit", ranges=self.target.area.ranges)
 
+class InvalidExpr(LangServiceError):
+  def __init__(self, target):
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid value, expected expression", ranges=self.target.area.ranges)
+
 class InvalidExprKind(LangServiceError):
   def __init__(self, target):
     self.target = target
 
   def diagnostic(self):
     return DraftDiagnostic(f"Invalid expression kind", ranges=self.target.area.ranges)
+
+class InvalidFileObject(LangServiceError):
+  def __init__(self, target):
+    self.target = target
+
+  def diagnostic(self):
+    return DraftDiagnostic(f"Invalid file object", ranges=self.target.area.ranges)
 
 
 class AnyType:
@@ -463,10 +479,11 @@ class ListType(PrimitiveType):
     return analysis, result
 
 class LiteralOrExprType:
-  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
+  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False, _force_expr: bool = False):
     from .expr import PythonExprKind
 
     self._kinds = set()
+    self._force_expr = _force_expr
     self._type = obj_type or cast(Type, super())
     self._expr_type = expr_type or self._type
 
@@ -495,8 +512,14 @@ class LiteralOrExprType:
           return analysis, Ellipsis
 
         return analysis, LocatedValue.new(expr, area=obj.area)
+      elif self._force_expr:
+        return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
 
     return self._type.analyze(obj, context)
+
+class ExprType(LiteralOrExprType):
+  def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
+    super().__init__(obj_type, dynamic=dynamic, expr_type=expr_type, field=field, static=static, _force_expr=True)
 
 class QuantityType:
   def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
@@ -581,14 +604,68 @@ class EnumType:
 
     return analysis, obj
 
-# class LiteralStrType(StrType):
-#   def __init__(self, value: str, /):
-#     self._value = value
+class UnionType(Type):
+  def __init__(self, variant: Type, /, *variants: Type):
+    self._variants = [variant, *variants]
 
-#   def analyze(self, obj, context):
-#     if obj != self._value:
+  def analyze(self, obj, context):
+    analysis = Analysis()
+
+    for variant in self._variants:
+      analysis, result = variant.analyze(obj, context)
+
+      if not isinstance(result, EllipsisType):
+        return analysis, result
+
+    return analysis, Ellipsis
+
+class PathType(Type):
+  def __init__(self):
+    self._type = UnionType(
+      PrimitiveType(Path),
+      PrimitiveType(str)
+    )
+
+  def analyze(self, obj, context):
+    analysis, result = self._type.analyze(obj, context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, LocatedValue.new(Path(result.value), result.area) if isinstance(result, LocatedString) else result
+
+class FileRefType(Type):
+  def __init__(self, *, text: Optional[bool] = None):
+    self._text = text
+    self._type = UnionType(
+      PathType(),
+      PrimitiveType(io.IOBase)
+    )
+
+  def analyze(self, obj, context):
+    analysis, result = self._type.analyze(obj, context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    if (self._text is not None) and isinstance(result, io.IOBase) and (isinstance(result, io.TextIOBase) != self._text):
+      analysis.errors.append(InvalidFileObject(result))
+      return analysis, Ellipsis
+
+    return analysis, result
+
+class DataRefType(Type):
+  def __init__(self, *, text: Optional[bool] = None):
+    self._type = UnionType(
+      FileRefType(text=text),
+      PrimitiveType(bytes)
+    )
+
+  def analyze(self, obj, context):
+    return self._type.analyze(obj, context)
 
 
+# TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):
   for error in analysis.errors:
     diagnostic = error.diagnostic()

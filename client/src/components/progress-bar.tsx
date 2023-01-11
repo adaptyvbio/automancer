@@ -6,22 +6,21 @@ import { UnstableText } from './unstable-text';
 import styles from '../../styles/components/progress-bar.module.scss';
 
 
-export interface ProgressBarProps {
-  duration: number;
+export type ProgressBarProps = {
   paused?: unknown;
+  progressRef?: React.RefObject<HTMLDivElement>;
   setValue?(newValue: number): void;
-  time: number;
-  value: number;
-}
+} & (
+  { value: number; } |
+  { getValue(): number;
+    textUpdateInterval?: number; }
+);
 
 export interface ProgressBarState {
   selectValue: number | null;
 }
 
 export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
-  animation: Animation | null = null;
-  ref = React.createRef<HTMLDivElement>();
-
   constructor(props: ProgressBarProps) {
     super(props);
 
@@ -30,43 +29,14 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
     };
   }
 
-  componentDidMount() {
-    this.update();
-  }
-
-  componentDidUpdate(prevProps: ProgressBarProps, _prevState: ProgressBarState) {
-    if (this.props !== prevProps) {
-      this.update();
-    }
-  }
-
-  getStats() {
-    let deltaTime = Date.now() - this.props.time;
-    let currentValue = Math.min(1, this.props.value + (!this.props.paused ? (deltaTime / this.props.duration) : 0));
-    let remainingTime = this.props.duration * (1 - this.props.value) - deltaTime;
-
-    return { currentValue, remainingTime };
-  }
-
-  update() {
-    if (this.animation) {
-      this.animation.cancel();
-    }
-
-    if (!this.props.paused) {
-      let { currentValue, remainingTime } = this.getStats();
-
-      if (remainingTime > 0) {
-        this.animation = this.ref.current!.animate([
-          { width: `${currentValue * 100}%` },
-          { width: '100%' }
-        ], { duration: remainingTime, fill: 'forwards' });
-      }
-    }
+  private getValue() {
+    return 'value' in this.props
+      ? this.props.value
+      : this.props.getValue();
   }
 
   render() {
-    let { currentValue, remainingTime } = this.getStats();
+    let currentValue = this.getValue();
 
     return (
       <div className={util.formatClass(styles.root, {
@@ -90,23 +60,23 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
             this.props.setValue!(this.state.selectValue!);
           })}>
           <div className={styles.inner} />
-          <div className={styles.progress} style={{ width: `${this.props.value * 100}%` }} ref={this.ref} />
-          {this.state.selectValue !== null && (
+          <div className={styles.progress} style={{ width: `${currentValue * 100}%` }} ref={this.props.progressRef} />
+          {(this.state.selectValue !== null) && (
             <div className={styles.select} style={{ width: `${this.state.selectValue * 100}%` }} />
           )}
         </div>
         <div className={styles.text}>
           <UnstableText
             interval={
-              !this.props.paused
-                ? remainingTime / (1 - currentValue) / 100
+              (('textUpdateInterval' in this.props) && (this.props.textUpdateInterval !== undefined)) && !this.props.paused
+                ? this.props.textUpdateInterval
                 : null
             }
             contents={() => {
-              let { currentValue } = this.getStats();
+              let currentValue = this.getValue();
 
               return (
-                <> {((this.state.selectValue ?? currentValue) * 100).toFixed(0)}%</>
+                <>{((this.state.selectValue ?? currentValue) * 100).toFixed(0)}%</>
               );
             }} />
         </div>

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import time
 from typing import Any, Optional
 
+from pr1.fiber.eval import EvalStack
 from pr1.fiber.process import ProgramExecEvent
 from pr1.units.base import BaseProcessRunner
 
@@ -29,7 +30,7 @@ class ProcessPoint:
     return cls(progress=value["progress"])
 
 class Process:
-  def __init__(self, data: Any):
+  def __init__(self, data: Any, *, runner: 'Runner'):
     self._data = data
 
     self._progress: Optional[float] = None
@@ -61,7 +62,7 @@ class Process:
     self._resume_future.set_result(None)
     self._resume_future = None
 
-  async def run(self, initial_point: Optional[ProcessPoint]):
+  async def run(self, initial_point: Optional[ProcessPoint], *, stack: EvalStack):
     self._progress = initial_point.progress if initial_point else 0.0
     total_duration = self._data._value / 1000.0
 

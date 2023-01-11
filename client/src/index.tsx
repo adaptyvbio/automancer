@@ -16,6 +16,7 @@ export * from './app-backends/browser';
 export * from './backends/common';
 export { MessageBackend } from './backends/message';
 export * from './contexts';
+export * from './draft';
 export * from './format';
 export * from './host';
 export { Startup } from './startup';
@@ -31,6 +32,7 @@ export * from './components/context-menu';
 export * from './components/description';
 export * from './components/graph-editor';
 export * from './components/progress-bar';
+export * from './components/timed-progress-bar';
 export * from './components/item-list';
 export * from './unit';
 

@@ -1,5 +1,5 @@
 import type { BaseBackend } from './base';
-import type { DraftCompilation } from '../draft';
+import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 import type { Master, Protocol, ProtocolBlockPath } from '../interfaces/protocol';
@@ -64,7 +64,6 @@ export type BackendAuthAgentSpec = {
 
 export type ChipId = string;
 export type DeviceId = string;
-export type DraftId = string;
 export type HostId = string;
 
 export interface Device {
@@ -106,16 +105,6 @@ export interface ChipIssue {
 }
 
 
-export interface Draft {
-  id: DraftId;
-  errors: {
-    message: string;
-    range: [number, number];
-  }[];
-  protocol: Protocol | null;
-  source: string;
-}
-
 export type ExecutorStates = Record<UnitNamespace, unknown>;
 
 
@@ -138,7 +127,6 @@ export interface HostState {
   };
 
   chips: Record<ChipId, GeneralChip>;
-  drafts: Record<DraftId, Draft>;
   devices: Record<DeviceId, Device>;
   executors: ExecutorStates;
 }

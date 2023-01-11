@@ -205,7 +205,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             }[item.kind],
             label: {
               description: item.namespace ?? undefined,
-              detail: ((item.sublabel !== null) ? ' ' + item.sublabel : undefined),
+              detail: (item.sublabel ? ' ' + item.sublabel : undefined),
               label: item.label
             },
             range: match!.range

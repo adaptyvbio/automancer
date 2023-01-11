@@ -61,7 +61,11 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     if (!this.chip) {
       ViewChips.navigate();
     } else if (!this.chip.master) {
-      ViewChip.navigate(this.chip.id);
+      if (navigation.canGoBack) {
+        navigation.back();
+      } else {
+        ViewChip.navigate(this.chip.id);
+      }
     }
   }
 

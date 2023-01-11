@@ -12,10 +12,18 @@ from pr1.draft import DraftGenericError
 from pr1.util.decorators import debug
 
 
-@dataclass
+@dataclass(kw_only=True)
+class AWSCredentials:
+  access_key_id: str
+  secret_access_key: str
+  session_token: Optional[str]
+
+@dataclass(kw_only=True)
 class ProcessData:
   bucket: str
+  credentials: Optional[AWSCredentials]
   multipart: bool
+  region: str
   source: PythonExprContext | Path | bytes
   target: str
 
@@ -36,12 +44,25 @@ class Parser(BaseParser):
         'bucket': lang.Attribute(
           lang.StrType(),
           description="The name of the S3 bucket."
-          # description="The name of the AWS region, such as `us-east-1`"
+        ),
+        'credentials': lang.Attribute(
+          lang.DictType({
+            'access_key_id': lang.StrType(),
+            'secret_access_key': lang.StrType(),
+            'session_token': lang.Attribute(lang.StrType(), optional=True)
+          }),
+          description="The AWS credentials.",
+          documentation=["Defaults to data in ~/.aws/credentials which is automatically written when running `aws configure` with the AWS CLI."],
+          optional=True
         ),
         'multipart': lang.Attribute(
           lang.PrimitiveType(bool),
           description="Whether to use a multipart upload.",
           optional=True
+        ),
+        'region': lang.Attribute(
+          lang.StrType(),
+          description="The name of the AWS region, such as `us-east-1`."
         ),
         'source': lang.Attribute(
           lang.LiteralOrExprType(
@@ -69,10 +90,18 @@ class Parser(BaseParser):
       if isinstance(value, EllipsisType):
         return lang.Analysis(), Ellipsis
 
+      data_credentials = value.get('credentials')
+
       return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, ProcessData(
         bucket=value['bucket'].value,
+        credentials=AWSCredentials(
+          access_key_id=data_credentials['access_key_id'].value,
+          secret_access_key=data_credentials['secret_access_key'].value,
+          session_token=(data_credentials['session_token'].value if 'session_token' in data_credentials else None)
+        ) if data_credentials else None,
         multipart=(value['multipart'].value if 'multipart' in value else True),
         source=(value['source'].value.contextualize(runtime_envs) if isinstance(value['source'].value, PythonExpr) else value['source'].value),
+        region=value['region'].value,
         target=value['target'].value
       ))])
     else:

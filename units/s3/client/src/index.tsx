@@ -7,7 +7,7 @@ export interface ProcessData {
 
 export interface ProcessLocation {
   paused: boolean;
-  phase: 'create' | 'upload' | 'complete';
+  phase: 'complete' | 'create' | 'done' | 'part_upload' | 'upload';
   progress: number;
 }
 
@@ -24,9 +24,11 @@ export default {
 
     let progress = (() => {
       switch (location.phase) {
-        case 'create': return 0;
-        case 'upload': return 0.1 + location.progress * 0.8;
         case 'complete': return 0.9;
+        case 'create': return 0;
+        case 'done': return 1;
+        case 'part_upload': return 0.1 + location.progress * 0.8;
+        case 'upload': return location.progress;
       }
     })();
 

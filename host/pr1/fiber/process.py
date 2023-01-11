@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 from enum import IntEnum
 from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
@@ -5,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .parser import BlockState
 from ..util.decorators import debug
+from ..util.misc import Exportable
 
 if TYPE_CHECKING:
   from .segment import SegmentProgram
@@ -35,35 +37,25 @@ class ProgramExecDuration:
 #   # Done = 5
 
 
-class ProgramState(Protocol):
-  def export(self) -> dict:
-    ...
+T = TypeVar('T', bound=Exportable)
 
-T = TypeVar('T', bound=ProgramState)
-
-@debug
+@dataclass(kw_only=True)
 class ProgramExecEvent(Generic[T]):
-  def __init__(
-    self,
-    duration: Optional[ProgramExecDuration | DurationLike] = None,
-    error: Optional[Exception] = None,
-    pausable: Optional[bool] = None,
-    location: Optional[T] = None,
-    partial: bool = False,
-    state_terminated: bool = False,
-    terminated: bool = False,
-    stopped: bool = False,
-    time: Optional[float] = None
-  ):
-    # self.duration = duration
-    # self.error = error
-    # self.pausable = pausable
-    self.location = location
-    self.partial = partial
-    self.state_terminated = state_terminated
-    self.stopped = stopped
-    self.terminated = terminated
-    self.time = time
+  location: Optional[T] = None # Optional?
+  partial: bool = False
+  state_terminated: bool = False
+  terminated: bool = False
+  stopped: bool = False
+  time: Optional[float] = None
+
+@dataclass(kw_only=True)
+class ProcessExecEvent:
+  duration: Optional[ProgramExecDuration | DurationLike] = None
+  location: Exportable
+  pausable: bool = False
+  stopped: bool = False
+  terminated: bool = False
+  time: Optional[float] = None
 
 
 class Process(Protocol[T]):

@@ -4,7 +4,7 @@ import time
 from typing import Any, Optional
 
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.process import ProgramExecEvent
+from pr1.fiber.process import ProcessExecEvent
 from pr1.units.base import BaseProcessRunner
 
 from . import namespace
@@ -73,9 +73,10 @@ class Process:
       remaining_duration = total_duration * (1.0 - progress)
       task_time = time.time()
 
-      yield ProgramExecEvent(
+      yield ProcessExecEvent(
         duration=remaining_duration,
         location=ProcessLocation(progress),
+        pausable=True,
         time=task_time
       )
 
@@ -94,10 +95,10 @@ class Process:
           remaining_duration = total_duration * (1.0 - progress)
           self._progress = progress
 
-          # yield ProgramExecEvent(location=ProcessLocation(self._progress, paused=True))
+          # yield ProcessExecEvent(location=ProcessLocation(self._progress, paused=True))
           # await asyncio.sleep(2)
 
-          yield ProgramExecEvent(
+          yield ProcessExecEvent(
             duration=remaining_duration,
             location=ProcessLocation(progress, paused=True),
             stopped=True,
@@ -110,7 +111,7 @@ class Process:
             except asyncio.CancelledError:
               # The process is halting while being paused.
 
-              yield ProgramExecEvent(
+              yield ProcessExecEvent(
                 duration=remaining_duration,
                 location=ProcessLocation(progress, paused=True),
                 stopped=True,
@@ -126,7 +127,7 @@ class Process:
       finally:
         self._task = None
 
-    yield ProgramExecEvent(
+    yield ProcessExecEvent(
       duration=0.0,
       location=ProcessLocation(1.0),
       stopped=True,

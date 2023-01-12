@@ -1,9 +1,9 @@
 from collections import namedtuple
-import math
 import re
 import regex
 
-from ..reader import LocatedError, LocatedString, LocatedValue
+from ..fiber.expr import unescape
+from ..reader import LocatedError, LocatedString, LocatedValue, Source
 from .schema import SchemaType
 
 
@@ -50,6 +50,23 @@ class IdentifierPath(SchemaType):
     return segments
 
 
+## Command member arguments
+
+regexp_member_unescaped = r'([^"\n][^ \n]*)'
+regexp_member_escaped = r'"((?:\\[^\n]|[^"\n])*)"'
+regexp_members = rf"(?:(?|{regexp_member_escaped}|{regexp_member_unescaped}) *)+"
+regexp_command = regex.compile(rf"^{regexp_members}$")
+# regexp_commands = regex.compile(...)
+
+def parse_command(input_str: LocatedString, /):
+  match = regexp_command.match(input_str)
+
+  if not match:
+    return Ellipsis
+
+  return [unescape(input_str[group_span[0]:group_span[1]]) for group_span in match.spans(1)]
+
+
 ## Calls
 
 regexp_arg = r"(?P<a>(:?[^,]|(?<=\\).)+?)"
@@ -57,10 +74,10 @@ regexp_args = rf"(?:{regexp_arg} *(?:(?<!\\), *{regexp_arg} *)*)?"
 regexp_call = regex.compile(rf"^(?P<n>[a-zA-Z][a-zA-Z0-9]*)(?:\( *{regexp_args}\))?$")
 regexp_escape = regex.compile(r"\\(.)")
 
-def unescape(value):
-  return LocatedValue.transfer(regexp_escape.sub(r"\1", value), value)
-
 def parse_call(expr):
+  def unescape(value):
+    return LocatedValue.transfer(regexp_escape.sub(r"\1", value), value)
+
   match = regexp_call.match(expr)
 
   if not match:
@@ -227,14 +244,13 @@ class UnclassifiedExpr:
 
 if __name__ == "__main__":
   for x in [
-    "foo",
-    "foo()",
-    "foo( )",
-    "foo(3 sec)",
-    "foo( 3 sec )",
-    r"foo(3\, sec)",
-    "foo([3 sec])",
-    r"foo( 3 sec \\, 6 sec )"
+    'yes no',
+    'y\"es no',
+    '"yes" no',
+    '"yes no"',
+    'y\\es no',
+    '"y\\"es no"',
+    '""'
   ]:
-    p = parse_call(x)
-    print(p)
+    p = parse_command(Source(x))
+    print(x.ljust(10), p)

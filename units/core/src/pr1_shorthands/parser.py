@@ -78,7 +78,7 @@ class ShorthandsParser(BaseParser):
         # description=(comments[0].value if data_shorthand.comments and not comments[0].startswith("@") else None),
         deprecated=False,
         description=None,
-        env=shorthand_env,
+        env=shorthand_env
       )
 
     return lang.Analysis()

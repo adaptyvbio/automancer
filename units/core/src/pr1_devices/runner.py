@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional
 from pr1.devices.claim import ClaimOwner, ClaimSymbol, PerpetualClaim, ClaimTransferFailChildError, ClaimTransferFailUnknownError
 from pr1.devices.node import BaseWritableNode, NodePath
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import PythonExprContext
+from pr1.fiber.expr import PythonExprAugmented
 from pr1.fiber.parser import BlockUnitState
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
@@ -81,7 +81,7 @@ class StateInstance:
         initial = False
 
         while True:
-          if isinstance(info.value, PythonExprContext):
+          if isinstance(info.value, PythonExprAugmented):
             analysis, result = info.value.evaluate(self._stack)
 
             if analysis.errors:

@@ -42,7 +42,7 @@ class TimerParser(BaseParser):
         return lang.Analysis(), Ellipsis
 
       if isinstance(raw_value.value, PythonExpr):
-        analysis, eval_result = raw_value.value.contextualize(adoption_envs).evaluate(adoption_stack)
+        analysis, eval_result = raw_value.value.augment(adoption_envs).evaluate(adoption_stack)
 
         if isinstance(eval_result, EllipsisType):
           return analysis, Ellipsis

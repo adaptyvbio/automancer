@@ -2,13 +2,14 @@ import ast
 import functools
 import re
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol, cast
 
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
-from ..reader import LocatedString
+from ..reader import LocatedString, LocatedValue
 from ..util.decorators import debug
+from ..util.misc import Exportable
 
 if TYPE_CHECKING:
   from .langservice import Type
@@ -54,26 +55,40 @@ class PythonExprKind(Enum):
   Binding = 3
 
 
-class PythonExpr:
-  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression, *, type: 'Optional[Type]'):
+class PotentialPythonExpr(Exportable, Protocol):
+  def __init__(self):
+    self.type: Optional[Type]
+
+  def augment(self) -> 'PythonExprAugmented':
+    ...
+
+  def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic') -> LocatedValue:
+    ...
+
+
+class PythonExpr(PotentialPythonExpr):
+  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression, *, type: 'Optional[Type]' = None):
     self.contents = contents
     self.kind = kind
     self.tree = tree
     self.type = type
 
   @functools.cached_property
-  def compiled(self):
+  def _compiled(self):
     return compile(self.tree, filename="<string>", mode="eval")
 
-  def contextualize(self, envs: EvalEnvs):
-    return PythonExprContext(self, envs)
+  def augment(self, envs: EvalEnvs):
+    return PythonExprAugmented(self, envs)
 
   def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
     match mode:
       case 'dynamic':
-        return dynamic_evaluate(self.compiled, self.contents, context)
+        return dynamic_evaluate(self._compiled, self.contents, context)
       case 'static':
         return static_evaluate(self.tree.body, self.contents, context)
+
+  def export(self):
+    return f"{{{{ {self.contents.value} }}}}"
 
   def __repr__(self):
     return f"{self.__class__.__name__}({repr(ast.unparse(self.tree))})"
@@ -113,7 +128,7 @@ class PythonExpr:
     )
 
   @classmethod
-  def parse(cls, raw_str: LocatedString, *, type: Optional['Type'] = None):
+  def parse(cls, raw_str: LocatedString, /, *, type: Optional['Type'] = None):
     from .langservice import Analysis
 
     match = expr_regexp_exact.search(raw_str)
@@ -124,7 +139,7 @@ class PythonExpr:
     return cls._parse_match(match, type=type)
 
   @classmethod
-  def parse_mixed(cls, raw_str: LocatedString):
+  def parse_mixed(cls, raw_str: LocatedString, /):
     from .langservice import Analysis
 
     analysis = Analysis()
@@ -147,19 +162,34 @@ class PythonExpr:
     return analysis, output
 
 
-class PythonExprContext:
-  def __init__(self, expr: PythonExpr, /, envs: EvalEnvs):
+class ValueAsPythonExpr(PotentialPythonExpr):
+  def __init__(self, value: Any, /):
+    self.type = None
+    self._value = value
+
+  def augment(self, envs: EvalEnvs):
+    return PythonExprAugmented(self, envs)
+
+  def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
+    return self._value
+
+  def export(self):
+    ...
+
+
+class PythonExprAugmented:
+  def __init__(self, expr: PotentialPythonExpr, /, envs: EvalEnvs):
     self._expr = expr
     self._envs = envs
 
   def evaluate(self, stack: EvalStack):
     from .langservice import Analysis
 
-    variables = dict()
+    variables = dict[str, Any]()
 
     for env in self._envs:
-      if stack[env] is not None:
-        variables.update(stack[env])
+      if (env_vars := stack[env]) is not None:
+        variables.update(env_vars)
 
     context = EvalContext(variables)
 
@@ -174,38 +204,7 @@ class PythonExprContext:
         return Analysis(), result
 
   def export(self):
-    return f"{{{{ {self._expr.contents.value} }}}}"
-
-
-# deprecated
-class PythonExprEvaluator:
-  def __init__(self, expr: PythonExpr, /, type):
-    self._expr = expr
-    self._type = type
-
-    self.envs: Optional[list[EvalEnv]] = None
-
-  def evaluate(self, stack: EvalStack, ctx = None):
-    from .langservice import Analysis
-    assert self.envs is not None
-
-    variables = dict()
-
-    for env in self.envs:
-      if stack[env] is not None:
-        variables.update(stack[env])
-
-    context = EvalContext(variables)
-
-    try:
-      result = self._expr.evaluate(context, mode='dynamic')
-    except EvalError as e:
-      return Analysis(errors=[e]), Ellipsis
-    else:
-      return self._type.analyze(result, context)
-
-  def export(self):
-    return dict()
+    return self._expr.export()
 
 
 if __name__ == "__main__":

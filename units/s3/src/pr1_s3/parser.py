@@ -3,7 +3,7 @@ from pathlib import Path
 from types import EllipsisType
 from typing import Optional
 
-from pr1.fiber.expr import PythonExpr, PythonExprContext
+from pr1.fiber.expr import PythonExpr, PythonExprAugmented
 from pr1.fiber.segment import SegmentTransform
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber import langservice as lang
@@ -24,7 +24,7 @@ class ProcessData:
   credentials: Optional[AWSCredentials]
   multipart: bool
   region: str
-  source: PythonExprContext | Path | bytes
+  source: PythonExprAugmented | Path | bytes
   target: str
 
   def export(self):
@@ -100,7 +100,7 @@ class Parser(BaseParser):
           session_token=(data_credentials['session_token'].value if 'session_token' in data_credentials else None)
         ) if data_credentials else None,
         multipart=(value['multipart'].value if 'multipart' in value else True),
-        source=(value['source'].value.contextualize(runtime_envs) if isinstance(value['source'].value, PythonExpr) else value['source'].value),
+        source=(value['source'].value.augment(runtime_envs) if isinstance(value['source'].value, PythonExpr) else value['source'].value),
         region=value['region'].value,
         target=value['target'].value
       ))])

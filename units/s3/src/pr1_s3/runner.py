@@ -11,7 +11,7 @@ import os
 
 import boto3
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import PythonExprContext
+from pr1.fiber.expr import PythonExprAugmented
 from pr1.fiber.process import ProcessExecEvent
 from pr1.units.base import BaseProcessRunner
 from pr1.util.asyncio import AsyncIteratorThread
@@ -66,7 +66,7 @@ class Process:
     self._resume_future = None
 
   async def run(self, initial_point: Optional[ProcessPoint], *, stack: EvalStack):
-    if isinstance(self._data.source, PythonExprContext):
+    if isinstance(self._data.source, PythonExprAugmented):
       analysis, source_result = self._data.source.evaluate(stack)
 
       if isinstance(source_result, EllipsisType):

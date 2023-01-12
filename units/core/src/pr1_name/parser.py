@@ -28,7 +28,7 @@ class NameParser(BaseParser):
 
     if ('name' in attrs) and not isinstance(name_raw := attrs['name'], EllipsisType):
       if isinstance(name_raw.value, PythonExpr):
-        analysis, name = name_raw.value.contextualize(adoption_envs).evaluate(adoption_stack)
+        analysis, name = name_raw.value.augment(adoption_envs).evaluate(adoption_stack)
 
         if isinstance(name, EllipsisType):
           return analysis, BlockUnitData(state=NameState(None))

@@ -664,6 +664,36 @@ class DataRefType(Type):
   def analyze(self, obj, context):
     return self._type.analyze(obj, context)
 
+class BindingType(Type):
+  def analyze(self, obj, context):
+    from .binding import Binding
+
+    if not isinstance(obj, str):
+      return Analysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
+
+    assert isinstance(obj, LocatedString)
+    expr_result = PythonExpr.parse(obj)
+
+    if not expr_result:
+      return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
+
+    analysis, expr = expr_result
+
+    if isinstance(expr, EllipsisType):
+      return analysis, Ellipsis
+
+    if expr.kind != PythonExprKind.Binding:
+      analysis.errors.append(InvalidExprKind(obj))
+      return analysis, Ellipsis
+
+    binding_analysis, binding = Binding.parse(expr.contents, expr.tree)
+    analysis += binding_analysis
+
+    if isinstance(binding, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, LocatedValue.new(binding, area=obj.area)
+
 
 # TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):

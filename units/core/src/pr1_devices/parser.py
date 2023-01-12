@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, LiteralOrExprType, PrimitiveType, QuantityType
-from pr1.fiber.expr import PythonExpr, PythonExprContext, PythonExprEvaluator, PythonExprKind
+from pr1.fiber.expr import PythonExpr, PythonExprAugmented, PythonExprKind
 from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState, FiberParser
 from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarWritableNode
 from pr1.util import schema as sc
@@ -38,7 +38,7 @@ class DevicesParser(BaseParser):
 
     return add_node(self._fiber.host.root_node)
 
-  @property
+  @functools.cached_property
   def segment_attributes(self):
     def get_type(node):
       match node:
@@ -72,13 +72,13 @@ class DevicesParser(BaseParser):
 
         if isinstance(real_value, PythonExpr):
           if real_value.kind == PythonExprKind.Static:
-            eval_analysis, eval_result = real_value.contextualize(adoption_envs).evaluate(adoption_stack)
+            eval_analysis, eval_result = real_value.augment(adoption_envs).evaluate(adoption_stack)
             analysis += eval_analysis
 
             if not isinstance(eval_result, EllipsisType):
               values[path] = eval_result.value
           else:
-            values[path] = real_value.contextualize(runtime_envs)
+            values[path] = real_value.augment(runtime_envs)
         else:
           values[path] = real_value
 
@@ -105,7 +105,7 @@ class DevicesState(BlockUnitState):
           return f"{value:.2fP~}"
         case None:
           return "–"
-        case PythonExprContext():
+        case PythonExprAugmented():
           return value.export()
         case _:
           return value

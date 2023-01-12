@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, Sequen
 
 from . import langservice as lang
 from .eval import EvalEnv, EvalEnvs, EvalStack
-from .expr import PythonExpr, PythonExprContext, PythonExprEvaluator
+from .expr import PythonExpr, PythonExprAugmented
 from .. import reader
 from ..reader import LocatedValue, LocationArea
 from ..draft import DraftDiagnostic, DraftGenericError
@@ -193,7 +193,7 @@ class UnresolvedBlockData:
 
 @debug
 class UnresolvedBlockDataExpr(UnresolvedBlockData):
-  def __init__(self, expr: PythonExprContext):
+  def __init__(self, expr: PythonExprAugmented):
     self._expr = expr
 
   def evaluate(self, stack: EvalStack):
@@ -271,9 +271,11 @@ class FiberParser:
     for parser in self._parsers:
       schema.add(parser.root_attributes, namespace=parser.namespace)
 
-    from pprint import pprint
-    # pprint(schema._attributes)
-    # print(schema.get_attr("name")._label)
+    self.segment_dict = lang.CompositeDict()
+
+    for parser in self._parsers:
+      self.segment_dict.add(parser.segment_attributes, namespace=parser.namespace)
+
 
     analysis, output = schema.analyze(data, self.analysis_context)
     self.analysis += analysis
@@ -328,15 +330,6 @@ class FiberParser:
     else:
       self.protocol = None
 
-  @property
-  def segment_dict(self):
-    schema_dict = lang.CompositeDict()
-
-    for parser in self._parsers:
-      schema_dict.add(parser.segment_attributes, namespace=parser.namespace)
-
-    return schema_dict
-
 
   def parse_block(self, data_block: Any, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs, *, allow_expr: bool = False) -> BlockData | EllipsisType:
     # if allow_expr:
@@ -380,7 +373,7 @@ class FiberParser:
       return Ellipsis
 
     if isinstance(data_attrs, LocatedValue) and isinstance(data_attrs.value, PythonExpr):
-      return UnresolvedBlockDataExpr(data_attrs.value.contextualize(adoption_envs))
+      return UnresolvedBlockDataExpr(data_attrs.value.augment(adoption_envs))
 
     return UnresolvedBlockDataLiteral(data_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 

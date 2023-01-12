@@ -7,12 +7,13 @@ from types import EllipsisType
 import pint
 from collections import namedtuple
 from pint import Quantity, Unit
-from typing import Any, Literal, Optional, Protocol, cast
+from typing import Any, Callable, Literal, Optional, Protocol, cast
 
+from .expr import PythonExpr, PythonExprKind, ValueAsPythonExpr
 from ..ureg import ureg
 from ..util.parser import check_identifier
 from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedError, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
+from ..reader import LocatedDict, LocatedError, LocatedList, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
 
 
 class Selection:
@@ -32,6 +33,11 @@ class Analysis:
     self.folds = folds or list()
     self.hovers = hovers or list()
     self.selections = selections or list()
+
+  def add(self, other: tuple['Analysis', Any]):
+    analysis, value = other
+    self += analysis
+    return value
 
   def __add__(self, other: 'Analysis'):
     return Analysis(
@@ -96,7 +102,8 @@ class Hover:
 
 
 class LangServiceError(Exception):
-  pass
+  def diagnostic(self) -> DraftDiagnostic:
+    ...
 
 class AmbiguousKeyError(LangServiceError):
   def __init__(self, key, target):
@@ -244,14 +251,14 @@ class CompositeDict:
 
     return namespace, attr_name, attr_entries
 
-  def analyze(self, obj, context):
+  def analyze(self, obj, context) -> tuple[Analysis, LocatedDict | EllipsisType]:
     analysis = Analysis()
     strict_failed = False
 
     primitive_analysis, obj = PrimitiveType(dict).analyze(obj, context)
     analysis += primitive_analysis
 
-    if obj is Ellipsis:
+    if isinstance(obj, EllipsisType):
       return analysis, obj
 
     assert isinstance(obj, ReliableLocatedDict)
@@ -320,7 +327,7 @@ class CompositeDict:
       ]
     ))
 
-    return analysis, attr_values if not (self._strict and strict_failed) else Ellipsis
+    return analysis, LocatedDict(attr_values, obj.area) if not (self._strict and strict_failed) else Ellipsis
 
   def merge(self, attr_values1, attr_values2):
     return {
@@ -335,7 +342,7 @@ class SimpleDict(CompositeDict):
   def analyze(self, obj, context):
     analysis, output = super().analyze(obj, context)
 
-    return analysis, output[self._native_namespace] if not isinstance(output, EllipsisType) else Ellipsis
+    return analysis, LocatedDict(output[self._native_namespace], obj.area) if not isinstance(output, EllipsisType) else Ellipsis
 
 class DictType(SimpleDict):
   def __init__(self, attrs, *, foldable = False):
@@ -424,6 +431,8 @@ class PrimitiveType:
   def analyze(self, obj, context):
     match self._primitive:
       case builtins.float | builtins.int if isinstance(obj, str):
+        assert isinstance(obj, LocatedString)
+
         try:
           value = self._primitive(obj.value)
         except (TypeError, ValueError):
@@ -431,6 +440,8 @@ class PrimitiveType:
         else:
           return Analysis(), LocatedValue.new(value, area=obj.area)
       case builtins.bool if isinstance(obj, str):
+        assert isinstance(obj, LocatedString)
+
         if obj.value in ("true", "false"):
           return Analysis(), LocatedValue.new((obj.value == "true"), area=obj.area)
         else:
@@ -439,6 +450,15 @@ class PrimitiveType:
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _:
         return Analysis(), obj
+
+class TransformType(Type):
+  def __init__(self, parent_type: Type, transformer: Callable, /):
+    self._type = parent_type
+    self._transformer = transformer
+
+  def analyze(self, obj, context):
+    analysis, value = self._type.analyze(obj, context)
+    return analysis, self._transformer(value) if not isinstance(value, EllipsisType) else Ellipsis
 
 class ListType(PrimitiveType):
   def __init__(self, item_type: Type, /, *, foldable: bool = True):
@@ -470,19 +490,17 @@ class ListType(PrimitiveType):
       if not isinstance(item_result, EllipsisType):
         result.append(item_result)
 
-    if obj.completion_ranges and isinstance(self._item_type, DictType):
+    if obj.completion_ranges and isinstance(self._item_type, CompositeDict):
       analysis.completions.append(Completion(
         items=self._item_type.completion_items,
         ranges=list(obj.completion_ranges)
       ))
 
-    return analysis, result
+    return analysis, LocatedList(result, obj.area)
 
-class LiteralOrExprType:
+class LiteralOrExprType(Type):
   def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False, _force_expr: bool = False):
-    from .expr import PythonExprKind
-
-    self._kinds = set()
+    self._kinds = set[PythonExprKind]()
     self._force_expr = _force_expr
     self._type = obj_type or cast(Type, super())
     self._expr_type = expr_type or self._type
@@ -495,8 +513,6 @@ class LiteralOrExprType:
       self._kinds.add(PythonExprKind.Static)
 
   def analyze(self, obj, context):
-    from .expr import PythonExpr
-
     if isinstance(obj, str):
       assert isinstance(obj, LocatedString)
       result = PythonExpr.parse(obj, type=self._expr_type)
@@ -516,6 +532,55 @@ class LiteralOrExprType:
         return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
 
     return self._type.analyze(obj, context)
+
+class PotentialExprType(Type):
+  def __init__(self, obj_type: Type, /, *, dynamic: Optional[bool] = None, literal: bool = True, static: Optional[bool] = None):
+    self._type = obj_type
+
+    both = (dynamic is None) and (static is None)
+    assert dynamic or static or both
+
+    self._dynamic = dynamic or both
+    self._literal = literal
+    self._static = static or both
+
+  def analyze(self, obj, context):
+    if not isinstance(obj, str):
+      return Analysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
+
+    assert isinstance(obj, LocatedString)
+    expr_result = PythonExpr.parse(obj, type=self._type)
+
+    if expr_result:
+      analysis, expr = expr_result
+
+      if isinstance(expr, EllipsisType):
+        return analysis, Ellipsis
+
+      located_expr = LocatedValue.new(expr, obj.area)
+
+      match expr.kind:
+        case PythonExprKind.Dynamic if self._dynamic and self._static:
+          return analysis, LocatedValue.new(ValueAsPythonExpr(located_expr), obj.area)
+        case PythonExprKind.Static if self._dynamic and self._static:
+          expr.type = TransformType(self._type, lambda value: LocatedValue.new(ValueAsPythonExpr(value), value.area))
+          return analysis, located_expr
+        case PythonExprKind.Dynamic if self._dynamic:
+          return analysis, located_expr
+        case PythonExprKind.Static if self._static:
+          return analysis, located_expr
+        case _:
+          analysis.errors.append(InvalidExprKind(obj))
+          return analysis, Ellipsis
+    elif self._literal:
+      analysis, value = self._type.analyze(obj, context) if self._type else (Analysis(), obj)
+
+      if self._dynamic and self._static:
+        value = LocatedValue.new(ValueAsPythonExpr(value), obj.area)
+
+      return analysis, LocatedValue.new(ValueAsPythonExpr(value), obj.area) if not isinstance(value, EllipsisType) else Ellipsis
+    else:
+      return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
 
 class ExprType(LiteralOrExprType):
   def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
@@ -567,6 +632,10 @@ class ArbitraryQuantityType:
 
     return Analysis(), LocatedValue.new(quantity, area=obj.area)
 
+
+class BoolType(PrimitiveType):
+  def __init__(self):
+    super().__init__(bool)
 
 class StrType(PrimitiveType):
   def __init__(self):

@@ -2,7 +2,8 @@ import ast
 import functools
 import re
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol, cast
+from types import EllipsisType
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, cast
 
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
@@ -163,7 +164,7 @@ class PythonExpr(PotentialPythonExpr):
 
 
 class ValueAsPythonExpr(PotentialPythonExpr):
-  def __init__(self, value: Any, /):
+  def __init__(self, value: LocatedValue | EllipsisType, /):
     self.type = None
     self._value = value
 

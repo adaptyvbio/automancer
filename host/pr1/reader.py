@@ -263,7 +263,7 @@ class LocatedValue:
     return self.area.source
 
   @classmethod
-  def new(cls, obj, area):
+  def new(cls, obj, area) -> 'LocatedValue':
     match obj:
       case LocatedValue():
         return obj

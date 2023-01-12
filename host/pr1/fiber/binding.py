@@ -41,7 +41,6 @@ class Binding(Protocol):
   @staticmethod
   def parse(source: LocatedString, /, tree: Optional[ast.Expression] = None) -> 'tuple[Analysis, Binding | EllipsisType]':
     tree = tree or ast.parse(source, mode='eval')
-    print(ast.dump(tree, indent=2))
 
     try:
       return Analysis(), parse_binding_expr(tree.body, source=source)

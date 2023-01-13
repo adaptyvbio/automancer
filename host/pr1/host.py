@@ -9,12 +9,11 @@ from graphlib import TopologicalSorter
 
 from pint import UnitRegistry
 
-from .fiber.langservice import Analysis, print_analysis
-
 from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.node import BaseNode, CollectionNode, DeviceNode, NodePath
-from .draft import Draft
+from .draft import Draft, DraftCompilation
+from .fiber.langservice import Analysis, print_analysis
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext, FiberParser
 from .protocol import Protocol
@@ -187,34 +186,6 @@ class Host:
     logger.debug("Destroyed executors")
 
 
-    # self.start_plan(chip, codes, draft, update_callback=update_callback)
-
-    # try:
-    #   protocol = Protocol(
-    #     (Path(__file__).parent.parent / "test.yml").open().read(),
-    #     parsers={ namespace: unit.Parser for namespace, unit in self.units.items() },
-    #     models=self.models
-    #   )
-
-    #   pprint(protocol.export())
-    # except reader.LocatedError as e:
-    #   e.display()
-    #   # raise e
-
-
-  def compile_draft(self, draft_id: str, source: str):
-    parser = FiberParser(
-      source,
-      host=self,
-      Parsers=self.manager.Parsers
-    )
-
-    return Draft(
-      id=draft_id,
-      analysis=parser.analysis,
-      protocol=parser.protocol
-    )
-
   def create_chip(self):
     chip = Chip.create(
       chips_dir=self.chips_dir,
@@ -328,18 +299,6 @@ class Host:
     return state_update
 
   async def process_request(self, request, *, client):
-    if request["type"] == "compileDraft":
-      try:
-        draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
-      except:
-        import traceback
-        traceback.print_exc()
-
-        from .fiber import langservice as lang
-        draft = Draft(analysis=lang.Analysis(), id=request["draftId"], protocol=None)
-
-      return draft.export()
-
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       await chip.runners[request["namespace"]].command(request["command"])
@@ -359,29 +318,8 @@ class Host:
       namespace, instruction = next(iter(request["instruction"].items()))
       await self.executors[namespace].instruct(instruction)
 
-    if request["type"] == "pause":
-      chip = self.chips[request["chipId"]]
-      chip.master.pause({
-        'neutral': request["options"]["neutral"]
-      })
-
     if request["type"] == "reloadUnits":
       await self.reload_units()
-
-    if request["type"] == "resume":
-      chip = self.chips[request["chipId"]]
-      chip.master.resume()
-
-    if request["type"] == "setLocation":
-      chip = self.chips[request["chipId"]]
-      chip.master.set_location(chip.master.import_location(request["location"]))
-
-    if request["type"] == "skipSegment":
-      chip = self.chips[request["chipId"]]
-      chip.master.skip_segment(
-        process_state=request["processState"],
-        segment_index=request["segmentIndex"]
-      )
 
     if request["type"] == "startDraft":
       chip = self.chips[request["chipId"]]
@@ -405,6 +343,25 @@ class Host:
       await chip.master.start(done_callback, update_callback)
 
     match request["type"]:
+      case "compileDraft":
+        draft = Draft.load(request["draft"])
+
+        try:
+          compilation = draft.compile(host=self)
+        except:
+          import traceback
+          traceback.print_exc()
+
+          from .fiber import langservice as lang
+          compilation = DraftCompilation(
+            analysis=lang.Analysis(),
+            document_paths={draft.entry_document.path},
+            draft_id=draft.id,
+            protocol=None
+          )
+
+        return compilation.export()
+
       case "deleteChip":
         chip = self.chips[request["chipId"]]
 

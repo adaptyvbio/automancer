@@ -1,10 +1,11 @@
 import functools
 import pickle
 from collections import namedtuple
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Type
 
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
+from ..fiber.process import Process
 
 # used?
 Device = namedtuple("Device", ["description", "build", "id", "name"])
@@ -21,6 +22,7 @@ class BaseParser:
 
 
 class BaseRunner(Protocol):
+  Process: Type[Process]
   StateInstance: Optional[Any] = None
   dependencies = set()
 

@@ -135,7 +135,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        return compilation.diagnostics.flatMap((diagnostic) => {
+        return compilation.analysis.diagnostics.flatMap((diagnostic) => {
           return diagnostic.ranges.map(([startIndex, endIndex]) => {
             let start = this.model.getPositionAt(startIndex);
             let end = this.model.getPositionAt(endIndex);
@@ -173,7 +173,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        let match = util.findMap(compilation.completions, (completion) => {
+        let match = util.findMap(compilation.analysis.completions, (completion) => {
           let modelRange = util.findMap(completion.ranges, (draftRange) => {
             let modelRange = getModelRangeFromDraftRange(model, draftRange);
 
@@ -217,7 +217,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        return this.props.compilation.folds.map((fold) => {
+        return this.props.compilation.analysis.folds.map((fold) => {
           let range = getModelRangeFromDraftRange(model, fold.range);
 
           return {
@@ -232,7 +232,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        let result = this.props.compilation.hovers
+        let result = this.props.compilation.analysis.hovers
           .map((hover) => ({
             hover,
             range: getModelRangeFromDraftRange(model, hover.range)
@@ -249,7 +249,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        let modelRanges = this.props.compilation.selections.map((draftRange) => getModelRangeFromDraftRange(model, draftRange));
+        let modelRanges = this.props.compilation.analysis.selections.map((draftRange) => getModelRangeFromDraftRange(model, draftRange));
 
         return positions.map((position) =>
           modelRanges

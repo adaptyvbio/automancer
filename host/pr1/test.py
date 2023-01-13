@@ -62,8 +62,7 @@ async def main():
 name: Test
 
 steps:
-  actions:
-    - wait: 1s
+  wait: 10s
     # - wait: 1s
   # actions:
   #   - Mock.valueBool: true
@@ -77,6 +76,7 @@ steps:
 
 
   # print(parser.protocol.root)
+  return
 
   from .fiber.master2 import Master
 

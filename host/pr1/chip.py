@@ -9,8 +9,10 @@ import uuid
 from collections import namedtuple
 from enum import IntEnum
 
+
 from . import logger
 from .util.misc import log_exception
+from .units.base import BaseRunner
 
 # flags (4)
 #  0 - reserved
@@ -119,7 +121,7 @@ class Chip(BaseChip):
     self.id = id
     self.issues = list()
     self.master: Optional[Master] = None
-    self.runners = dict()
+    self.runners = dict[str, BaseRunner]()
 
     self._header_path = (dir / ".header.json")
 

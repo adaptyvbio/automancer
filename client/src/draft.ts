@@ -40,12 +40,15 @@ export interface DraftFold {
 export type DraftSelection = DraftRange;
 
 export interface DraftCompilation {
-  completions: DraftCompletion[];
-  diagnostics: DraftDiagnostic[];
-  folds: DraftFold[];
-  hovers: DraftHover[];
-  selections: DraftSelection[];
+  analysis: {
+    completions: DraftCompletion[];
+    diagnostics: DraftDiagnostic[];
+    folds: DraftFold[];
+    hovers: DraftHover[];
+    selections: DraftSelection[];
+  };
 
+  documentPaths: string[];
   protocol: Protocol | null;
   valid: boolean;
 }

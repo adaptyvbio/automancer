@@ -1,7 +1,8 @@
 import { BackendCommon, ChipId, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
-import { ProtocolBlockPath } from '../interfaces/protocol';
+import type { ProtocolBlockPath } from '../interfaces/protocol';
+import type { HostDraft, HostDraftCompilerOptions } from '../interfaces/draft';
 
 
 export abstract class RawMessageBackend extends BackendCommon {
@@ -18,15 +19,15 @@ export abstract class RawMessageBackend extends BackendCommon {
   }
 
   async compileDraft(options: {
-    draftId: DraftId;
-    source: string;
+    draft: HostDraft;
+    options: HostDraftCompilerOptions;
   }) {
     // console.log('[FS] Compile');
 
     return await this._request({
       type: 'compileDraft',
-      draftId: options.draftId,
-      source: options.source
+      draft: options.draft,
+      options: options.options
     }) as DraftCompilation;
   }
 

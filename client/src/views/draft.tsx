@@ -153,8 +153,19 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     this.setState((state) => !state.compiling ? { compiling: true } : null);
 
     let promise = this.props.host.backend.compileDraft({
-      draftId: this.props.draft.id,
-      source
+      draft: {
+        id: this.props.draft.id,
+        documents: [
+          { id: '_',
+            contents: source,
+            owner: null,
+            path: 'draft.yml' }
+        ],
+        entryDocumentId: '_'
+      },
+      options: {
+        trusted: true
+      }
     });
 
     this.compilationPromise = promise;
@@ -344,7 +355,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                         { id: 'report',
                           label: 'Report',
                           contents: () => (
-                            <DiagnosticsReport diagnostics={this.state.compilation?.diagnostics ?? []} />
+                            <DiagnosticsReport diagnostics={this.state.compilation?.analysis.diagnostics ?? []} />
                           ) }
                       ]} />
                   </div>
@@ -460,7 +471,7 @@ export function FilledDraftSummary(props: {
 
   let compilation = props.compilation!;
 
-  let [errorCount, warningCount] = compilation.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
+  let [errorCount, warningCount] = compilation.analysis.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
     switch (diagnostic.kind) {
       case 'error': return [errorCount + 1, warningCount];
       case 'warning': return [errorCount, warningCount + 1];

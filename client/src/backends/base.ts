@@ -1,7 +1,8 @@
-import { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
+import type { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { ChipId, HostState, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
-import { ProtocolBlockPath } from '../interfaces/protocol';
+import type { ProtocolBlockPath } from '../interfaces/protocol';
+import type { HostDraft, HostDraftCompilerOptions } from '../interfaces/draft';
 
 
 export interface BaseBackend {
@@ -16,8 +17,8 @@ export interface BaseBackend {
 
   command<T>(options: { chipId: ChipId; command: T; namespace: UnitNamespace; }): Promise<void>;
   compileDraft(options: {
-    draftId: DraftId;
-    source: string;
+    draft: HostDraft;
+    options: HostDraftCompilerOptions;
   }): Promise<DraftCompilation>;
   createChip(): Promise<{ chipId: ChipId; }>;
   createDraftSample(): Promise<string>;

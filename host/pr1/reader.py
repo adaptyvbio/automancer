@@ -4,17 +4,22 @@ from enum import Enum
 import ast
 import functools
 import math
+import re
 import sys
-from typing import Any, Optional
+from typing import Any, Generic, Optional, TypeVar
 
 from .draft import DraftDiagnostic
 from .util.decorators import deprecated
 
 
-Position = namedtuple("Position", ["line", "column"])
+@dataclass
+class Position:
+  column: int
+  line: int
+
 
 class Location:
-  def __init__(self, source, offset):
+  def __init__(self, source: 'Source', offset: int):
     self.source = source
     self.offset = offset
 
@@ -34,13 +39,14 @@ class Location:
   def end_position(self):
     return self.source.offset_position(self.offset)
 
+
 class LocationRange:
-  def __init__(self, source, start, end):
+  def __init__(self, source: 'Source', start: int, end: int):
     self.end = end
     self.source = source
     self.start = start
 
-  def __mod__(self, offset):
+  def __mod__(self, offset: tuple[int, int] | int):
     start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
 
     return LocationRange(
@@ -50,14 +56,14 @@ class LocationRange:
     )
 
   @deprecated
-  def __add__(self, other):
+  def __add__(self, other: 'LocationRange'):
     return LocationRange(
       source=self.source,
       start=min(self.start, other.start),
       end=max(self.end, other.end)
     )
 
-  def __lt__(self, other):
+  def __lt__(self, other: 'LocationRange'):
     return (self.start < other.start) or ((self.start == other.start) and (self.end < other.end))
 
   def __repr__(self):
@@ -76,12 +82,13 @@ class LocationRange:
     return Location(self.source, offset=self.start)
 
   @classmethod
-  def full_string(cls, source, value):
+  def full_string(cls, source: 'Source', value: str):
     return cls(source, 0, len(value))
 
+
 class LocationArea:
-  def __init__(self, ranges = list()):
-    self.ranges = ranges
+  def __init__(self, ranges: Optional[list[LocationRange]] = None):
+    self.ranges = ranges or list()
 
   @property
   def source(self):
@@ -149,7 +156,7 @@ class LocationArea:
 
     return output
 
-  def __add__(self, other):
+  def __add__(self, other: 'LocationArea'):
     ranges = (self.ranges + [other]) if isinstance(other, LocationRange) else (self.ranges + other.ranges)
     output = list()
 
@@ -162,7 +169,7 @@ class LocationArea:
     # print(self, '+', other, '->', output)
     return LocationArea(output)
 
-  def __mod__(self, offset):
+  def __mod__(self, offset: tuple[int, int] | int):
     start, end = offset if isinstance(offset, tuple) else (offset, offset + 1)
 
     index = 0
@@ -248,8 +255,10 @@ class LocatedError(Exception):
         )
 
 
-class LocatedValue:
-  def __init__(self, value, area, *, full_area: Optional[LocationArea] = None):
+T = TypeVar('T')
+
+class LocatedValue(Generic[T]):
+  def __init__(self, value: T, area: LocationArea, *, full_area: Optional[LocationArea] = None):
     self.area = area
     self.full_area = full_area or area
     self.value = value
@@ -313,20 +322,20 @@ class LocatedValue:
     return dest
 
 
-class LocatedValueContainer(LocatedValue):
+class LocatedValueContainer(LocatedValue[T], Generic[T]):
   def __repr__(self):
     return repr(self.value)
 
 
-class LocatedString(str, LocatedValue):
-  def __new__(cls, value, *args, **kwargs):
+class LocatedString(str, LocatedValue[str]):
+  def __new__(cls, value: str, *args, **kwargs):
     return super(LocatedString, cls).__new__(cls, value)
 
-  def __init__(self, value, area, *, absolute = True):
+  def __init__(self, value: str, area: LocationArea, *, absolute: bool = True):
     LocatedValue.__init__(self, value, area)
     self.absolute = absolute
 
-  def __add__(self, other):
+  def __add__(self, other: 'LocatedString | str'):
     other_located = isinstance(other, LocatedString)
 
     return LocatedString(
@@ -335,10 +344,10 @@ class LocatedString(str, LocatedValue):
       absolute=(self.absolute and ((other_located and other.absolute) or (not other)))
     )
 
-  def __radd__(self, other):
+  def __radd__(self, other: 'LocatedString'):
     return self + other
 
-  def __getitem__(self, key):
+  def __getitem__(self, key: int | slice) -> 'LocatedString':
     if isinstance(key, slice):
       if self.absolute:
         start, stop, step = key.indices(len(self))
@@ -348,7 +357,7 @@ class LocatedString(str, LocatedValue):
     else:
       return self[key:(key + 1)] if key >= 0 else self[key:((key - 1) if key < -1 else None)]
 
-  def split(self, sep, maxsplit = -1):
+  def split(self, sep: Optional[str], maxsplit: int = -1):
     if sep is None:
       raise Exception("Not supported")
 
@@ -364,18 +373,18 @@ class LocatedString(str, LocatedValue):
     fragments = self.value.split(sep, maxsplit)
     return [it(frag) for frag in fragments]
 
-  def splitlines(self, keepends = False):
+  def splitlines(self, keepends: bool = False):
     indices = [index for index, char in enumerate(self.value) if char == "\n"]
     return [self[((a + 1) if a is not None else a):((b + 1) if keepends and (b is not None) else b)] for a, b in zip([None, *indices], [*indices, None])]
 
-  def strip(self, chars = None):
+  def strip(self, chars: Optional[str] = None):
     return self.lstrip(chars).rstrip(chars)
 
-  def lstrip(self, chars = None):
+  def lstrip(self, chars: Optional[str] = None):
     stripped = self.value.lstrip(chars)
     return self[(len(self) - len(stripped)):]
 
-  def rstrip(self, chars = None):
+  def rstrip(self, chars: Optional[str] = None):
     stripped = self.value.rstrip(chars)
     return self[0:len(stripped)]
 
@@ -388,33 +397,46 @@ class LocatedString(str, LocatedValue):
 
     return lengths
 
-  def compute_location(self, position):
+  def compute_location(self, position: Position):
     return self._line_cumlengths[position.line] + position.column
 
-  def compute_ast_node_area(self, node):
+  def compute_ast_node_area(self, node: ast.expr):
     assert self.absolute
+    assert node.end_lineno is not None
+    assert node.end_col_offset is not None
 
     start = self.compute_location(Position(node.lineno - 1, node.col_offset))
     end = self.compute_location(Position(node.end_lineno - 1, node.end_col_offset))
 
     return self.area % (start, end)
 
-  def index_ast_node(self, node):
+  def index_ast_node(self, node: ast.expr):
     return LocatedString(self.value, area=self.compute_ast_node_area(node), absolute=False)
 
-  def index_syntax_error(self, err):
+  def index_syntax_error(self, err: SyntaxError):
+    assert err.lineno is not None
+    assert err.offset is not None
+    assert err.end_lineno is not None
+    assert err.end_offset is not None
+
     start = self.compute_location(Position(err.lineno - 1, err.offset - 1))
     end = self.compute_location(Position(err.end_lineno - 1, err.end_offset - 1))
 
     return self[start:end]
 
+  def offset_position(self, offset: int):
+    line = self.value[:offset].count("\n")
+    column = (offset - self.value[:offset].rindex("\n") - 1) if line > 0 else offset
+
+    return Position(line, column)
+
   @staticmethod
-  def from_match_group(match, group):
+  def from_match_group(match: re.Match, group: int):
     span = match.span(group)
     return match.string[span[0]:span[1]]
 
 
-class LocatedDict(dict, LocatedValue):
+class LocatedDict(dict, LocatedValue[dict]):
   def __new__(cls, *args, **kwargs):
     return super(LocatedDict, cls).__new__(cls)
 
@@ -426,7 +448,7 @@ class LocatedDict(dict, LocatedValue):
     return next(key for key in self.keys() if key == target)
 
 
-class LocatedList(list, LocatedValue):
+class LocatedList(list, LocatedValue[list]):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 
@@ -436,17 +458,9 @@ class LocatedList(list, LocatedValue):
 
 
 class Source(LocatedString):
-  # def __new__(cls, value, *args, **kwargs):
-  #   return super(Source, cls).__new__(cls, value)
-
-  def __init__(self, value):
+  def __init__(self, value: str, *, origin: Optional[Any] = None):
     super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
-
-  def offset_position(self, offset):
-    line = self.value[:offset].count("\n")
-    column = (offset - self.value[:offset].rindex("\n") - 1) if line > 0 else offset
-
-    return Position(line, column)
+    self.origin = origin
 
 
 ObjectComments = tuple[list[LocatedString], list[LocatedString]]
@@ -931,7 +945,9 @@ def analyze(tokens: list[Token]):
         errors.append(InvalidTokenError(token.data))
         continue
 
-      assert token.value is not None
+      assert isinstance(head.value, LocatedString)
+      assert isinstance(token.value, LocatedString)
+      assert head.area
 
       head.area += token.value.area
       head.value += token.value
@@ -989,10 +1005,13 @@ def add_location(entry: StackEntry) -> Any:
       )
 
     case StackEntryMode.String:
+      assert entry.area
       assert isinstance(entry.value, str)
+
       return LocatedString(entry.value, entry.area).rstrip("\n")
 
     case None:
+      assert entry.area
       return LocatedValueContainer(None, entry.area)
 
 

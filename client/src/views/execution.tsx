@@ -1,5 +1,7 @@
 import * as React from 'react';
 
+import viewStyles from '../../styles/components/view.module.scss';
+
 import { Chip, ChipId } from '../backends/common';
 import { BlockInspector } from '../components/block-inspector';
 import { ExecutionInspector } from '../components/execution-inspector';
@@ -8,7 +10,7 @@ import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
-import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
+import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
@@ -16,8 +18,7 @@ import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { ViewChips } from './chips';
 import { ViewChip } from './chip';
-
-import viewStyles from '../../styles/components/view.module.scss';
+import { DiagnosticsReport } from '../components/diagnostics-report';
 
 
 export interface ViewExecutionRoute {
@@ -88,7 +89,8 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
     this.setState({
-      selectedBlockPath: path
+      selectedBlockPath: path,
+      toolsTabId: 'inspector'
     });
 
     if (options?.showInspector) {
@@ -113,7 +115,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     //   return unit.getExecutionInfo(block, state, { getExecutionInfo });
     // };
 
-    let getActiveBlockPaths = (block: ProtocolBlock, location: MasterBlockLocation, path: ProtocolBlockPath): ProtocolBlockPath[] => {
+    let getActiveBlockPaths = (block: ProtocolBlock, location: unknown, path: ProtocolBlockPath): ProtocolBlockPath[] => {
       let unit = this.props.host.units[block.namespace];
       let keys = unit.getChildrenExecutionKeys!(block, location);
 
@@ -174,7 +176,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
                         return {
                           id: 'inspector',
-                          label: (showDefaultInspector ? 'Default Inspector' : 'Execution inspector'),
+                          label: (showDefaultInspector ? 'Inspector' : 'Execution inspector'),
                           contents: () => showDefaultInspector
                             ? (
                               <BlockInspector
@@ -193,7 +195,17 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                                 selectBlock={this.selectBlock.bind(this)} />
                             )
                         };
-                      })()
+                      })(),
+                      {
+                        id: 'report',
+                        label: 'Report',
+                        contents: () => (
+                          <DiagnosticsReport diagnostics={[
+                            { kind: 'error', message: 'Invalid halt signal', ranges: [] },
+                            { kind: 'warning', message: 'Missing command target', ranges: [] }
+                          ]} />
+                        )
+                      }
                     ]} />
                 )
               }

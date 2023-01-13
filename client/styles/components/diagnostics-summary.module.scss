@@ -1,0 +1,82 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+$report-icon-size: 32px;
+
+.root {
+  display: grid;
+  align-items: center;
+  gap: 0 0.8rem;
+  grid-template-columns: $report-icon-size 1fr;
+
+  min-height: 62px;
+  padding: 0 1rem;
+
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  box-shadow: 1px 1px 1px #0002;
+}
+
+.root:has(.actionRoot) {
+  grid-template-columns: $report-icon-size 1fr auto;
+}
+
+.icon {
+  grid-row: 1 / span 2;
+
+  color: $icon-grey;
+  font-size: $report-icon-size;
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 200,
+    'GRAD' 200,
+    'opsz' 24;
+}
+
+.rootSuccess .icon { color: $app-green; }
+.rootError .icon { color: $app-red; }
+.rootWarning .icon { color: $app-orange; }
+
+.title {
+  @include text-ellipsis();
+
+  align-self: end;
+  font-weight: 600;
+}
+
+.root:not(:has(.description)) .title {
+  align-self: unset;
+  grid-row: 1 / span 2;
+}
+
+.description {
+  @include text-ellipsis();
+
+  align-self: start;
+  color: #666;
+}
+
+.action {
+  &Root {
+    display: flex;
+    align-items: center;
+    column-gap: $icon-gap;
+
+    grid-column: 3;
+    grid-row: 1 / span 2;
+
+    padding: 0.2rem 0.8rem 0.2rem 0.6rem;
+    border-radius: 4px;
+
+  &:hover {
+      background-color: #f6f6f6;
+    }
+  }
+
+  &Label {
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+}

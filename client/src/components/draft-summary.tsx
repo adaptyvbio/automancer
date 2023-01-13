@@ -1,9 +1,9 @@
 import * as React from 'react';
 
+import styles from '../../styles/components/diagnostics-summary.module.scss';
+
 import { Icon } from '../components/icon';
 import * as util from '../util';
-
-import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
 
 
 export function DraftSummary(props: {
@@ -13,24 +13,24 @@ export function DraftSummary(props: {
   title: string;
 }) {
   return (
-    <div className={util.formatClass(diagnosticsStyles.reportRoot, {
+    <div className={util.formatClass(styles.root, {
       default: {},
-      error: diagnosticsStyles.reportRootError,
-      success: diagnosticsStyles.reportRootSuccess,
-      warning: diagnosticsStyles.reportRootWarning
+      error: styles.rootError,
+      success: styles.rootSuccess,
+      warning: styles.rootWarning
     }[props.status])}>
       <Icon name={{
         default: 'pending',
         error: 'report',
         success: 'new_releases',
         warning: 'warning'
-      }[props.status]} className={diagnosticsStyles.reportIcon} />
-      <div className={diagnosticsStyles.reportTitle}>{props.title}</div>
-      {props.description && <p className={diagnosticsStyles.reportDescription}>{props.description}</p>}
+      }[props.status]} className={styles.icon} />
+      <div className={styles.title}>{props.title}</div>
+      {props.description && <p className={styles.description}>{props.description}</p>}
       {props.onStart && (
-        <button type="button" className={diagnosticsStyles.reportActionRoot} onClick={props.onStart}>
-          <Icon name="play_circle" className={diagnosticsStyles.reportActionIcon} />
-          <div className={diagnosticsStyles.reportActionLabel}>Start</div>
+        <button type="button" className={styles.actionRoot} onClick={props.onStart}>
+          <Icon name="play_circle" className={styles.actionIcon} />
+          <div className={styles.actionLabel}>Start</div>
         </button>
       )}
     </div>

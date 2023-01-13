@@ -1,6 +1,11 @@
 import * as React from 'react';
 import Split from 'react-split-grid';
 
+import editorStyles from '../../styles/components/editor.module.scss';
+import spotlightStyles from '../../styles/components/spotlight.module.scss';
+import formStyles from '../../styles/components/form.module.scss';
+import viewStyles from '../../styles/components/view.module.scss';
+
 import type { Application } from '../application';
 import { Icon } from '../components/icon';
 import { TextEditor } from '../components/text-editor';
@@ -25,12 +30,7 @@ import { BaseUrl } from '../constants';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { ViewDrafts } from './protocols';
 import { ViewExecution } from './execution';
-
-import editorStyles from '../../styles/components/editor.module.scss';
-import diagnosticsStyles from '../../styles/components/diagnostics.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
-import formStyles from '../../styles/components/form.module.scss';
-import viewStyles from '../../styles/components/view.module.scss';
+import { DiagnosticsReport } from '../components/diagnostics-report';
 
 
 export interface ViewDraftProps {
@@ -344,23 +344,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                         { id: 'report',
                           label: 'Report',
                           contents: () => (
-                            <div className={util.formatClass(formStyles.main2)}>
-                              {this.state.compilation && (
-                                <div className={diagnosticsStyles.list}>
-                                  {this.state.compilation.diagnostics.map((diagnostic, index) => (
-                                    <div className={util.formatClass(diagnosticsStyles.entryRoot, {
-                                      error: diagnosticsStyles.entryRootError,
-                                      warning: diagnosticsStyles.entryRootWarning
-                                    }[diagnostic.kind])} key={index}>
-                                      <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={diagnosticsStyles.entryIcon} />
-                                      <div className={diagnosticsStyles.entryTitle}>{diagnostic.message}</div>
-                                      {/* <button type="button" className={diagnosticsStyles.entryLocation}>foo.yml 13:8</button> */}
-                                      {/* <p className={diagnosticsStyles.entryDescription}>This line contains a syntax error. See the <a href="#">documentation</a> for details.</p> */}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <DiagnosticsReport diagnostics={this.state.compilation?.diagnostics ?? []} />
                           ) }
                       ]} />
                   </div>

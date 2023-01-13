@@ -1,0 +1,62 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  display: flex;
+  flex-direction: column;
+  row-gap: 1rem;
+
+  margin: 1rem 0;
+  padding: 1rem 1.4rem;
+}
+
+
+.entry {
+  &Root {
+    display: grid;
+    column-gap: $icon-gap;
+    grid-template-columns: $icon-size 1fr auto;
+  }
+
+  &Icon {
+    align-self: start;
+    grid-row: 1 / span 2;
+
+    margin-top: -3px;
+    border-radius: 6px;
+
+    color: $icon-grey;
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 24;
+  }
+
+  &RootError &Icon { color: $app-red; }
+  &RootWarning &Icon { color: $app-orange; }
+
+  &Title {
+    font-weight: 600;
+  }
+
+  &Location {
+    text-decoration: underline dotted;
+
+    &:hover {
+      text-decoration-style: solid;
+    }
+  }
+
+  &Description {
+    grid-column: 2 / span 2;
+    margin-top: 0.2rem;
+  }
+
+  &Source {
+    grid-column: 2 / span 2;
+    color: #999;
+    font-size: 0.9rem;
+  }
+}

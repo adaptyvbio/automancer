@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { MasterBlockLocation, Protocol, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
+import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockAggregates, getBlockExplicitLabel, getBlockLabel, getBlockState, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
 import { FeatureList, SimpleFeatureList } from './features';

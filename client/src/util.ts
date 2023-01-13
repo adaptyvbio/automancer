@@ -55,6 +55,16 @@ export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) =
 }
 
 
+export function usePrevious<T>(value: T): T | undefined {
+  let ref = React.useRef<T>();
+
+  React.useEffect(() => {
+    ref.current = value;
+  }, [value]);
+
+  return ref.current;
+}
+
 export function useForceUpdate() {
   let [_, setValue] = React.useState(0);
   return () => void setValue(value => value + 1);

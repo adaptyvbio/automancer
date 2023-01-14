@@ -8,15 +8,9 @@ $border-color: #ddd;
   grid-template-rows: 1fr auto;
 }
 
-
-.editor {
-  &Root {
-    overflow-x: hidden;
-  }
-
-  &Monaco {
-    height: 100%;
-  }
+.editorPanel {
+  display: grid;
+  grid-template-rows: auto 1fr;
 }
 
 

@@ -31,6 +31,7 @@ import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { ViewDrafts } from './protocols';
 import { ViewExecution } from './execution';
 import { DiagnosticsReport } from '../components/diagnostics-report';
+import { FileTabNav } from '../components/file-tab-nav';
 
 
 export interface ViewDraftProps {
@@ -305,20 +306,57 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
           <SplitPanels
             panels={[
               { component: (
-                <TextEditor
-                  autoSave={false}
-                  compilation={this.state.compilation}
-                  draft={this.props.draft}
-                  getCompilation={this.getCompilation.bind(this)}
-                  save={(compilation, source) => {
-                    this.pool.add(async () => {
-                      await this.props.app.saveDraftSource(this.props.draft, source);
-                      await this.props.app.saveDraftCompilation(this.props.draft, compilation);
+                <div className={editorStyles.editorPanel}>
+                  <FileTabNav entries={[
+                    { id: '0',
+                      label: 'main.prl',
+                      createMenu: () => [
+                        { id: 'close', name: 'Close' },
+                        { id: '_divider', type: 'divider' },
+                        { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open' },
+                        { id: 'open', name: 'Open in external editor', icon: 'code' },
+                        { id: '_divider2', type: 'divider' },
+                        { id: 'copy_file', name: 'Copy', icon: 'content_paste' },
+                        { id: 'copy_path', name: 'Copy absolute path' },
+                        { id: '_divider3', type: 'divider' },
+                        { id: 'rename', name: 'Rename', icon: 'edit' },
+                        { id: 'delete', name: 'Move to trash', icon: 'delete' }
+                      ] },
+                    { id: '1',
+                      label: 'project.prl',
+                      detail: './library',
+                      selected: true,
+                      unsaved: true },
+                    { id: '2',
+                      label: 'project.prl',
+                      detail: './stuff',
+                      unsaved: true },
+                    { id: '3',
+                      label: 'other.prl' },
+                    { id: '4',
+                      label: 'other.prl' },
+                    { id: '5',
+                      label: 'other.prl' },
+                    { id: '6',
+                      label: 'other.prl' },
+                    { id: '7',
+                      label: 'other.prl' }
+                  ]} />
+                  <TextEditor
+                    autoSave={false}
+                    compilation={this.state.compilation}
+                    draft={this.props.draft}
+                    getCompilation={this.getCompilation.bind(this)}
+                    save={(compilation, source) => {
+                      this.pool.add(async () => {
+                        await this.props.app.saveDraftSource(this.props.draft, source);
+                        await this.props.app.saveDraftCompilation(this.props.draft, compilation);
 
-                      this.refTitleBar.current!.notify();
-                    });
-                  }}
-                  summary={!this.state.graphOpen ? summary : null} />
+                        this.refTitleBar.current!.notify();
+                      });
+                    }}
+                    summary={!this.state.graphOpen ? summary : null} />
+                </div>
               ) },
               { onToggle: (graphOpen) => void this.setState({ graphOpen }),
                 open: this.state.graphOpen,

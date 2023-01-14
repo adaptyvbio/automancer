@@ -1,0 +1,32 @@
+.root {
+  --shadow-color: #0003;
+  --shadow-length: 40; // px
+  --shadow-size: 10px;
+
+  overflow: hidden;
+  position: relative;
+
+  &::before, &::after {
+    content: "";
+
+    width: var(--shadow-size);
+
+    position: absolute;
+    top: 0;
+    bottom: 0;
+
+    z-index: 10;
+  }
+
+  &::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--shadow-color), transparent);
+    opacity: calc(var(--scroll-start) / var(--shadow-length));
+  }
+
+  &::after {
+    right: 0;
+    background: linear-gradient(-90deg, var(--shadow-color), transparent);
+    opacity: calc(var(--scroll-end) / var(--shadow-length));
+  }
+}

@@ -26,6 +26,10 @@ declare global {
     MonacoEnvironment?: monaco.Environment | undefined;
   }
 
+  namespace CSS {
+    function number(value: number): any;
+  }
+
   class CSSNumericValue {
     unit: string;
     value: number;

@@ -10,8 +10,8 @@ export type ContextMenuComponent = React.ComponentType<ContextMenuProps>;
 
 
 export type ContextMenuAreaProps = React.PropsWithChildren<{
-  createMenu(event: React.MouseEvent): MenuDef;
-  onSelect(path: MenuEntryPath): void;
+  createMenu?(event: React.MouseEvent): MenuDef;
+  onSelect?(path: MenuEntryPath): void;
 }>;
 
 export function ContextMenuArea(props: ContextMenuAreaProps) {
@@ -22,11 +22,13 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
 
   React.useEffect(() => {
     childRef.current!.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      (event.currentTarget as HTMLElement).classList.add('_context');
+      if (props.createMenu) {
+        event.preventDefault();
+        (event.currentTarget as HTMLElement).classList.add('_context');
 
-      formerFocusRef.current = document.activeElement;
-      triggerRef.current(event);
+        formerFocusRef.current = document.activeElement;
+        triggerRef.current(event);
+      }
     });
   }, []);
 
@@ -49,23 +51,25 @@ export function ContextMenuArea(props: ContextMenuAreaProps) {
 
   return (
     <>
-      <ContextMenuContext.Consumer>
-        {(ReplacedContextMenu) => {
-          let ContextMenu = ReplacedContextMenu ?? DefaultContextMenu;
+      {props.createMenu && (
+        <ContextMenuContext.Consumer>
+          {(ReplacedContextMenu) => {
+            let ContextMenu = ReplacedContextMenu ?? DefaultContextMenu;
 
-          return (
-            <ContextMenu
-              createMenu={props.createMenu}
-              onClose={(_selected) => {
-                close();
-              }}
-              onSelect={(path) => props.onSelect(List(path))}
+            return (
+              <ContextMenu
+                createMenu={props.createMenu!}
+                onClose={(_selected) => {
+                  close();
+                }}
+                onSelect={(path) => void props.onSelect?.(List(path))}
 
-              closeRef={closeRef}
-              triggerRef={triggerRef} />
-          );
-        }}
-      </ContextMenuContext.Consumer>
+                closeRef={closeRef}
+                triggerRef={triggerRef} />
+            );
+          }}
+        </ContextMenuContext.Consumer>
+      )}
 
       {React.cloneElement(child, {
         ref: (ref: HTMLElement) => {

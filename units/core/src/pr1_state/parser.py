@@ -214,7 +214,7 @@ class StateProgram(BlockProgram):
 
       # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
       # This corresponds to a pause() call on the state child program, causing itself and all its descendants to become paused.
-      if (self._mode == StateProgramMode.Normal) and event.stopped and not (self._child_stopped) and (not event.state_terminated):
+      if (self._mode == StateProgramMode.Normal) and event.stopped and (not self._child_stopped) and (not event.state_terminated):
         self._master.transfer_state(); print("X: State1")
         self._master.write_state(); print("Y: State2")
 

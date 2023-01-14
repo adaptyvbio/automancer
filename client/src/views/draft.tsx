@@ -292,8 +292,19 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
                   await backend.startDraft({
                     chipId,
-                    draftId: crypto.randomUUID(),
-                    source: this.props.draft.item.source!
+                    draft: {
+                      id: this.props.draft.id,
+                      documents: [
+                        { id: '_',
+                          contents: this.props.draft.item.source!,
+                          owner: null,
+                          path: 'draft.yml' }
+                      ],
+                      entryDocumentId: '_'
+                    },
+                    options: {
+                      trusted: true
+                    }
                   });
 
                   setTimeout(() => {
@@ -309,7 +320,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                 <div className={editorStyles.editorPanel}>
                   <FileTabNav entries={[
                     { id: '0',
-                      label: 'main.prl',
+                      label: 'Draft',
                       createMenu: () => [
                         { id: 'close', name: 'Close' },
                         { id: '_divider', type: 'divider' },
@@ -321,26 +332,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                         { id: '_divider3', type: 'divider' },
                         { id: 'rename', name: 'Rename', icon: 'edit' },
                         { id: 'delete', name: 'Move to trash', icon: 'delete' }
-                      ] },
-                    { id: '1',
-                      label: 'project.prl',
-                      detail: './library',
-                      selected: true,
-                      unsaved: true },
-                    { id: '2',
-                      label: 'project.prl',
-                      detail: './stuff',
-                      unsaved: true },
-                    { id: '3',
-                      label: 'other.prl' },
-                    { id: '4',
-                      label: 'other.prl' },
-                    { id: '5',
-                      label: 'other.prl' },
-                    { id: '6',
-                      label: 'other.prl' },
-                    { id: '7',
-                      label: 'other.prl' }
+                      ],
+                      selected: true }
                   ]} />
                   <TextEditor
                     autoSave={false}

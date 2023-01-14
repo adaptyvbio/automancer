@@ -11,6 +11,10 @@ $border-color: #ddd;
 .editorPanel {
   display: grid;
   grid-template-rows: auto 1fr;
+
+  > :only-child {
+    grid-row: 1 / -1;
+  }
 }
 
 

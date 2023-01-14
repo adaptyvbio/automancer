@@ -321,27 +321,6 @@ class Host:
     if request["type"] == "reloadUnits":
       await self.reload_units()
 
-    if request["type"] == "startDraft":
-      chip = self.chips[request["chipId"]]
-
-      if chip.master:
-        raise Exception("Already running")
-
-      draft = self.compile_draft(draft_id=request["draftId"], source=request["source"])
-      assert draft.protocol
-
-      def done_callback():
-        logger.info(f"Ran protocol on chip '{chip.id}'")
-        chip.master = None
-
-      def update_callback():
-        self.update_callback()
-
-      logger.info(f"Running protocol on chip '{chip.id}'")
-
-      chip.master = Master(draft.protocol, chip, host=self)
-      await chip.master.start(done_callback, update_callback)
-
     match request["type"]:
       case "compileDraft":
         draft = Draft.load(request["draft"])
@@ -393,8 +372,33 @@ class Host:
 
       case "sendMessageToActiveBlock":
         chip = self.chips[request["chipId"]]
+        assert chip.master
+
         chip.master.send_message(request["path"], [None] * len(request["path"]), request["message"]) # TODO: Set real execution path
+
         return None
+
+      case "startDraft":
+        chip = self.chips[request["chipId"]]
+
+        if chip.master:
+          raise Exception("Already running")
+
+        draft = Draft.load(request["draft"])
+        compilation = draft.compile(host=self)
+        assert compilation.protocol
+
+        def done_callback():
+          logger.info(f"Ran protocol on chip '{chip.id}'")
+          chip.master = None
+
+        def update_callback():
+          self.update_callback()
+
+        logger.info(f"Running protocol on chip '{chip.id}'")
+
+        chip.master = Master(compilation.protocol, chip, host=self)
+        await chip.master.start(done_callback, update_callback)
 
       case "upgradeChip":
         chip = self.chips[request["chipId"]]

@@ -8,13 +8,14 @@ from .eval import EvalEnv, EvalEnvs, EvalStack
 from .expr import PythonExpr, PythonExprAugmented
 from .. import reader
 from ..reader import LocatedValue, LocationArea
-from ..draft import DraftDiagnostic, DraftGenericError
+from ..draft import Draft, DraftDiagnostic, DraftGenericError
 from ..ureg import ureg
 from ..util import schema as sc
 from ..util.decorators import debug
 
 if TYPE_CHECKING:
   from .master2 import Master
+  from ..host import Host
 
 
 @debug
@@ -226,13 +227,15 @@ class UnresolvedBlockDataLiteral(UnresolvedBlockData):
 
 
 class FiberProtocol:
-  def __init__(self, *, global_env: EvalEnv, name: Optional[str], root: BaseBlock):
+  def __init__(self, *, draft: Draft, global_env: EvalEnv, name: Optional[str], root: BaseBlock):
+    self.draft = draft
     self.global_env = global_env
     self.name = name
     self.root = root
 
   def export(self):
     return {
+      "draft": self.draft.export(),
       "name": self.name,
       "root": self.root.export()
     }
@@ -242,7 +245,7 @@ class GlobalEnv(EvalEnv):
   pass
 
 class FiberParser:
-  def __init__(self, text: str, *, Parsers: Sequence[type[BaseParser]], host):
+  def __init__(self, draft: Draft, *, Parsers: Sequence[type[BaseParser]], host: 'Host'):
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
     self.host = host
@@ -251,7 +254,7 @@ class FiberParser:
     self.analysis = lang.Analysis()
     self.analysis_context = AnalysisContext(ureg=self.ureg)
 
-    data, reader_errors, reader_warnings = reader.loads(text)
+    data, reader_errors, reader_warnings = reader.loads(draft.entry_document.source)
 
     self.analysis.errors += reader_errors
     self.analysis.warnings += reader_warnings
@@ -305,13 +308,13 @@ class FiberParser:
     else:
       entry_block = Ellipsis
 
-    print()
+    # print()
 
-    print("<= ANALYSIS =>")
-    print("Errors >", self.analysis.errors)
-    print()
+    # print("<= ANALYSIS =>")
+    # print("Errors >", self.analysis.errors)
+    # print()
 
-    import json
+    # import json
 
     # if not isinstance(entry_block, EllipsisType):
     #   print("<= ENTRY =>")
@@ -326,7 +329,12 @@ class FiberParser:
       # print()
 
     if not isinstance(entry_block, EllipsisType):
-      self.protocol = FiberProtocol(global_env=global_env, name=output['_']['name'], root=entry_block)
+      self.protocol = FiberProtocol(
+        draft=draft,
+        global_env=global_env,
+        name=output['_']['name'],
+        root=entry_block
+      )
     else:
       self.protocol = None
 

@@ -34,8 +34,8 @@ export interface BaseBackend {
   skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   startDraft(options: {
     chipId: ChipId;
-    draftId: DraftId;
-    source: string;
+    draft: HostDraft;
+    options: HostDraftCompilerOptions;
   }): Promise<void>;
   upgradeChip(chipId: ChipId): Promise<void>;
 

@@ -4,7 +4,7 @@ import time
 from typing import Any, Optional
 
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.process import ProcessExecEvent
+from pr1.fiber.process import Process as ProcessIntf, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent
 from pr1.units.base import BaseProcessRunner
 
 from . import namespace
@@ -29,7 +29,7 @@ class ProcessPoint:
   def import_value(cls, value: Any):
     return cls(progress=value["progress"])
 
-class Process:
+class Process(ProcessIntf):
   def __init__(self, data: Any, *, runner: 'Runner'):
     self._data = data
 
@@ -98,10 +98,9 @@ class Process:
           # yield ProcessExecEvent(location=ProcessLocation(self._progress, paused=True))
           # await asyncio.sleep(2)
 
-          yield ProcessExecEvent(
+          yield ProcessPauseEvent(
             duration=remaining_duration,
             location=ProcessLocation(progress, paused=True),
-            stopped=True,
             time=current_time
           )
 
@@ -111,10 +110,8 @@ class Process:
             except asyncio.CancelledError:
               # The process is halting while being paused.
 
-              yield ProcessExecEvent(
-                duration=remaining_duration,
+              yield ProcessTerminationEvent(
                 location=ProcessLocation(progress, paused=True),
-                stopped=True,
                 time=current_time
               )
 
@@ -127,11 +124,8 @@ class Process:
       finally:
         self._task = None
 
-    yield ProcessExecEvent(
-      duration=0.0,
-      location=ProcessLocation(1.0),
-      stopped=True,
-      terminated=True
+    yield ProcessTerminationEvent(
+      location=ProcessLocation(1.0)
     )
 
 class Runner(BaseProcessRunner):

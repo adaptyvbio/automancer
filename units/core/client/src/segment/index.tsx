@@ -17,10 +17,11 @@ export interface Location {
 }
 
 export enum LocationMode {
-  Halting = 0,
-  Normal = 1,
-  Pausing = 2,
-  Paused = 3
+  Broken = 0,
+  Halting = 1,
+  Normal = 2,
+  Pausing = 3,
+  Paused = 4
 }
 
 export interface Point {

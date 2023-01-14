@@ -49,8 +49,8 @@ export abstract class BackendCommon implements BaseBackend {
   abstract skipSegment(chipId: ChipId, segmentIndex: number, processState?: object): Promise<void>;
   abstract startDraft(options: {
     chipId: ChipId;
-    draftId: DraftId;
-    source: string;
+    draft: HostDraft;
+    options: HostDraftCompilerOptions;
   }): Promise<void>;
   abstract upgradeChip(chipId: ChipId): Promise<void>;
 

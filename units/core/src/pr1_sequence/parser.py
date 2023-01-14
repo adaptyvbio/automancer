@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from enum import IntEnum
+import functools
 from types import EllipsisType
 from typing import Any, Optional
 
@@ -22,22 +23,24 @@ class SequenceParser(BaseParser):
   priority = 700
 
   root_attributes = dict()
-  segment_attributes = {
-    'actions': lang.Attribute(
-      description="Describes a nested list of steps.",
-      documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
-      kind='class',
-      optional=True,
-      signature="actions:\n  - <action 1>\n  - <action 2>",
-      type=lang.ListType(lang.AnyType())
-    )
-  }
+
+  @functools.cached_property
+  def segment_attributes(self):
+    return {
+      'actions': lang.Attribute(
+        description="Describes a nested list of steps.",
+        documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
+        kind='class',
+        optional=True,
+        signature="actions:\n  - <action 1>\n  - <action 2>",
+        type=lang.ListType(self._fiber.segment_dict)
+      )
+    }
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
   def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
-  # def parse_block(self, block_attrs: Any, /, adoption_envs, adoption_stack, runtime_envs):
     attrs = block_attrs[self.namespace]
 
     if 'actions' in attrs:
@@ -47,7 +50,7 @@ class SequenceParser(BaseParser):
       actions_info: list[ActionInfo] = list()
 
       for action_attrs in attrs['actions']:
-        action_data = self._fiber.parse_block(action_attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, allow_expr=True)
+        action_data = self._fiber.parse_block_attrs(action_attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, allow_expr=True)
 
         if not isinstance(action_data, EllipsisType):
           actions_info.append((action_data, action_attrs.area))

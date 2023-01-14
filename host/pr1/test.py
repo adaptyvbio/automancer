@@ -56,27 +56,37 @@ async def main():
 
   await host.initialize()
 
+  from .document import Document
+  from .draft import Draft
   from .fiber.parser import FiberParser
 
-  parser = FiberParser("""
+  document = Document.text("""
 name: Test
 
 steps:
-  wait: 10s
+  wait: 2s
     # - wait: 1s
   # actions:
   #   - Mock.valueBool: true
   #     wait: 1s
   #   - wait: 1s
   Mock.valueBool: false
-""",
+""")
+
+  draft = Draft(
+    documents=[document],
+    entry_document_id=document.id,
+    id="a"
+  )
+
+  parser = FiberParser(
+    draft,
     host=host,
     Parsers=host.manager.Parsers
   )
 
 
   # print(parser.protocol.root)
-  return
 
   from .fiber.master2 import Master
 
@@ -106,9 +116,9 @@ steps:
       # await asyncio.sleep(1.0)
       # print("\n= PAUSING\n")
       # master._program._child_program._child_program._child_program.pause()
-      await asyncio.sleep(0.5)
-      print("\n= HALTING\n")
-      master._program._child_program._child_program._child_program.halt()
+      # await asyncio.sleep(0.5)
+      # print("\n= HALTING\n")
+      # master._program._child_program._child_program._child_program.halt()
 
       # print("\n= PAUSING\n")
       # master._program.pause()

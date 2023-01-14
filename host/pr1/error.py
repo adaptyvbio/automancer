@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from typing import Optional
 
 from .reader import LocatedString, LocatedValue, LocationArea
@@ -55,11 +55,12 @@ class ErrorFileReference(ErrorReference):
       "path": self.path
     }
 
-@dataclass(kw_only=True)
+@dataclass
 class Error(Exportable):
+  message: str
+  _: KW_ONLY
   description: list[str] = field(default_factory=list)
   id: Optional[int] = None
-  message: str
   references: list[ErrorReference] = field(default_factory=list)
 
   def export(self):
@@ -72,7 +73,7 @@ class Error(Exportable):
 
 @dataclass(kw_only=True)
 class MasterError(Error, Exportable):
-  time: int
+  time: Optional[int] = None
 
   def export(self):
     return {

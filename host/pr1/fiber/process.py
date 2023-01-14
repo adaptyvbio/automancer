@@ -4,6 +4,7 @@ from enum import IntEnum
 from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
+from ..error import MasterError
 from .parser import BlockState
 from ..util.decorators import debug
 from ..util.misc import Exportable
@@ -30,40 +31,68 @@ class ProgramExecDuration:
     }
 
 
-# class ProgramExecMode(IntEnum):
-#   Normal = 0
-#   Paused = 1
-#   Halted = 2
-#   # Done = 5
-
-
 T = TypeVar('T', bound=Exportable)
 
 @dataclass(kw_only=True)
 class ProgramExecEvent(Generic[T]):
-  location: Optional[T] = None # Optional?
+  errors: Optional[list[Any]] = None
+  location: Optional[T] = None
   partial: bool = False
   state_terminated: bool = False
   terminated: bool = False
   stopped: bool = False
   time: Optional[float] = None
 
+  def inherit(
+    self,
+    *,
+    errors: Optional[list[Any]],
+    location: Optional[T],
+    terminated: bool = False
+  ):
+    return type(self)(
+      errors=((self.errors or list()) + (errors or list())),
+      location=location,
+      partial=self.partial,
+      state_terminated=self.state_terminated,
+      terminated=terminated,
+      stopped=self.stopped,
+      time=self.time
+    )
+
+
 @dataclass(kw_only=True)
-class ProcessExecEvent:
-  duration: Optional[ProgramExecDuration | DurationLike] = None
-  location: Exportable
-  pausable: bool = False
-  stopped: bool = False
-  terminated: bool = False
+class BaseProcessEvent:
+  errors: Optional[list[MasterError]] = None
+  location: Optional[Exportable] = None
   time: Optional[float] = None
+
+@dataclass(kw_only=True)
+class ProcessExecEvent(BaseProcessEvent):
+  duration: Optional[ProgramExecDuration | DurationLike] = None
+  pausable: Optional[bool] = None
+
+@dataclass(kw_only=True)
+class ProcessPauseEvent(BaseProcessEvent):
+  duration: Optional[ProgramExecDuration | DurationLike] = None
+
+@dataclass(kw_only=True)
+class ProcessFailureEvent(BaseProcessEvent):
+  error: MasterError
+
+@dataclass(kw_only=True)
+class ProcessTerminationEvent(BaseProcessEvent):
+  pass
+
+ProcessEvent = ProcessExecEvent | ProcessFailureEvent | ProcessPauseEvent | ProcessTerminationEvent
 
 
 class Process(Protocol[T]):
-  def cancel(self):
-    ...
+  def __init__(self, process_data: Any, /, runner: Any):
+    pass
 
-  def halt(self):
-    ...
+  def halt(self) -> Optional[bool]:
+    return None
 
   def jump(self, point: Any):
     ...

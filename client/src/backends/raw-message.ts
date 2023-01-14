@@ -130,14 +130,14 @@ export abstract class RawMessageBackend extends BackendCommon {
 
   async startDraft(options: {
     chipId: string;
-    draftId: DraftId;
-    source: string;
+    draft: HostDraft;
+    options: HostDraftCompilerOptions;
   }) {
     await this._request({
       type: 'startDraft',
       chipId: options.chipId,
-      draftId: options.draftId,
-      source: options.source
+      draft: options.draft,
+      options: options.options
     });
   }
 

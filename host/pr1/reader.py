@@ -458,8 +458,12 @@ class LocatedList(list, LocatedValue[list]):
 
 
 class Source(LocatedString):
-  def __init__(self, value: str, *, origin: Optional[Any] = None):
-    super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
+  def __init__(self, value: LocatedString | str, *, origin: Optional[Any] = None):
+    if isinstance(value, LocatedString):
+      super().__init__(value.value, value.area)
+    else:
+      super().__init__(value, LocationArea([LocationRange.full_string(self, value)]))
+
     self.origin = origin
 
 

@@ -24,7 +24,7 @@ class Draft:
     from .fiber.parser import FiberParser
 
     parser = FiberParser(
-      self.entry_document.source,
+      draft=self,
       host=host,
       Parsers=host.manager.Parsers
     )
@@ -35,6 +35,13 @@ class Draft:
       draft_id=self.id,
       protocol=parser.protocol
     )
+
+  def export(self):
+    return {
+      "documents": [document.export() for document in self.documents],
+      "entryDocumentId": self.entry_document_id,
+      "id": self.id
+    }
 
   @classmethod
   def load(cls, data: Any):

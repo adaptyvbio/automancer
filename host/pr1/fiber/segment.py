@@ -4,18 +4,16 @@ from enum import IntEnum
 import time
 import traceback
 from types import EllipsisType
-from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence
+from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence, cast
 
 from .eval import EvalStack
 
-from ..util.iterators import CoupledStateIterator2
-from ..util.ref import Ref
 from ..host import logger
-from .process import Process, ProgramExecEvent
+from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
-from ..devices.claim import ClaimSymbol, Claimable
-from ..draft import DraftDiagnostic, DraftGenericError
+from ..devices.claim import ClaimSymbol
+from ..draft import DraftDiagnostic
 from ..reader import LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable
@@ -57,22 +55,27 @@ class SegmentTransform(BaseTransform):
 
 
 class SegmentProgramMode(IntEnum):
-  Halted = -1
+  Starting = -1
+  Terminated = -2
 
-  Halting = 0
-  Normal = 1
-  Pausing = 2
-  Paused = 3
+  Broken = 0
+  Halting = 1
+  Normal = 2
+  Pausing = 3
+  Paused = 4
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
+  error: Optional[Any]
   mode: SegmentProgramMode
+  pausable: bool
   process: Any
   time: float
 
   def export(self):
     return {
       "mode": self.mode,
+      "pausable": self.pausable,
       "process": self.process.export(),
       "time": self.time * 1000.0
     }
@@ -85,6 +88,19 @@ class SegmentProgramPoint:
   def import_value(cls, data: Any, /, block: 'SegmentBlock', *, master):
     return cls(process=None)
 
+
+class ProcessError(Exception):
+  pass
+
+class ProcessInternalError(ProcessError):
+  def __init__(self, exception: Exception, /):
+    self.exception = exception
+
+class ProcessProtocolError(ProcessError):
+  def __init__(self, message: str, /):
+    self.message = message
+
+
 class SegmentProgram(BlockProgram):
   def __init__(self, block: 'SegmentBlock', master, parent):
     self._block = block
@@ -94,6 +110,10 @@ class SegmentProgram(BlockProgram):
     self._mode: SegmentProgramMode
     self._point: Optional[SegmentProgramPoint]
     self._process: Process
+
+  @property
+  def _settled(self):
+    return self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated)
 
   @property
   def busy(self):
@@ -139,9 +159,12 @@ class SegmentProgram(BlockProgram):
 
   async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
     runner = self._master.chip.runners[self._block._process.namespace]
-    self._point = initial_point or SegmentProgramPoint(process=None)
 
+    self._point = initial_point or SegmentProgramPoint(process=None)
     self._master.transfer_state(); print("X: Segment")
+
+    process_location: Optional[Exportable] = None
+    process_pausable: bool = False
 
     async def run():
       while self._point:
@@ -150,34 +173,95 @@ class SegmentProgram(BlockProgram):
         self._point = None
         self._process = runner.Process(self._block._process.data, runner=runner)
 
-        async for event in self._process.run(point.process, stack=stack):
-          yield event
+        try:
+          async for event in self._process.run(point.process, stack=stack):
+            yield cast(ProcessEvent, event) # TODO: Remove
+        except Exception as e:
+          yield ProcessInternalError(e)
+
+        if self._mode not in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated):
+          yield ProcessProtocolError(f"Process returned without sending a {type(ProcessFailureEvent)} or {type(ProcessTerminationEvent)} event")
 
     async for event in run():
-      event_time = event.time or time.time()
+      event_errors = list()
+      event_time = None
+      location_error: Optional[Any] = None
 
-      if (self._mode == SegmentProgramMode.Pausing) and event.stopped:
-        self._mode = SegmentProgramMode.Paused
-      if (self._mode == SegmentProgramMode.Paused) and (not event.stopped):
-        self._mode = SegmentProgramMode.Normal
+      try:
+        if isinstance(event, ProcessError):
+          raise event
 
-      halted = (self._mode == SegmentProgramMode.Halting) and event.stopped
+        event_time = event.time
+        process_location = event.location or process_location
+
+        if event.errors:
+          event_errors += event.errors
+
+        if self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated):
+          raise ProcessProtocolError(f"Process sent a {type(event).__name__} event while terminated")
+
+        match event:
+          case ProcessExecEvent(pausable=pausable):
+            if self._mode == SegmentProgramMode.Starting:
+              if not process_location:
+                raise ProcessProtocolError(f"Process sent a {ProcessExecEvent.__name__} event with a falsy location while starting")
+
+              self._mode = SegmentProgramMode.Normal
+
+            if pausable is not None:
+              process_pausable = pausable
+
+          case ProcessFailureEvent(error=error):
+            self._mode = SegmentProgramMode.Broken
+            location_error = error
+
+          case ProcessPauseEvent():
+            if self._mode != SegmentProgramMode.Pausing:
+              raise ProcessProtocolError(f"Process sent a {ProcessPauseEvent.__name__} event not while pausing")
+
+            self._mode = SegmentProgramMode.Paused
+
+          case ProcessTerminationEvent():
+            self._mode = SegmentProgramMode.Terminated
+
+          case _:
+            raise ProcessProtocolError(f"Process sent an invalid object")
+
+      except (ProcessInternalError, ProcessProtocolError) as e:
+        logger.error(f"Process protocol error: {e}")
+
+        # Cancel the jump request, if any
+        self._point = None
+
+        if self._mode == SegmentProgramMode.Terminated:
+          logger.error(f"This error cannot be reported to the user.")
+          continue
+        else:
+          self._mode = SegmentProgramMode.Broken
+
+          event_errors.append(e)
+          location_error = e
+
+          yield ProgramExecEvent(
+            errors=[e]
+          )
+
+      event_time = event_time or time.time()
 
       yield ProgramExecEvent(
+        errors=event_errors,
         location=SegmentProgramLocation(
+          error=location_error,
           mode=self._mode,
-          process=event.location,
+          pausable=process_pausable,
+          process=process_location,
           time=event_time
         ),
-        stopped=event.stopped,
-
-        # Allow processes to implicitly have terminated=True when halted
-        state_terminated=(event.terminated or halted),
-        terminated=(event.terminated or halted)
+        partial=True,
+        stopped=(self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Paused, SegmentProgramMode.Terminated)),
+        state_terminated=(self._mode == SegmentProgramMode.Terminated),
+        terminated=(self._mode == SegmentProgramMode.Terminated)
       )
-
-      if halted:
-        self._mode = SegmentProgramMode.Halted
 
 
 @dataclass

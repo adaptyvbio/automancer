@@ -17,6 +17,15 @@ class Document:
     self.owner = owner
     self.path = path
     self.source = Source(contents)
+    self.source.origin = self
+
+  def export(self):
+    return {
+      "id": self.id,
+      "owner": self.owner,
+      "path": str(self.path),
+      "source": self.source
+    }
 
   @classmethod
   def load(cls, data: Any, /):
@@ -30,9 +39,11 @@ class Document:
       ) if (data_owner := data["owner"]) else None)
     )
 
-  # def reference(self, area: Optional[LocationArea] = None, *, id: str = 'main'):
-  #   return ErrorDocumentReference(
-  #     area=area,
-  #     id=id,
-  #     document_id=self.id
-  #   )
+  @classmethod
+  def text(cls, contents: str, id: str = 'default', path: PurePosixPath = PurePosixPath('/default')):
+    return cls(
+      contents=Source(contents),
+      id=id,
+      owner=None,
+      path=path
+    )

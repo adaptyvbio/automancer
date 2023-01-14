@@ -5,6 +5,7 @@ import logging
 import os
 import platform
 import signal
+import socket
 import sys
 import traceback
 import uuid
@@ -12,10 +13,12 @@ from pathlib import Path
 from typing import Optional
 
 from pr1 import Host
+from zeroconf import IPVersion
+from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
 logger = logging.getLogger("pr1.app")
 
-from .bridges.protocol import ClientClosed, ClientProtocol
+from .bridges.protocol import BridgeAdvertisementInfo, ClientClosed, ClientProtocol
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .conf import Conf
@@ -141,7 +144,52 @@ class App:
     # Misc
 
     self.updating = False
+    self.zeroconf = None
+    self.zeroconf_services = list()
     self._main_task = None
+
+
+  async def initialize(self):
+    # Register advertisement
+
+    if self.conf.advertisement:
+      infos = list[BridgeAdvertisementInfo]()
+
+      for bridge in self.bridges:
+        infos += bridge.advertise()
+
+      self.zeroconf_services = [AsyncServiceInfo(
+        f"_prone.{info.type}",
+        f"{self.conf.identifier}._prone." + info.type,
+        # self.conf.advertisement.description,
+        addresses=[socket.inet_aton(info.address)],
+        port=info.port,
+        properties={
+          'description': self.conf.advertisement.description,
+          'identifier': self.conf.identifier,
+          'requires_auth': False
+        },
+        server=f"{self.conf.identifier}.local"
+      ) for info in infos]
+
+      logger.debug(f"Registering {len(self.zeroconf_services)} zeroconf services")
+
+      self.zeroconf = AsyncZeroconf(ip_version=IPVersion.V4Only)
+      await asyncio.gather(*[self.zeroconf.async_register_service(service) for service in self.zeroconf_services])
+
+      logger.debug("Registered zeroconf services")
+
+  async def deinitialize(self):
+    if self.zeroconf:
+      logger.debug(f"Unregistering {len(self.zeroconf_services)} zeroconf services")
+
+      await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in self.zeroconf_services])
+      await self.zeroconf.async_close()
+
+      self.zeroconf = None
+      self.zeroconf_services.clear()
+
+      logger.debug("Unregistered zeroconf services")
 
 
   async def handle_client(self, client: ClientProtocol):
@@ -279,6 +327,7 @@ class App:
     logger.info("Starting app")
 
     loop = asyncio.get_event_loop()
+    loop.run_until_complete(self.initialize())
     loop.run_until_complete(self.host.initialize())
 
     logger.debug(f"Initializing {len(self.bridges)} bridges")
@@ -300,6 +349,8 @@ class App:
         await asyncio.gather(*tasks)
       except asyncio.CancelledError:
         logger.debug(f"Canceled {len(tasks)} tasks")
+
+      await self.deinitialize()
 
     tasks.add(asyncio.ensure_future(self.host.start()))
     self._main_task = asyncio.ensure_future(start())

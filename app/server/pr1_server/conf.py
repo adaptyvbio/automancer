@@ -11,7 +11,7 @@ from .bridges.socket import SocketBridge
 from .bridges.protocol import BridgeProtocol
 
 
-VERSION = 3
+VERSION = 4
 
 class VersionMismatch(Exception):
   pass
@@ -27,7 +27,6 @@ ConfAuthDetails = ConfAuthDetailsPassword
 class ConfAuthMethod:
   details: ConfAuthDetails
   label: str
-
 
 @dataclass(kw_only=True)
 class ConfAuth:
@@ -170,7 +169,24 @@ class ConfBridgeWebsocket(ConfBridge):
 
 
 @dataclass(kw_only=True)
+class ConfAdvertisement:
+  description: str
+
+  def export(self):
+    return {
+      "description": self.description
+    }
+
+  @classmethod
+  def load(cls, data):
+    return cls(
+      description=data["description"]
+    )
+
+
+@dataclass(kw_only=True)
 class Conf:
+  advertisement: Optional[ConfAdvertisement]
   auth: ConfAuth
   bridges: list[ConfBridge]
   identifier: str
@@ -178,6 +194,7 @@ class Conf:
 
   def export(self):
     return {
+      "advertisement": self.advertisement and self.advertisement.export(),
       "auth": self.auth.export(),
       "bridges": [bridge.export() for bridge in self.bridges],
       "identifier": self.identifier,
@@ -189,6 +206,7 @@ class Conf:
     identifier = str(uuid.uuid4())
 
     return cls(
+      advertisement=None,
       auth=ConfAuth.create(),
       bridges=[
         ConfBridgeSocketUnix(path=f"/tmp/pr1/{identifier}.sock")
@@ -203,6 +221,7 @@ class Conf:
       raise VersionMismatch()
 
     return cls(
+      advertisement=(data["advertisement"] and ConfAdvertisement.load(data["advertisement"])),
       auth=ConfAuth.load(data["auth"]),
       bridges=[ConfBridge.load(data_bridge) for data_bridge in data["bridges"]],
       identifier=data["identifier"],

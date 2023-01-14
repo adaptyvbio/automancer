@@ -16,7 +16,7 @@ import * as util from './util';
 export class LocalHost {
   closed!: Promise<{ code: number; } | null>;
   private process!: ReturnType<typeof childProcess.spawn>;
-  private logger = this.app.logger.getChild(['localHost', this.hostSettings.id.slice(0, 8)]);
+  private logger = this.app.logger.getChild(['localHost', this.hostSettings.options.identifier.slice(0, 8)]);
   private stateMessage: any | null = null;
   private windowReady: boolean = false;
 
@@ -50,6 +50,9 @@ export class LocalHost {
 
     let conf = {
       ...hostOptions.conf,
+      advertisement: {
+        description: this.hostSettings.label
+      },
       bridges: [
         ...hostOptions.conf.bridges,
         { type: 'stdio',

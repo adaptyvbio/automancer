@@ -8,7 +8,7 @@ import threading
 from typing import Any, Optional
 import uuid
 
-from .protocol import BridgeProtocol, ClientClosed, ClientProtocol
+from .protocol import BridgeAdvertisementInfo, BridgeProtocol, ClientClosed, ClientProtocol
 
 
 class Client(ClientProtocol):
@@ -26,6 +26,7 @@ class Client(ClientProtocol):
     self._socket = client_socket
 
   def close(self):
+    self._socket.close()
     del self._bridge._tasks[self.id]
 
   async def recv(self):
@@ -68,6 +69,18 @@ class SocketBridge(BridgeProtocol):
     self._family = family
     self._server: socket.socket
     self._tasks = dict[str, asyncio.Task]()
+
+  def advertise(self):
+    if self._family != socket.AF_INET:
+      return list()
+
+    host, port = self._address
+
+    return [BridgeAdvertisementInfo(
+      type="Pr1._tcp.local.",
+      address=host,
+      port=port
+    )]
 
   async def initialize(self):
     self._server = socket.socket(self._family, socket.SOCK_STREAM)

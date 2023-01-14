@@ -13,7 +13,7 @@ from OpenSSL import SSL, crypto
 
 from .. import logger as parent_logger
 from ..auth import agents as auth_agents
-from .protocol import BridgeProtocol, ClientClosed, ClientProtocol
+from .protocol import BridgeAdvertisementInfo, BridgeProtocol, ClientClosed, ClientProtocol
 
 if TYPE_CHECKING:
   from ..conf import ConfBridgeWebsocket
@@ -154,6 +154,12 @@ class WebsocketBridge(BridgeProtocol):
     self.static_site = None
     self.static_url = None
 
+  def advertise(self):
+    return [BridgeAdvertisementInfo(
+      type="_http._tcp.local.",
+      address=self.conf.hostname,
+      port=self.conf.port
+    )]
 
   async def initialize(self):
     await self.static_runner.setup()

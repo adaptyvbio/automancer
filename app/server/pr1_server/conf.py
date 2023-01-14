@@ -1,6 +1,14 @@
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, Protocol
 import uuid
+
+from .bridges.stdio import StdioBridge
+
+from .bridges.websocket import WebsocketBridge
+
+from .bridges.socket import SocketBridge
+
+from .bridges.protocol import BridgeProtocol
 
 
 VERSION = 3
@@ -9,7 +17,7 @@ class VersionMismatch(Exception):
   pass
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ConfAuthDetailsPassword:
   password: str
   type: Literal['password']
@@ -21,7 +29,7 @@ class ConfAuthMethod:
   label: str
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ConfAuth:
   methods: list[ConfAuthMethod]
 
@@ -40,8 +48,92 @@ class ConfAuth:
       methods=[]
     )
 
-@dataclass
-class ConfRemote:
+
+class ConfBridge(Protocol):
+  def create_bridge(self, *, app) -> BridgeProtocol:
+    ...
+
+  def export(self) -> Any:
+    ...
+
+  @staticmethod
+  def load(data):
+    match data["type"]:
+      case "socket":
+        return ConfBridgeSocket.load(data["options"])
+      case "stdio":
+        return ConfBridgeStdio.load(data["options"])
+      case "websocket":
+        return ConfBridgeWebsocket.load(data["options"])
+      case _:
+        raise ValueError()
+
+class ConfBridgeSocket:
+  @staticmethod
+  def load(data):
+    match data["type"]:
+      case "inet":
+        return ConfBridgeSocketInet(
+          host=data["host"],
+          port=data["port"]
+        )
+      case "unix":
+        return ConfBridgeSocketUnix(
+          path=data["path"]
+        )
+      case _:
+        raise ValueError()
+
+@dataclass(kw_only=True)
+class ConfBridgeSocketInet(ConfBridge):
+  host: str
+  port: int
+
+  def create_bridge(self, *, app):
+    return SocketBridge.inet(self.host, self.port)
+
+  def export(self):
+    return {
+      "type": "socket",
+      "options": {
+        "type": "inet",
+        "host": self.host,
+        "port": self.port
+      }
+    }
+
+@dataclass(kw_only=True)
+class ConfBridgeSocketUnix(ConfBridge):
+  path: str
+
+  def create_bridge(self, *, app):
+    return SocketBridge.unix(self.path)
+
+  def export(self):
+    return {
+      "type": "socket",
+      "options": {
+        "type": "unix",
+        "path": self.path
+      }
+    }
+
+@dataclass(kw_only=True)
+class ConfBridgeStdio(ConfBridge):
+  def create_bridge(self, *, app):
+    return StdioBridge(app=app)
+
+  def export(self):
+    return {
+      "type": "stdio"
+    }
+
+  @classmethod
+  def load(cls, data):
+    return cls()
+
+@dataclass(kw_only=True)
+class ConfBridgeWebsocket(ConfBridge):
   hostname: str
   port: int
   secure: bool
@@ -49,14 +141,20 @@ class ConfRemote:
   static_authenticate_clients: bool
   static_port: int
 
+  def create_bridge(self, *, app):
+    return WebsocketBridge(app, conf=self)
+
   def export(self):
     return {
-      "hostname": self.hostname,
-      "port": self.port,
-      "secure": self.secure,
-      "singleClient": self.single_client,
-      "staticAuthenticateClients": self.static_authenticate_clients,
-      "staticPort": self.static_port
+      "type": "websocket",
+      "options": {
+        "hostname": self.hostname,
+        "port": self.port,
+        "secure": self.secure,
+        "singleClient": self.single_client,
+        "staticAuthenticateClients": self.static_authenticate_clients,
+        "staticPort": self.static_port
+      }
     }
 
   @classmethod
@@ -71,27 +169,31 @@ class ConfRemote:
     )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Conf:
   auth: ConfAuth
+  bridges: list[ConfBridge]
   identifier: str
-  remote: Optional[ConfRemote]
   version: int
 
   def export(self):
     return {
       "auth": self.auth.export(),
+      "bridges": [bridge.export() for bridge in self.bridges],
       "identifier": self.identifier,
-      "remote": self.remote.export() if self.remote else None,
       "version": self.version
     }
 
   @classmethod
   def create(cls):
+    identifier = str(uuid.uuid4())
+
     return cls(
       auth=ConfAuth.create(),
-      identifier=str(uuid.uuid4()),
-      remote=None,
+      bridges=[
+        ConfBridgeSocketUnix(path=f"/tmp/pr1/{identifier}.sock")
+      ],
+      identifier=identifier,
       version=VERSION
     )
 
@@ -102,7 +204,7 @@ class Conf:
 
     return cls(
       auth=ConfAuth.load(data["auth"]),
+      bridges=[ConfBridge.load(data_bridge) for data_bridge in data["bridges"]],
       identifier=data["identifier"],
-      remote=(ConfRemote.load(data["remote"]) if data["remote"] else None),
       version=data["version"]
     )

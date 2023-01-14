@@ -16,7 +16,6 @@ setup(
   },
 
   install_requires=[
-    "appdirs==1.4.4",
     "aiohttp==3.7.4",
     "bcrypt==3.2.2",
     "pyOpenSSL==22.0.0",

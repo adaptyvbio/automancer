@@ -48,7 +48,16 @@ export class LocalHost {
       // this.logger.debug(...);
     }
 
-    let args = ['-m', 'pr1_server', '--conf', JSON.stringify(hostOptions.conf), '--data-dir', hostOptions.dirPath, '--local'];
+    let conf = {
+      ...hostOptions.conf,
+      bridges: [
+        ...hostOptions.conf.bridges,
+        { type: 'stdio',
+          options: {} }
+      ]
+    };
+
+    let args = ['-m', 'pr1_server', '--conf', JSON.stringify(conf), '--data-dir', hostOptions.dirPath];
     let executable = hostOptions.pythonPath;
 
     if (hostOptions.architecture && util.isDarwin) {

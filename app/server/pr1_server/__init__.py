@@ -11,17 +11,13 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-import appdirs
-from pr1 import Host, reader
-from pr1.util import schema as sc
+from pr1 import Host
 
 logger = logging.getLogger("pr1.app")
 
-from .auth import agents as auth_agents
-from .bridges.socket import SocketBridge
+from .bridges.protocol import ClientClosed, ClientProtocol
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
-from .client import ClientClosed
 from .conf import Conf
 from .session import Session
 from .trash import trash as trash_file
@@ -138,22 +134,8 @@ class App:
 
     # Create bridges
 
-    self.bridges = set()
-
-    if args.local:
-      self.owner_bridge = StdioBridge(self)
-      self.bridges.add(self.owner_bridge)
-    else:
-      self.owner_bridge = None
-
-    if self.conf.remote:
-      self.remote_bridge = WebsocketBridge(self, conf=self.conf.remote)
-      self.bridges.add(self.remote_bridge)
-    else:
-      self.remote_bridge = None
-
-    socket_bridge = SocketBridge.inet("", 17000)
-    self.bridges.add(socket_bridge)
+    self.bridges = {bridge_conf.create_bridge(app=self) for bridge_conf in self.conf.bridges}
+    self.owner_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, StdioBridge)), None)
 
 
     # Misc
@@ -162,12 +144,13 @@ class App:
     self._main_task = None
 
 
-  async def handle_client(self, client):
+  async def handle_client(self, client: ClientProtocol):
     try:
       logger.debug(f"Added client '{client.id}'")
 
       self.clients[client.id] = client
       requires_auth = self.auth_agents and client.remote
+      websocket_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, WebsocketBridge)), None)
 
       await client.send({
         "type": "initialize",
@@ -176,7 +159,7 @@ class App:
         ] if requires_auth else None,
         "features": {},
         "identifier": self.conf.identifier,
-        "staticUrl": (self.remote_bridge.static_url if self.remote_bridge else None),
+        "staticUrl": (websocket_bridge.static_url if websocket_bridge else None),
         "version": self.conf.version
       })
 
@@ -218,9 +201,6 @@ class App:
     except Exception:
       traceback.print_exc()
     finally:
-      for session in client.sessions.values():
-        session.close()
-
       client.close()
       del self.clients[client.id]
 
@@ -354,7 +334,6 @@ def main():
   parser.add_argument("--conf")
   parser.add_argument("--data-dir", required=True)
   parser.add_argument("--initialize", action='store_true')
-  parser.add_argument("--local", action='store_true')
 
   args = parser.parse_args()
 

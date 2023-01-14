@@ -2,17 +2,21 @@ import asyncio
 import json
 import sys
 import threading
+from typing import Optional
 
-from ..client import BaseClient
+from .protocol import BridgeProtocol, ClientProtocol
 
 
-class Client(BaseClient):
+class Client(ClientProtocol):
   privileged = False
   remote = False
 
   def __init__(self):
     super().__init__()
     self.id = "0"
+
+  def close(self):
+    pass
 
   async def recv(self):
     loop = asyncio.get_event_loop()
@@ -30,10 +34,10 @@ class Client(BaseClient):
     sys.stdout.flush()
 
 
-class StdioBridge:
-  def __init__(self, app):
+class StdioBridge(BridgeProtocol):
+  def __init__(self, *, app):
     self.app = app
-    self.client = None
+    self.client: Client
 
   async def initialize(self):
     self.client = Client()

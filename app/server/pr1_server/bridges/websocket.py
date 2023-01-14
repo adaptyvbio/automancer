@@ -3,16 +3,20 @@ import json
 import random
 import ssl
 from collections import namedtuple
+from typing import TYPE_CHECKING
 
 from aiohttp.abc import AbstractAccessLogger
 import aiohttp.web
 import websockets
+import websockets.exceptions
 from OpenSSL import SSL, crypto
 
 from .. import logger as parent_logger
-from ..conf import ConfRemote
 from ..auth import agents as auth_agents
-from ..client import BaseClient, ClientClosed
+from .protocol import BridgeProtocol, ClientClosed, ClientProtocol
+
+if TYPE_CHECKING:
+  from ..conf import ConfBridgeWebsocket
 
 
 logger = parent_logger.getChild("bridges.websocket")
@@ -25,12 +29,15 @@ class AccessLogger(AbstractAccessLogger):
     self.logger.debug(f"{request.method} {request.path} -> {response.status}")
 
 
-class Client(BaseClient):
+class Client(ClientProtocol):
   privileged = False
 
   def __init__(self, conn):
     super().__init__()
     self.conn = conn
+
+  def close(self):
+    pass
 
   @property
   def id(self):
@@ -53,8 +60,8 @@ class Client(BaseClient):
       raise ClientClosed() from e
 
 
-class WebsocketBridge:
-  def __init__(self, app, *, conf: ConfRemote):
+class WebsocketBridge(BridgeProtocol):
+  def __init__(self, app, *, conf: 'ConfBridgeWebsocket'):
     self.app = app
     self.clients = set()
     self.conf = conf
@@ -186,7 +193,7 @@ class WebsocketBridge:
       ssl_context = None
 
     self.static_site = aiohttp.web.TCPSite(self.static_runner, hostname, port=static_port, ssl_context=ssl_context)
-    self.data_server = await websockets.serve(handler, host=hostname, port=data_port, max_size=(5 * (2 ** 20)), ssl=ssl_context)
+    self.data_server = await websockets.serve(handler, host=hostname, port=data_port, max_size=(5 * (2 ** 20)), ssl=ssl_context) # type: ignore
 
 
     # Start

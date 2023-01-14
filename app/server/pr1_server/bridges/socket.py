@@ -8,10 +8,10 @@ import threading
 from typing import Any, Optional
 import uuid
 
-from ..client import BaseClient, ClientClosed
+from .protocol import BridgeProtocol, ClientClosed, ClientProtocol
 
 
-class Client(BaseClient):
+class Client(ClientProtocol):
   privileged = False
   remote = False
 
@@ -62,7 +62,7 @@ class Client(BaseClient):
       raise ClientClosed from e
 
 
-class SocketBridge:
+class SocketBridge(BridgeProtocol):
   def __init__(self, *, address: Any, family: int):
     self._address = address
     self._family = family
@@ -106,6 +106,7 @@ class SocketBridge:
   @classmethod
   def unix(cls, raw_path: str, /):
     path = Path(raw_path)
+    path.parent.mkdir(exist_ok=True, parents=True)
     path.unlink(missing_ok=True)
 
     return cls(

@@ -1,0 +1,15 @@
+{
+  "extends": "../../shared/tsconfig.json",
+
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "lib"
+  },
+  "files": [
+    "src/index.ts"
+  ],
+  "references": [
+    { "path": "../library" },
+    { "path": "../../client" }
+  ]
+}

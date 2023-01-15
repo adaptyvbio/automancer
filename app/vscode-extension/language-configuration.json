@@ -1,0 +1,37 @@
+{
+  "autoClosingPairs": [
+    {
+      "open": "{{",
+      "close": "}}"
+    }
+  ],
+  "brackets": [
+    [
+      "{{",
+      "}}"
+    ]
+  ],
+  "comments": {
+    "lineComment": "#"
+  },
+  "surroundingPairs": [
+    {
+      "open": "{",
+      "close": "}"
+    }
+  ],
+  "onEnterRules": [
+    {
+      "beforeText": "/^ *[^:]+: *$/",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "/^ *\\| .*$/",
+      "action": {
+        "indent": "none"
+      }
+    }
+  ]
+}

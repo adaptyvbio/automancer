@@ -1,0 +1,64 @@
+{
+  "name": "prl",
+  "displayName": "PRL language support",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:prl"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "pr1.setHostIdentifier",
+        "title": "Select setup"
+      }
+    ],
+    "languages": [
+      {
+        "id": "prl",
+        "aliases": [
+          "PRL",
+          "prl"
+        ],
+        "extensions": [
+          ".prl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "pr1.setHostIdentifier",
+          "when": "editorLangId == prl"
+        }
+      ]
+    },
+    "grammars": [
+      {
+        "language": "prl",
+        "scopeName": "source.prl",
+        "path": "./syntaxes/prl.tmLanguage.json"
+      }
+    ]
+  },
+  "dependencies": {
+    "node-machine-id": "^1.1.12",
+    "pr1": "file:../../client",
+    "pr1-library": "file:../library"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.18",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  }
+}

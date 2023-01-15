@@ -10,6 +10,12 @@ class DocumentOwner:
   id: str
   location: str
 
+  def export(self):
+    return {
+      "id": self.id,
+      "location": self.location
+    }
+
 
 class Document:
   def __init__(self, *, contents: str, id: str, path: PurePosixPath, owner: Optional[DocumentOwner]):
@@ -22,7 +28,7 @@ class Document:
   def export(self):
     return {
       "id": self.id,
-      "owner": self.owner,
+      "owner": self.owner and self.owner.export(),
       "path": str(self.path),
       "source": self.source
     }

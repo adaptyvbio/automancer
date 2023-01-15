@@ -41,36 +41,37 @@ class Executor(BaseExecutor):
 
     self._devices = dict()
 
-    for device_conf in self._conf['devices']:
-      device_id = device_conf['id']
+    if self._conf:
+      for device_conf in self._conf['devices']:
+        device_id = device_conf['id']
 
-      if device_id in self._host.devices:
-        raise device_id.error(f"Duplicate device id '{device_id}'")
+        if device_id in self._host.devices:
+          raise device_id.error(f"Duplicate device id '{device_id}'")
 
-      for node_conf in device_conf['nodes']:
-        is_numeric = nodes_map[node_conf['type']] == OPCUADeviceScalarNode
+        for node_conf in device_conf['nodes']:
+          is_numeric = nodes_map[node_conf['type']] == OPCUADeviceScalarNode
 
-        if not is_numeric:
-          for key in ['unit', 'min', 'max']:
-            if key in node_conf:
-              # analysis.errors.append(InvalidValueError(node_conf.get_key(key)))
-              analysis.errors.append(InvalidValueError(node_conf[key]))
+          if not is_numeric:
+            for key in ['unit', 'min', 'max']:
+              if key in node_conf:
+                # analysis.errors.append(InvalidValueError(node_conf.get_key(key)))
+                analysis.errors.append(InvalidValueError(node_conf[key]))
 
-        # unit = node_conf['unit'].value if 'unit' in node_conf else context.ureg.Quantity('1')
+          # unit = node_conf['unit'].value if 'unit' in node_conf else context.ureg.Quantity('1')
 
-        # if 'min' in node_conf:
-        #   min_analysis, min_value = QuantityType.check(node_conf['min'].value, unit, target=node_conf['min'])
-        #   analysis += min_analysis
+          # if 'min' in node_conf:
+          #   min_analysis, min_value = QuantityType.check(node_conf['min'].value, unit, target=node_conf['min'])
+          #   analysis += min_analysis
 
-      device = OPCUADevice(
-        address=device_conf['address'].value,
-        id=device_id.value,
-        label=(device_conf['label'].value if 'label' in device_conf else None),
-        nodes_conf=device_conf['nodes']
-      )
+        device = OPCUADevice(
+          address=device_conf['address'].value,
+          id=device_id.value,
+          label=(device_conf['label'].value if 'label' in device_conf else None),
+          nodes_conf=device_conf['nodes']
+        )
 
-      self._devices[device_id.value] = device
-      self._host.devices[device_id.value] = device
+        self._devices[device_id.value] = device
+        self._host.devices[device_id.value] = device
 
     return analysis
 

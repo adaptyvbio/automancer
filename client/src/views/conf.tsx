@@ -96,7 +96,19 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
 
     return (
       <main className={viewStyles.root}>
-        <TitleBar title="Modules" />
+        <TitleBar title={(() => {
+          if (route.id === 'section') {
+            let { groupId, sectionId } = route.params;
+
+            return groups
+              .find((group) => group.id === groupId)!
+              .sections
+              .find((section) => section.id === sectionId)!
+              .label;
+          }
+
+          return 'Settings';
+        })()} />
         <div className={util.formatClass(viewStyles.contents, styles.root)}>
           <div className={styles.selectorRoot}>
             <div className={styles.selectorListRoot}>

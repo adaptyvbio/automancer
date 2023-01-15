@@ -1,7 +1,8 @@
 import asyncio
 import traceback
-from pr1.devices.node import BaseWritableNode, CollectionNode
 
+from pr1.devices.node import BaseWritableNode, CollectionNode
+from pr1.fiber.langservice import DictType
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
@@ -10,9 +11,9 @@ from . import logger
 
 
 class Executor(BaseExecutor):
-  def __init__(self, conf, *, host: Host):
-    conf = sc.Schema({}).transform(conf)
+  options_type = DictType({})
 
+  def __init__(self, conf, *, host: Host):
     self._host = host
     self._registration = None
 

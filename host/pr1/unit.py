@@ -27,7 +27,7 @@ class UnitInfo:
     self.development = False
     self.enabled = True
     self.module = module
-    self.options = dict()
+    self.options = None
     self.path = path
     self.source_name = source_name
     self.unit = unit
@@ -64,7 +64,11 @@ class UnitManager:
 
     if hasattr(info.unit, 'Executor'):
       Executor = info.unit.Executor
-      analysis, conf = Executor.options_type.analyze(info.options, host.analysis_context)
+
+      if info.options:
+        analysis, conf = Executor.options_type.analyze(info.options, host.analysis_context)
+      else:
+        analysis, conf = Analysis(), None
 
       if isinstance(conf, EllipsisType):
         logger.error(f"Failed to load configuration of unit '{namespace}'")

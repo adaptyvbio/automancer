@@ -118,7 +118,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
     return (
       <main className={viewStyles.root}>
-        <TitleBar title="Modules" />
+        <TitleBar title={metadata.title} />
         <div className={util.formatClass(viewStyles.contents, viewStyles.legacy, 'blayout-container')}>
           <div className="blayout-header">
             <h1>{metadata.title}</h1>

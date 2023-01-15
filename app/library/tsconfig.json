@@ -1,0 +1,19 @@
+{
+  "extends": "../../shared/tsconfig.json",
+
+  "compilerOptions": {
+    "composite": true,
+    "module": "CommonJS",
+    "outDir": "lib",
+    "rootDir": "src"
+  },
+  "files": [
+    "src/index.ts"
+  ],
+  "include": [
+    "src"
+  ],
+  "references": [
+    { "path": "../electron/tsconfig.types.json" }
+  ]
+}

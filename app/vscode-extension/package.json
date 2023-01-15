@@ -22,6 +22,16 @@
         "title": "Select setup"
       }
     ],
+    "grammars": [
+      {
+        "language": "prl",
+        "scopeName": "source.prl",
+        "path": "./syntaxes/prl.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.python": "python"
+        }
+      }
+    ],
     "languages": [
       {
         "id": "prl",
@@ -42,14 +52,7 @@
           "when": "editorLangId == prl"
         }
       ]
-    },
-    "grammars": [
-      {
-        "language": "prl",
-        "scopeName": "source.prl",
-        "path": "./syntaxes/prl.tmLanguage.json"
-      }
-    ]
+    }
   },
   "dependencies": {
     "node-machine-id": "^1.1.12",

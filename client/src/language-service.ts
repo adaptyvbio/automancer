@@ -52,6 +52,11 @@ monaco.languages.setLanguageConfiguration(LanguageName, {
     { open: '{', close: '}' }
   ],
   onEnterRules: [
+    { beforeText: /^ *- *[^:]+: *$/,
+      action: {
+        appendText: '  ',
+        indentAction: monaco.languages.IndentAction.Indent
+      } },
     { beforeText: /^ *[^:]+: *$/,
       action: {
         indentAction: monaco.languages.IndentAction.Indent

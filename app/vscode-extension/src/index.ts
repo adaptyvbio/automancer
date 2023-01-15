@@ -37,6 +37,7 @@ const extension = {
     let bridge = environment.bridges.find((bridge): bridge is BridgeSocket => bridge.type === 'socket');
 
     if (!bridge) {
+      // TODO: Fix the fact that if the error isn't closed, the function never returns
       await vscode.window.showErrorMessage('Unsupported host bridge');
       return false;
     }
@@ -108,14 +109,11 @@ export async function activate(context: vscode.ExtensionContext) {
     if (hostIdentifier) {
       let environment = environments[hostIdentifier];
 
-      if (environment) {
-        if (await extension.selectHost(environments[hostIdentifier], context)) {
-          return;
-        }
-      } else {
-        await context.workspaceState.update(HostIdentifierStorageKey, undefined);
+      if (environment && (await extension.selectHost(environments[hostIdentifier], context))) {
+        return;
       }
 
+      await context.workspaceState.update(HostIdentifierStorageKey, undefined);
       hostIdentifier = undefined;
     }
 

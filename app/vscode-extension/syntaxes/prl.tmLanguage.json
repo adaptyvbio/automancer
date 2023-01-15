@@ -3,30 +3,50 @@
 	"name": "PRL",
 	"patterns": [
 		{
-			"include": "#keywords"
+			"name": "comment.line.number-sign",
+			"match": "#.*$"
 		},
 		{
-			"include": "#strings"
-		}
-	],
-	"repository": {
-		"keywords": {
-			"patterns": [{
-				"name": "keyword.control.prl",
-				"match": "\\b(if|while|for|return)\\b"
-			}]
+			"match": "^[[:space:]]*(?:(-)[[:space:]])?([^/]+/)?([^:]+:)",
+			"captures": {
+				"1": { "name": "punctuation" },
+				"2": { "name": "entity.name.section" },
+				"3": { "name": "entity.name.constant" }
+			}
 		},
-		"strings": {
-			"name": "string.quoted.double.prl",
-			"begin": "\"",
-			"end": "\"",
+		{
+			"match": "^[[:space:]]*(-)",
+			"captures": {
+				"1": { "name": "punctuation" }
+			}
+		},
+		{
+			"match": "^[[:space:]]*(|)(?:[^#\\\\]|\\\\#)*$",
+			"captures": {
+				"1": { "name": "punctuation" },
+				"2": { "name": "string" }
+			}
+		},
+		{
+			"contentName": "meta.embedded.block.python",
+			"begin": "[%@\\$]?{{",
+			"end": "}}",
+			"beginCaptures": {
+				"0": { "name": "variable" }
+			},
+			"endCaptures": {
+				"0": { "name": "variable" }
+			},
 			"patterns": [
 				{
-					"name": "constant.character.escape.prl",
-					"match": "\\\\."
+					"include": "source.python"
 				}
 			]
+		},
+		{
+			"name": "variable.other",
+			"match": "(?:(?![%@\\$]?{{)[^#\\\\]|\\\\#)*"
 		}
-	},
+	],
 	"scopeName": "source.prl"
 }

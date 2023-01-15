@@ -22,15 +22,23 @@
   ],
   "onEnterRules": [
     {
-      "beforeText": "/^ *[^:]+: *$/",
+      "beforeText": "^ *- *[^:]+: *$",
+      "action": {
+        "appendText": "  ",
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^ *[^:]+: *$",
       "action": {
         "indent": "indent"
       }
     },
     {
-      "beforeText": "/^ *\\| .*$/",
+      "beforeText": "^ *\\| ",
       "action": {
-        "indent": "none"
+        "indent": "none",
+        "appendText": "| "
       }
     }
   ]

@@ -11,6 +11,7 @@ module.exports = {
     ignore: [
       /^\/forge\.config\.js$/,
       /^\/icon\.icns$/,
+      /^\/lib\/types(\/|$)/,
       /^\/node_modules(\/|$)/,
       /^\/scripts(\/|$)/,
       /^\/src(\/|$)/,

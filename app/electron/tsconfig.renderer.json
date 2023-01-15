@@ -1,6 +1,9 @@
 {
   "extends": "./tsconfig.base.json",
 
+  "compilerOptions": {
+    "jsx": "react"
+  },
   "files": [
     "src/host/renderer.tsx",
     "src/startup/renderer.jsx"

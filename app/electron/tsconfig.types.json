@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "jsx": "react",
+    "noEmit": false,
+    "outDir": "lib/types",
+    "rootDir": "src",
+    "resolveJsonModule": true
+  },
+  "files": [
+    "src/types.ts"
+  ],
+  "include": [
+    "src"
+  ]
+}

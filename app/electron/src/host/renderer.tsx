@@ -128,7 +128,7 @@ class App extends React.Component<AppProps, AppState> {
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.pool.add(async () => {
       let { hostSettings: hostSettingsCollection } = await window.api.hostSettings.query();
       let hostSettings = hostSettingsCollection[this.hostSettingsId];
@@ -138,7 +138,7 @@ class App extends React.Component<AppProps, AppState> {
     });
   }
 
-  render() {
+  override render() {
     if (!this.state.hostSettings) {
       return <div />;
     }

@@ -20,7 +20,7 @@ export interface HostSettingsOptionsLocal {
   conf: any;
   corePackagesInstalled: boolean;
   dirPath: string;
-  id: string;
+  identifier: string;
   pythonPath: string; // | null; // null -> use embedded
 }
 

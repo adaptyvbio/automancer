@@ -266,7 +266,7 @@ export class CoreApplication {
               conf,
               corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
               dirPath: hostDirPath,
-              id: conf.identifier,
+              identifier: conf.identifier,
               pythonPath
             }
           }

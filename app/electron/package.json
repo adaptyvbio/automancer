@@ -2,6 +2,7 @@
   "name": "pr1-app",
   "version": "3.0.0",
   "main": "lib/app/main.js",
+  "types": "lib/types/types.d.ts",
   "productName": "PR–1",
   "scripts": {
     "build": "npm run build:app && npm run build:client && npm run build:preload && npm run build:renderer && npm run build:static",
@@ -12,6 +13,7 @@
     "build:preload": "esbuild src/host/preload.ts src/startup/preload.js --bundle --external:electron --outdir=lib/preload",
     "build:renderer": "esbuild src/host/renderer.tsx src/startup/renderer.jsx --bundle --external:electron --external:fs/promises --external:path --external:pr1 --external:vm --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --outdir=lib/renderer",
     "build:static": "python3 -c \"for f in __import__('pathlib').Path('src').glob('*/index.html'): d = 'lib/static' / f.relative_to('src'); d.parent.mkdir(exist_ok=True, parents=True); __import__('shutil').copy(f, d)\"",
+    "build:types": "tsc --project tsconfig.types.json",
     "make": "electron-forge make",
     "package": "electron-forge package",
     "start": "electron . --enable-source-maps",

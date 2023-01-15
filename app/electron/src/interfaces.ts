@@ -1,3 +1,6 @@
+import type { HostSettings, HostSettingsId } from 'pr1';
+
+
 export interface DraftEntry {
   id: string;
   lastModified: number;
@@ -16,4 +19,13 @@ export interface PythonInstallation {
     version: [number, number, number];
   };
   symlink: boolean;
+}
+
+export interface AppData {
+  defaultHostSettingsId: string | null;
+  drafts: DraftEntry[];
+  embeddedPythonInstallation: null;
+  hostSettings: Record<HostSettingsId, HostSettings>;
+  preferences: {};
+  version: number;
 }

@@ -1,4 +1,4 @@
-import { React, AnonymousUnit, formatDuration, Host, TimedProgressBar, formatDynamicValue, DynamicValue } from 'pr1';
+import { React, UnknownUnit, formatDuration, Host, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
 
 
 export interface ProcessData {
@@ -13,42 +13,30 @@ export interface ProcessLocation {
 }
 
 
-const namespace = 'timer';
-
-function ProcessComponent(props: {
-  host: Host;
-  processData: ProcessData;
-  processLocation: ProcessLocation;
-  time: number;
-}) {
-  return (
-    <div>
-      <TimedProgressBar
-        duration={props.processLocation.durationValue}
-        paused={props.processLocation.paused}
-        time={props.time}
-        value={props.processLocation.progress} />
-    </div>
-  );
-}
-
-function getProcessLabel(processData: ProcessData) {
-  return 'Wait';
-  // return 'Wait ' + formatDuration(processData.value);
-}
-
-
 export default {
-  ProcessComponent,
-  getProcessLabel,
-  namespace,
+  namespace: 'timer',
 
-  createProcessFeatures(processData: ProcessData, location: ProcessLocation | null, options) {
+  ProcessComponent(props) {
+    return (
+      <div>
+        <TimedProgressBar
+          duration={props.location.durationValue}
+          paused={props.location.paused}
+          time={props.time}
+          value={props.location.progress} />
+      </div>
+    );
+  },
+
+  createProcessFeatures(processData, location, options) {
     return [{
       icon: 'hourglass_empty',
       label: location
         ? formatDynamicValue(location.durationQuantity)
         : formatDynamicValue(processData.value)
     }];
+  },
+  getProcessLabel(data) {
+    return 'Wait';
   }
-} satisfies AnonymousUnit
+} satisfies ProcessUnit<ProcessData, ProcessLocation>

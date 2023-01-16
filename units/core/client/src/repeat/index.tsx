@@ -1,4 +1,4 @@
-import { getBlockExplicitLabel, GraphBlockMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
+import { getBlockExplicitLabel, GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -9,8 +9,8 @@ export interface Block extends ProtocolBlock {
   count: number;
 }
 
-export interface BlockMetrics extends GraphBlockMetrics {
-  child: GraphBlockMetrics;
+export interface BlockMetrics extends GraphRendererDefaultMetrics {
+  child: GraphRendererDefaultMetrics;
   label: string;
 }
 

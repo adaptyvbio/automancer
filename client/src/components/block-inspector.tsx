@@ -1,14 +1,15 @@
 import * as React from 'react';
 
+import spotlightStyles from '../../styles/components/spotlight.module.scss';
+
 import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, getBlockLabel, getBlockState, getBlockStateName, getSegmentBlockProcessData } from '../unit';
+import { getBlockAggregates, UnitTools } from '../unit';
 import { SimpleFeatureList } from './features';
-
-import formStyles from '../../styles/components/form.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
+import { UnitContext } from '../interfaces/unit';
+import { ErrorBoundary } from './error-boundary';
 
 
 export interface BlockInspectorProps {
@@ -34,28 +35,25 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       return <div />;
     }
 
+    let context = {
+      host: this.props.host
+    } satisfies UnitContext;
+    let units = this.props.host.units;
+
     let targetBlock = this.props.protocol.root;
     let lineBlocks = [targetBlock];
 
     for (let key of this.props.blockPath) {
-      let unit = this.props.host.units[targetBlock.namespace];
-      targetBlock = unit.getChildBlock!(targetBlock, key);
+      let unit = UnitTools.asBlockUnit(units[targetBlock.namespace])!;
+      targetBlock = unit.getChildBlock(targetBlock, key);
       lineBlocks.push(targetBlock);
     }
 
-    let lineLabels = lineBlocks.map((block) => {
-      return getBlockLabel(block, null, this.props.host);
-    });
+    let aggregates = getBlockAggregates(lineBlocks)
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, context);
 
-    let process = getSegmentBlockProcessData(targetBlock, this.props.host);
-    let processUnit = process && this.props.host.units[process.namespace];
-
-    let lineStates = lineBlocks
-      .map(getBlockState)
-      .filter((state): state is ProtocolState => state !== null);
-
-    let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, { host: this.props.host });
+    let headUnit = UnitTools.asBlockUnit(units[lineBlocks.at(-1).namespace])!;
+    let HeadComponent = headUnit.HeadComponent;
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
@@ -79,22 +77,31 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           <h2 className={spotlightStyles.title}>{renderLabel(aggregateLabelItems.at(-1).label)}</h2>
         </div>
 
-        {(process && processUnit) && (
-          <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, null, {
-            host: this.props.host
-          }).map((feature) => ({ ...feature, accent: true }))]} />
+        {HeadComponent && (
+          <ErrorBoundary>
+            <HeadComponent
+              block={lineBlocks.at(-1)}
+              context={context}
+              location={null} />
+          </ErrorBoundary>
         )}
 
-        <SimpleFeatureList list={lineStates.map((state, index) => {
-          return Object.values(this.props.host.units).flatMap((unit) => {
-            return unit?.createStateFeatures?.(
-              state,
-              lineStates.slice(index + 1),
-              null,
-              { host: this.props.host }
-            ) ?? [];
-          });
-        })} />
+        <SimpleFeatureList list={
+          Array.from(aggregates.entries())
+            .filter(([_aggregateIndex, aggregate]) => aggregate.state)
+            .map(([aggregateIndex, aggregate]) => {
+              return Object.values(units).flatMap((unit) => {
+                return UnitTools.asStateUnit(unit)?.createStateFeatures?.(
+                  aggregate.state!,
+                  aggregates
+                    .slice(aggregateIndex + 1)
+                    .map((aggregate) => aggregate.state!),
+                  null,
+                  context
+                ) ?? [];
+              });
+            })
+        } />
       </div>
     );
   }
@@ -112,9 +119,9 @@ export function renderLabel(label: ReturnType<typeof getBlockLabel>) {
   );
 }
 
-export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], protocolName: string | null, options: { host: Host; }) {
+export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], protocolName: string | null, context: UnitContext) {
   return aggregates.flatMap((aggregate, aggregateIndex) => {
-    let label = aggregate.state && getBlockStateName(aggregate.state);
+    let label = aggregate.state && UnitTools.getBlockStateNameFromState(aggregate.state);
 
     if (aggregateIndex < 1) {
       label ??= protocolName;
@@ -133,7 +140,7 @@ export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], pro
       }];
     } else {
       return aggregate.blocks.flatMap((block, blockIndex) => {
-        let unit = options.host.units[block.namespace];
+        let unit = context.host.units[block.namespace];
 
         if (!unit.getBlockDefaultLabel) {
           return [];
@@ -147,7 +154,7 @@ export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], pro
           label: {
             explicit: false,
             suffix: null,
-            value: unit.getBlockDefaultLabel(block, options.host) ?? 'Block'
+            value: unit.getBlockDefaultLabel(block, context.host) ?? 'Block'
           },
           offset: aggregate.offset + blockIndex
         }];

@@ -1,12 +1,12 @@
-import { GraphBlockMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, AnonymousUnit } from 'pr1';
+import { GraphRendererDefaultMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, UnknownUnit, BlockUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
   children: ProtocolBlock[];
 }
 
-export interface BlockMetrics extends GraphBlockMetrics {
-  children: GraphBlockMetrics[];
+export interface BlockMetrics extends GraphRendererDefaultMetrics {
+  children: GraphRendererDefaultMetrics[];
   childrenX: number[];
   linksCompact: boolean[];
 }
@@ -25,6 +25,8 @@ export enum LocationMode {
   Paused = 3
 }
 
+export type Key = number;
+
 export interface Point {
   child: unknown | null;
   index: number;
@@ -37,7 +39,7 @@ const verticalCellGap = 1;
 const namespace = 'sequence';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, options) {
+  computeMetrics(block, ancestors, location, options, context) {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
 
@@ -99,7 +101,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         }
     };
   },
-  render(block, path, metrics, position, location, options) {
+  render(block, path, metrics, position, location, options, context) {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
     let linkDirection = vertical
@@ -242,4 +244,4 @@ export default {
   namespace,
   onSelectBlockMenu,
   getBlockLocationLabelSuffix
-} satisfies AnonymousUnit
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key>

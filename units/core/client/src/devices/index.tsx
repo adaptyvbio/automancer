@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, Feature, MasterStateLocation, ProtocolState, AnonymousUnit, util } from 'pr1';
+import { CreateFeaturesOptions, Feature, MasterStateLocation, ProtocolState, UnknownUnit, util } from 'pr1';
 
 
 export type NodePath = string[];
@@ -112,4 +112,4 @@ function createStateFeatures(state: ProtocolState, descendantStates: ProtocolSta
 export default {
   createStateFeatures,
   namespace
-} satisfies AnonymousUnit
+} satisfies UnknownUnit

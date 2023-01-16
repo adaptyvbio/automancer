@@ -1,19 +1,20 @@
 import * as React from 'react';
 
+import formStyles from '../../styles/components/form.module.scss';
+import spotlightStyles from '../../styles/components/spotlight.module.scss';
+
 import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, getBlockExplicitLabel, getBlockLabel, getBlockState, getSegmentBlockProcessData, getSegmentBlockProcessState } from '../unit';
-import { FeatureList, SimpleFeatureList } from './features';
+import { getBlockAggregates, getBlockLabel, UnitTools } from '../unit';
+import { FeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
 import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
-
-import formStyles from '../../styles/components/form.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
+import { UnitContext, UnitNamespace } from '../interfaces/unit';
 
 
 export interface ExecutionInspectorProps {
@@ -43,7 +44,11 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
   }
 
   render() {
+    let context = {
+      host: this.props.host
+    } satisfies UnitContext;
     let units = this.props.host.units;
+
     let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
 
     let lineBlocks = [this.props.protocol.root];
@@ -52,8 +57,8 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     for (let key of activeBlockPath) {
       let parentBlock = lineBlocks.at(-1);
       let parentLocation = lineLocations.at(-1);
-      let unit = units[parentBlock.namespace];
-      let block = unit.getChildBlock!(parentBlock, key);
+      let unit = UnitTools.asBlockUnit(units[parentBlock.namespace])!;
+      let block = unit.getChildBlock(parentBlock, key);
       let location = unit.getActiveChildLocation!(parentLocation, key);
 
       lineBlocks.push(block);
@@ -61,9 +66,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     }
 
     let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, { host: this.props.host });
-
-    // let lastAggregate = aggregates.at(-1);
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, context);
 
     let pausedAggregateIndexRaw = aggregates.findIndex((aggregate) => {
       if (!aggregate.state) {
@@ -72,27 +75,24 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
       let block = aggregate.blocks[0];
       let location = lineLocations[aggregate.offset];
-      let unit = units[block.namespace];
+      let unit = UnitTools.asBlockUnit(units[block.namespace])!;
 
-      return unit.isBlockPaused?.(block, location, { host: this.props.host }) ?? false;
+      return unit.isBlockPaused?.(block, location, context) ?? false;
     });
 
     let pausedAggregateIndex = (pausedAggregateIndexRaw >= 0) ? pausedAggregateIndexRaw : null;
-    let process = getSegmentBlockProcessData(lineBlocks.at(-1), this.props.host);
 
-    if (process && (pausedAggregateIndex === null)) {
+    let headUnit = UnitTools.asBlockUnit(units[lineBlocks.at(-1).namespace])!;
+    let HeadComponent = headUnit.HeadComponent;
+
+    if (pausedAggregateIndex === null) {
       let block = lineBlocks.at(-1);
       let location = lineLocations.at(-1);
-      let unit = units[block.namespace];
 
-      if (unit.isBlockPaused?.(block, location, { host: this.props.host })) {
+      if (headUnit.isBlockPaused?.(block, location, context)) {
         pausedAggregateIndex = aggregates.length;
       }
     }
-
-    // let lineStates = Array.from(lineBlocks.entries())
-    //   .map(([index, block]) => [index, getBlockState(block)] as [number, ProtocolState])
-    //   .filter(([index, state]) => state);
 
     return (
       <div className={spotlightStyles.root}>
@@ -108,7 +108,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                       createMenu={() => item.blocks.flatMap((block, blockRelIndex, arr) => {
                         let blockIndex = item.aggregate.offset + blockRelIndex;
                         let location = lineLocations[blockIndex];
-                        let unit = this.props.host.units[block.namespace];
+                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
 
                         let menu = (unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? []).map((entry) => ({
                           ...entry,
@@ -130,7 +130,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                         let blockPath = activeBlockPath.slice(0, blockIndex);
 
                         let location = lineLocations[blockIndex];
-                        let unit = this.props.host.units[block.namespace];
+                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
 
                         let message = unit.onSelectBlockMenu?.(block, location, path.slice(1));
 
@@ -162,55 +162,45 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             </div>
           </div>
 
-          {process && (() => {
-            let processUnit = units[process.namespace];
-            let ProcessComponent = processUnit.ProcessComponent!;
-            let segmentLocation = lineLocations.at(-1) as any;
-            let processLocation = getSegmentBlockProcessState(segmentLocation, this.props.host);
-
-            return (
-              <>
-                <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, processLocation, {
-                  host: this.props.host
-                }).map((feature) => ({ ...feature, accent: true }))]} />
-
-                <ErrorBoundary>
-                  <ProcessComponent
-                    host={this.props.host}
-                    processData={process!.data}
-                    processLocation={processLocation}
-                    time={segmentLocation.time} />
-                </ErrorBoundary>
-              </>
-            );
-          })()}
+          {HeadComponent && (
+            <ErrorBoundary>
+              <HeadComponent
+                block={lineBlocks.at(-1)}
+                context={context}
+                location={lineLocations.at(-1)} />
+            </ErrorBoundary>
+          )}
 
           <FeatureList
             hoveredGroupIndex={this.state.hoveredAggregateIndex}
             pausedGroupIndex={pausedAggregateIndex}
-            list={aggregates.map((aggregate, aggregateIndex) => {
-              let blockIndex = aggregate.offset;
-              let location = lineLocations[blockIndex];
-              let disabled = (this.state.hoveredAggregateIndex !== null)
-                ? (aggregateIndex >= this.state.hoveredAggregateIndex)
-                : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
+            list={
+              Array.from(aggregates.entries())
+                .filter(([_aggregateIndex, aggregate]) => aggregate.state)
+                .map(([aggregateIndex, aggregate]) => {
+                  let blockIndex = aggregate.offset;
+                  let location = lineLocations[blockIndex] as { state: Record<UnitNamespace, unknown>; };
+                  let disabled = (this.state.hoveredAggregateIndex !== null)
+                    ? (aggregateIndex >= this.state.hoveredAggregateIndex)
+                    : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
 
-              let ancestorStates = aggregates
-                .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? pausedAggregateIndex ?? aggregates.length)
-                .map((aggregate) => aggregate.state!);
+                  let ancestorStates = aggregates
+                    .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? pausedAggregateIndex ?? aggregates.length)
+                    .map((aggregate) => aggregate.state!);
 
-              return Object.values(this.props.host.units).flatMap((unit) => {
-                return unit?.createStateFeatures?.(
-                  aggregate.state!, // TODO: Remove this assumption
-                  ancestorStates,
-                  location.state,
-                  { host: this.props.host }
-                ) ?? [];
-              }).map((feature) => ({
-                ...feature,
-                disabled: (disabled || feature.disabled)
-              }));
-            })}
+                  return Object.values(units).flatMap((unit) => {
+                    return UnitTools.asStateUnit(unit)?.createStateFeatures?.(
+                      aggregate.state!,
+                      ancestorStates,
+                      location.state,
+                      { host: this.props.host }
+                    ) ?? [];
+                  }).map((feature) => ({
+                    ...feature,
+                    disabled: (disabled || feature.disabled)
+                  }));
+                })
+            }
             setHoveredGroupIndex={(hoveredAggregateIndex) => void this.setState({ hoveredAggregateIndex })}
             setPausedGroupIndex={(aggregateIndex) => {
               this.pool.add(async () => {

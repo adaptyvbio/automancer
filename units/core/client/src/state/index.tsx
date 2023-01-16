@@ -1,4 +1,4 @@
-import { GraphBlockMetrics, GraphRenderer, Host, ProtocolBlock, ProtocolState, Unit } from 'pr1';
+import { GraphRendererDefaultMetrics, GraphRenderer, Host, ProtocolBlock, ProtocolState, Unit, BlockUnit, React, UnitNamespace } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -6,9 +6,14 @@ export interface Block extends ProtocolBlock {
   state: ProtocolState;
 }
 
+export interface BlockMetrics {
+
+}
+
 export interface Location {
   child: unknown;
   mode: LocationMode;
+  state: Record<UnitNamespace, unknown>;
 }
 
 export enum LocationMode {
@@ -19,46 +24,42 @@ export enum LocationMode {
   Paused = 4
 }
 
-
-export type BlockMetrics = GraphBlockMetrics;
-
-
-const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, options) {
-    return options.computeMetrics(block.child, [...ancestors, block]);
-  },
-
-  render(block, path, metrics, position, location, options) {
-    return options.render(block.child, [...path, null], metrics, position, location?.child ?? null, options);
-  }
-};
+export type Key = null;
 
 
 export default {
   namespace: 'state',
 
-  graphRenderer,
+  graphRenderer: {
+    computeMetrics(block, ancestors, location, options, context) {
+      return options.computeMetrics(block.child, [...ancestors, block], location?.child ?? null);
+    },
 
-  createActiveBlockMenu(_block, location, _options) {
+    render(block, path, metrics, position, location, options, context) {
+      return options.render(block.child, [...path, null], metrics, position, location?.child ?? null, options);
+    }
+  },
+
+  createActiveBlockMenu(block, location, options) {
     let busy = false;
 
     return location.mode === LocationMode.Normal
       ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
       : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }];
   },
-  getBlockClassLabel(_block) {
+  getBlockClassLabel(block) {
     return 'State';
   },
   getActiveChildLocation(location, key) {
     return location.child;
   },
-  getChildrenExecutionKeys(_block, _location) {
+  getChildrenExecutionKeys(block, location) {
     return [null];
   },
-  getChildBlock(block, _key) {
+  getChildBlock(block, key) {
     return block.child;
   },
-  isBlockPaused(_block, location, _options) {
+  isBlockPaused(block, location, options) {
     return location.mode == LocationMode.Paused;
   },
   onSelectBlockMenu(block, location, path) {
@@ -67,4 +68,4 @@ export default {
       case 'resume': return { type: 'resume' };
     }
   },
-} satisfies Unit<Block, Location>
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key>

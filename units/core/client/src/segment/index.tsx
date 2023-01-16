@@ -1,12 +1,11 @@
-import { FeatureGroupDef, formatHostSettings, GraphBlockMetrics, GraphNode, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, AnonymousUnit } from 'pr1';
+import { BlockUnit, FeatureGroupDef, GraphNode, GraphRenderer, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
-  namespace: typeof namespace;
   process: ProtocolProcess;
 }
 
-export interface BlockMetrics extends GraphBlockMetrics {
+export interface BlockMetrics {
   features: FeatureGroupDef;
   name: string | null;
 }
@@ -14,6 +13,7 @@ export interface BlockMetrics extends GraphBlockMetrics {
 export interface Location {
   mode: LocationMode;
   process: unknown;
+  time: number;
 }
 
 export enum LocationMode {
@@ -24,49 +24,44 @@ export enum LocationMode {
   Paused = 4
 }
 
+export type Key = never;
+
 export interface Point {
   process: unknown | null;
 }
 
 
-const namespace = 'segment';
-
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, options) {
-    let createFeaturesOptions = {
-      host: options.host
-    };
+  computeMetrics(block, ancestors, location, options, context) {
+    let parentBlock = ancestors.at(-1);
+    let state = UnitTools.getBlockState(parentBlock);
+    let name = state && UnitTools.getBlockStateNameFromState(state);
 
-    let ancestor = ancestors.at(-1);
+    let processUnit = context.host.units[block.process.namespace] as ProcessUnit<unknown, unknown>;
+    let processFeatures = UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(block.process.data, null, context) ?? []);
+    let stateFeatures = state
+      ? Object.values(context.host.units).flatMap((unit) => {
+        return UnitTools.asStateUnit(unit)?.createStateFeatures?.(state!, null, null, context) ?? [];
+      })
+      : [];
 
-    let state = (ancestor?.namespace === 'state')
-      ? ancestor.state as ProtocolState
-      : null;
-
-    let name = (state?.['name']?.value ?? null);
-    let processFeatures = options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, null, createFeaturesOptions) ?? [];
     let features = [
-      ...(processFeatures.length > 0
-        ? processFeatures
-        : [{ icon: 'not_listed_location', label: 'Unknown process' }])
-        .map((feature) => ({ ...feature, accent: true })),
-      ...(state
-          ? Object.values(options.host.units).flatMap((unit) => {
-            return unit?.createStateFeatures?.(state, null, null, createFeaturesOptions) ?? [];
-          })
-          : [])
+      ...processFeatures,
+      ...stateFeatures
     ];
 
     let featureCount = features.length;
-    let width = Math.round((280 + options.settings.nodePadding * 2) / options.settings.cellPixelSize);
+    let settings = options.settings;
+
+    let width = Math.round((280 + settings.nodePadding * 2) / settings.cellPixelSize);
     let height = Math.ceil((
-      ((name !== null) ? options.settings.nodeHeaderHeight : 0)
+      ((name !== null) ? settings.nodeHeaderHeight : 0)
       + (30 * featureCount)
       + (5.6 * (featureCount - 1))
-      + (options.settings.nodeBodyPaddingY * 2)
-      + (options.settings.nodePadding * 2)
-      + (options.settings.nodeBorderWidth * 2)
-    ) / options.settings.cellPixelSize);
+      + (settings.nodeBodyPaddingY * 2)
+      + (settings.nodePadding * 2)
+      + (settings.nodeBorderWidth * 2)
+    ) / settings.cellPixelSize);
 
     return {
       features,
@@ -84,7 +79,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
     };
   },
 
-  render(block, path, metrics, position, location, options) {
+  render(block, path, metrics, position, location, options, context) {
     let active = (location !== null);
     let vertical = options.settings.vertical;
 
@@ -105,7 +100,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         createMenu={() => {
           return [
             ...(active
-              ? createActiveBlockMenu(block, location!, { host: options.host })
+              ? createActiveBlockMenu(block, location!, context)
               : []),
             { id: 'jump', name: 'Jump to', icon: 'move_down' },
             { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
@@ -130,7 +125,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
               let tree = options.settings.editor.props.tree!;
 
               let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
-                let unit = options.host.units[block.namespace];
+                let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
                 return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
               };
 
@@ -201,15 +196,41 @@ function getBlockLocationLabelSuffix(block: Block, location: Location) {
 
 
 export default {
+  namespace: 'segment',
+
+  graphRenderer,
+
+  HeadComponent(props) {
+    let process = props.block.process;
+    let processLocation = props.location?.process ?? null;
+    let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
+
+    let ProcessComponent = props.location && processUnit.ProcessComponent;
+
+    return (
+      <>
+        <SimpleFeatureList list={[
+          UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(process.data, processLocation, props.context))
+        ]} />
+
+        {ProcessComponent && (
+          <ProcessComponent
+            context={props.context}
+            data={process.data}
+            location={processLocation}
+            time={props.location!.time} />
+        )}
+      </>
+    );
+  },
+
   createActiveBlockMenu,
   createDefaultPoint,
   getBlockClassLabel,
   getBlockDefaultLabel,
   getBlockLocationLabelSuffix,
   getChildrenExecutionKeys,
-  graphRenderer,
   isBlockBusy,
   isBlockPaused,
-  namespace,
   onSelectBlockMenu
-} satisfies AnonymousUnit
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key>;

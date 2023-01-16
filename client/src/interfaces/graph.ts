@@ -4,9 +4,10 @@ import type { ProtocolBlock, ProtocolBlockPath } from './protocol';
 import type { Point, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
 import type { Host } from '../host';
+import { UnitContext } from './unit';
 
 
-export interface GraphBlockMetrics {
+export interface GraphRendererDefaultMetrics {
   start: Point;
   end: Point;
 
@@ -14,22 +15,35 @@ export interface GraphBlockMetrics {
   size: Size;
 }
 
-export interface GraphRenderer<Block extends ProtocolBlock, Metrics extends GraphBlockMetrics, State = unknown> {
-  computeMetrics(block: Block, ancestors: ProtocolBlock[], options: GraphRendererComputeSizeOptions): Metrics;
-  render(block: Block, path: ProtocolBlockPath, metrics: Metrics, position: Point, state: State | null, options: RendererRenderOptions): React.ReactNode;
+export interface GraphRenderer<Block extends ProtocolBlock, Metrics, Location = never> {
+  computeMetrics(
+    block: Block,
+    ancestors: ProtocolBlock[],
+    location: Location | null,
+    options: GraphRendererComputeMetricsOptions,
+    context: UnitContext
+  ): Metrics & GraphRendererDefaultMetrics;
+
+  render(
+    block: Block,
+    path: ProtocolBlockPath,
+    metrics: Metrics & GraphRendererDefaultMetrics,
+    position: Point,
+    location: Location | null,
+    options: GraphRendererRenderOptions,
+    context: UnitContext
+  ): React.ReactNode;
 }
 
-export interface GraphRendererComputeSizeOptions {
-  computeMetrics(block: ProtocolBlock, ancestors: ProtocolBlock[]): GraphBlockMetrics;
-  host: Host;
+export interface GraphRendererComputeMetricsOptions {
+  computeMetrics(block: ProtocolBlock, ancestors: ProtocolBlock[], location: unknown | null): GraphRendererDefaultMetrics;
   settings: GraphRenderSettings;
 }
 
-export interface RendererRenderOptions {
+export interface GraphRendererRenderOptions {
   attachmentEnd: boolean;
   attachmentStart: boolean;
-  host: Host;
-  render(block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphBlockMetrics, position: Point, state: unknown | null, options: {
+  render(block: ProtocolBlock, path: ProtocolBlockPath, metrics: GraphRendererDefaultMetrics, position: Point, location: unknown | null, options: {
     attachmentEnd: boolean;
     attachmentStart: boolean;
   }): React.ReactNode;

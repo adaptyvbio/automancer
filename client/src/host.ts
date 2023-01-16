@@ -1,14 +1,14 @@
 import type { BaseBackend } from './backends/base';
 import type { HostId, HostState } from './backends/common';
-import { HostSettings } from './interfaces/host';
-import { AnonymousUnit, UnitNamespace } from './interfaces/unit';
+import type { HostSettings } from './interfaces/host';
+import type { Units } from './interfaces/unit';
 
 
 export interface Host {
   backend: BaseBackend;
   id: HostId;
   state: HostState;
-  units: Record<UnitNamespace, AnonymousUnit>;
+  units: Units;
 }
 
 /**

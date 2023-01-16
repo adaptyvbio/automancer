@@ -5,7 +5,7 @@ import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
-import type { GraphBlockMetrics, GraphRenderer } from './graph';
+import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
 import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
@@ -38,26 +38,9 @@ export interface CreateFeaturesOptions {
   host: Host;
 }
 
-export interface Unit<Block extends ProtocolBlock = never, Location = never, ProcessData = never> {
-  namespace: UnitNamespace;
-  styleSheets?: CSSStyleSheet[];
-
-  ProcessComponent?: React.ComponentType<{
-    host: Host;
-    processData: any;
-    processLocation: any;
-    time: number;
-  }>;
-
-  OptionsComponent?: React.ComponentType<{
-    app: Application;
-    baseUrl: string;
-    host: Host;
-    pathname: string;
-  }>;
-
+/** @deprecated */
+export interface Unit<Block extends ProtocolBlock = never, Location = never, ProcessData = never> extends BaseUnit {
   createProcessFeatures?(processData: ProcessData, location: unknown | null, options: CreateFeaturesOptions): FeatureGroupDef;
-  createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions): FeatureGroupDef;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   getProcessLabel?(processData: ProcessData): string | null;
@@ -75,10 +58,89 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 
-  graphRenderer?: GraphRenderer<Block, GraphBlockMetrics>;
+  graphRenderer?: GraphRenderer<Block, GraphRendererDefaultMetrics>;
 }
 
-export type AnonymousUnit = Unit<ProtocolBlock | never, unknown, unknown>;
+
+export interface UnitContext {
+  host: Host;
+}
+
+export interface OptionsComponentProps {
+  app: Application;
+  baseUrl: string;
+  context: UnitContext;
+  pathname: string;
+}
+
+export interface BaseUnit {
+  OptionsComponent?: React.ComponentType<OptionsComponentProps>;
+  namespace: UnitNamespace;
+  styleSheets?: CSSStyleSheet[];
+
+  /** @deprecated */
+  getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
+
+  /** @deprecated */
+  getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
+
+  /** @deprecated */
+  providePreview?(options: { chip: Chip; host: Host; }): string | null;
+}
 
 
-export type Units = Record<UnitNamespace, AnonymousUnit>;
+export interface ProcessComponentProps<Data, Location> {
+  context: UnitContext;
+  data: Data;
+  location: Location;
+  time: number;
+}
+
+export interface ProcessUnit<Data, Location> extends BaseUnit {
+  ProcessComponent?: React.ComponentType<ProcessComponentProps<Data, Location>>;
+  createProcessFeatures(data: Data, location: Location | null, context: UnitContext): FeatureGroupDef;
+  getProcessLabel(data: Data, context: UnitContext): string | null;
+}
+
+export type UnknownProcessUnit = ProcessUnit<unknown, unknown>;
+
+
+export interface StateUnit extends BaseUnit {
+  createStateFeatures(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, context: UnitContext): FeatureGroupDef;
+}
+
+export type UnknownStateUnit = StateUnit;
+
+
+export interface HeadComponentProps<Block, Location> {
+  block: Block;
+  context: UnitContext;
+  location: Location | null;
+}
+
+export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, Key> extends BaseUnit {
+  HeadComponent?: React.ComponentType<HeadComponentProps<Block, Location>>;
+  graphRenderer: GraphRenderer<Block, BlockMetrics, Location>;
+
+  createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
+  createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
+  getActiveChildLocation?(location: Location, key: unknown): unknown;
+  getBlockClassLabel?(block: Block): string | null;
+  getBlockDefaultLabel?(block: Block, host: Host): string | null;
+  getBlockLocationLabelSuffix?(block: Block, location: Location): string | null;
+  getChildBlock(block: Block, key: Key): ProtocolBlock;
+  getChildrenExecutionKeys?(block: Block, location: Location): ProtocolBlockPath | null;
+  isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;
+  isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
+  onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
+}
+
+export type UnknownBlockUnit = BlockUnit<ProtocolBlock | never, unknown, unknown, unknown>;
+
+
+export type UnknownUnit = BaseUnit
+  & (UnknownBlockUnit | {})
+  & (UnknownProcessUnit | {})
+  & (UnknownStateUnit | {});
+
+export type Units = Record<UnitNamespace, UnknownUnit>;

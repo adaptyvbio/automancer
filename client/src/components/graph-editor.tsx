@@ -1,10 +1,11 @@
 import { Set as ImSet } from 'immutable';
 import * as React from 'react';
 
+import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
+
 import { Icon } from './icon';
 import * as util from '../util';
-
-import { GraphBlockMetrics } from '../interfaces/graph';
+import { GraphRendererDefaultMetrics } from '../interfaces/graph';
 import { Point, SideFlags, SideValues, Size } from '../geometry';
 import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
@@ -14,8 +15,7 @@ import { OverflowableText } from '../components/overflowable-text';
 import { FeatureGroupDef } from '../interfaces/unit';
 import { MenuDef, MenuEntryPath } from './context-menu';
 import { ViewExecution } from '../views/execution';
-
-import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
+import { UnitTools } from '../unit';
 
 
 export interface GraphEditorProps {
@@ -214,39 +214,38 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }
 
+    let context = { host: this.props.host };
     let settings = this.settings!;
     let renderedTree!: React.ReactNode | null;
 
     if (this.props.tree) {
-      let computeMetrics = (block: ProtocolBlock, ancestors: ProtocolBlock[]) => {
-        return this.props.host.units[block.namespace].graphRenderer!.computeMetrics(block, ancestors, {
-          computeMetrics,
-          host: this.props.host,
-          settings
-        });
+      let computeMetrics = (
+        block: ProtocolBlock,
+        ancestors: ProtocolBlock[],
+        location: unknown
+      ) => {
+        let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
+        return unit.graphRenderer.computeMetrics(block, ancestors, location, { computeMetrics, settings }, context);
       };
 
       let render = (
         block: ProtocolBlock,
         path: ProtocolBlockPath,
-        metrics: GraphBlockMetrics,
+        metrics: GraphRendererDefaultMetrics,
         position: Point,
-        state: unknown | null,
+        location: unknown | null,
         options: {
           attachmentEnd: boolean;
           attachmentStart: boolean;
         }
       ) => {
-        return this.props.host.units[block.namespace].graphRenderer!.render(block, path, metrics, position, state, {
-          ...options,
-          host: this.props.host,
-          render,
-          settings
-        });
+        let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
+        return unit.graphRenderer!.render(block, path, metrics, position, location, { render, settings, ...options }, context);
       };
 
       let origin = { x: 1, y: 1 } satisfies Point;
-      let treeMetrics = computeMetrics(this.props.tree, []);
+      let treeMetrics = computeMetrics(this.props.tree, [], this.props.location ?? null);
+
       renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.location ?? null, {
         attachmentEnd: false,
         attachmentStart: false

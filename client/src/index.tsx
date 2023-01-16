@@ -31,6 +31,7 @@ export * from './geometry';
 export * from './components/button';
 export * from './components/context-menu';
 export * from './components/description';
+export * from './components/features';
 export * from './components/graph-editor';
 export * from './components/progress-bar';
 export * from './components/timed-progress-bar';

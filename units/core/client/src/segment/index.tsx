@@ -1,4 +1,4 @@
-import { BlockUnit, FeatureGroupDef, GraphNode, GraphRenderer, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, Host, MasterError, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -11,8 +11,10 @@ export interface BlockMetrics {
 }
 
 export interface Location {
+  error: ProtocolError | null;
   mode: LocationMode;
-  process: unknown;
+  pausable: boolean;
+  process: unknown | null;
   time: number;
 }
 
@@ -163,7 +165,7 @@ function isBlockBusy(_block: Block, location: Location, _options: { host: Host; 
 }
 
 function isBlockPaused(_block: Block, location: Location, _options: { host: Host; }) {
-  return (location.mode === LocationMode.Paused);
+  return [LocationMode.Broken, LocationMode.Paused].includes(location.mode);
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
@@ -206,6 +208,7 @@ export default {
     let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
 
     let ProcessComponent = props.location && processUnit.ProcessComponent;
+    let broken = (props.location?.mode === LocationMode.Broken);
 
     return (
       <>
@@ -214,11 +217,17 @@ export default {
         ]} />
 
         {ProcessComponent && (
-          <ProcessComponent
-            context={props.context}
-            data={process.data}
-            location={processLocation}
-            time={props.location!.time} />
+          !broken
+            ? <ProcessComponent
+                context={props.context}
+                data={process.data}
+                location={processLocation!}
+                time={props.location!.time} />
+            : <DiagnosticsReport diagnostics={[
+              { kind: 'error',
+                message: props.location!.error!.message,
+                ranges: [] }
+            ]} />
         )}
       </>
     );

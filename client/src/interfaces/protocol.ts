@@ -29,19 +29,24 @@ export interface ProtocolBlockAggregate {
 }
 
 
+export interface ProtocolError {
+  id: string | null;
+  description: string[];
+  message: string;
+  references: MasterErrorReference[];
+}
+
+
 export interface Master {
   errors: MasterError[];
   location: unknown;
   protocol: Protocol;
 }
 
-export interface MasterError {
+export interface MasterError extends ProtocolError {
   id: string;
   date: number;
-  description: string[];
-  // kind: 'info' | 'error' | 'warning';
-  message: string;
-  references: MasterErrorReference[];
+  path: ProtocolBlockPath
 }
 
 export type MasterErrorReference = MasterErrorDocumentReference | MasterErrorFileReference;

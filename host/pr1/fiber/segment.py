@@ -74,6 +74,7 @@ class SegmentProgramLocation:
 
   def export(self):
     return {
+      "error": self.error and self.error.export(),
       "mode": self.mode,
       "pausable": self.pausable,
       "process": self.process and self.process.export(),
@@ -107,6 +108,7 @@ class SegmentProgram(BlockProgram):
     self._master: Master = master
     self._parent = parent
 
+    self._bypass_future: Optional[asyncio.Future]
     self._mode: SegmentProgramMode
     self._point: Optional[SegmentProgramPoint]
     self._process: Process
@@ -131,10 +133,14 @@ class SegmentProgram(BlockProgram):
         self.resume()
 
   def halt(self):
-    assert (not self.busy) and (self._mode in (SegmentProgramMode.Normal, SegmentProgramMode.Paused))
-
-    self._mode = SegmentProgramMode.Halting
-    self._process.halt()
+    match self._mode:
+      case SegmentProgramMode.Broken:
+        self.resume()
+      case SegmentProgramMode.Normal | SegmentProgramMode.Paused:
+        self._mode = SegmentProgramMode.Halting
+        self._process.halt()
+      case _:
+        raise ValueError()
 
   def jump(self, point: SegmentProgramPoint):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
@@ -146,20 +152,27 @@ class SegmentProgram(BlockProgram):
       self.halt()
 
   def pause(self):
-    assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
+    assert self._mode == SegmentProgramMode.Normal
 
     self._mode = SegmentProgramMode.Pausing
     self._process.pause()
 
   def resume(self):
-    assert (not self.busy) and (self._mode == SegmentProgramMode.Paused)
-
-    self.call_resume()
-    self._process.resume()
+    match self._mode:
+      case SegmentProgramMode.Broken:
+        assert self._bypass_future
+        self._bypass_future.set_result(None)
+        self._bypass_future = None
+      case SegmentProgramMode.Paused:
+        self.call_resume()
+        self._process.resume()
+      case _:
+        raise ValueError()
 
   async def run(self, initial_point: Optional[SegmentProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
     runner = self._master.chip.runners[self._block._process.namespace]
 
+    self._bypass_future = None
     self._point = initial_point or SegmentProgramPoint(process=None)
     self._master.transfer_state(); print("X: Segment")
 
@@ -180,7 +193,7 @@ class SegmentProgram(BlockProgram):
           yield ProcessInternalError(e)
 
         if self._mode not in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated):
-          yield ProcessProtocolError(f"Process returned without sending a {type(ProcessFailureEvent)} or {type(ProcessTerminationEvent)} event")
+          yield ProcessProtocolError(f"Process returned without sending a {ProcessFailureEvent.__name__} or {ProcessTerminationEvent.__name__} event")
 
     async for event in run():
       event_errors = list[Error]()
@@ -266,6 +279,29 @@ class SegmentProgram(BlockProgram):
         state_terminated=(self._mode == SegmentProgramMode.Terminated),
         terminated=(self._mode == SegmentProgramMode.Terminated)
       )
+
+      if self._mode == SegmentProgramMode.Broken:
+        self._bypass_future = asyncio.Future()
+        await self._bypass_future
+
+        # TODO: Add
+        # self._mode = SegmentProgramMode.Terminated
+
+        yield ProgramExecEvent(
+          location=SegmentProgramLocation(
+            error=location_error,
+            mode=self._mode,
+            pausable=process_pausable,
+            process=None,
+            time=event_time
+          ),
+          partial=True,
+          stopped=True,
+          state_terminated=True,
+          terminated=True
+        )
+
+        break
 
 
 @dataclass

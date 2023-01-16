@@ -172,6 +172,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           )}
 
           <FeatureList
+            indexOffset={aggregates.findIndex((aggregate) => aggregate.state)}
             hoveredGroupIndex={this.state.hoveredAggregateIndex}
             pausedGroupIndex={pausedAggregateIndex}
             list={

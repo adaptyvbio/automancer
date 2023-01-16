@@ -391,6 +391,7 @@ class Host:
         def done_callback():
           logger.info(f"Ran protocol on chip '{chip.id}'")
           chip.master = None
+          self.update_callback()
 
         def update_callback():
           self.update_callback()

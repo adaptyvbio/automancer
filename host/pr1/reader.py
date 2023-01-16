@@ -14,8 +14,8 @@ from .util.decorators import deprecated
 
 @dataclass
 class Position:
-  column: int
   line: int
+  column: int
 
 
 class Location:

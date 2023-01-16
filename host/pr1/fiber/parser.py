@@ -335,6 +335,9 @@ class FiberParser:
         name=output['_']['name'],
         root=entry_block
       )
+
+      # Remove the root state block
+      # self.protocol.root = self.protocol.root.child
     else:
       self.protocol = None
 

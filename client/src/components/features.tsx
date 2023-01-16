@@ -21,22 +21,28 @@ export function SimpleFeatureList(props: {
 
 export function FeatureList(props: {
   hoveredGroupIndex: number | null;
+  indexOffset?: number;
   list: FeatureListDef;
   pausedGroupIndex: number | null;
   setHoveredGroupIndex(value: number | null): void;
   setPausedGroupIndex(value: number | null): void;
 }) {
+  let indexOffset = (props.indexOffset ?? 0);
   let groupHovered = (props.hoveredGroupIndex !== null);
+
+  let topIndex = indexOffset + props.list.length;
 
   return (
     <div className={styles.list}>
       <FeatureListDivider
         freezable={true}
-        hovered={props.hoveredGroupIndex === props.list.length}
-        paused={props.pausedGroupIndex === props.list.length}
-        setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? props.list.length : null)}
-        setPaused={(paused) => void props.setPausedGroupIndex(paused ? props.list.length : null)} />
+        hovered={props.hoveredGroupIndex === topIndex}
+        paused={props.pausedGroupIndex === topIndex}
+        setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? topIndex : null)}
+        setPaused={(paused) => void props.setPausedGroupIndex(paused ? topIndex : null)} />
       {Array.from(props.list.entries()).reverse().map(([index, group]) => {
+        index += indexOffset;
+
         let hovered = (props.hoveredGroupIndex === index);
 
         return (

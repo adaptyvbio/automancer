@@ -135,7 +135,7 @@ class Master:
           if start_future:
             start_future.set_result(None)
             start_future = None
-          else:
+          elif not event.terminated:
             update_callback()
 
         done_callback()

@@ -1,5 +1,8 @@
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Optional
+from typing import Any, Optional
+import uuid
+
+from .draft import DraftDiagnostic
 
 from .reader import LocatedString, LocatedValue, LocationArea
 from .util.misc import Exportable
@@ -30,19 +33,23 @@ class ErrorDocumentReference(ErrorReference, Exportable):
     }
 
   @classmethod
-  def from_value(cls, value: LocatedValue, *, id: str = 'target'):
+  def from_area(cls, area: LocationArea, *, id: str = 'target'):
     from .document import Document
 
-    assert value.source
+    assert area.source
 
-    document = value.source.origin
+    document = area.source.origin
     assert isinstance(document, Document)
 
     return cls(
-      area=value.area,
+      area=area,
       document_id=document.id,
       id=id
     )
+
+  @classmethod
+  def from_value(cls, value: LocatedValue, *, id: str = 'target'):
+    return cls.from_area(value.area, id=id)
 
 @dataclass(kw_only=True)
 class ErrorFileReference(ErrorReference):
@@ -60,8 +67,17 @@ class Error(Exportable):
   message: str
   _: KW_ONLY
   description: list[str] = field(default_factory=list)
-  id: Optional[int] = None
+  id: Optional[str] = None
   references: list[ErrorReference] = field(default_factory=list)
+
+  def with_time(self, time: float, /):
+    return MasterError(
+      description=self.description,
+      message=self.message,
+      id=self.id or str(uuid.uuid4()),
+      references=self.references,
+      time=time
+    )
 
   def export(self):
     return {
@@ -71,14 +87,23 @@ class Error(Exportable):
       "references": [ref.export() for ref in self.references]
     }
 
+  # For compatibility only
+  def diagnostic(self):
+    return DraftDiagnostic(self.message, ranges=[
+      range for ref in self.references if isinstance(ref, ErrorDocumentReference) and ref.area for range in ref.area.ranges
+    ])
+
 @dataclass(kw_only=True)
 class MasterError(Error, Exportable):
-  time: Optional[int] = None
+  id: str
+  path: list[Any] = field(default_factory=list)
+  time: Optional[float] = None
 
   def export(self):
     return {
       **super().export(),
-      "date": self.time
+      "date": self.time,
+      "path": self.path
     }
 
 

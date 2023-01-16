@@ -90,11 +90,11 @@ export function FeatureGroup(props: {
   return (
     <div className={styles.group}>
       {(props.group.length > 0)
-        ? props.group.map((feature) => (
+        ? props.group.map((feature, index) => (
           <div className={util.formatClass(styles.entry, {
             [styles.entryAccent]: feature.accent,
             [styles.entryDisabled]: feature.disabled
-          })} key={feature.label}>
+          })} key={index}>
             <Icon name={feature.icon} className={styles.icon} />
             <div className={styles.body}>
               {feature.description && <div className={styles.description}>{feature.description}</div>}

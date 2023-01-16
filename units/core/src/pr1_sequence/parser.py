@@ -214,15 +214,14 @@ class SequenceProgram(BlockProgram):
 
       terminated = (event.terminated and ((self._point and self._point.index >= len(self._block._children)) or (self._child_index + 1 >= len(self._block._children)) or (self._mode == SequenceProgramMode.Halted)))
 
-      yield ProgramExecEvent(
+      yield event.inherit(
+        key=self._child_index,
         location=SequenceProgramLocation(
           child=event.location,
           index=self._child_index,
           interrupting=self._interrupting,
           mode=self._mode
         ),
-        state_terminated=event.state_terminated,
-        stopped=event.stopped,
         terminated=terminated
       )
 

@@ -575,6 +575,9 @@ class PotentialExprType(Type):
     elif self._literal:
       analysis, value = self._type.analyze(obj, context) if self._type else (Analysis(), obj)
 
+      if isinstance(value, EllipsisType):
+        return analysis, Ellipsis
+
       if self._dynamic and self._static:
         value = LocatedValue.new(ValueAsPythonExpr(value), obj.area)
 

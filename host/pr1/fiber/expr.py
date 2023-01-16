@@ -2,6 +2,7 @@ import ast
 import functools
 import re
 from enum import Enum
+from pint import Quantity
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, cast
 
@@ -38,6 +39,26 @@ def unescape(value: LocatedString) -> LocatedString:
 
   output += value[pos:]
   return cast(LocatedString, output)
+
+
+def export_value(value: Any, /):
+  if isinstance(value, LocatedValue):
+    return export_value(value.value)
+
+  match value:
+    case Exportable():
+      return value.export()
+    case Quantity(magnitude=magnitude, units=unit):
+      return {
+        "type": "quantity",
+        "formatted": f"{value:~.2fP}",
+        "magnitude": magnitude,
+        "unit_formatted": f"{unit:~P}"
+      }
+    case _:
+      return {
+        "type": "unknown"
+      }
 
 
 class PythonSyntaxError(Exception):
@@ -89,7 +110,10 @@ class PythonExpr(PotentialPythonExpr):
         return static_evaluate(self.tree.body, self.contents, context)
 
   def export(self):
-    return f"{{{{ {self.contents.value} }}}}"
+    return {
+      "type": "expression",
+      "contents": self.contents.value
+    }
 
   def __repr__(self):
     return f"{self.__class__.__name__}({repr(ast.unparse(self.tree))})"
@@ -175,7 +199,10 @@ class ValueAsPythonExpr(PotentialPythonExpr):
     return self._value
 
   def export(self):
-    ...
+    return export_value(self._value)
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self._value})"
 
 
 class PythonExprAugmented:

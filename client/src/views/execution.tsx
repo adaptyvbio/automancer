@@ -200,10 +200,12 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                         id: 'report',
                         label: 'Report',
                         contents: () => (
-                          <DiagnosticsReport diagnostics={[
-                            { kind: 'error', message: 'Invalid halt signal', ranges: [] },
-                            { kind: 'warning', message: 'Missing command target', ranges: [] }
-                          ]} />
+                          <DiagnosticsReport diagnostics={this.master.errors.slice().reverse().map((error, index) => ({
+                            id: error.id ?? index,
+                            kind: 'error',
+                            message: error.message,
+                            ranges: []
+                          }))} />
                         )
                       }
                     ]} />

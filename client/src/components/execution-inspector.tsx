@@ -166,10 +166,11 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             let processUnit = units[process.namespace];
             let ProcessComponent = processUnit.ProcessComponent!;
             let segmentLocation = lineLocations.at(-1) as any;
+            let processLocation = getSegmentBlockProcessState(segmentLocation, this.props.host);
 
             return (
               <>
-                <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, {
+                <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, processLocation, {
                   host: this.props.host
                 }).map((feature) => ({ ...feature, accent: true }))]} />
 
@@ -177,7 +178,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                   <ProcessComponent
                     host={this.props.host}
                     processData={process!.data}
-                    processLocation={getSegmentBlockProcessState(segmentLocation, this.props.host)}
+                    processLocation={processLocation}
                     time={segmentLocation.time} />
                 </ErrorBoundary>
               </>

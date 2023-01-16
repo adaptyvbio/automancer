@@ -5,6 +5,7 @@ from io import IOBase
 import logging
 import traceback
 from typing import Awaitable, Protocol
+import typing
 
 
 FileObject = IOBase
@@ -17,6 +18,7 @@ def log_exception(logger, *, level = logging.DEBUG):
     if line:
       logger.log(level, line)
 
+@typing.runtime_checkable
 class Exportable(Protocol):
   def export(self) -> object:
     ...

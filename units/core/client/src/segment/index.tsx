@@ -44,9 +44,11 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       : null;
 
     let name = (state?.['name']?.value ?? null);
+    let processFeatures = options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, null, createFeaturesOptions) ?? [];
     let features = [
-      ...(options.host.units[block.process.namespace].createProcessFeatures?.(block.process.data, createFeaturesOptions)
-        ?? [{ icon: 'not_listed_location', label: 'Unknown process' }])
+      ...(processFeatures.length > 0
+        ? processFeatures
+        : [{ icon: 'not_listed_location', label: 'Unknown process' }])
         .map((feature) => ({ ...feature, accent: true })),
       ...(state
           ? Object.values(options.host.units).flatMap((unit) => {

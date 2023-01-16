@@ -25,7 +25,7 @@ export interface Feature {
     message: string;
   } | null;
   icon: string;
-  label: string;
+  label: React.ReactNode;
 }
 
 export type FeatureGroupDef = Feature[];
@@ -56,7 +56,7 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
     pathname: string;
   }>;
 
-  createProcessFeatures?(processData: ProcessData, options: CreateFeaturesOptions): FeatureGroupDef;
+  createProcessFeatures?(processData: ProcessData, location: unknown | null, options: CreateFeaturesOptions): FeatureGroupDef;
   createStateFeatures?(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions): FeatureGroupDef;
   getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];

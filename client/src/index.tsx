@@ -26,6 +26,7 @@ export { Pool } from './util';
 export * as util from './util';
 export { React, ReactDOM };
 
+export * from './dynamic-value';
 export * from './geometry';
 export * from './components/button';
 export * from './components/context-menu';

@@ -80,7 +80,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         </div>
 
         {(process && processUnit) && (
-          <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, {
+          <SimpleFeatureList list={[processUnit.createProcessFeatures!(process.data, null, {
             host: this.props.host
           }).map((feature) => ({ ...feature, accent: true }))]} />
         )}

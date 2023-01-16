@@ -7,8 +7,8 @@ from types import EllipsisType
 from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence, cast
 
 from .eval import EvalStack
-
 from ..host import logger
+from ..error import Error
 from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
@@ -16,7 +16,7 @@ from ..devices.claim import ClaimSymbol
 from ..draft import DraftDiagnostic
 from ..reader import LocationArea
 from ..util.decorators import debug
-from ..util.misc import Exportable
+from ..util.misc import Exportable, UnreachableError
 from .master2 import Master
 
 
@@ -66,17 +66,17 @@ class SegmentProgramMode(IntEnum):
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
-  error: Optional[Any]
+  error: Optional[Error]
   mode: SegmentProgramMode
   pausable: bool
-  process: Any
+  process: Optional[Exportable]
   time: float
 
   def export(self):
     return {
       "mode": self.mode,
       "pausable": self.pausable,
-      "process": self.process.export(),
+      "process": self.process and self.process.export(),
       "time": self.time * 1000.0
     }
 
@@ -183,7 +183,7 @@ class SegmentProgram(BlockProgram):
           yield ProcessProtocolError(f"Process returned without sending a {type(ProcessFailureEvent)} or {type(ProcessTerminationEvent)} event")
 
     async for event in run():
-      event_errors = list()
+      event_errors = list[Error]()
       event_time = None
       location_error: Optional[Any] = None
 
@@ -206,14 +206,14 @@ class SegmentProgram(BlockProgram):
               if not process_location:
                 raise ProcessProtocolError(f"Process sent a {ProcessExecEvent.__name__} event with a falsy location while starting")
 
-              self._mode = SegmentProgramMode.Normal
+            self._mode = SegmentProgramMode.Normal
 
             if pausable is not None:
               process_pausable = pausable
 
           case ProcessFailureEvent(error=error):
             self._mode = SegmentProgramMode.Broken
-            location_error = error
+            location_error = error or event.errors[0]
 
           case ProcessPauseEvent():
             if self._mode != SegmentProgramMode.Pausing:
@@ -239,17 +239,21 @@ class SegmentProgram(BlockProgram):
         else:
           self._mode = SegmentProgramMode.Broken
 
-          event_errors.append(e)
-          location_error = e
+          match e:
+            case ProcessInternalError():
+              err = Error("Process internal error")
+            case ProcessProtocolError():
+              err = Error(e.message)
+            case _:
+              raise UnreachableError()
 
-          yield ProgramExecEvent(
-            errors=[e]
-          )
+          event_errors.append(err)
+          location_error = err
 
       event_time = event_time or time.time()
 
       yield ProgramExecEvent(
-        errors=event_errors,
+        errors=[error.with_time(event_time) for error in event_errors],
         location=SegmentProgramLocation(
           error=location_error,
           mode=self._mode,

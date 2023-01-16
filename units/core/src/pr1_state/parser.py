@@ -259,7 +259,7 @@ class StateProgram(BlockProgram):
       if self._mode == StateProgramMode.Halted:
         await self._state_instance.close()
 
-      yield ProgramExecEvent(
+      yield event.inherit(
         location=StateProgramLocation(
           child=event.location,
           mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack

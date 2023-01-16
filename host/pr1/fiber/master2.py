@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import traceback
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
+from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from ..units.base import BaseRunner
@@ -33,6 +34,7 @@ class Master:
 
     self._child_state_terminated: bool
     self._child_stopped: bool
+    self._errors = list[MasterError]()
     self._events = list[ProgramExecEvent]()
     self._program: BlockProgram
     self._location: Any
@@ -73,7 +75,6 @@ class Master:
 
     self._child_state_terminated = False
     self._child_stopped = True
-    self._will_write_state = True
 
     from random import random
 
@@ -82,6 +83,8 @@ class Master:
     }
 
     async for event in self._program.run(initial_location, None, runtime_stack, symbol):
+      self._errors += event.errors
+
       # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
       if self._child_state_terminated and (not event.state_terminated):
         self.write_state(); print("Y: Master3")
@@ -163,6 +166,7 @@ class Master:
 
   def export(self):
     return {
+      "errors": [error.export() for error in self._errors],
       "location": self._location.export(),
       "protocol": self.protocol.export()
     }

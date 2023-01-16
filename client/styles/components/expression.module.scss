@@ -1,0 +1,15 @@
+@use "../constants" as *;
+@use "../mixins" as *;
+
+
+.root {
+  background-color: #0074d933;
+  border-radius: 4px;
+
+  padding: 2px 0.5ch;
+
+  @include text-ellipsis();
+
+  font-family: $monospace-font;
+  font-size: 0.8em;
+}

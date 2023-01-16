@@ -19,8 +19,8 @@ export function DiagnosticsReport(props: {
         }[diagnostic.kind])} key={index}>
           <Icon name={{ error: 'report', warning: 'warning' }[diagnostic.kind]} className={styles.entryIcon} />
           <div className={styles.entryTitle}>{diagnostic.message}</div>
-          <button type="button" className={styles.entryLocation}>foo.yml 13:8</button>
-          <p className={styles.entryDescription}>This line contains a syntax error. See the documentation for details.</p>
+          {/* <button type="button" className={styles.entryLocation}>foo.yml 13:8</button> */}
+          {/* <p className={styles.entryDescription}>This line contains a syntax error. See the documentation for details.</p> */}
         </div>
       ))}
     </div>

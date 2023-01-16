@@ -1,10 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 from enum import IntEnum
 from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
-from ..error import MasterError
+from ..error import Error, MasterError
 from .parser import BlockState
 from ..util.decorators import debug
 from ..util.misc import Exportable
@@ -35,7 +35,7 @@ T = TypeVar('T', bound=Exportable)
 
 @dataclass(kw_only=True)
 class ProgramExecEvent(Generic[T]):
-  errors: Optional[list[Any]] = None
+  errors: list[MasterError] = field(default_factory=list)
   location: Optional[T] = None
   partial: bool = False
   state_terminated: bool = False
@@ -46,24 +46,30 @@ class ProgramExecEvent(Generic[T]):
   def inherit(
     self,
     *,
-    errors: Optional[list[Any]],
+    errors: Optional[list[MasterError]] = None,
+    key: Optional[Any] = None,
     location: Optional[T],
+    state_terminated: Optional[bool] = None,
+    stopped: Optional[bool] = None,
     terminated: bool = False
   ):
+    for err in self.errors:
+      err.path.insert(0, key)
+
     return type(self)(
-      errors=((self.errors or list()) + (errors or list())),
+      errors=(self.errors + (errors or list())),
       location=location,
       partial=self.partial,
-      state_terminated=self.state_terminated,
+      state_terminated=(state_terminated if state_terminated is not None else self.state_terminated),
       terminated=terminated,
-      stopped=self.stopped,
+      stopped=(stopped if stopped is not None else self.stopped),
       time=self.time
     )
 
 
 @dataclass(kw_only=True)
 class BaseProcessEvent:
-  errors: Optional[list[MasterError]] = None
+  errors: list[Error] = field(default_factory=list)
   location: Optional[Exportable] = None
   time: Optional[float] = None
 
@@ -78,7 +84,7 @@ class ProcessPauseEvent(BaseProcessEvent):
 
 @dataclass(kw_only=True)
 class ProcessFailureEvent(BaseProcessEvent):
-  error: MasterError
+  error: Optional[Error] = None
 
 @dataclass(kw_only=True)
 class ProcessTerminationEvent(BaseProcessEvent):

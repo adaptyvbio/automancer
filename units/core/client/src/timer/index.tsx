@@ -36,7 +36,7 @@ export default {
         : formatDynamicValue(processData.value)
     }];
   },
-  getProcessLabel(data) {
+  getProcessLabel(data, context) {
     return 'Wait';
   }
 } satisfies ProcessUnit<ProcessData, ProcessLocation>

@@ -400,14 +400,23 @@ class CoupledStateIterator3(Generic[T, S]):
 
     if self._triggered:
       self._triggered = False
-      return None, self._state_events
+
+      state_events = self._state_events.copy()
+      self._state_events.clear()
+
+      return None, state_events
 
     if (not self._done) and (not self._task):
       self._task = asyncio.create_task(anext(self._iterator)) # type: ignore
       self._task.add_done_callback(self._callback)
 
     self._future = Future()
-    return await self._future, self._state_events
+
+    value = await self._future
+    state_events = self._state_events.copy()
+    self._state_events.clear()
+
+    return value, state_events
 
 
 class AltIterator(Generic[T]):

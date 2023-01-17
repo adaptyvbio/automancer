@@ -1,7 +1,7 @@
 import { Chip } from './backends/common';
 import { Host } from './host';
 import { Master, MasterProcessState, ProtocolBlock, ProtocolBlockAggregate, ProtocolProcess, ProtocolState } from './interfaces/protocol';
-import { BlockUnit, FeatureGroupDef, StateUnit, UnknownBlockUnit, UnknownProcessUnit, UnknownUnit } from './interfaces/unit';
+import { BlockUnit, FeatureGroupDef, StateUnit, UnknownBlockUnit, UnknownProcessUnit, UnknownStateUnit, UnknownUnit } from './interfaces/unit';
 
 
 /** @deprecated */
@@ -73,7 +73,7 @@ export namespace UnitTools {
     return isStateUnit(unit) ? unit : null;
   }
 
-  export function isStateUnit(unit: UnknownUnit): unit is StateUnit {
+  export function isStateUnit(unit: UnknownUnit): unit is UnknownStateUnit {
     return 'createStateFeatures' in unit;
   }
 

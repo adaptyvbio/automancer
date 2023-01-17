@@ -1,4 +1,5 @@
 import ast
+import builtins
 import functools
 import re
 from enum import Enum
@@ -46,6 +47,25 @@ def export_value(value: Any, /):
     return export_value(value.value)
 
   match value:
+    case builtins.bool():
+      return {
+        "type": "boolean",
+        "value": value
+      }
+    case builtins.float() | builtins.int():
+      return {
+        "type": "number",
+        "value": value
+      }
+    case builtins.str():
+      return {
+        "type": "string",
+        "value": value
+      }
+    case EllipsisType():
+      return {
+        "type": "ellipsis"
+      }
     case Exportable():
       return value.export()
     case Quantity(magnitude=magnitude, units=unit):

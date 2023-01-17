@@ -180,7 +180,13 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 .filter(([_aggregateIndex, aggregate]) => aggregate.state)
                 .map(([aggregateIndex, aggregate]) => {
                   let blockIndex = aggregate.offset;
-                  let location = lineLocations[blockIndex] as { state: Record<UnitNamespace, unknown>; };
+                  let location = lineLocations[blockIndex] as {
+                    state: Record<UnitNamespace, {
+                      location: unknown;
+                      settled: boolean;
+                    }> | null;
+                  };
+
                   let disabled = (this.state.hoveredAggregateIndex !== null)
                     ? (aggregateIndex >= this.state.hoveredAggregateIndex)
                     : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
@@ -191,10 +197,10 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                   return Object.values(units).flatMap((unit) => {
                     return UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                      aggregate.state!,
-                      ancestorStates,
-                      location.state,
-                      { host: this.props.host }
+                      aggregate.state![unit.namespace],
+                      ancestorStates.map((state) => state[unit.namespace]),
+                      location.state?.[unit.namespace].location,
+                      context
                     ) ?? [];
                   }).map((feature) => ({
                     ...feature,

@@ -1,4 +1,4 @@
-import { CreateFeaturesOptions, Feature, MasterStateLocation, ProtocolState, UnknownUnit, util } from 'pr1';
+import { CreateFeaturesOptions, DynamicValue, Feature, formatDynamicValue, MasterStateLocation, ProtocolState, StateUnit, util } from 'pr1';
 
 
 export type NodePath = string[];
@@ -39,12 +39,18 @@ export interface DataNode extends BaseNode {
   };
 }
 
+const findNode = (node: BaseNode, path: NodePath): BaseNode =>
+  path.length > 0
+    ? findNode((node as CollectionNode).nodes[path[0]], path.slice(1))
+    : node;
+
+
 export interface ExecutorState {
   root: CollectionNode<DeviceNode>;
 }
 
-export interface UnitProtocolState {
-  values: [NodePath, string][];
+export interface State {
+  values: [NodePath, DynamicValue][];
 }
 
 export enum NodeWriteError {
@@ -53,63 +59,52 @@ export enum NodeWriteError {
   ExprError = 2
 }
 
-function formatError(error: NodeWriteError): Feature['error'] {
-  switch (error) {
-    case NodeWriteError.Disconnected: return {
-      message: 'Disconnected',
-      kind: 'power'
-    };
-
-    case NodeWriteError.Unclaimable: return {
-      message: 'Unclaimable',
-      kind: 'shield'
-    };
-
-    case NodeWriteError.ExprError: return {
-      message: 'Expression error',
-      kind: 'error'
-    };
-  }
+export interface NodeStateLocation {
+  errors: {
+    disconnected: boolean;
+    evaluation: boolean;
+    unclaimable: boolean;
+  };
+  value: DynamicValue;
 }
 
-export interface UnitStateLocation {
-  values: [NodePath, NodeWriteError | null][];
-}
-
-
-const namespace = 'devices';
-
-function createStateFeatures(state: ProtocolState, descendantStates: ProtocolState[] | null, location: MasterStateLocation, options: CreateFeaturesOptions) {
-  let executor = options.host.state.executors[namespace] as ExecutorState;
-  let unitLocation = location?.[namespace] as UnitStateLocation | undefined;
-  let unitStateData = state[namespace] as UnitProtocolState;
-
-  let findNode = (node: BaseNode, path: NodePath): BaseNode =>
-    path.length > 0
-      ? findNode((node as CollectionNode).nodes[path[0]], path.slice(1))
-      : node;
-
-  return unitStateData.values.map(([path, value]) => {
-    let node = findNode(executor.root, path);
-    let nodeError = unitLocation?.values.find(([otherPath, _error]) => util.deepEqual(otherPath, path))?.[1];
-
-    return {
-      disabled: descendantStates?.some((descendantState) => {
-        let unitDescendantState = descendantState[namespace] as UnitProtocolState;
-        return unitDescendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
-      }),
-      description: node.label ?? node.id,
-      error: nodeError != null
-        ? formatError(nodeError)
-        : null,
-      icon: node.icon ?? 'settings_input_hdmi',
-      label: value
-    };
-  });
+export interface Location {
+  values: [NodePath, NodeStateLocation][];
 }
 
 
 export default {
-  createStateFeatures,
-  namespace
-} satisfies UnknownUnit
+  namespace: 'devices',
+
+  createStateFeatures(state, descendantStates, location, context) {
+    let executor = context.host.state.executors[this.namespace] as ExecutorState;
+
+    return state?.values.map(([path, value]) => {
+      let node = findNode(executor.root, path);
+      let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
+
+      let errors: Feature['error'][] = [];
+
+      if (nodeLocation?.errors.disconnected) {
+        errors.push({ kind: 'power', message: 'Disconnected' });
+      } if (nodeLocation?.errors.unclaimable) {
+        errors.push({ kind: 'shield', message: 'Unclaimable' });
+      } if (nodeLocation?.errors.evaluation) {
+        errors.push({ kind: 'error', message: 'Expression evaluation error' });
+      }
+
+      return {
+        disabled: descendantStates?.some((descendantState) => {
+          return descendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
+        }),
+        description: node.label ?? node.id,
+        error: errors[0] ?? null,
+        icon: node.icon ?? 'settings_input_hdmi',
+        label: nodeLocation
+          ? formatDynamicValue(nodeLocation.value)
+          : formatDynamicValue(value)
+      };
+    }) ?? [];
+  }
+
+} satisfies StateUnit<State | undefined, Location>

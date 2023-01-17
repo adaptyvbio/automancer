@@ -92,10 +92,10 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
             .map(([aggregateIndex, aggregate]) => {
               return Object.values(units).flatMap((unit) => {
                 return UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                  aggregate.state!,
+                  aggregate.state![unit.namespace],
                   aggregates
                     .slice(aggregateIndex + 1)
-                    .map((aggregate) => aggregate.state!),
+                    .map((aggregate) => aggregate.state![unit.namespace]),
                   null,
                   context
                 ) ?? [];

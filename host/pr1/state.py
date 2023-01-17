@@ -1,4 +1,5 @@
 import asyncio
+import copy
 from dataclasses import KW_ONLY, dataclass, field
 from typing import Any, Callable, Optional
 
@@ -11,27 +12,21 @@ from .util.misc import Exportable
 
 
 @dataclass
-class StateBaseEvent:
+class StateEvent:
   location: Optional[Exportable] = None
   _: KW_ONLY
   errors: list[Error] = field(default_factory=list)
+  settled: bool = False
   time: Optional[float] = None
 
 # @dataclass(kw_only=True)
 # class StateErrorEvent(StateBaseEvent):
 #   error: Optional[Error]
 
-@dataclass
-class StateSettleEvent(StateBaseEvent):
-  pass
 
-@dataclass
-class StateSuspensionEvent(StateBaseEvent):
-  pass
-
-@dataclass
-class StateUpdateEvent(StateBaseEvent):
-  pass
+class StateProtocolError(Error):
+  def __init__(self, message: str):
+    super().__init__(message)
 
 
 @dataclass(kw_only=True)
@@ -60,7 +55,7 @@ class StateRecord:
   location: StateLocation
 
 
-StateInstanceNotifyCallback = Callable[[StateBaseEvent], None]
+StateInstanceNotifyCallback = Callable[[StateEvent], None]
 # StateInstanceCollectionResult = tuple[list[Error], StateLocation]
 
 class StateInstanceCollection:
@@ -76,7 +71,7 @@ class StateInstanceCollection:
       namespace: runner.StateInstance(
         state[namespace],
         runner,
-        notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)),
+        notify=(lambda event, namespace = namespace: self._handle_event(namespace, event, notify=True)),
         stack=stack,
         symbol=symbol
       ) for namespace, runner in runners.items() if runner.StateInstance
@@ -93,17 +88,18 @@ class StateInstanceCollection:
     if all(entry.settled for entry in self._location.entries.values()):
       self._settled_future.set_result(None)
 
-  def _notify_unit(self, namespace: str, event: StateBaseEvent):
+  def _handle_event(self, namespace: str, event: StateEvent, *, notify: bool):
     entry = self._location.entries[namespace]
-    entry.settled = entry.settled or isinstance(event, StateSettleEvent)
+    entry.settled = entry.settled or event.settled
 
     if event.location:
       entry.location = event.location
 
-    self._notify(StateRecord(
-      errors=event.errors,
-      location=self._location
-    ))
+    if notify:
+      self._notify(StateRecord(
+        errors=event.errors,
+        location=copy.deepcopy(self._location)
+      ))
 
   def apply(self, *, resume: bool):
     self._applied = True
@@ -117,17 +113,17 @@ class StateInstanceCollection:
       assert event.location
 
       errors += event.errors
-      settled = isinstance(event, StateSettleEvent)
 
       self._location.entries[namespace] = StateLocationUnitEntry(
         location=event.location,
-        settled=settled
+        settled=event.settled
       )
 
     self._check_all_settled()
+
     return StateRecord(
       errors=errors,
-      location=self._location
+      location=copy.deepcopy(self._location)
     )
 
   async def close(self):
@@ -140,8 +136,22 @@ class StateInstanceCollection:
   async def suspend(self):
     assert self._applied
 
-    self._applied = False
-    await asyncio.gather(*[instance.suspend() for instance in self._instances.values()])
+    events = await asyncio.gather(*[instance.suspend() for instance in self._instances.values()])
+    errors = list[Error]()
+
+    for namespace, event in zip(self._instances.keys(), events):
+      if event:
+        errors += event.errors
+        self._handle_event(namespace, event, notify=False)
+
+    record = StateRecord(
+      errors=errors,
+      location=copy.deepcopy(self._location)
+    )
 
     del self._location
     del self._settled_future
+
+    self._applied = False
+
+    return record

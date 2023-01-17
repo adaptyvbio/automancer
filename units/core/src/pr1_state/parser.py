@@ -10,7 +10,7 @@ from pr1.error import Error
 from pr1.fiber.master2 import StateInstanceCollection
 from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocationArea
-from pr1.state import StateLocation, StateRecord, StateUpdateEvent
+from pr1.state import StateLocation, StateRecord
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
 from pr1.util.iterators import CoupledStateIterator3
@@ -193,16 +193,7 @@ class StateProgram(BlockProgram):
 
     async def suspend_state():
       try:
-        await self._state_instance.suspend()
-
-        match self._mode:
-          case StateProgramMode.PausingState:
-            self._mode = StateProgramMode.Paused
-            self._state_location = None
-            self._iterator.trigger()
-          case StateProgramMode.HaltingState:
-            self._mode = StateProgramMode.Halted
-            self._iterator.trigger()
+        self._iterator.notify(await self._state_instance.suspend())
       except Exception:
         traceback.print_exc()
 
@@ -263,6 +254,13 @@ class StateProgram(BlockProgram):
         self._mode = StateProgramMode.PausingState
         asyncio.create_task(suspend_state())
         continue
+
+      if (self._mode == StateProgramMode.PausingState) and (not self._state_instance.applied):
+        self._mode = StateProgramMode.Paused
+        self._state_location = None
+
+      if (self._mode == StateProgramMode.HaltingState) and (not self._state_instance.applied):
+        self._mode = StateProgramMode.Halted
 
       resuming = ((self._mode == StateProgramMode.Paused) and (not self._child_stopped)) or (self._mode == StateProgramMode.Resuming)
 

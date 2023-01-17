@@ -105,11 +105,11 @@ export interface ProcessUnit<Data, Location> extends BaseUnit {
 export type UnknownProcessUnit = ProcessUnit<unknown, unknown>;
 
 
-export interface StateUnit extends BaseUnit {
-  createStateFeatures(state: ProtocolState, ancestorStates: ProtocolState[] | null, location: MasterStateLocation, context: UnitContext): FeatureGroupDef;
+export interface StateUnit<State, Location> extends BaseUnit {
+  createStateFeatures(state: State, ancestorStates: State[] | null, location: Location | null, context: UnitContext): FeatureGroupDef;
 }
 
-export type UnknownStateUnit = StateUnit;
+export type UnknownStateUnit = StateUnit<unknown, unknown>;
 
 
 export interface HeadComponentProps<Block, Location> {

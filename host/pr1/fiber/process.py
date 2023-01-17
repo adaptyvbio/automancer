@@ -46,7 +46,7 @@ class ProgramExecEvent(Generic[T]):
   def inherit(
     self,
     *,
-    errors: Optional[list[MasterError]] = None,
+    errors: Optional[list[Error]] = None,
     key: Optional[Any] = None,
     location: Optional[T],
     state_terminated: Optional[bool] = None,
@@ -57,7 +57,8 @@ class ProgramExecEvent(Generic[T]):
       err.path.insert(0, key)
 
     return type(self)(
-      errors=(self.errors + (errors or list())),
+      # The child errors (self.errors) are considered to happen after the parent errors (errors), so they are added last.
+      errors=([error.as_master(time=self.time) for error in (errors or list())] + self.errors),
       location=location,
       partial=self.partial,
       state_terminated=(state_terminated if state_terminated is not None else self.state_terminated),

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import traceback
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
+from ..state import StateInstanceCollection
 from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
@@ -14,16 +15,6 @@ from ..util.iterators import DynamicParallelIterator
 
 if TYPE_CHECKING:
   from ..host import Host
-
-
-@dataclass
-class StateLocation:
-  unit_locations: dict[str, Any]
-
-  def export(self):
-    return {
-      namespace: (unit_location and unit_location.export()) for namespace, unit_location in self.unit_locations.items()
-    }
 
 
 class Master:
@@ -170,43 +161,3 @@ class Master:
       "location": self._location.export(),
       "protocol": self.protocol.export()
     }
-
-
-class StateInstanceCollection:
-  def __init__(self, state: BlockState, *, notify: Callable, runners: dict[str, BaseRunner], stack: EvalStack, symbol: ClaimSymbol):
-    self._applied = False
-    self._notify = notify
-    self._runners = runners
-    self._instances = { namespace: runner.StateInstance(state[namespace], runner, notify=(lambda event, namespace = namespace: self._notify_unit(namespace, event)), stack=stack, symbol=symbol) for namespace, runner in runners.items() if runner.StateInstance }
-    self._location: StateLocation
-    self._state = state
-
-  @property
-  def applied(self):
-    return self._applied
-
-  def _notify_unit(self, namespace: str, event: Any):
-    self._location.unit_locations[namespace] = event
-    self._notify(self._location)
-
-  def apply(self, *, resume: bool):
-    self._applied = True
-    self._location = StateLocation({})
-
-    for namespace, instance in self._instances.items():
-      self._location.unit_locations[namespace] = instance.apply(resume=resume)
-
-    return self._location
-
-  async def close(self):
-    await asyncio.gather(*[instance.close() for instance in self._instances.values()])
-
-  def prepare(self, *, resume: bool):
-    for instance in self._instances.values():
-      instance.prepare(resume=resume)
-
-  async def suspend(self):
-    assert self._applied
-
-    self._applied = False
-    await asyncio.gather(*[instance.suspend() for instance in self._instances.values()])

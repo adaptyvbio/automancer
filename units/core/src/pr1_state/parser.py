@@ -3,15 +3,17 @@ from dataclasses import dataclass
 from enum import IntEnum
 import traceback
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from pr1.devices.claim import ClaimSymbol
+from pr1.error import Error
 from pr1.fiber.master2 import StateInstanceCollection
 from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocationArea
+from pr1.state import StateLocation, StateRecord, StateUpdateEvent
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
-from pr1.util.iterators import CoupledStateIterator2
+from pr1.util.iterators import CoupledStateIterator3
 from pr1.fiber.langservice import Analysis
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
@@ -107,11 +109,12 @@ class StateProgram(BlockProgram):
     self._child_program: BlockProgram
     self._child_stopped: bool
     self._child_state_terminated: bool
-    self._iterator: CoupledStateIterator2[ProgramExecEvent, Any]
+    self._iterator: CoupledStateIterator3[ProgramExecEvent, StateRecord]
     self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
     self._state_excess: BlockState
     self._state_instance: StateInstanceCollection
+    self._state_location: Optional[StateLocation]
 
   @property
   def busy(self):
@@ -153,10 +156,10 @@ class StateProgram(BlockProgram):
     if self._mode == StateProgramMode.Normal:
       self._master.transfer_state(); print("X: State2")
     else:
-      if self._mode == StateProgramMode.Resuming:
-        self._iterator.clear_state()
-      else:
-        self._iterator.clear()
+      # if self._mode == StateProgramMode.Resuming:
+      #   self._iterator.clear_state()
+      # else:
+      #   self._state_location = None
 
       self._state_instance.prepare(resume=True)
       super().call_resume()
@@ -171,19 +174,22 @@ class StateProgram(BlockProgram):
         self._mode = StateProgramMode.Normal
 
         async for event in self._child_program.run(point.child, self, stack, symbol):
-          yield event
+          yield cast(ProgramExecEvent, event)
 
     self._child_stopped = False
     self._child_state_terminated = False
     self._mode = StateProgramMode.Starting
     self._point = initial_point or StateProgramPoint(child=None)
-    self._iterator = CoupledStateIterator2(run())
+    self._iterator = CoupledStateIterator3(run())
 
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
     self._state_instance.prepare(resume=False)
 
     # state_location = await self._state_instance.apply(self._block.state, resume=False)
     # self._iterator.notify(state_location)
+
+    previous_event: Optional[ProgramExecEvent] = None
+    self._state_location = None
 
     async def suspend_state():
       try:
@@ -192,7 +198,7 @@ class StateProgram(BlockProgram):
         match self._mode:
           case StateProgramMode.PausingState:
             self._mode = StateProgramMode.Paused
-            self._iterator.clear_state()
+            self._state_location = None
             self._iterator.trigger()
           case StateProgramMode.HaltingState:
             self._mode = StateProgramMode.Halted
@@ -200,77 +206,106 @@ class StateProgram(BlockProgram):
       except Exception:
         traceback.print_exc()
 
-    async for event, state_location in self._iterator:
-      # print(">",self._counter, event, self._mode)
+    async for event, state_events in self._iterator:
       # self._state_instance._instances['devices']._logger.info("Ok")
 
-      # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
-      if (self._mode == StateProgramMode.Normal) and self._child_state_terminated and (not event.state_terminated):
-        self._master.write_state(); print("Y: State3")
+      last_event = event or previous_event
+      assert last_event
 
-      # Write the state if the state child program was paused (but not this program) and is not anymore.
-      elif (self._mode == StateProgramMode.Normal) and self._child_stopped and (not event.stopped):
-        self._master.write_state(); print("Y: State1")
+      state_errors = list[Error]()
+      self._state_location = self._state_location or (state_events[-1].location if state_events else None)
 
-      # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
-      # This corresponds to a pause() call on the state child program, causing itself and all its descendants to become paused.
-      if (self._mode == StateProgramMode.Normal) and event.stopped and (not self._child_stopped) and (not event.state_terminated):
-        self._master.transfer_state(); print("X: State1")
-        self._master.write_state(); print("Y: State2")
+      for state_event in state_events:
+        state_errors += state_event.errors
 
-      self._child_stopped = event.stopped
-      self._child_state_terminated = event.state_terminated
+      if event:
+        previous_event = event
+
+        # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
+        if (self._mode == StateProgramMode.Normal) and self._child_state_terminated and (not event.state_terminated):
+          self._master.write_state(); print("Y: State3")
+
+        # Write the state if the state child program was paused (but not this program) and is not anymore.
+        elif (self._mode == StateProgramMode.Normal) and self._child_stopped and (not event.stopped):
+          self._master.write_state(); print("Y: State1")
+
+        # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
+        # This corresponds to a pause() call on the state child program, causing itself and all its descendants to become paused.
+        if (self._mode == StateProgramMode.Normal) and event.stopped and (not self._child_stopped) and (not event.state_terminated):
+          self._master.transfer_state(); print("X: State1")
+          self._master.write_state(); print("Y: State2")
+
+        self._child_stopped = event.stopped
+        self._child_state_terminated = event.state_terminated
+
+        if event.terminated:
+          if self._state_instance.applied:
+            # Case (1)
+            #   The state instance emits events.
+            #   Once we receive the first event, we yield a corresponding event with child=event.location and stopped=False.
+            #   Following events will be yielded with child=None (or event.location) and stopped=False.
+            #   After the state instance terminates, we will yield a final event with child=None (or event.location) and stopped=True.
+            # Case (2)
+            #   The state instance does not emit anything and is suspended silently.
+            #   We need to yield a last event with child=event.location and stopped=True.
+
+            self._mode = StateProgramMode.HaltingState
+            asyncio.create_task(suspend_state())
+
+            # Wait for the state instance to emit an event or terminate.
+            continue
+          else:
+            # This is the last iteration of the loop. Same as case (2) above.
+            self._mode = StateProgramMode.Halted
 
       # If the child was immediately paused, then no event gets emitted.
-      if (self._mode == StateProgramMode.PausingChild) and event.stopped:
+      if (self._mode == StateProgramMode.PausingChild) and self._child_stopped:
         self._mode = StateProgramMode.PausingState
         asyncio.create_task(suspend_state())
         continue
 
-      if event.terminated:
-        if self._state_instance.applied:
-          # Case (1)
-          #   The state instance emits events.
-          #   Once we receive the first event, we yield a corresponding event with child=event.location and stopped=False.
-          #   Following events will be yielded with child=None (or event.location) and stopped=False.
-          #   After the state instance terminates, we will yield a final event with child=None (or event.location) and stopped=True.
-          # Case (2)
-          #   The state instance does not emit anything and is suspended silently.
-          #   We need to yield a last event with child=event.location and stopped=True.
-
-          self._mode = StateProgramMode.HaltingState
-          asyncio.create_task(suspend_state())
-
-          # Wait for the state instance to emit an event or terminate.
-          continue
-        else:
-          # This is the last iteration of the loop. Same as case (2) above.
-          self._mode = StateProgramMode.Halted
-
-      resuming = ((self._mode == StateProgramMode.Paused) and (not event.stopped)) or (self._mode == StateProgramMode.Resuming)
+      resuming = ((self._mode == StateProgramMode.Paused) and (not self._child_stopped)) or (self._mode == StateProgramMode.Resuming)
 
       if resuming:
         self._mode = StateProgramMode.Normal
 
-      if (self._mode == StateProgramMode.Normal) and (state_location is None):
-        state_location = self._state_instance.apply(resume=resuming)
-        self._iterator.set_state(state_location)
+      if (self._mode == StateProgramMode.Normal) and (self._state_location is None):
+        state_record = self._state_instance.apply(resume=resuming)
+        assert state_record.location
+
+        state_errors += state_record.errors
+        self._state_location = state_record.location
 
       if self._mode == StateProgramMode.Halted:
         await self._state_instance.close()
 
-      yield event.inherit(
-        location=StateProgramLocation(
-          child=event.location,
-          mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
-          state=state_location
-        ),
-        state_terminated=(self._mode == StateProgramMode.Halted),
-        stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
-        terminated=(self._mode == StateProgramMode.Halted)
-      )
+      if event:
+        yield event.inherit(
+          errors=state_errors,
+          location=StateProgramLocation(
+            child=event.location,
+            mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
+            state=self._state_location
+          ),
+          state_terminated=(self._mode == StateProgramMode.Halted),
+          stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
+          terminated=(self._mode == StateProgramMode.Halted)
+        )
+      else:
+        yield ProgramExecEvent(
+          errors=[error.as_master() for error in state_errors],
+          location=StateProgramLocation(
+            child=last_event.location,
+            mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
+            state=self._state_location
+          ),
+          state_terminated=(self._mode == StateProgramMode.Halted),
+          stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
+          terminated=(self._mode == StateProgramMode.Halted)
+        )
 
       if self._mode == StateProgramMode.Halted:
+        # The iterator never ends, we need to break it ourselves.
         break
 
 

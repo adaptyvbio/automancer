@@ -70,11 +70,11 @@ class Error(Exportable):
   id: Optional[str] = None
   references: list[ErrorReference] = field(default_factory=list)
 
-  def with_time(self, time: float, /):
+  def as_master(self, *, time: Optional[float] = None):
     return MasterError(
       description=self.description,
       message=self.message,
-      id=self.id or str(uuid.uuid4()),
+      id=(self.id or str(uuid.uuid4())),
       references=self.references,
       time=time
     )
@@ -98,6 +98,9 @@ class MasterError(Error, Exportable):
   id: str
   path: list[Any] = field(default_factory=list)
   time: Optional[float] = None
+
+  def as_master(self, time: float, /):
+    return self
 
   def export(self):
     return {

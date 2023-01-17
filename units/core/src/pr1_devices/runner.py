@@ -1,17 +1,19 @@
 import asyncio
 from enum import IntEnum
 import time
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
-from pr1.devices.claim import ClaimOwner, ClaimSymbol, PerpetualClaim, ClaimTransferFailChildError, ClaimTransferFailUnknownError
+from pr1.devices.claim import ClaimOwner, ClaimSymbol, PerpetualClaim
 from pr1.devices.node import BaseWritableNode, NodePath
+from pr1.error import Error
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import PythonExprAugmented
+from pr1.fiber.expr import PythonExprAugmented, export_value
 from pr1.fiber.parser import BlockUnitState
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
+from pr1.state import StateBaseEvent, StateInstanceNotifyCallback, StateUpdateEvent
 from pr1.units.base import BaseProcessRunner, BaseRunner
 from pr1.util.misc import race
 
@@ -19,39 +21,63 @@ from . import logger, namespace
 from .parser import DevicesState
 
 
-class NodeWriteError(IntEnum):
-  Disconnected = 0
-  Unclaimable = 1
-  ExprError = 2
+class NodeDisconnectedError(Error):
+  def __init__(self, path: NodePath):
+    super().__init__(
+      f"Disconnected node '{'.'.join(path)}'"
+    )
+
+class NodeUnclaimableError(Error):
+  def __init__(self, path: NodePath):
+    super().__init__(
+      f"Unclaimable node '{'.'.join(path)}'"
+    )
 
 
 @dataclass
+class NodeStateLocation:
+  value: Any
+  _: KW_ONLY
+  error_disconnected: bool = False
+  error_evaluation: bool = False
+  error_unclaimable: bool = False
+
+  def export(self):
+    return {
+      "errors": {
+        "disconnected": self.error_disconnected,
+        "evaluation": self.error_evaluation,
+        "unclaimable": self.error_unclaimable
+      },
+      "value": export_value(self.value)
+    }
+
+@dataclass
 class StateLocation:
-  values: dict[NodePath, Optional[NodeWriteError]]
+  values: dict[NodePath, NodeStateLocation]
 
   def export(self):
     return {
       "values": [
-        [path, error] for path, error in self.values.items()
+        [path, node_location.export()] for path, node_location in self.values.items()
       ]
     }
 
-@dataclass
+@dataclass(kw_only=True)
 class StateInstanceNodeInfo:
   claim: PerpetualClaim
   node: BaseWritableNode
   path: NodePath
-  task: asyncio.Task[None]
-  update_event: asyncio.Event
+  task: Optional[asyncio.Task[None]]
   value: Any
 
 
 class StateInstance:
   _next_index = 0
 
-  def __init__(self, state: DevicesState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
+  def __init__(self, state: DevicesState, runner: 'Runner', *, notify: StateInstanceNotifyCallback, stack: EvalStack, symbol: ClaimSymbol):
     self._location: StateLocation
-    self._notify = lambda: notify(self._location)
+    self._notify = notify
     self._runner = runner
     self._stack = stack
     self._state = state
@@ -64,60 +90,26 @@ class StateInstance:
 
 
   async def _node_lifecycle(self, info: StateInstanceNodeInfo):
-    claim = None
-    initial = True
     label = ".".join(info.path)
 
     try:
       while True:
-        claim = await info.token.wait()
-
-        self._location.values[info.path] = None
-
-        if not initial:
-          self._notify()
-
+        claim_owner = await info.claim.wait()
         self._logger.debug(f"Claimed node '{label}'")
-        initial = False
 
-        while True:
-          if isinstance(info.value, PythonExprAugmented):
-            analysis, result = info.value.evaluate(self._stack)
+        self._logger.debug(f"Writing node '{label}' with value {repr(info.value)}")
+        await asyncio.shield(info.node.write(info.value))
 
-            if analysis.errors:
-              self._location.values[info.path] = NodeWriteError.ExprError
-
-              for err in analysis.errors:
-                logger.warn(err.diagnostic().message)
-
-            if isinstance(result, EllipsisType):
-              await asyncio.Future()
-
-            value = result
-          else:
-            value = info.value
-
-          self._logger.debug(f"Writing node '{label}' with value {repr(value)}")
-          await asyncio.shield(info.node.write(value))
-
-          index, race_result = await race(claim.lost(), info.update_event.wait())
-
-          # The claim was lost
-          if index == 0:
-            if not race_result:
-              # The claim was not lost to a child
-              self._location.values[info.path] = NodeWriteError.Unclaimable
-
-            break
-
-          info.update_event.clear()
-
+        await claim_owner.lost()
         self._logger.debug(f"Lost node '{label}'")
 
-        claim = None
-        self._notify()
+        self._location.values[info.path].error_unclaimable = True
+        self._notify(StateUpdateEvent(
+          errors=[],
+          location=self._location
+        ))
     finally:
-      await info.token.cancel()
+      info.claim.close()
       self._logger.debug(f"Released node '{label}'")
 
   def prepare(self):
@@ -134,65 +126,68 @@ class StateInstance:
         claim=node.create_claim(self._symbol),
         node=node,
         path=path,
-        task=None, # type: ignore
-        update_event=asyncio.Event(),
+        task=None,
         value=value
       )
 
-      # info.task = asyncio.create_task(self._write_node(info))
       self._infos[path] = info
 
   def apply(self):
     self._logger.debug("Applying state")
 
-    for info in self._infos.values():
-      if not info.node.connected:
-        self._location.values[info.path] = NodeWriteError.Disconnected
-      elif (not info.claim.owner) and (not info.claim.owned_by_child):
-        self._location.values[info.path] = NodeWriteError.Unclaimable
-        self._logger.debug(f"Failed to claim '{info.node.id}'")
-      else:
-        self._location.values[info.path] = None
-        asyncio.create_task(info.node.write(info.value))
+    errors = list[Error]()
 
-      # info.task = asyncio.create_task(self._node_lifecycle(info))
+    for info in self._infos.values():
+      location = NodeStateLocation(
+        info.value,
+        error_disconnected=(not info.node.connected),
+        error_unclaimable=(not (info.claim.owner or info.claim.owned_by_child))
+      )
+
+      self._location.values[info.path] = location
+
+      if location.error_disconnected:
+        errors.append(NodeDisconnectedError(info.path))
+      if location.error_unclaimable:
+        errors.append(NodeUnclaimableError(info.path))
+
+      info.task = asyncio.create_task(self._node_lifecycle(info))
 
     self._logger.debug("Applied state")
-    return self._location
+    return StateUpdateEvent(errors=errors, location=self._location)
 
   async def suspend(self):
     self._logger.debug("Suspending")
 
     for info in self._infos.values():
-      info.claim.close()
+      assert info.task
+      info.task.cancel()
 
-      # info.task.cancel()
-
-      # try:
-      #   await info.task
-      # except asyncio.CancelledError:
-      #   pass
+      try:
+        await info.task
+      except asyncio.CancelledError:
+        pass
 
     del self._infos
     del self._location
 
-    # self._location = StateLocation({ 'a': 34 })
-    # self._notify()
-    # await asyncio.sleep(1)
-    # self._location = StateLocation({ 'a': 100 })
-    # self._notify()
-
 
 counter = 0
 
+class DemoStateLocation:
+  def export(self):
+    return { "foo": "bar" }
+
 class DemoStateInstance:
+  _next_index = 0
+
   def __init__(self, state: BlockUnitState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
     global counter
     self._logger = logger.getChild(f"stateInstance{counter}")
-    self._index = counter
-    counter = counter + 1
-
     self._notify = notify
+
+    self._index = self._next_index
+    type(self)._next_index += 1
 
   def prepare(self, *, resume: bool):
     self._logger.debug(f'Prepare, resume={resume}')
@@ -206,6 +201,10 @@ class DemoStateInstance:
       self._notify(34)
 
     # if self._index == 0: asyncio.create_task(task())
+
+    return StateUpdateEvent(DemoStateLocation(), errors=[
+      Error(f"Hello {self._index}")
+    ])
 
   async def close(self):
     self._logger.debug('Close')

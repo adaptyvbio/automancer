@@ -266,7 +266,7 @@ class SegmentProgram(BlockProgram):
       event_time = event_time or time.time()
 
       yield ProgramExecEvent(
-        errors=[error.with_time(event_time) for error in event_errors],
+        errors=[error.as_master(time=event_time) for error in event_errors],
         location=SegmentProgramLocation(
           error=location_error,
           mode=self._mode,

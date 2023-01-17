@@ -343,7 +343,7 @@ class TriggerableIterator(Generic[T]):
     assert not self._future
 
     if self._triggered and (self._value is not None):
-      self._triggered = None
+      self._triggered = False
       return self._value
 
     if not self._task:
@@ -358,6 +358,56 @@ class TriggerableIterator(Generic[T]):
 
     assert self._value is not None
     return self._value
+
+
+class CoupledStateIterator3(Generic[T, S]):
+  def __init__(self, iterator: AsyncIterator[T], /):
+    self._done = False
+    self._future: Optional[Future[Optional[T]]] = None
+    self._iterator = iterator
+    self._state_events = list[S]()
+    self._task: Optional[Task[T]] = None
+    self._triggered = False
+
+  def _callback(self, task: Task[T]):
+    self._task = None
+
+    try:
+      value = task.result()
+    except StopAsyncIteration as e:
+      self._done = True
+    else:
+      if self._future:
+        self._future.set_result(value)
+        self._future = None
+
+  def notify(self, state_event: S, /):
+    self._state_events.append(state_event)
+    self.trigger()
+
+  def trigger(self):
+    if self._future:
+      self._future.set_result(None)
+      self._future = None
+    else:
+      self._triggered = True
+
+  def __aiter__(self) -> AsyncIterator[tuple[Optional[T], list[S]]]:
+    return self
+
+  async def __anext__(self):
+    assert not self._future
+
+    if self._triggered:
+      self._triggered = False
+      return None, self._state_events
+
+    if (not self._done) and (not self._task):
+      self._task = asyncio.create_task(anext(self._iterator)) # type: ignore
+      self._task.add_done_callback(self._callback)
+
+    self._future = Future()
+    return await self._future, self._state_events
 
 
 class AltIterator(Generic[T]):

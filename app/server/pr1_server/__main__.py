@@ -11,7 +11,7 @@ class ColoredFormatter(logging.Formatter):
       logging.WARNING: "\x1b[33;20m"
     }.get(record.levelno, str())
 
-    formatter = logging.Formatter(f"%(levelname)-8s :: %(name)-18s :: %(message)s")
+    formatter = logging.Formatter(f"{color}%(levelname)-8s{reset} :: %(name)-18s :: %(message)s")
     return formatter.format(record)
 
 ch = logging.StreamHandler()

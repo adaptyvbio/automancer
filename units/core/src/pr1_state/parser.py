@@ -60,10 +60,10 @@ class StateTransform(BaseTransform):
 
 
 class StateProgramMode(IntEnum):
-  Halted = -1
   Resuming = -2
   Starting = -3
 
+  Halted = 6
   HaltingChild = 0
   HaltingState = 5
   Normal = 1
@@ -73,13 +73,13 @@ class StateProgramMode(IntEnum):
 
 @dataclass(kw_only=True)
 class StateProgramLocation:
-  child: Any
+  child: Optional[Any]
   mode: StateProgramMode
   state: Optional[Any]
 
   def export(self):
     return {
-      "child": self.child.export(),
+      "child": self.child and self.child.export(),
       "mode": self.mode,
       "state": self.state and self.state.export()
     }
@@ -156,11 +156,6 @@ class StateProgram(BlockProgram):
     if self._mode == StateProgramMode.Normal:
       self._master.transfer_state(); print("X: State2")
     else:
-      # if self._mode == StateProgramMode.Resuming:
-      #   self._iterator.clear_state()
-      # else:
-      #   self._state_location = None
-
       self._state_instance.prepare(resume=True)
       super().call_resume()
 
@@ -299,7 +294,7 @@ class StateProgram(BlockProgram):
         )
 
       if self._mode == StateProgramMode.Halted:
-        # The iterator never ends, we need to break it ourselves.
+        # The iterator never ends, we need to break it here.
         break
 
 

@@ -1,4 +1,4 @@
-import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, Host, MasterError, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MasterError, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -242,4 +242,4 @@ export default {
   isBlockBusy,
   isBlockPaused,
   onSelectBlockMenu
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>;

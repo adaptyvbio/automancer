@@ -1,4 +1,4 @@
-import { GraphRendererDefaultMetrics, GraphRenderer, Host, ProtocolBlock, ProtocolState, Unit, BlockUnit, React, UnitNamespace } from 'pr1';
+import { ProtocolBlock, ProtocolState, BlockUnit, React, UnitNamespace, HeadUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -11,12 +11,13 @@ export interface BlockMetrics {
 }
 
 export interface Location {
-  child: unknown;
+  child: unknown | null;
   mode: LocationMode;
   state: Record<UnitNamespace, unknown>;
 }
 
 export enum LocationMode {
+  Halted = 6,
   Halting = 0,
   Normal = 1,
   PausingChild = 2,
@@ -40,6 +41,16 @@ export default {
     }
   },
 
+  HeadComponent(props) {
+    if (!props.location) {
+      return null;
+    }
+
+    return (
+      <div>{LocationMode[props.location.mode]}</div>
+    );
+  },
+
   createActiveBlockMenu(block, location, options) {
     let busy = false;
 
@@ -54,7 +65,9 @@ export default {
     return location.child;
   },
   getChildrenExecutionKeys(block, location) {
-    return [null];
+    return location.child
+      ? [null]
+      : null;
   },
   getChildBlock(block, key) {
     return block.child;
@@ -68,4 +81,4 @@ export default {
       case 'resume': return { type: 'resume' };
     }
   },
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key>
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>

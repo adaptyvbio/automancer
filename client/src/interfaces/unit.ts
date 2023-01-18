@@ -118,8 +118,14 @@ export interface HeadComponentProps<Block, Location> {
   location: Location | null;
 }
 
+export interface HeadUnit<Block extends ProtocolBlock, Location> extends BlockUnit<Block, unknown, Location, unknown> {
+  HeadComponent: React.ComponentType<HeadComponentProps<Block, Location>>;
+}
+
+export type UnknownHeadUnit = HeadUnit<ProtocolBlock | never, unknown>;
+
+
 export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, Key> extends BaseUnit {
-  HeadComponent?: React.ComponentType<HeadComponentProps<Block, Location>>;
   graphRenderer: GraphRenderer<Block, BlockMetrics, Location>;
 
   createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
@@ -129,7 +135,7 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   getBlockDefaultLabel?(block: Block, host: Host): string | null;
   getBlockLocationLabelSuffix?(block: Block, location: Location): string | null;
   getChildBlock(block: Block, key: Key): ProtocolBlock;
-  getChildrenExecutionKeys?(block: Block, location: Location): ProtocolBlockPath | null;
+  getChildrenExecutionKeys(block: Block, location: Location): ProtocolBlockPath | null;
   isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;

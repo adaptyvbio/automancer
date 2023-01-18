@@ -82,7 +82,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
     let pausedAggregateIndex = (pausedAggregateIndexRaw >= 0) ? pausedAggregateIndexRaw : null;
 
-    let headUnit = UnitTools.asBlockUnit(units[lineBlocks.at(-1).namespace])!;
+    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace])!;
     let HeadComponent = headUnit.HeadComponent;
 
     if (pausedAggregateIndex === null) {

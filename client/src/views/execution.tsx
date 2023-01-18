@@ -11,7 +11,7 @@ import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
 import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
-import { MetadataTools } from '../unit';
+import { MetadataTools, UnitTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
@@ -116,8 +116,8 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     // };
 
     let getActiveBlockPaths = (block: ProtocolBlock, location: unknown, path: ProtocolBlockPath): ProtocolBlockPath[] => {
-      let unit = this.props.host.units[block.namespace];
-      let keys = unit.getChildrenExecutionKeys!(block, location);
+      let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
+      let keys = unit.getChildrenExecutionKeys(block, location);
 
       return keys
         ? keys.flatMap((key) => getActiveBlockPaths(

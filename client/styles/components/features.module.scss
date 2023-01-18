@@ -108,7 +108,7 @@ $entry-height: 30px;
   flex-direction: column;
 
   &:last-child {
-    grid-column-end: 3;
+    grid-column: 2 / 4;
   }
 }
 
@@ -123,13 +123,15 @@ $entry-height: 30px;
 }
 
 .label {
-  // Enables correct positioning of expressions
-  display: flex;
-
   @include text-ellipsis();
 
   font-weight: 500;
   line-height: 1.15;
+
+  &:has(*) {
+    // Enables correct positioning of expressions
+    display: flex;
+  }
 }
 
 .blank {

@@ -6,7 +6,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, UnitTools } from '../unit';
+import { getBlockAggregates, getBlockLabel, UnitTools } from '../unit';
 import { SimpleFeatureList } from './features';
 import { UnitContext } from '../interfaces/unit';
 import { ErrorBoundary } from './error-boundary';
@@ -52,8 +52,8 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
     let aggregates = getBlockAggregates(lineBlocks)
     let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, context);
 
-    let headUnit = UnitTools.asBlockUnit(units[lineBlocks.at(-1).namespace])!;
-    let HeadComponent = headUnit.HeadComponent;
+    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace]);
+    let HeadComponent = headUnit?.HeadComponent;
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
@@ -140,7 +140,7 @@ export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], pro
       }];
     } else {
       return aggregate.blocks.flatMap((block, blockIndex) => {
-        let unit = context.host.units[block.namespace];
+        let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
 
         if (!unit.getBlockDefaultLabel) {
           return [];

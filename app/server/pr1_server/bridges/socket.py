@@ -77,7 +77,7 @@ class SocketBridge(BridgeProtocol):
     host, port = self._address
 
     return [BridgeAdvertisementInfo(
-      type="Pr1._tcp.local.",
+      type="_tcp.local.",
       address=host,
       port=port
     )]

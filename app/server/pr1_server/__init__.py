@@ -161,7 +161,6 @@ class App:
       self.zeroconf_services = [AsyncServiceInfo(
         f"_prone.{info.type}",
         f"{self.conf.identifier}._prone." + info.type,
-        # self.conf.advertisement.description,
         addresses=[socket.inet_aton(info.address)],
         port=info.port,
         properties={

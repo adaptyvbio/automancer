@@ -1,7 +1,7 @@
 import { Chip } from './backends/common';
 import { Host } from './host';
-import { Master, MasterProcessState, ProtocolBlock, ProtocolBlockAggregate, ProtocolProcess, ProtocolState } from './interfaces/protocol';
-import { BlockUnit, FeatureGroupDef, StateUnit, UnknownBlockUnit, UnknownProcessUnit, UnknownStateUnit, UnknownUnit } from './interfaces/unit';
+import { ProtocolBlock, ProtocolBlockAggregate, ProtocolState } from './interfaces/protocol';
+import { FeatureGroupDef, UnknownBlockUnit, UnknownHeadUnit, UnknownProcessUnit, UnknownStateUnit, UnknownUnit } from './interfaces/unit';
 
 
 /** @deprecated */
@@ -60,6 +60,12 @@ export namespace UnitTools {
   export function asBlockUnit(unit: UnknownUnit) {
     return 'graphRenderer' in unit
       ? unit as UnknownBlockUnit
+      : null;
+  }
+
+  export function asHeadUnit(unit: UnknownUnit) {
+    return 'HeadComponent' in unit
+      ? unit as UnknownHeadUnit
       : null;
   }
 

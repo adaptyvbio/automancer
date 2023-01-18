@@ -3,6 +3,7 @@ import copy
 from enum import IntEnum
 import time
 from dataclasses import KW_ONLY, dataclass
+import traceback
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
@@ -66,12 +67,12 @@ class StateLocation:
 
 @dataclass(kw_only=True)
 class StateInstanceNodeInfo:
-  claim: PerpetualClaim
+  claim: Optional[PerpetualClaim]
   label: str
   node: BaseWritableNode
   path: NodePath
   task: Optional[asyncio.Task[None]]
-  value: PythonExprAugmented
+  value: Any
   written: bool
 
 
@@ -86,7 +87,27 @@ class StateInstance:
     self._state = state
     self._symbol = symbol
 
-    self._infos: dict[NodePath, StateInstanceNodeInfo]
+    self._eval_errors = list[Error]()
+    self._infos = dict[NodePath, StateInstanceNodeInfo]()
+
+    for path, value in self._state.values.items():
+      node = self._runner._host.root_node.find(path)
+      assert isinstance(node, BaseWritableNode)
+
+      eval_analysis, eval_result = value.evaluate(self._stack)
+      self._eval_errors += eval_analysis.errors
+
+      info = StateInstanceNodeInfo(
+        claim=None,
+        label=".".join(path),
+        node=node,
+        path=path,
+        task=None,
+        value=(eval_result.value if not isinstance(eval_result, EllipsisType) else Ellipsis),
+        written=False
+      )
+
+      self._infos[path] = info
 
     self._logger = logger.getChild(f"stateInstance{self._next_index}")
     type(self)._next_index += 1
@@ -94,11 +115,20 @@ class StateInstance:
 
   async def _node_lifecycle(self, info: StateInstanceNodeInfo):
     while True:
+      assert info.claim
+
       claim_owner = await info.claim.wait()
       self._logger.debug(f"Claimed node '{info.label}'")
 
       self._logger.debug(f"Writing node '{info.label}' with value {repr(info.value)}")
-      await asyncio.shield(info.node.write(info.value))
+
+      write_task = asyncio.create_task(info.node.write(info.value))
+
+      try:
+        await asyncio.shield(write_task)
+      except asyncio.CancelledError:
+        await write_task
+        raise
 
       if all(info.written for info in self._infos.values()):
         self._notify(StateEvent(settled=True))
@@ -112,41 +142,27 @@ class StateInstance:
   def prepare(self, *, resume: bool):
     self._logger.debug("Preparing state")
 
-    self._infos = dict()
-    self._location = StateLocation(values=dict())
-
-    for path, value in self._state.values.items():
-      node = self._runner._host.root_node.find(path)
-      assert isinstance(node, BaseWritableNode)
-
-      info = StateInstanceNodeInfo(
-        claim=node.create_claim(self._symbol),
-        label=".".join(path),
-        node=node,
-        path=path,
-        task=None,
-        value=value,
-        written=False
-      )
-
-      self._infos[path] = info
+    for info in self._infos.values():
+      info.claim = info.node.create_claim(self._symbol)
 
   def apply(self, *, resume: bool):
     self._logger.debug("Applying state")
+    self._location = StateLocation(values=dict())
+
     errors = list[Error]()
 
     for info in self._infos.values():
-      eval_analysis, eval_result = info.value.evaluate(self._stack)
-
-      errors += eval_analysis.errors
-      eval_error = isinstance(eval_result, EllipsisType)
+      assert info.claim
 
       location = NodeStateLocation(
-        eval_result.value if not eval_error else Ellipsis,
+        info.value,
         error_disconnected=(not info.node.connected),
-        error_evaluation=eval_error,
+        error_evaluation=isinstance(info.value, EllipsisType),
         error_unclaimable=(not (info.claim.owner or info.claim.owned_by_child))
       )
+
+      errors += self._eval_errors
+      self._eval_errors.clear()
 
       self._location.values[info.path] = location
 
@@ -155,7 +171,7 @@ class StateInstance:
       if location.error_unclaimable:
         errors.append(NodeUnclaimableError(info.path))
 
-      if not eval_error:
+      if not isinstance(info.value, EllipsisType):
         info.task = asyncio.create_task(self._node_lifecycle(info))
 
     self._logger.debug("Applied state")
@@ -168,6 +184,10 @@ class StateInstance:
     self._logger.debug("Suspending")
 
     for info in self._infos.values():
+      location = self._location.values[info.path]
+      location.error_disconnected = False
+      location.error_unclaimable = False
+
       if info.task:
         info.task.cancel()
 
@@ -176,11 +196,12 @@ class StateInstance:
         except asyncio.CancelledError:
           pass
 
+      assert info.claim
       info.claim.close()
+
       self._logger.debug(f"Released node '{info.label}'")
 
-    del self._infos
-    del self._location
+    return StateEvent(copy.deepcopy(self._location))
 
 
 counter = 0
@@ -248,3 +269,11 @@ class Runner(BaseRunner):
 
   def write_state(self):
     logger.debug('Write state')
+
+    async def commit():
+      try:
+        await self._host.root_node.walk_commit()
+      except Exception:
+        traceback.print_exc()
+
+    asyncio.create_task(commit())

@@ -11,7 +11,7 @@ from pint import UnitRegistry
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
-from .devices.node import BaseNode, CollectionNode, DeviceNode, NodePath
+from .devices.node import BaseNode, BatchGroupNode, CollectionNode, DeviceNode, NodePath
 from .draft import Draft, DraftCompilation
 from .fiber.langservice import Analysis, print_analysis
 from .fiber.master2 import Master
@@ -40,6 +40,13 @@ class HostRootNode(CollectionNode):
       node = node.nodes[node_id]
 
     return node
+
+  async def walk_commit(self):
+    async def walk(node: BaseNode):
+      if isinstance(node, BatchGroupNode):
+        await node.commit()
+
+    await self.walk_async(walk)
 
 
 class Host:

@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 from pint import Quantity, Unit, UnitRegistry
-from typing import Any, Callable, Generic, Optional, Protocol, Sequence, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Optional, Protocol, Sequence, TypeVar
 
 from .claim import Claimable
 from ..ureg import ureg
@@ -98,6 +98,12 @@ class CollectionNode(BaseWatchableNode):
         callback(node)
       else:
         node.walk(callback)
+
+  async def walk_async(self, callback: Callable[[BaseNode], Awaitable], /):
+    await asyncio.gather(*[
+      callback(self),
+      *[node.walk_async(callback) for node in self.nodes.values() if isinstance(node, CollectionNode)]
+    ])
 
   def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
     regs = set()
@@ -213,10 +219,10 @@ class BaseWritableNode(BaseNode, Claimable, Generic[T]):
 
   # To be implemented
 
-  async def write(self, value: Optional[T]):
+  async def write(self, value: Optional[T], /):
     raise NotImplementedError()
 
-  async def write_import(self, value: Any):
+  async def write_import(self, value: Any, /):
     raise NotImplementedError()
 
 class BooleanWritableNode(BaseWritableNode[bool]):
@@ -314,7 +320,14 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
     BaseWritableNode.__init__(self)
 
     self.connected = False
+
+    # This is None when the value is unknown, which can happen in the following cases:
+    #   (1) the self._read() method is not implemented;
+    #   (2) the device has always been disconnected.
+    # When disconnected, self.current_value contains the last known value and will not always be None.
     self.current_value: Optional[T] = None
+
+    # This is None when the user doesn't care about the value, in which case no write shoud happen.
     self.target_value: Optional[T] = None
 
   # To be implemented
@@ -339,12 +352,9 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
     else:
       self.current_value = current_value
 
-    if self.target_value is None:
-      self.target_value = self.current_value
-
     self.connected = True
 
-    if (self.target_value is not None) and (current_value != self.target_value):
+    if current_value != self.target_value:
       await self.write(self.target_value)
 
     self._trigger_listeners()
@@ -355,10 +365,10 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
 
   # Called by the consumer
 
-  async def write(self, value: T, /):
+  async def write(self, value: Optional[T], /):
     self.target_value = value
 
-    if self.connected:
+    if self.connected and (value is not None):
       try:
         await self._write(value)
       except NodeUnavailableError:
@@ -367,6 +377,120 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
         self.current_value = value
 
     self._trigger_listeners()
+
+class BatchableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
+  def __init__(self):
+    BaseWatchableNode.__init__(self)
+    BaseWritableNode.__init__(self)
+
+    self._group: 'BatchGroupNode'
+
+    self.connected = False
+
+    self.current_value: Optional[T] = None
+    self.target_value: Optional[T] = None
+
+  # To be implemented
+
+  async def _read(self) -> T:
+    raise NotImplementedError()
+
+  # Called by the consumer
+
+  # @property
+  # def connected(self):
+  #   return self._group.connected
+
+  async def write(self, value: Optional[T], /):
+    self.target_value = value
+
+    if self.connected:
+      try:
+        await self._group._add(self)
+      except NodeUnavailableError:
+        pass
+      else:
+        self.current_value = value
+
+    self._trigger_listeners()
+
+S = TypeVar('S', bound=BatchableWritableNode)
+
+class BatchGroupNode(BaseNode, Generic[S]):
+  def __init__(self):
+    self._changed_nodes = set[S]()
+    self._future = asyncio.Future[None]()
+    self._group_nodes: set[S]
+
+  # Internal
+
+  def _add(self, node: S, /):
+    assert node in self._group_nodes
+
+    self._changed_nodes.add(node)
+    return self._future
+
+  # To be implemented
+
+  async def _read(self, nodes: set[S], /) -> dict[S, Any]:
+    raise NotImplementedError()
+
+  async def _write(self, nodes: set[S], /) -> None:
+    raise NotImplementedError()
+
+  # Called by the producer
+
+  async def _configure(self):
+    try:
+      values = await self._read(self._group_nodes)
+    except NodeUnavailableError:
+      return
+    except NotImplementedError:
+      for node in self._group_nodes:
+        try:
+          node.current_value = await node._read()
+        except NodeUnavailableError:
+          continue
+        except NotImplementedError:
+          node.current_value = None
+        else:
+          node.connected = True
+    else:
+      for node, value in values.items():
+        node.current_value = value
+
+    self.connected = True
+
+    awaitables = set[Awaitable]()
+
+    for node in self._group_nodes:
+      if node.connected and (node.target_value is not None) and (node.current_value != node.target_value):
+        awaitables.add(node.write(node.target_value))
+
+    await asyncio.gather(*awaitables)
+
+    for node in self._group_nodes:
+      node._trigger_listeners()
+
+  async def _unconfigure(self):
+    self.connected = False
+
+    for node in self._group_nodes:
+      node.connected = False
+      node._trigger_listeners()
+
+  # Called by the consumer
+
+  async def commit(self):
+    if self.connected and self._changed_nodes:
+      try:
+        await self._write(self._changed_nodes)
+      except NodeUnavailableError as e:
+        self._future.set_exception(e)
+      else:
+        self._future.set_result(None)
+        self._future = asyncio.Future()
+        self._changed_nodes.clear()
 
 
 # Polled nodes

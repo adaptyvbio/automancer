@@ -185,9 +185,6 @@ class StateProgram(BlockProgram):
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
     self._state_instance.prepare(resume=False)
 
-    # state_location = await self._state_instance.apply(self._block.state, resume=False)
-    # self._iterator.notify(state_location)
-
     previous_event: Optional[ProgramExecEvent] = None
     self._state_location = None
 
@@ -204,7 +201,7 @@ class StateProgram(BlockProgram):
       assert last_event
 
       state_errors = list[Error]()
-      self._state_location = self._state_location or (state_events[-1].location if state_events else None)
+      self._state_location = (state_events[-1].location if state_events else None) or self._state_location
 
       for state_event in state_events:
         state_errors += state_event.errors
@@ -257,7 +254,6 @@ class StateProgram(BlockProgram):
 
       if (self._mode == StateProgramMode.PausingState) and (not self._state_instance.applied):
         self._mode = StateProgramMode.Paused
-        self._state_location = None
 
       if (self._mode == StateProgramMode.HaltingState) and (not self._state_instance.applied):
         self._mode = StateProgramMode.Halted
@@ -267,7 +263,7 @@ class StateProgram(BlockProgram):
       if resuming:
         self._mode = StateProgramMode.Normal
 
-      if (self._mode == StateProgramMode.Normal) and (self._state_location is None):
+      if (self._mode == StateProgramMode.Normal) and (not self._state_instance.applied):
         state_record = self._state_instance.apply(resume=resuming)
         assert state_record.location
 

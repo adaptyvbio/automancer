@@ -4,7 +4,7 @@ from typing import Any, Optional
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
 from pint import Quantity
-from pr1.devices.node import (ConfigurableWritableNode, BooleanWritableNode, DeviceNode,
+from pr1.devices.node import (BatchGroupNode, BatchableWritableNode, BooleanWritableNode, DeviceNode,
                               NodeUnavailableError, PolledReadableNode,
                               ScalarWritableNode)
 
@@ -43,7 +43,7 @@ class OPCUADeviceReadableNode(PolledReadableNode):
       raise NodeUnavailableError() from e
 
 
-class OPCUADeviceWritableNode(ConfigurableWritableNode):
+class OPCUADeviceWritableNode(BatchableWritableNode):
   def __init__(
     self,
     *,
@@ -69,16 +69,13 @@ class OPCUADeviceWritableNode(ConfigurableWritableNode):
   def _long_label(self):
     return f"node {self._label}" + (f" with id '{self._node.nodeid.to_string()}'" if self._node.nodeid else str())
 
-  async def _configure(self):
+  async def _read(self):
     if (variant := await self._node.read_data_type_as_variant_type()) != self._variant:
       found_type = next((key for key, test_variant in variants_map.items() if test_variant == variant), 'unknown')
       logger.error(f"Type mismatch of {self._long_label}, expected {self._type}, found {found_type}")
 
-      return
+      raise NodeUnavailableError()
 
-    await super()._configure()
-
-  async def _read(self):
     try:
       return await self._node.read_value()
     except ConnectionError as e:
@@ -87,14 +84,6 @@ class OPCUADeviceWritableNode(ConfigurableWritableNode):
     except ua.uaerrors._auto.BadNodeIdUnknown as e: # type: ignore
       logger.error(f"Missing {self._long_label}")
       raise NodeUnavailableError() from e
-
-  async def _write(self, raw_value: Any, /):
-    match self._type:
-      case 'i16' | 'i32' | 'i64' | 'u16' | 'u32' | 'u64': value = int(raw_value)
-      case 'f32' | 'f64': value = float(raw_value)
-      case _: value = raw_value
-
-    await self._node.write_value(ua.DataValue(ua.Variant(value, self._variant)))
 
 
 class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
@@ -126,7 +115,7 @@ nodes_map: dict[str, type[OPCUADeviceWritableNode]] = {
 }
 
 
-class OPCUADevice(DeviceNode):
+class OPCUADevice(DeviceNode, BatchGroupNode[OPCUADeviceWritableNode]):
   description = None
   model = "Generic OPC-UA device"
   owner = namespace
@@ -178,9 +167,14 @@ class OPCUADevice(DeviceNode):
 
     self._keepalive_reg = self._keepalive_node.watch(interval=1.0)
 
-    self.nodes: dict[str, OPCUADeviceWritableNode] = {
+    self.nodes: dict[str, OPCUADeviceScalarNode] = {
       node.id: node for node in {*{create_node(node_conf) for node_conf in nodes_conf}, self._keepalive_node}
     }
+
+    self._group_nodes = {node for node in self.nodes.values() if isinstance(node, OPCUADeviceWritableNode) }
+
+    for node in self.nodes.values():
+      node._group = self
 
   async def initialize(self):
     await self._connect()
@@ -212,26 +206,12 @@ class OPCUADevice(DeviceNode):
     logger.info(f"Configuring {self._label}")
     self._connected = True
 
-    for node in self.nodes.values():
-      await node._configure()
-
-      if not self._connected:
-        break
-    else:
-      logger.info(f"Connected to {self._label}")
-
-      self.connected = True
-      self._trigger_listeners()
+    await self._configure()
+    logger.info(f"Connected to {self._label}")
 
   async def _disconnect(self):
     self._connected = False
-    self.connected = False
-
-    for node in self.nodes.values():
-      if node.connected:
-        await node._unconfigure()
-
-    self._trigger_listeners()
+    await self._unconfigure()
 
   async def _lost(self):
     logger.warn(f"Lost connection to {self._label}")
@@ -261,3 +241,22 @@ class OPCUADevice(DeviceNode):
         self._reconnect_task = None
 
     self._reconnect_task = asyncio.create_task(reconnect())
+
+  # async def _read(self, nodes: list[OPCUADeviceWritableNode]):
+  #   values = await self._client.read_values([node._node for node in nodes])
+
+  async def _write(self, nodes: set[OPCUADeviceWritableNode]):
+    nodes_nodes = [node._node for node in nodes]
+    nodes_values: list[Any] = [None] * len(nodes)
+
+    for index, node in enumerate(nodes):
+      value = node.target_value
+      assert value
+
+      match node._type:
+        case 'i16' | 'i32' | 'i64' | 'u16' | 'u32' | 'u64': value = int(value)
+        case 'f32' | 'f64': value = float(value)
+
+      nodes_values[index] = ua.DataValue(ua.Variant(value, node._variant))
+
+    await self._client.write_values(nodes_nodes, nodes_values)

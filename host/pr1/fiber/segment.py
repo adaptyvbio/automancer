@@ -243,6 +243,10 @@ class SegmentProgram(BlockProgram):
       except (ProcessInternalError, ProcessProtocolError) as e:
         logger.error(f"Process protocol error: {e}")
 
+        if isinstance(e, ProcessInternalError):
+          for line in str().join(traceback.format_exception(e.exception)).splitlines():
+            logger.debug(line)
+
         # Cancel the jump request, if any
         self._point = None
 

@@ -70,7 +70,8 @@ class Master:
     from random import random
 
     runtime_stack = {
-      self.protocol.global_env: dict(random=random)
+      self.protocol.global_env: dict(random=random),
+      self.protocol.user_env: dict()
     }
 
     async for event in self._program.run(initial_location, None, runtime_stack, symbol):

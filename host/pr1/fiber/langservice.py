@@ -10,6 +10,7 @@ from pint import Quantity, Unit
 from typing import Any, Callable, Literal, Optional, Protocol, cast
 
 from .expr import PythonExpr, PythonExprKind, ValueAsPythonExpr
+from ..error import Error, ErrorDocumentReference
 from ..ureg import ureg
 from ..util.parser import check_identifier
 from ..draft import DraftDiagnostic, DraftGenericError
@@ -36,7 +37,14 @@ class Analysis:
 
   def add(self, other: tuple['Analysis', Any]):
     analysis, value = other
-    self += analysis
+
+    self.errors += analysis.errors
+    self.warnings += analysis.warnings
+    self.completions += analysis.completions
+    self.folds += analysis.folds
+    self.hovers += analysis.hovers
+    self.selections += analysis.selections
+
     return value
 
   def __add__(self, other: 'Analysis'):
@@ -364,13 +372,12 @@ class InvalidValueError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Invalid value", ranges=self.target.area.ranges)
 
-class InvalidPrimitiveError(LangServiceError):
-  def __init__(self, target, primitive):
-    self.primitive = primitive
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid type", ranges=self.target.area.ranges)
+class InvalidPrimitiveError(Error):
+  def __init__(self, target: LocatedValue, primitive: Callable):
+    super().__init__(
+      f"Invalid primitive, expected {primitive.__name__}",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class MissingUnitError(LangServiceError):
   def __init__(self, target, unit):
@@ -490,11 +497,18 @@ class ListType(PrimitiveType):
       if not isinstance(item_result, EllipsisType):
         result.append(item_result)
 
-    if obj.completion_ranges and isinstance(self._item_type, CompositeDict):
-      analysis.completions.append(Completion(
-        items=self._item_type.completion_items,
-        ranges=list(obj.completion_ranges)
-      ))
+    if isinstance(self._item_type, CompositeDict):
+      completion_ranges = list(obj.completion_ranges)
+
+      for item in obj:
+        if isinstance(item, LocatedString):
+          completion_ranges.append(item.area.single_range())
+
+      if completion_ranges:
+        analysis.completions.append(Completion(
+          items=self._item_type.completion_items,
+          ranges=completion_ranges
+        ))
 
     return analysis, LocatedList(result, obj.area)
 
@@ -545,34 +559,33 @@ class PotentialExprType(Type):
     self._static = static or both
 
   def analyze(self, obj, context):
-    if not isinstance(obj, str):
-      return Analysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
+    if isinstance(obj, str) and (not context.symbolic):
+      assert isinstance(obj, LocatedString)
+      expr_result = PythonExpr.parse(obj, type=self._type)
 
-    assert isinstance(obj, LocatedString)
-    expr_result = PythonExpr.parse(obj, type=self._type)
+      if expr_result:
+        analysis, expr = expr_result
 
-    if expr_result:
-      analysis, expr = expr_result
-
-      if isinstance(expr, EllipsisType):
-        return analysis, Ellipsis
-
-      located_expr = LocatedValue.new(expr, obj.area)
-
-      match expr.kind:
-        case PythonExprKind.Dynamic if self._dynamic and self._static:
-          return analysis, LocatedValue.new(ValueAsPythonExpr(located_expr), obj.area)
-        case PythonExprKind.Static if self._dynamic and self._static:
-          expr.type = TransformType(self._type, lambda value: LocatedValue.new(ValueAsPythonExpr(value), value.area))
-          return analysis, located_expr
-        case PythonExprKind.Dynamic if self._dynamic:
-          return analysis, located_expr
-        case PythonExprKind.Static if self._static:
-          return analysis, located_expr
-        case _:
-          analysis.errors.append(InvalidExprKind(obj))
+        if isinstance(expr, EllipsisType):
           return analysis, Ellipsis
-    elif self._literal:
+
+        located_expr = LocatedValue.new(expr, obj.area)
+
+        match expr.kind:
+          case PythonExprKind.Dynamic if self._dynamic and self._static:
+            return analysis, LocatedValue.new(ValueAsPythonExpr(located_expr), obj.area)
+          case PythonExprKind.Static if self._dynamic and self._static:
+            expr.type = TransformType(self._type, lambda value: LocatedValue.new(ValueAsPythonExpr(value), value.area))
+            return analysis, located_expr
+          case PythonExprKind.Dynamic if self._dynamic:
+            return analysis, located_expr
+          case PythonExprKind.Static if self._static:
+            return analysis, located_expr
+          case _:
+            analysis.errors.append(InvalidExprKind(obj))
+            return analysis, Ellipsis
+
+    if self._literal:
       analysis, value = self._type.analyze(obj, context) if self._type else (Analysis(), obj)
 
       if isinstance(value, EllipsisType):
@@ -607,6 +620,8 @@ class QuantityType:
         return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
       except (pint.PintError, TokenError):
         return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
+      except Exception:
+        return Analysis(errors=[DraftGenericError("Unknown error", ranges=obj.area.ranges)]), Ellipsis
     else:
       value = obj.value
 
@@ -627,7 +642,7 @@ class QuantityType:
 class ArbitraryQuantityType:
   def analyze(self, obj, context):
     try:
-      quantity = context.ureg.Quantity(obj.value)
+      quantity = ureg.Quantity(obj.value)
     except pint.errors.UndefinedUnitError:
       return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
     except pint.PintError:
@@ -765,6 +780,37 @@ class BindingType(Type):
       return analysis, Ellipsis
 
     return analysis, LocatedValue.new(binding, area=obj.area)
+
+class KVDictType(Type):
+  def __init__(self, value_type: Type, /):
+    self._type = value_type
+
+  def analyze(self, obj, context):
+    analysis, result = PrimitiveType(dict).analyze(obj, context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    assert isinstance(obj, LocatedDict)
+
+    if isinstance(obj, ReliableLocatedDict):
+      analysis.folds.append(FoldingRange(obj.fold_range))
+
+    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+
+    result = dict()
+
+    for key, value in obj.items():
+      key_analysis, key_result = PrimitiveType(str).analyze(key, context)
+      value_analysis, value_result = self._type.analyze(value, context)
+
+      if not (isinstance(key_result, EllipsisType) or isinstance(value_result, EllipsisType)):
+        result[key_result] = value_result
+
+      analysis += key_analysis
+      analysis += value_analysis
+
+    return analysis, LocatedValue.new(result, obj.area)
 
 
 # TODO: Improve

@@ -49,16 +49,7 @@ class ShorthandsParser(BaseParser):
     self._fiber = fiber
     self._shorthands = dict[str, ShorthandItem]()
 
-  @property
-  def segment_attributes(self):
-    return {
-      shorthand_name: lang.Attribute(
-        deprecated=shorthand.deprecated,
-        description=shorthand.description,
-        optional=True,
-        type=lang.AnyType()
-      ) for shorthand_name, shorthand in self._shorthands.items()
-    }
+    self.segment_attributes = dict[str, lang.Attribute]()
 
   def enter_protocol(self, data_protocol: BlockAttrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     data_shorthands = data_protocol.get('shorthands', dict())
@@ -79,6 +70,13 @@ class ShorthandsParser(BaseParser):
         deprecated=False,
         description=None,
         env=shorthand_env
+      )
+
+      self.segment_attributes[shorthand_name] = lang.Attribute(
+        deprecated=False,
+        description=None,
+        optional=True,
+        type=lang.AnyType()
       )
 
     return lang.Analysis()

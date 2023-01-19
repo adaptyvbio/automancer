@@ -118,7 +118,7 @@ class Host:
     logger.info(f"Loaded {len(self.manager.units)} units")
 
     self.ureg = ureg
-    self.analysis_context = AnalysisContext(ureg=self.ureg)
+    self.analysis_context = AnalysisContext()
 
     analysis = Analysis()
 

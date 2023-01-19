@@ -31,6 +31,6 @@ class EvalError(Exception, Error):
 
 def evaluate(compiled: Any, /, contents: LocatedString, context: EvalContext):
   try:
-    return LocatedValue.new(eval(compiled, globals(), context.variables), area=contents.area)
+    return LocatedValue.new(eval(compiled, globals(), context.variables), area=contents.area, deep=True)
   except Exception as e:
     raise EvalError(contents.area, message=str(e)) from e

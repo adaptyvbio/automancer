@@ -1,8 +1,10 @@
 from collections import namedtuple
+from dataclasses import dataclass
 from pint import UnitRegistry
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, Sequence
 
+from ..util.misc import Exportable
 from . import langservice as lang
 from .eval import EvalEnv, EvalEnvs, EvalStack
 from .expr import PythonExpr, PythonExprAugmented
@@ -182,10 +184,12 @@ class LinearizationContext(dict):
     return LinearizationContext({ **self, **other }, parser=self.parser)
 
 
-@debug
+@dataclass
 class AnalysisContext:
-  def __init__(self, *, ureg: UnitRegistry):
-    self.ureg = ureg
+  symbolic: bool = False
+
+  def update(self, **kwargs):
+    return type(self)(**{ **self.__dict__, **kwargs })
 
 
 class UnresolvedBlockData:
@@ -226,12 +230,13 @@ class UnresolvedBlockDataLiteral(UnresolvedBlockData):
 # ----
 
 
-class FiberProtocol:
-  def __init__(self, *, draft: Draft, global_env: EvalEnv, name: Optional[str], root: BaseBlock):
-    self.draft = draft
-    self.global_env = global_env
-    self.name = name
-    self.root = root
+@dataclass(kw_only=True)
+class FiberProtocol(Exportable):
+  draft: Draft
+  global_env: EvalEnv
+  name: Optional[str]
+  root: BaseBlock
+  user_env: EvalEnv
 
   def export(self):
     return {
@@ -244,15 +249,18 @@ class FiberProtocol:
 class GlobalEnv(EvalEnv):
   pass
 
+class UserEnv(EvalEnv):
+  pass
+
 class FiberParser:
   def __init__(self, draft: Draft, *, Parsers: Sequence[type[BaseParser]], host: 'Host'):
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
     self.host = host
-    self.ureg = host.ureg
+    self.user_env = UserEnv()
 
     self.analysis = lang.Analysis()
-    self.analysis_context = AnalysisContext(ureg=self.ureg)
+    self.analysis_context = AnalysisContext()
 
     data, reader_errors, reader_warnings = reader.loads(draft.entry_document.source)
 
@@ -298,10 +306,10 @@ class FiberParser:
     for parser in self._parsers:
       # Order is important here as enter_protocol() will also update self.analysis.
       # TODO: Improve by making enter_protocol() return an Analysis.
-      self.analysis = parser.enter_protocol(output[parser.namespace], adoption_envs=[global_env], runtime_envs=[global_env]) + self.analysis
+      self.analysis = parser.enter_protocol(output[parser.namespace], adoption_envs=[global_env], runtime_envs=[global_env, self.user_env]) + self.analysis
 
     data_actions = output['_']['steps']
-    data = self.parse_block(data_actions, adoption_envs=[global_env], adoption_stack=adoption_stack, runtime_envs=[global_env])
+    data = self.parse_block(data_actions, adoption_envs=[global_env], adoption_stack=adoption_stack, runtime_envs=[global_env, self.user_env])
 
     if not isinstance(data, EllipsisType):
       entry_block = self.execute(data.state, data.transforms, origin_area=data_actions.area)
@@ -333,7 +341,8 @@ class FiberParser:
         draft=draft,
         global_env=global_env,
         name=output['_']['name'],
-        root=entry_block
+        root=entry_block,
+        user_env=self.user_env
       )
 
       # Remove the root state block

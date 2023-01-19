@@ -272,12 +272,16 @@ class LocatedValue(Generic[T]):
     return self.area.source
 
   @classmethod
-  def new(cls, obj, area) -> 'LocatedValue':
+  def new(cls, obj: Any, area: LocationArea, *, deep: bool = False) -> 'LocatedValue':
     match obj:
       case LocatedValue():
         return obj
+      case dict() if deep:
+        return LocatedDict({ cls.new(key, area, deep=True): cls.new(value, area, deep=True) for key, value in obj.items() }, area)
       case dict():
         return LocatedDict(obj, area)
+      case list() if deep:
+        return LocatedList([cls.new(value, area, deep=True) for value in obj], area)
       case list():
         return LocatedList(obj, area)
       case str():

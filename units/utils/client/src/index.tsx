@@ -1,34 +1,37 @@
-import { Host, React, Unit } from 'pr1';
+import { DynamicValue, formatDynamicValue, Host, ProcessUnit, React, Unit } from 'pr1';
 
 
 export interface ProcessData {
   type: 'run';
+  command: DynamicValue;
 }
 
 export interface ProcessLocation {
+  command: string;
   pid: number;
 }
 
 export default {
   namespace: 'utils',
 
-  ProcessComponent(props: {
-    host: Host;
-    processData: ProcessData;
-    processLocation: ProcessLocation;
-    time: number;
-  }) {
+  ProcessComponent(props) {
     return (
-      <div>PID: {props.processLocation.pid}</div>
+      <div>PID: {props.location.pid}</div>
     );
   },
 
-  createProcessFeatures(processData: ProcessData, _options) {
-    switch (processData.type) {
+  createProcessFeatures(data: ProcessData, location, context) {
+    switch (data.type) {
       case 'run': return [
-        { icon: 'terminal',
-          label: 'Run command' }
+        { description: 'Run command',
+          icon: 'terminal',
+          label: location
+            ? location.command
+            : formatDynamicValue(data.command) }
       ];
     }
+  },
+  getProcessLabel(data, context) {
+    return 'Run command';
   }
-} satisfies Unit
+} satisfies ProcessUnit<ProcessData, ProcessLocation>

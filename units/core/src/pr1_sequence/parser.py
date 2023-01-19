@@ -24,7 +24,7 @@ class SequenceParser(BaseParser):
 
   root_attributes = dict()
 
-  @functools.cached_property
+  @property
   def segment_attributes(self):
     return {
       'actions': lang.Attribute(

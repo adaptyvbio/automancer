@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, ca
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
-from ..reader import LocatedString, LocatedValue
+from ..reader import LocatedString, LocatedValue, LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable
 
 if TYPE_CHECKING:
-  from .langservice import Type
+  from .langservice import Analysis, Type
 
 
 expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
@@ -104,7 +104,7 @@ class PotentialPythonExpr(Exportable, Protocol):
   def augment(self) -> 'PythonExprAugmented':
     ...
 
-  def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic') -> LocatedValue:
+  def evaluate(self, context: EvalContext) -> 'tuple[Analysis, LocatedValue]':
     ...
 
 
@@ -215,7 +215,7 @@ class ValueAsPythonExpr(PotentialPythonExpr):
   def augment(self, envs: EvalEnvs):
     return PythonExprAugmented(self, envs)
 
-  def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
+  def evaluate(self, context: EvalContext):
     return self._value
 
   def export(self):
@@ -232,6 +232,7 @@ class PythonExprAugmented:
 
   def evaluate(self, stack: EvalStack):
     from .langservice import Analysis
+    from .parser import AnalysisContext
 
     variables = dict[str, Any]()
 
@@ -242,12 +243,12 @@ class PythonExprAugmented:
     context = EvalContext(variables)
 
     try:
-      result = self._expr.evaluate(context, mode='dynamic')
+      result = self._expr.evaluate(context)
     except EvalError as e:
       return Analysis(errors=[e]), Ellipsis
     else:
       if self._expr.type:
-        return self._expr.type.analyze(result, None)
+        return self._expr.type.analyze(result, AnalysisContext(symbolic=True))
       else:
         return Analysis(), result
 

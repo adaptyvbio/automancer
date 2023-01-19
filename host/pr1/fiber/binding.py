@@ -4,7 +4,7 @@ from typing import Any, Optional, Protocol
 import ast
 
 from ..draft import DraftDiagnostic
-from .eval import EvalContext, EvalVariables
+from .eval import EvalContext, EvalEnv, EvalEnvs, EvalStack, EvalVariables
 from .expr import PythonExpr, PythonExprKind
 from .langservice import Analysis, LangServiceError
 from ..reader import LocatedString, Source
@@ -35,6 +35,9 @@ class InvalidBindingPythonExpr(LangServiceError):
 
 
 class Binding(Protocol):
+  def augment(self, envs: EvalEnvs, *, target_env: EvalEnv) -> 'BindingAugmented':
+    return BindingAugmented(self, envs, target_env=target_env)
+
   def write(self, value: Any, /, context: BindingWriteContext) -> Analysis:
     ...
 
@@ -46,6 +49,27 @@ class Binding(Protocol):
       return Analysis(), parse_binding_expr(tree.body, source=source)
     except InvalidBindingPythonExpr as e:
       return Analysis(errors=[e]), Ellipsis
+
+class BindingAugmented:
+  def __init__(self, binding: Binding, /, envs: EvalEnvs, *, target_env: EvalEnv):
+    self._binding = binding
+    self._envs = envs
+    self._target_env = target_env
+
+  def write(self, value: Any, /, stack: EvalStack):
+    background_variables = dict[str, Any]()
+    present_variables = stack[self._target_env]
+
+    assert present_variables is not None
+
+    for env in self._envs:
+      if ((env_vars := stack[env]) is not None) and (env is not self._target_env):
+        background_variables.update(env_vars)
+
+    return self._binding.write(value, BindingWriteContext(
+      background=background_variables,
+      present=present_variables
+    ))
 
 
 @dataclass(kw_only=True)

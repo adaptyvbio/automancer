@@ -1,33 +1,49 @@
 from asyncio import subprocess
 import builtins
+from pathlib import Path
 import platform
 import signal
-from botocore.config import Config
 from dataclasses import dataclass
-from pathlib import Path
 from types import EllipsisType
-from typing import Literal, Optional
+from typing import Optional
 import asyncio
 
+from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import PythonExprAugmented
-from pr1.fiber.process import ProcessExecEvent
+from pr1.fiber.process import ProcessExecEvent, ProcessFailureEvent, ProcessTerminationEvent
 from pr1.util.parser import parse_command
-from pr1.reader import LocatedString
+from pr1.reader import LocatedString, LocatedValue
 from pr1.units.base import BaseProcessRunner
-from pr1.util.asyncio import AsyncIteratorThread
-from pr1.util.misc import FileObject, UnreachableError
 
 from . import namespace
 from .parser import ProcessData
 
 
+class InvalidCommandArgumentsError(Error):
+  def __init__(self, target: LocatedString, /):
+    super().__init__("Invalid command arguments", references=[ErrorDocumentReference.from_value(target)])
+
+class InvalidCommandExecutableError(Error):
+  def __init__(self, target: LocatedString, /):
+    super().__init__("Invalid command executable", references=[ErrorDocumentReference.from_value(target)])
+
+class MissingCwdError(Error):
+  def __init__(self, target: LocatedValue[Path], /):
+    super().__init__(f"Missing current working directory '{str(target.value)}'", references=[ErrorDocumentReference.from_value(target)])
+
+class NonZeroExitCodeError(Error):
+  def __init__(self, exit_code: int, /):
+    super().__init__(f"Non-zero exit code ({exit_code})")
+
+
 @dataclass(kw_only=True)
 class ProcessLocation:
+  command: str
   pid: int
 
   def export(self):
     return {
+      "command": self.command,
       "pid": self.pid
     }
 
@@ -81,17 +97,56 @@ class Process:
       pass
 
   async def run(self, initial_point: Optional[ProcessPoint], *, stack: EvalStack):
-    analysis, command = self._data.command.evaluate(stack)
+    # Command
 
-    if isinstance(command, EllipsisType):
-      print("Error!")
+    analysis, command = self._data.command.evaluate(stack)
+    failure = isinstance(command, EllipsisType)
+
+    # Env
+
+    env = dict[str, str]()
+
+    if isinstance(self._data.env, EllipsisType):
+      pass
+    else:
+      for key, value in self._data.env.items():
+        value_result = analysis.add(value.evaluate(stack))
+
+        if not isinstance(value_result, EllipsisType):
+          env[key] = value_result.value
+        else:
+          failure = True
+
+    # Cwd
+
+    if self._data.cwd:
+      cwd_result = analysis.add(self._data.cwd.evaluate(stack))
+
+      if not isinstance(cwd_result, EllipsisType):
+        cwd = cwd_result.value
+
+        if not cwd.exists():
+          analysis.errors.append(MissingCwdError(cwd_result))
+          failure = True
+      else:
+        cwd = None
+        failure = True
+    else:
+      cwd = None
+
+    # Bindings
+
+    # if self._data.stdout:
+    #   analysis += self._data.stdout.write(34, stack)
+
+    if failure:
+      yield ProcessFailureEvent(errors=analysis.errors)
       return
 
     assert isinstance(command, LocatedString)
 
-    env = dict()
-
     subprocess_args = dict(
+      cwd=cwd,
       env=env,
       stderr=(subprocess.PIPE if self._data.stderr else subprocess.DEVNULL),
       stdout=(subprocess.PIPE if self._data.stdout else subprocess.DEVNULL)
@@ -101,23 +156,30 @@ class Process:
       self._process = await asyncio.create_subprocess_shell(command.value, **subprocess_args)
     else:
       command_args = parse_command(command)
-      print("Args", command_args)
 
       if isinstance(command_args, EllipsisType):
-        print("Error!")
+        yield ProcessFailureEvent(errors=(analysis.errors + [InvalidCommandArgumentsError(command)]))
         return
 
       try:
         self._process = await asyncio.create_subprocess_exec(*command_args, **subprocess_args)
       except FileNotFoundError:
-        print("Error!")
+        yield ProcessFailureEvent(errors=(analysis.errors + [InvalidCommandExecutableError(command_args[0])]))
         return
 
     yield ProcessExecEvent(
-      location=ProcessLocation(pid=self._process.pid)
+      errors=analysis.errors,
+      location=ProcessLocation(
+        command=command.value,
+        pid=self._process.pid
+      )
     )
 
     stdout, stderr = await self._process.communicate()
+    exit_code = self._process.returncode
+
+    if (exit_code is not None) and (exit_code != 0) and (not self._data.ignore_exit_code):
+      yield ProcessFailureEvent(errors=[NonZeroExitCodeError(exit_code)])
 
     print("STDOUT", stdout)
     print("STDERR", stderr)
@@ -128,11 +190,7 @@ class Process:
     # if self._data.stderr:
     #   self._data.stderr.write(stderr, context)
 
-    yield ProcessExecEvent(
-      location=ProcessLocation(pid=self._process.pid),
-      stopped=True,
-      terminated=True
-    )
+    yield ProcessTerminationEvent()
 
 
 class Runner(BaseProcessRunner):

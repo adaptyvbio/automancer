@@ -452,7 +452,7 @@ class LocatedDict(dict, LocatedValue[dict]):
     return next(key for key in self.keys() if key == target)
 
 
-class LocatedList(list, LocatedValue[list]):
+class LocatedList(list[T], LocatedValue[list[T]], Generic[T]):
   def __new__(cls, *args, **kwargs):
     return super(LocatedList, cls).__new__(cls)
 

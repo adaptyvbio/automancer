@@ -1,22 +1,24 @@
-import asyncio
 from dataclasses import dataclass
 from enum import IntEnum
-import functools
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
 from pr1.fiber import langservice as lang
-from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.parser import AnalysisContext, BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from pr1.fiber.eval import EvalStack
+from pr1.fiber.parser import Attrs, BaseBlock, BaseParser, BaseTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
 from pr1.fiber.process import ProgramExecEvent
 from pr1.devices.claim import ClaimSymbol
-from pr1.reader import LocatedValue, LocationArea
-from pr1.util import schema as sc
+from pr1.reader import LocationArea
 from pr1.util.decorators import debug
-from pr1.util.iterators import CoupledStateIterator2, TriggerableIterator
+from pr1.util.iterators import TriggerableIterator
 
 
-ActionInfo = tuple[BlockData, LocationArea]
+SequenceActionInfo = tuple[BlockData, LocationArea]
+
+class SequenceAttrs(TypedDict, total=False):
+  actions: list[Any]
+
+SequencePrep = list[tuple[Attrs, LocationArea]]
 
 class SequenceParser(BaseParser):
   namespace = "sequence"
@@ -40,82 +42,51 @@ class SequenceParser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
-    if 'actions' in attrs:
-      actions = [item._value for item in attrs['actions']._value]
+  def prepare_block(self, attrs: SequenceAttrs, /, adoption_envs, runtime_envs):
+    if (attr := attrs.get('actions')):
+      actions_prep = SequencePrep()
       analysis = lang.Analysis()
-      context = AnalysisContext()
 
-      action_preps = list()
+      for action_source in attr:
+        action_prep = analysis.add(self._fiber.prepare_block(action_source, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
-      for action in actions:
-        action_result = analysis.add(self._fiber.segment_type.analyze(action, context))
-
-        if isinstance(action_result, EllipsisType):
+        if isinstance(action_prep, EllipsisType):
           continue
 
-        prep = analysis.add(self._fiber.prepare_block(action_result, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
+        actions_prep.append((action_prep, action_source.area))
 
-        if isinstance(prep, EllipsisType):
-          continue
+      return analysis, BlockUnitPreparationData(actions_prep)
 
-        action_preps.append(LocatedValue.new(prep, action.area))
-        # print(">", prep)
-
-      return analysis, ({ 'actions': lang.ValueAsPythonExpr((action_preps, adoption_envs)) }, [])
-      # return analysis, ({ 'actions': lang.ValueAsPythonExpr(action_preps or Ellipsis) }, [])
-      # __import__('sys').exit()
-
-    return lang.Analysis(), (dict(), [])
-
-  def parse_block(self, attrs, /, adoption_stack):
-    if 'actions' in attrs:
-      analysis = lang.Analysis()
-      actions_info = list[ActionInfo]()
-      preps, adoption_envs = attrs['actions']
-
-      for action_prep in preps:
-        # print(">>>>", action_prep)
-        action_data = analysis.add(self._fiber.parse_block(action_prep, adoption_envs, adoption_stack))
-
-        if not isinstance(action_data, EllipsisType):
-          actions_info.append((action_data, action_prep.area))
-        # print(">>>>", type(action_prep))
-
-      return analysis, BlockUnitData(transforms=[
-        SequenceTransform(actions_info, parser=self)
-      ])
-
-      if isinstance(attrs['actions'], EllipsisType):
-        return lang.Analysis(), Ellipsis
-
-      actions_info: list[ActionInfo] = list()
-
-      for action_attrs in attrs['actions']:
-        action_data = self._fiber.parse_block_attrs(action_attrs, adoption_envs=adoption_envs, adoption_stack=adoption_stack, runtime_envs=runtime_envs, allow_expr=True)
-
-        if not isinstance(action_data, EllipsisType):
-          actions_info.append((action_data, action_attrs.area))
-
-      return lang.Analysis(), BlockUnitData(transforms=[
-        SequenceTransform(actions_info, parser=self)
-      ])
     else:
-      return lang.Analysis(), BlockUnitData()
+      return lang.Analysis(), BlockUnitPreparationData()
+
+  def parse_block(self, attrs: SequencePrep, /, adoption_stack):
+    analysis = lang.Analysis()
+    actions_info = list[SequenceActionInfo]()
+
+    for action_prep, action_area in attrs:
+      action_data = analysis.add(self._fiber.parse_block(action_prep, adoption_stack))
+
+      if not isinstance(action_data, EllipsisType):
+        actions_info.append((action_data, action_area))
+
+    return analysis, BlockUnitData(transforms=[
+      SequenceTransform(actions_info, parser=self)
+    ])
 
 
 @debug
 class SequenceTransform(BaseTransform):
-  def __init__(self, actions_info: list[ActionInfo], /, parser: SequenceParser):
+  def __init__(self, actions_info: list[SequenceActionInfo], /, parser: SequenceParser):
     self._actions_info = actions_info
     self._parser = parser
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     analysis = lang.Analysis()
-    children: list[BaseBlock] = list()
+    children = list[BaseBlock]()
 
     for action_data, action_area in self._actions_info:
-      action_block = self._parser._fiber.execute(action_data.state, transforms + action_data.transforms, origin_area=action_area)
+      action_block = analysis.add(self._parser._fiber.execute(action_data.state, transforms + action_data.transforms, origin_area=action_area))
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)

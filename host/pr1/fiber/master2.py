@@ -12,6 +12,7 @@ from .parser import BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
 from ..util.iterators import DynamicParallelIterator
+from ..ureg import ureg
 
 if TYPE_CHECKING:
   from ..host import Host
@@ -70,7 +71,10 @@ class Master:
     from random import random
 
     runtime_stack = {
-      self.protocol.global_env: dict(random=random),
+      self.protocol.global_env: dict(
+        random=random,
+        unit=ureg
+      ),
       self.protocol.user_env: dict()
     }
 

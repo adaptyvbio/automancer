@@ -5,7 +5,7 @@ import re
 from enum import Enum
 from pint import Quantity
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, TypeVar, cast
 
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
@@ -97,6 +97,7 @@ class PythonExprKind(Enum):
   Binding = 3
 
 
+# @deprecated
 class PotentialPythonExpr(Exportable, Protocol):
   def __init__(self):
     self.type: Optional[Type]
@@ -201,18 +202,28 @@ class PythonExpr:
 
     return analysis, output
 
-class PythonExprObject:
-  def __init__(self, expr: PythonExpr, /, type: 'Type'):
+
+# T = LocatedValue[...] | Evaluable[...]
+T = TypeVar('T', covariant=True)
+
+class Evaluable(Exportable, Protocol[T]):
+  def evaluate(self, stack: EvalStack) -> 'tuple[Analysis, T | EllipsisType]':
+    ...
+
+class PythonExprObject(Evaluable):
+  def __init__(self, expr: PythonExpr, /, type: 'Type', *, depth: int, envs: EvalEnvs):
+    self._depth = depth
+    self._envs = envs
     self._expr = expr
     self._type = type
 
-  def evaluate(self, envs, stack, *, done):
+  def evaluate(self, stack):
     from .langservice import Analysis
     from .parser import AnalysisContext
 
     variables = dict[str, Any]()
 
-    for env in envs:
+    for env in self._envs:
       if (env_vars := stack[env]) is not None:
         variables.update(env_vars)
 
@@ -223,28 +234,56 @@ class PythonExprObject:
     except EvalError as e:
       return Analysis(errors=[e]), Ellipsis
     else:
-      return self._type.analyze(result, AnalysisContext(symbolic=True))
+      analysis, result = self._type.analyze(result, AnalysisContext(symbolic=True))
+      return analysis, ValueAsPythonExpr.new(result, depth=(self._depth - 1))
+
+  def export(self):
+    return self._expr.export()
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._expr)})"
+    return f"{self.__class__.__name__}({repr(self._expr)}, depth={self._depth})"
 
 
-class ValueAsPythonExpr:
-  def __init__(self, value: LocatedValue | EllipsisType, /):
-    self.type = None
+class ValueAsPythonExpr(Evaluable):
+  def __init__(self, value: Evaluable | LocatedValue | EllipsisType, /, *, depth: int):
+    self._depth = depth
     self._value = value
 
-  def evaluate(self, envs, stack, *, done):
+  def evaluate(self, stack):
     from .langservice import Analysis
-    return Analysis(), self._value
+    return Analysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
 
   def export(self):
     return export_value(self._value)
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._value)})"
+    return f"{self.__class__.__name__}({repr(self._value)}, depth={(self._depth + 1)})"
+
+  @classmethod
+  def new(cls, value: Evaluable | LocatedValue | EllipsisType, /, *, depth: int = 0):
+    return cls(value, depth=(depth - 1)) if (depth > 0) and (not isinstance(value, EllipsisType)) else value
+
+class DeferredEvaluable(Evaluable):
+  def __init__(self, value: Evaluable, /, *, depth: int):
+    self._depth = depth
+    self._value = value
+
+  def evaluate(self, stack):
+    from .langservice import Analysis
+    return self._value.evaluate(stack) if self._depth < 1 else (Analysis(), self.__class__(self._value, depth=(self._depth - 1)))
+
+  def export(self):
+    return self._value.export()
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({repr(self._value)}, depth={self._depth})"
+
+  @classmethod
+  def new(cls, value: Any, /, *, depth: int):
+    return cls(value, depth=(depth - 1)) if depth > 0 else value
 
 
+# @deprecated
 class PythonExprAugmented:
   def __init__(self, expr: PotentialPythonExpr, /, envs: EvalEnvs):
     self._expr = expr

@@ -12,6 +12,7 @@ from pr1.units.base import BaseProcessRunner
 from pr1.ureg import ureg
 
 from . import namespace
+from .parser import TimerProcessData
 
 
 @dataclass(kw_only=True)
@@ -37,7 +38,7 @@ class ProcessPoint:
     return cls(progress=value["progress"])
 
 class Process(ProcessIntf):
-  def __init__(self, data: Any, *, runner: 'Runner'):
+  def __init__(self, data: TimerProcessData, *, runner: 'Runner'):
     self._data = data
 
     self._progress: Optional[float] = None
@@ -73,10 +74,7 @@ class Process(ProcessIntf):
     eval_analysis, eval_result = self._data.value.evaluate(stack)
 
     if isinstance(eval_result, EllipsisType):
-      yield ProcessFailureEvent(
-        errors=eval_analysis.errors
-      )
-
+      yield ProcessFailureEvent(errors=eval_analysis.errors)
       return
 
     total_duration: float = eval_result.value.m_as('sec')

@@ -7,9 +7,9 @@ from types import EllipsisType
 import pint
 from collections import namedtuple
 from pint import Quantity, Unit
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast
 
-from .expr import PythonExpr, PythonExprKind, PythonExprObject, ValueAsPythonExpr
+from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject, ValueAsPythonExpr
 from ..error import Error, ErrorDocumentReference
 from ..ureg import ureg
 from ..util.parser import check_identifier
@@ -576,7 +576,7 @@ class AnyType(Type):
     pass
 
   def analyze(self, obj, /, context):
-    return Analysis(), ValueAsPythonExpr(obj) if context.eval else obj
+    return Analysis(), ValueAsPythonExpr.new(obj, depth=context.eval_depth)
 
 class PrimitiveType(Type):
   def __init__(self, primitive: Any, /):
@@ -607,7 +607,7 @@ class PrimitiveType(Type):
 
   def analyze(self, obj, /, context):
     analysis, result = self._analyze(obj, context)
-    return analysis, (ValueAsPythonExpr(result) if (not isinstance(result, EllipsisType)) and context.eval else result)
+    return analysis, (ValueAsPythonExpr.new(result, depth=context.eval_depth) if (not isinstance(result, EllipsisType)) else Ellipsis)
 
 class TransformType(Type):
   def __init__(self, parent_type: Type, transformer: Callable, /):
@@ -660,23 +660,34 @@ class ListType(Type):
         ))
 
     result = LocatedList(result, obj.area)
-    return analysis, ListAsPythonExpr(result) if context.eval else result
 
-class ListAsPythonExpr(ListType):
-  def __init__(self, value: LocatedList, /):
+    return analysis, ValueAsPythonExpr.new(ListAsPythonExpr(result), depth=context.eval_depth) if context.eval_depth > 0 else result
+
+
+S = TypeVar('S', bound=LocatedValue)
+
+class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
+  def __init__(self, value: LocatedList[Evaluable[S]], /):
     self._value = value
 
-  def evaluate(self, envs, stack, *, done):
+  def evaluate(self, stack):
     analysis = Analysis()
     result = list[Any]()
 
     for item in self._value:
-      item_result = analysis.add(item.evaluate(envs, stack, done=done))
+      item_result = analysis.add(item.evaluate(stack))
+
+      if isinstance(item_result, EllipsisType):
+        return analysis, Ellipsis # TODO: Improve that using a flag to disable during dynamic evaluation
+
       result.append(item_result)
 
     located_result = LocatedList(result, self._value.area)
 
     return analysis, (located_result if done else self.__class__(located_result))
+
+  def export(self):
+    raise NotImplementedError
 
   def __repr__(self):
     return f"{self.__class__.__name__}({repr(self._value)})"
@@ -729,6 +740,8 @@ class PotentialExprType(Type):
     self._static = static or both
 
   def analyze(self, obj, /, context):
+    eval_depth = max(context.eval_depth, (1 if self._dynamic else 0) + (1 if self._static else 0))
+
     if isinstance(obj, str) and (not context.symbolic):
       assert isinstance(obj, LocatedString)
       expr_result = PythonExpr.parse(obj)
@@ -739,32 +752,29 @@ class PotentialExprType(Type):
         if isinstance(expr, EllipsisType):
           return analysis, Ellipsis
 
-        located_expr = LocatedValue.new(expr, obj.area)
-
         match expr.kind:
-          case PythonExprKind.Dynamic if self._dynamic and self._static:
-            return analysis, LocatedValue.new(ValueAsPythonExpr(located_expr), obj.area)
-          case PythonExprKind.Static if self._dynamic and self._static:
-            expr.type = TransformType(self._type, lambda value: LocatedValue.new(ValueAsPythonExpr(value), value.area))
-            return analysis, located_expr
           case PythonExprKind.Dynamic if self._dynamic:
-            return analysis, located_expr
+            return analysis, ValueAsPythonExpr.new(PythonExprObject(expr, self._type, depth=(eval_depth - 1), envs=context.envs_list[1].copy()), depth=1)
           case PythonExprKind.Static if self._static:
-            return analysis, PythonExprObject(expr, self._type)
+            return analysis, PythonExprObject(expr, self._type, depth=eval_depth, envs=context.envs_list[0].copy())
           case _:
             analysis.errors.append(InvalidExprKind(obj))
             return analysis, Ellipsis
 
     if self._literal:
-      analysis, value = self._type.analyze(obj, context)
+      return self._type.analyze(obj, context.update(eval_depth=eval_depth))
 
-      if isinstance(value, EllipsisType):
-        return analysis, Ellipsis
+      # analysis, result = self._type.analyze(obj, context.update(eval_depth=eval_depth))
 
-      if self._dynamic and self._static:
-        value = LocatedValue.new(ValueAsPythonExpr(value), obj.area)
+      # if isinstance(result, EllipsisType):
+      #   return analysis, Ellipsis
 
-      return analysis, value
+      # return analysis, ValueAsPythonExpr.new(result, depth=eval_depth)
+
+      # if self._dynamic and self._static:
+      #   value = LocatedValue.new(ValueAsPythonExpr(value), obj.area)
+
+      # return analysis, value
       # return analysis, ValueAsPythonExpr(value) if not isinstance(value, EllipsisType) else Ellipsis
     else:
       return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
@@ -773,7 +783,7 @@ class ExprType(LiteralOrExprType):
   def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
     super().__init__(obj_type, dynamic=dynamic, expr_type=expr_type, field=field, static=static, _force_expr=True)
 
-class QuantityType:
+class QuantityType(Type):
   def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
     self._allow_nil = allow_nil
     self._unit: Unit = ureg.Unit(unit)
@@ -781,9 +791,9 @@ class QuantityType:
   def analyze(self, obj, /, context):
     if self._allow_nil and ((obj == "nil") or (obj.value == None)):
       result = LocatedValue.new(None, area=obj.area)
-      return Analysis(), ValueAsPythonExpr(result) if context.eval else result
+      return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
-    if isinstance(obj, str):
+    if isinstance(obj, str) and (not context.symbolic):
       assert isinstance(obj, LocatedString)
 
       try:
@@ -798,7 +808,7 @@ class QuantityType:
       value = obj.value
 
     analysis, result = self.check(value, self._unit, target=obj)
-    return analysis, (ValueAsPythonExpr(result) if not isinstance(result, EllipsisType) and context.eval else result)
+    return analysis, ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
   @staticmethod
   def check(value: ureg.Quantity, unit: Unit, *, target: LocatedValue):
@@ -992,13 +1002,13 @@ class KVDictValueAsPythonExpr:
   def __init__(self, value: LocatedDict, /):
     self._value = value
 
-  def evaluate(self, envs, stack, *, done):
+  def evaluate(self, stack):
     analysis = Analysis()
     result = dict[Any, Any]()
 
     for key, value in self._value.items():
-      key_analysis, key_result = key.evaluate(envs, stack, done=done)
-      value_analysis, value_result = value.evaluate(envs, stack, done=done)
+      key_analysis, key_result = key.evaluate(stack)
+      value_analysis, value_result = value.evaluate(stack)
 
       analysis += key_analysis
       analysis += value_analysis
@@ -1007,10 +1017,18 @@ class KVDictValueAsPythonExpr:
 
     located_result = LocatedDict(result, self._value.area)
 
-    return analysis, (located_result if done else type(self)(located_result))
+    return analysis, (located_result if done else self.__class__(located_result))
 
   def __repr__(self):
     return f"{self.__class__.__name__}({repr(self._value)})"
+
+class EvaluableContainerType(Type):
+  def __init__(self, obj_type: Type, /, depth: int):
+    self._depth = depth
+    self._type = obj_type
+
+  def analyze(self, obj, /, context):
+    return self._type.analyze(obj, context.update(eval_depth=self._depth))
 
 # TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):

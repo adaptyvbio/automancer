@@ -23,19 +23,20 @@ class TimerParser(BaseParser):
   root_attributes = dict()
   segment_attributes = {
     'wait': lang.Attribute(
+      decisive=True,
       description="Waits for a fixed delay.",
-      optional=True,
       type=lang.PotentialExprType(lang.QuantityType('second'), dynamic=True, static=True)
+      # type=lang.KVDictType(lang.PotentialExprType(lang.QuantityType('second', allow_nil=True), static=True))
     )
   }
 
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
-    attrs = block_attrs[self.namespace]
-
+  def parse_block(self, attrs, /, adoption_stack):
     if (attr := attrs.get('wait')):
+      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(34))])
+
       if isinstance(attr, EllipsisType):
         return lang.Analysis(), Ellipsis
 

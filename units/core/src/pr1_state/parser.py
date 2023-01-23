@@ -29,7 +29,7 @@ class StateParser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[Analysis, BlockUnitData | EllipsisType]:
+  def parse_block(self, attrs, /, adoption_stack):
     return Analysis(), BlockUnitData(transforms=[StateTransform(parser=self)])
 
 @debug
@@ -38,10 +38,10 @@ class StateTransform(BaseTransform):
     self._parser = parser
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    child = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
+    analysis, child = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
 
     if isinstance(child, EllipsisType):
-      return Analysis(), Ellipsis
+      return analysis, Ellipsis
 
     # if isinstance(child, StateBlock):
     #   return Analysis(), StateBlock(
@@ -53,7 +53,7 @@ class StateTransform(BaseTransform):
     #   print(t)
     # print()
 
-    return Analysis(), StateBlock(
+    return analysis, StateBlock(
       child=child,
       state=state
     )

@@ -108,19 +108,15 @@ class PotentialPythonExpr(Exportable, Protocol):
     ...
 
 
-class PythonExpr(PotentialPythonExpr):
-  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression, *, type: 'Optional[Type]' = None):
+class PythonExpr:
+  def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression):
     self.contents = contents
     self.kind = kind
     self.tree = tree
-    self.type = type
 
   @functools.cached_property
   def _compiled(self):
     return compile(self.tree, filename="<string>", mode="eval")
-
-  def augment(self, envs: EvalEnvs):
-    return PythonExprAugmented(self, envs)
 
   def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
     match mode:
@@ -139,7 +135,7 @@ class PythonExpr(PotentialPythonExpr):
     return f"{self.__class__.__name__}({repr(ast.unparse(self.tree))})"
 
   @classmethod
-  def _parse_match(cls, match: re.Match, *, type: Optional['Type']):
+  def _parse_match(cls, match: re.Match):
     from .langservice import Analysis
 
     match match.group(1):
@@ -168,12 +164,11 @@ class PythonExpr(PotentialPythonExpr):
     return analysis, cls(
       contents=contents,
       kind=kind,
-      tree=tree,
-      type=type
+      tree=tree
     )
 
   @classmethod
-  def parse(cls, raw_str: LocatedString, /, *, type: Optional['Type'] = None):
+  def parse(cls, raw_str: LocatedString, /):
     from .langservice import Analysis
 
     match = expr_regexp_exact.search(raw_str)
@@ -181,7 +176,7 @@ class PythonExpr(PotentialPythonExpr):
     if not match:
       return None
 
-    return cls._parse_match(match, type=type)
+    return cls._parse_match(match)
 
   @classmethod
   def parse_mixed(cls, raw_str: LocatedString, /):
@@ -198,7 +193,7 @@ class PythonExpr(PotentialPythonExpr):
       output.append(raw_str[index:match_start])
       index = match_end
 
-      match_analysis, match_expr = cls._parse_match(match, type=None)
+      match_analysis, match_expr = cls._parse_match(match)
       analysis += match_analysis
       output.append(match_expr)
 
@@ -206,23 +201,48 @@ class PythonExpr(PotentialPythonExpr):
 
     return analysis, output
 
+class PythonExprObject:
+  def __init__(self, expr: PythonExpr, /, type: 'Type'):
+    self._expr = expr
+    self._type = type
 
-class ValueAsPythonExpr(PotentialPythonExpr):
+  def evaluate(self, envs, stack, *, done):
+    from .langservice import Analysis
+    from .parser import AnalysisContext
+
+    variables = dict[str, Any]()
+
+    for env in envs:
+      if (env_vars := stack[env]) is not None:
+        variables.update(env_vars)
+
+    context = EvalContext(variables)
+
+    try:
+      result = self._expr.evaluate(context)
+    except EvalError as e:
+      return Analysis(errors=[e]), Ellipsis
+    else:
+      return self._type.analyze(result, AnalysisContext(symbolic=True))
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({repr(self._expr)})"
+
+
+class ValueAsPythonExpr:
   def __init__(self, value: LocatedValue | EllipsisType, /):
     self.type = None
     self._value = value
 
-  def augment(self, envs: EvalEnvs):
-    return PythonExprAugmented(self, envs)
-
-  def evaluate(self, context: EvalContext):
-    return self._value
+  def evaluate(self, envs, stack, *, done):
+    from .langservice import Analysis
+    return Analysis(), self._value
 
   def export(self):
     return export_value(self._value)
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({self._value})"
+    return f"{self.__class__.__name__}({repr(self._value)})"
 
 
 class PythonExprAugmented:

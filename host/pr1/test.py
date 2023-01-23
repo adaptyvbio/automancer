@@ -5,7 +5,6 @@ from pathlib import Path
 from pprint import pprint
 
 from .devices.claim import ClaimSymbol
-
 from .host import Host
 
 class ColoredFormatter(logging.Formatter):
@@ -64,13 +63,19 @@ async def main():
 name: Test
 
 steps:
-  wait: 2s
+  actions:
+    - wait: 30 sec
+    # - wait:
+    #     a: ${{ (3 + x) * ureg.sec }}
+    #     c: 34 min
+    #     d: nil
+  # wait: 2s
     # - wait: 1s
   # actions:
   #   - Mock.valueBool: true
   #     wait: 1s
   #   - wait: 1s
-  Mock.valueBool: false
+  # Mock.valueBool: false
 """)
 
   draft = Draft(
@@ -87,6 +92,8 @@ steps:
 
 
   # print(parser.protocol.root)
+
+  return
 
   from .fiber.master2 import Master
 

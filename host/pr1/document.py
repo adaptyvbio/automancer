@@ -48,7 +48,7 @@ class Document:
   @classmethod
   def text(cls, contents: str, id: str = 'default', path: PurePosixPath = PurePosixPath('/default')):
     return cls(
-      contents=Source(contents),
+      contents=contents,
       id=id,
       owner=None,
       path=path

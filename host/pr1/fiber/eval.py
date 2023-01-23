@@ -5,7 +5,7 @@ from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
 
 
-class EvalEnv(Protocol):
+class EvalEnv:
   pass
 
 EvalEnvs = list[EvalEnv]

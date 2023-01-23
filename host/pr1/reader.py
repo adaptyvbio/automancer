@@ -578,11 +578,11 @@ class InvalidCharacterError(ReaderError):
     return DraftDiagnostic("Invalid character", ranges=self.target.area.ranges)
 
 
-def tokenize(raw_source: str):
+def tokenize(raw_source: Source | str, /):
   errors = list[ReaderError]()
   warnings = list[ReaderError]()
 
-  source = Source(raw_source)
+  source = Source(raw_source) if not isinstance(raw_source, Source) else raw_source
   tokens = list[Token]()
 
 
@@ -1064,7 +1064,7 @@ def dumps(obj, depth = 0, cont = False):
   raise Exception("Invalid input")
 
 
-def parse(raw_source):
+def parse(raw_source: Source | str, /):
   tokens, errors, _ = tokenize(raw_source)
 
   if errors:
@@ -1078,7 +1078,7 @@ def parse(raw_source):
   return result
 
 
-def loads(raw_source) -> tuple[Any, list[ReaderError], list[ReaderError]]:
+def loads(raw_source: Source | str, /) -> tuple[Any, list[ReaderError], list[ReaderError]]:
   tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
   result, analysis_errors, analysis_warnings = analyze(tokens)
 

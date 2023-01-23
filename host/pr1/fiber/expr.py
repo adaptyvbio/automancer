@@ -170,8 +170,6 @@ class PythonExpr:
 
   @classmethod
   def parse(cls, raw_str: LocatedString, /):
-    from .langservice import Analysis
-
     match = expr_regexp_exact.search(raw_str)
 
     if not match:

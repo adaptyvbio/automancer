@@ -27,10 +27,6 @@ class InvalidCommandExecutableError(Error):
   def __init__(self, target: LocatedString, /):
     super().__init__("Invalid command executable", references=[ErrorDocumentReference.from_value(target)])
 
-class MissingCwdError(Error):
-  def __init__(self, target: LocatedValue[Path], /):
-    super().__init__(f"Missing current working directory '{str(target.value)}'", references=[ErrorDocumentReference.from_value(target)])
-
 class NonZeroExitCodeError(Error):
   def __init__(self, exit_code: int, /):
     super().__init__(f"Non-zero exit code ({exit_code})")
@@ -97,62 +93,23 @@ class Process:
       pass
 
   async def run(self, initial_point: Optional[ProcessPoint], *, stack: EvalStack):
-    # Command
+    analysis, data = self._data.data.evaluate(stack)
 
-    analysis, command = self._data.command.evaluate(stack)
-    failure = isinstance(command, EllipsisType)
-
-    # Env
-
-    env = dict[str, str]()
-
-    if isinstance(self._data.env, EllipsisType):
-      pass
-    else:
-      for key, value in self._data.env.items():
-        value_result = analysis.add(value.evaluate(stack))
-
-        if not isinstance(value_result, EllipsisType):
-          env[key] = value_result.value
-        else:
-          failure = True
-
-    # Cwd
-
-    if self._data.cwd:
-      cwd_result = analysis.add(self._data.cwd.evaluate(stack))
-
-      if not isinstance(cwd_result, EllipsisType):
-        cwd = cwd_result.value
-
-        if not cwd.exists():
-          analysis.errors.append(MissingCwdError(cwd_result))
-          failure = True
-      else:
-        cwd = None
-        failure = True
-    else:
-      cwd = None
-
-    # Bindings
-
-    # if self._data.stdout:
-    #   analysis += self._data.stdout.write(34, stack)
-
-    if failure:
+    if isinstance(data, EllipsisType):
       yield ProcessFailureEvent(errors=analysis.errors)
       return
 
-    assert isinstance(command, LocatedString)
+    command = data['command']
+    # print(data)
 
     subprocess_args = dict(
-      cwd=cwd,
-      env=env,
-      stderr=(subprocess.PIPE if self._data.stderr else subprocess.DEVNULL),
-      stdout=(subprocess.PIPE if self._data.stdout else subprocess.DEVNULL)
+      cwd=data.get('cwd'),
+      env=(data.get('env') or dict()),
+      # stderr=(subprocess.PIPE if self._data.stderr else subprocess.DEVNULL),
+      # stdout=(subprocess.PIPE if self._data.stdout else subprocess.DEVNULL)
     )
 
-    if self._data.shell:
+    if data.get('shell'):
       self._process = await asyncio.create_subprocess_shell(command.value, **subprocess_args)
     else:
       command_args = parse_command(command)
@@ -178,7 +135,7 @@ class Process:
     stdout, stderr = await self._process.communicate()
     exit_code = self._process.returncode
 
-    if (exit_code is not None) and (exit_code != 0) and (not self._data.ignore_exit_code):
+    if (exit_code is not None) and (exit_code != 0) and (not data.get('ignore_exit_code')):
       yield ProcessFailureEvent(errors=[NonZeroExitCodeError(exit_code)])
 
     print("STDOUT", stdout)

@@ -511,6 +511,53 @@ class DivisibleCompositeDictType(Type):
 
     return analysis, (result if not failure else Ellipsis)
 
+class SimpleDictType(DivisibleCompositeDictType):
+  def __init__(self, attrs: dict[str, Attribute | Type]):
+    super().__init__(attrs)
+
+  def analyze(self, obj, /, context):
+    analysis, global_result = super().analyze(obj, context)
+
+    if isinstance(global_result, EllipsisType):
+      return analysis, Ellipsis
+
+    result = analysis.add(super().analyze_namespace(global_result, context, namespace=None))
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, SimpleDictAsPythonExpr.new(LocatedDict(result, obj.area), depth=context.eval_depth)
+
+class SimpleDictAsPythonExpr(Evaluable):
+  def __init__(self, value: LocatedDict, /, *, depth: int):
+    self._depth = depth
+    self._value = value
+
+  def evaluate(self, stack):
+    analysis = Analysis()
+    result = dict[str, Any]()
+
+    for key, value in self._value.items():
+      item_result = analysis.add(value.evaluate(stack))
+
+      # TODO: Same as lists
+      if isinstance(item_result, EllipsisType):
+        return analysis, Ellipsis
+
+      result[key] = item_result
+
+    return analysis, self.new(LocatedDict(result, self._value.area), depth=(self._depth - 1))
+
+  def export(self):
+    raise NotImplementedError
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self._value!r}, depth={self._depth})"
+
+  @classmethod
+  def new(cls, value: LocatedDict, /, *, depth: int):
+    return cls(value, depth=depth) if depth > 0 else value
+
 
 class InvalidValueError(LangServiceError):
   def __init__(self, target):
@@ -569,6 +616,10 @@ class InvalidFileObject(LangServiceError):
 
   def diagnostic(self):
     return DraftDiagnostic(f"Invalid file object", ranges=self.target.area.ranges)
+
+# class MissingFileError(Error):
+#   def __init__(self, target: LocatedValue[Path], /):
+#     super().__init__(f"Missing file '{str(target.value)}'", references=[ErrorDocumentReference.from_value(target)])
 
 
 class AnyType(Type):
@@ -661,6 +712,7 @@ class ListType(Type):
 
     result = LocatedList(result, obj.area)
 
+    # This is wrong
     return analysis, ValueAsPythonExpr.new(ListAsPythonExpr(result), depth=context.eval_depth) if context.eval_depth > 0 else result
 
 
@@ -690,7 +742,7 @@ class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
     raise NotImplementedError
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._value)})"
+    return f"{self.__class__.__name__}({self._value!r})"
 
 
 class LiteralOrExprType(Type):
@@ -740,7 +792,7 @@ class PotentialExprType(Type):
     self._static = static or both
 
   def analyze(self, obj, /, context):
-    eval_depth = max(context.eval_depth, (1 if self._dynamic else 0) + (1 if self._static else 0))
+    eval_depth = max(context.eval_depth, (1 if self._dynamic else 0) + (1 if self._static else 0)) if not context.symbolic else 0
 
     if isinstance(obj, str) and (not context.symbolic):
       assert isinstance(obj, LocatedString)
@@ -896,13 +948,31 @@ class PathType(Type):
       PrimitiveType(str)
     )
 
-  def analyze(self, obj, context):
+  def analyze(self, obj, /, context):
     analysis, result = self._type.analyze(obj, context)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
     return analysis, LocatedValue.new(Path(result.value), result.area) if isinstance(result, LocatedString) else result
+
+# class RealPathType(Type):
+#   def __init__(self, obj_type: Type, /):
+#     self._type = obj_type
+
+#   def analyze(self, obj, /, context):
+#     analysis, result = self._type.analyze(obj, context)
+
+#     if isinstance(result, EllipsisType):
+#       return analysis, Ellipsis
+
+#     assert isinstance(result, LocatedValue)
+#     assert isinstance(result.value, Path)
+
+#     if not result.value.exists():
+#       analysis.errors.append(MissingFileError(result))
+
+#     return analysis, result
 
 class FileRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
@@ -994,18 +1064,18 @@ class KVDictType(Type):
       analysis += key_analysis
       analysis += value_analysis
 
-    located_result = LocatedDict(result, obj.area)
-
-    return analysis, KVDictValueAsPythonExpr(located_result) if context.eval else located_result
+    return analysis, KVDictValueAsPythonExpr.new(LocatedDict(result, obj.area), depth=context.eval_depth)
 
 class KVDictValueAsPythonExpr:
-  def __init__(self, value: LocatedDict, /):
+  def __init__(self, value: LocatedDict, /, *, depth: int):
+    self._depth = depth
     self._value = value
 
   def evaluate(self, stack):
     analysis = Analysis()
     result = dict[Any, Any]()
 
+    # TODO: Same as lists
     for key, value in self._value.items():
       key_analysis, key_result = key.evaluate(stack)
       value_analysis, value_result = value.evaluate(stack)
@@ -1015,12 +1085,14 @@ class KVDictValueAsPythonExpr:
 
       result[key_result] = value_result
 
-    located_result = LocatedDict(result, self._value.area)
-
-    return analysis, (located_result if done else self.__class__(located_result))
+    return analysis, self.new(LocatedDict(result, self._value.area), depth=(self._depth - 1))
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._value)})"
+    return f"{self.__class__.__name__}({self._value!r}, depth={self._depth})"
+
+  @classmethod
+  def new(cls, value: LocatedDict, /, *, depth: int):
+    return cls(value, depth=depth) if depth > 0 else value
 
 class EvaluableContainerType(Type):
   def __init__(self, obj_type: Type, /, depth: int):

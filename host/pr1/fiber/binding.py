@@ -1,89 +1,60 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, TypeVar
 import ast
 
 from ..draft import DraftDiagnostic
+from ..error import Error, ErrorDocumentReference
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalStack, EvalVariables
-from .expr import PythonExpr, PythonExprKind
-from .langservice import Analysis, LangServiceError
-from ..reader import LocatedString, Source
+from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject
+from .langservice import Analysis, AnyType, HasAttrType, LangServiceError
+from ..reader import LocatedString, LocatedValue, Source
 
 
-@dataclass(kw_only=True)
-class BindingWriteContext:
-  background: EvalVariables
-  present: EvalVariables
-
-  @property
-  def eval_context(self):
-    return EvalContext(self.background | self.present)
-
-  @classmethod
-  def from_eval_context(cls, context: EvalContext, /):
-    return cls(
-      background=context.variables,
-      present=dict()
-    )
-
-class InvalidBindingPythonExpr(LangServiceError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid binding expression", ranges=self.target.area.ranges)
+class InvalidBindingPythonExpr(Error, Exception):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__("Invalid binding expression", references=[ErrorDocumentReference.from_value(target)])
 
 
-class Binding(Protocol):
-  def augment(self, envs: EvalEnvs, *, target_env: EvalEnv) -> 'BindingAugmented':
-    return BindingAugmented(self, envs, target_env=target_env)
+T = TypeVar('T', contravariant=True)
 
-  def write(self, value: Any, /, context: BindingWriteContext) -> Analysis:
+class BindingWriter(Protocol[T]):
+  def __call__(self, value: T):
     ...
 
+class Binding(Evaluable, Protocol):
+  def evaluate(self, stack: EvalStack) -> 'tuple[Analysis, BindingWriter | EllipsisType]':
+    ...
+
+  def export(self):
+    raise NotImplementedError
+
   @staticmethod
-  def parse(source: LocatedString, /, tree: Optional[ast.Expression] = None) -> 'tuple[Analysis, Binding | EllipsisType]':
+  def parse(source: LocatedString, /, tree: Optional[ast.Expression] = None, *, envs: EvalEnvs, write_env: EvalEnv) -> 'tuple[Analysis, Binding | EllipsisType]':
     tree = tree or ast.parse(source, mode='eval')
 
     try:
-      return Analysis(), parse_binding_expr(tree.body, source=source)
+      return Analysis(), parse_binding_expr(tree.body, envs=envs, source=source, write_env=write_env)
     except InvalidBindingPythonExpr as e:
       return Analysis(errors=[e]), Ellipsis
-
-class BindingAugmented:
-  def __init__(self, binding: Binding, /, envs: EvalEnvs, *, target_env: EvalEnv):
-    self._binding = binding
-    self._envs = envs
-    self._target_env = target_env
-
-  def write(self, value: Any, /, stack: EvalStack):
-    background_variables = dict[str, Any]()
-    present_variables = stack[self._target_env]
-
-    assert present_variables is not None
-
-    for env in self._envs:
-      if ((env_vars := stack[env]) is not None) and (env is not self._target_env):
-        background_variables.update(env_vars)
-
-    return self._binding.write(value, BindingWriteContext(
-      background=background_variables,
-      present=present_variables
-    ))
 
 
 @dataclass(kw_only=True)
 class AttributeBinding(Binding):
   attribute: str
-  target: PythonExpr
+  target: PythonExprObject
 
-  def write(self, value, /, context):
-    analysis = Analysis()
-    target_result = self.target.evaluate(context.eval_context)
+  def evaluate(self, stack):
+    analysis, target = self.target.evaluate(stack)
+    assert isinstance(target, LocatedValue)
 
-    setattr(target_result.value, self.attribute, value)
+    if isinstance(target, EllipsisType):
+      return analysis, Ellipsis
 
-    return analysis
+    def write(value, /):
+      setattr(target.value, self.attribute, value)
+
+    return analysis, write
 
 @dataclass(kw_only=True)
 class DestructuringBinding(Binding):
@@ -91,57 +62,107 @@ class DestructuringBinding(Binding):
   before_starred: list[Binding]
   starred: Optional[Binding]
 
-  def write(self, value, /, context):
+  def evaluate(self, stack):
     analysis = Analysis()
 
-    for index, binding in enumerate(self.before_starred):
-      analysis += binding.write(value[index], context)
+    before_starred = [analysis.add(binding.evaluate(stack)) for binding in self.before_starred]
+    starred = analysis.add(self.starred.evaluate(stack)) if self.starred else None
+    after_starred = [analysis.add(binding.evaluate(stack)) for binding in self.after_starred]
 
-    if self.starred:
-      analysis += self.starred.write(value[len(self.before_starred):-len(self.after_starred)], context)
+    if any(isinstance(binding, EllipsisType) for binding in before_starred + after_starred + [starred]):
+      return analysis, Ellipsis
 
-    for index, binding in enumerate(self.after_starred):
-      analysis += binding.write(value[-index - 1], context)
+    # def evaluate_bindings(bindings: list[Binding]):
+    #   nonlocal analysis
 
-    return analysis
+    #   writers = list[BindingWriter]()
+    #   failure = False
+
+    #   for binding in bindings:
+    #     writer = analysis.add(binding.evaluate(stack))
+
+    #     if not isinstance(writer, EllipsisType):
+    #       writers.append(writer)
+    #     else:
+    #       failure = True
+
+    #   return writers if not failure else Ellipsis
+
+    # before_starred = evaluate_bindings(self.before_starred)
+    # after_starred = evaluate_bindings(self.after_starred)
+    # starred = evaluate_bindings([self.starred] if self.starred else list()) # if self.starred else None
+
+    def write(value: tuple, /):
+      for index, writer in enumerate(before_starred):
+        writer(value[index]) # type: ignore
+
+      if starred:
+        starred[0](value[len(before_starred):-len(after_starred)]) # type: ignore
+
+      for index, writer in enumerate(after_starred):
+        writer(value[-index - 1]) # type: ignore
+
+    return analysis, write
 
 @dataclass(kw_only=True)
 class NamedBinding(Binding):
+  env: EvalEnv
   name: str
 
-  def write(self, value, /, context):
-    context.present[self.name] = value
-    return Analysis()
+  def __post_init__(self):
+    assert not self.env.readonly
+
+  def evaluate(self, stack):
+    def write(value, /):
+      vars = stack[self.env]
+      assert vars is not None
+
+      vars[self.name] = value
+
+    return Analysis(), write
 
 @dataclass(kw_only=True)
 class NullBinding(Binding):
-  def write(self, value, /, context):
-    return Analysis()
+  def evaluate(self, stack):
+    def write(value, /):
+      pass
+
+    return Analysis(), write
 
 @dataclass(kw_only=True)
 class SubscriptBinding(Binding):
-  slice: PythonExpr
-  target: PythonExpr
+  slice: PythonExprObject
+  target: PythonExprObject
 
-  def write(self, value, /, context):
-    slice_result = self.slice.evaluate(context.eval_context)
-    target_result = self.target.evaluate(context.eval_context)
+  def evaluate(self, stack):
+    analysis = Analysis()
 
-    target_result.value[slice_result.value] = value
+    slice_result = analysis.add(self.slice.evaluate(stack))
+    target_result = analysis.add(self.target.evaluate(stack))
 
-    return Analysis()
+    if isinstance(slice_result, EllipsisType) or isinstance(target_result, EllipsisType):
+      return analysis, Ellipsis
+
+    def write(self, value, /):
+      target_result.value[slice_result.value] = value
+
+    return Analysis(), write
 
 
-def parse_binding_expr(expr: ast.expr, *, source: LocatedString):
+def parse_binding_expr(expr: ast.expr, *, envs: EvalEnvs, source: LocatedString, write_env: EvalEnv):
   match expr:
     case ast.Attribute(attr=attribute, ctx=ast.Load(), value=target_expr):
       return AttributeBinding(
         attribute=attribute,
-        target=PythonExpr(
-          source.index_ast_node(target_expr),
-          kind=PythonExprKind.Dynamic,
-          tree=ast.Expression(target_expr),
-          type=None
+        target=PythonExprObject(
+          PythonExpr(
+            source.index_ast_node(target_expr),
+            kind=PythonExprKind.Dynamic,
+            tree=ast.Expression(target_expr)
+          ),
+          depth=1,
+          envs=envs,
+          type=HasAttrType(attribute)
         )
       )
 
@@ -149,19 +170,32 @@ def parse_binding_expr(expr: ast.expr, *, source: LocatedString):
       return NullBinding()
 
     case ast.Name(ctx=ast.Load(), id=name):
-      return NamedBinding(name=name)
+      return NamedBinding(
+        env=write_env,
+        name=name
+      )
 
     case ast.Subscript(ctx=ast.Load(), slice=slice_expr, value=target_expr):
       return SubscriptBinding(
-        slice=PythonExpr(
-          source.index_ast_node(slice_expr),
-          kind=PythonExprKind.Static,
-          tree=ast.Expression(slice_expr)
+        slice=PythonExprObject(
+          PythonExpr(
+            source.index_ast_node(slice_expr),
+            kind=PythonExprKind.Static,
+            tree=ast.Expression(slice_expr)
+          ),
+          depth=1,
+          envs=envs,
+          type=AnyType()
         ),
-        target=PythonExpr(
-          source.index_ast_node(target_expr),
-          kind=PythonExprKind.Dynamic,
-          tree=ast.Expression(target_expr)
+        target=PythonExprObject(
+          PythonExpr(
+            source.index_ast_node(target_expr),
+            kind=PythonExprKind.Dynamic,
+            tree=ast.Expression(target_expr)
+          ),
+          depth=1,
+          envs=envs,
+          type=HasAttrType('__setitem__')
         )
       )
 
@@ -173,9 +207,9 @@ def parse_binding_expr(expr: ast.expr, *, source: LocatedString):
       for item in items:
         match item:
           case ast.Starred(ctx=ast.Load(), value=item_value) if not starred:
-            starred = parse_binding_expr(item_value, source=source)
+            starred = parse_binding_expr(item_value, envs=envs, source=source, write_env=write_env)
           case _:
-            binding = parse_binding_expr(item, source=source)
+            binding = parse_binding_expr(item, envs=envs, source=source, write_env=write_env)
 
             if starred:
               after_starred.append(binding)
@@ -190,23 +224,3 @@ def parse_binding_expr(expr: ast.expr, *, source: LocatedString):
 
     case _:
       raise InvalidBindingPythonExpr(source.index_ast_node(expr))
-
-
-if __name__ == "__main__":
-  import ast
-
-  library = dict(
-    x=[0, 1, 2, 3]
-  )
-
-  context = BindingWriteContext.from_eval_context(EvalContext({
-    'a': [0, 1, 2, 3]
-  }))
-
-  _, x = Binding.parse(Source("{ **x, 'y': y, 'z': z }"))
-  assert isinstance(x, Binding)
-
-  print(x)
-
-  x.write([5, 6, 7, 8], context)
-  print(context.eval_context.variables)

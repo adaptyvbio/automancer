@@ -215,7 +215,7 @@ class PythonExprObject(Evaluable):
     self._expr = expr
     self._type = type
 
-  def evaluate(self, stack):
+  def evaluate(self, stack) -> 'tuple[Analysis, Any | EllipsisType]':
     from .langservice import Analysis
     from .parser import AnalysisContext
 
@@ -260,25 +260,6 @@ class ValueAsPythonExpr(Evaluable):
   @classmethod
   def new(cls, value: Evaluable | LocatedValue | EllipsisType, /, *, depth: int = 0):
     return cls(value, depth=(depth - 1)) if (depth > 0) and (not isinstance(value, EllipsisType)) else value
-
-class DeferredEvaluable(Evaluable):
-  def __init__(self, value: Evaluable, /, *, depth: int):
-    self._depth = depth
-    self._value = value
-
-  def evaluate(self, stack):
-    from .langservice import Analysis
-    return self._value.evaluate(stack) if self._depth < 1 else (Analysis(), self.__class__(self._value, depth=(self._depth - 1)))
-
-  def export(self):
-    return self._value.export()
-
-  def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._value)}, depth={self._depth})"
-
-  @classmethod
-  def new(cls, value: Any, /, *, depth: int):
-    return cls(value, depth=(depth - 1)) if depth > 0 else value
 
 
 # @deprecated

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 from ..error import Error, ErrorDocumentReference
@@ -5,8 +6,12 @@ from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
 
 
+@dataclass(kw_only=True)
 class EvalEnv:
-  pass
+  readonly: bool = False
+
+  def __hash__(self):
+    return id(self)
 
 EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]

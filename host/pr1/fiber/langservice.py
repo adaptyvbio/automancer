@@ -158,6 +158,10 @@ class InvalidEnumValueError(LangServiceError):
   def __init__(self, target: LocatedValue, /):
     self.target = target
 
+class MissingAttributeError(Error):
+  def __init__(self, target: LocatedValue, attribute: str, /):
+    super().__init__(f"Missing attribute '{attribute}'", references=[ErrorDocumentReference.from_value(target)])
+
 
 class Type(Protocol):
   def analyze(self, obj: LocatedValue, /, context: 'AnalysisContext') -> tuple[Analysis, Any | EllipsisType]:
@@ -1005,7 +1009,7 @@ class DataRefType(Type):
     return self._type.analyze(obj, context)
 
 class BindingType(Type):
-  def analyze(self, obj, context):
+  def analyze(self, obj, /, context):
     from .binding import Binding
 
     if not isinstance(obj, str):
@@ -1026,13 +1030,14 @@ class BindingType(Type):
       analysis.errors.append(InvalidExprKind(obj))
       return analysis, Ellipsis
 
-    binding_analysis, binding = Binding.parse(expr.contents, expr.tree)
+    binding_analysis, binding = Binding.parse(expr.contents, expr.tree, envs=context.envs_list[1], write_env=context.envs_list[0][0])
     analysis += binding_analysis
 
     if isinstance(binding, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, LocatedValue.new(binding, area=obj.area)
+    return analysis, ValueAsPythonExpr.new(binding, depth=1)
+    # return analysis, ValueAsPythonExpr.new(LocatedValue.new(binding, area=obj.area), depth=1)
 
 class KVDictType(Type):
   def __init__(self, key_type: Type, value_type: Optional[Type] = None, /):
@@ -1101,6 +1106,23 @@ class EvaluableContainerType(Type):
 
   def analyze(self, obj, /, context):
     return self._type.analyze(obj, context.update(eval_depth=self._depth))
+
+class HasAttrType(Type):
+  def __init__(self, attribute: str, /):
+    self._attribute = attribute
+
+  def analyze(self, obj, /, context):
+    analysis, result = PrimitiveType(object).analyze(obj, context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    if not hasattr(result, self._attribute):
+      analysis.errors.append(MissingAttributeError(obj, self._attribute))
+      return analysis, Ellipsis
+
+    return analysis, result
+
 
 # TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):

@@ -45,10 +45,9 @@ class Parser(BaseParser):
           'env': lang.Attribute(
             lang.PotentialExprType(lang.KVDictType(lang.PotentialExprType(lang.StrType())))
           ),
-          # 'exit_code': lang.Attribute(
-          #   lang.BindingType(),
-          #   optional=True
-          # ),
+          'exit_code': lang.Attribute(
+            lang.BindingType(),
+          ),
           'halt': lang.Attribute(
             lang.UnionType(
               lang.EnumType('none', 'sigint', 'sigkill', 'sigquit', 'sigterm'),
@@ -64,14 +63,11 @@ class Parser(BaseParser):
             lang.PotentialExprType(lang.BoolType()),
             description="Whether to run the command in a shell."
           ),
-
-          # Bindings
-          # 'stderr': lang.Attribute(lang.BindingType(), optional=True),
-          # 'stdout': lang.Attribute(lang.BindingType(), optional=True)
+          'stderr': lang.Attribute(lang.BindingType()),
+          'stdout': lang.Attribute(lang.BindingType())
         }), depth=1)
       ),
-      description="Runs a command.",
-      optional=True
+      description="Runs a command."
     )
   }
 
@@ -90,6 +86,7 @@ class Parser(BaseParser):
           command=result['command'],
           data=lang.SimpleDictAsPythonExpr(result, depth=1)
         )
+
       else:
         process_data = ProcessData(
           command=result,

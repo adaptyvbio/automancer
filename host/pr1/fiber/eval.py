@@ -28,14 +28,9 @@ class EvalError(Exception, Error):
 
     self.area = area
 
-  def diagnostic(self):
-    assert self.__cause__
-
-    return DraftDiagnostic(str(self.__cause__), ranges=self.area.ranges)
-
 
 def evaluate(compiled: Any, /, contents: LocatedString, context: EvalContext):
   try:
     return LocatedValue.new(eval(compiled, globals(), context.variables), area=contents.area, deep=True)
   except Exception as e:
-    raise EvalError(contents.area, message=str(e)) from e
+    raise EvalError(contents.area, message=f"{e} ({e.__class__.__name__})") from e

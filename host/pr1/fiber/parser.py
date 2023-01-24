@@ -264,12 +264,24 @@ class FiberParser:
     self.protocol = protocol if not isinstance(protocol, EllipsisType) else None
 
   def _parse(self):
+    # Initialization
+
     analysis = lang.Analysis()
+
+    global_env = EvalEnv()
+    adoption_envs = [global_env]
+    runtime_envs = [global_env, self.user_env]
+
+
+    # Syntax
 
     data, reader_errors, reader_warnings = reader.loads(self.draft.entry_document.source)
 
     analysis.errors += reader_errors
     analysis.warnings += reader_warnings
+
+
+    # Root dictionary
 
     root_type = lang.DivisibleCompositeDictType({
       'name': lang.Attribute(
@@ -283,31 +295,50 @@ class FiberParser:
       )
     })
 
-
     for parser in self._parsers:
       root_type.add(parser.root_attributes, namespace=parser.namespace)
-
-    self.segment_type = lang.DivisibleCompositeDictType()
-
-    for parser in self._parsers:
-      self.segment_type.add(parser.segment_attributes, namespace=parser.namespace)
 
     context = AnalysisContext()
     root_result = analysis.add(root_type.analyze(data, context))
 
     if isinstance(root_result, EllipsisType):
-      raise Exception()
+      return analysis, Ellipsis
+
+
+    # Root block type (1)
+
+    self.block_type = lang.DivisibleCompositeDictType()
+
+    for parser in self._parsers:
+      self.block_type.add(parser.segment_attributes, namespace=parser.namespace)
+
+
+    # Root unit attributes
+
+    for parser in self._parsers:
+      unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, namespace=parser.namespace))
+
+      if isinstance(unit_attrs, EllipsisType):
+        continue
+
+      analysis += parser.enter_protocol(unit_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs)
+
+
+    # Root block type (2)
+
+    self.block_type = lang.DivisibleCompositeDictType()
+
+    for parser in self._parsers:
+      self.block_type.add(parser.segment_attributes, namespace=parser.namespace)
+
+
+    # Root block
 
     root_result_native = analysis.add(root_type.analyze_namespace(root_result, context, namespace=None))
-
-    print("1", root_result_native)
-    print()
 
     if isinstance(root_result_native, EllipsisType):
       return analysis, Ellipsis
 
-    global_env = EvalEnv()
-    adoption_envs = [global_env]
     adoption_stack: EvalStack = {
       global_env: {
         'unit': ureg
@@ -316,27 +347,18 @@ class FiberParser:
 
     root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=[global_env]))
 
-    print("2", root_block_prep)
-    print()
-
     if isinstance(root_block_prep, EllipsisType):
       return analysis, Ellipsis
 
-    if isinstance(root_block_prep, EllipsisType):
-      raise Exception()
-
     root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
-
-    print("3", root_block_data)
-    print()
 
     if isinstance(root_block_data, EllipsisType):
       return analysis, Ellipsis
 
     root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
 
-    print("\x1b[1;31mAnalysis >\x1b[22;0m", analysis.errors)
-    print(root_block)
+    print("\x1b[1;31mAnalysis →\x1b[22;0m", analysis.errors)
+    # print(root_block)
 
     if isinstance(root_block, EllipsisType):
       return analysis, Ellipsis
@@ -353,11 +375,10 @@ class FiberParser:
   def prepare_block(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     analysis = lang.Analysis()
     context = AnalysisContext(
-      envs_list=[adoption_envs, runtime_envs],
-      # eval_depth=2
+      envs_list=[adoption_envs, runtime_envs]
     )
 
-    block_result = analysis.add(self.segment_type.analyze(attrs, context))
+    block_result = analysis.add(self.block_type.analyze(attrs, context))
 
     if isinstance(block_result, EllipsisType):
       return analysis, Ellipsis
@@ -368,7 +389,7 @@ class FiberParser:
     runtime_envs = runtime_envs.copy()
 
     for parser in self._parsers:
-      unit_attrs = analysis.add(self.segment_type.analyze_namespace(block_result, context, namespace=parser.namespace))
+      unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, namespace=parser.namespace))
 
       if isinstance(unit_attrs, EllipsisType):
         failure = True

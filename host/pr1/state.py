@@ -19,10 +19,6 @@ class StateEvent:
   settled: bool = False
   time: Optional[float] = None
 
-# @dataclass(kw_only=True)
-# class StateErrorEvent(StateBaseEvent):
-#   error: Optional[Error]
-
 
 class StateProtocolError(Error):
   def __init__(self, message: str):

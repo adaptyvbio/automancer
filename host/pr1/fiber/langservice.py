@@ -849,7 +849,7 @@ class QuantityType(Type):
       result = LocatedValue.new(None, area=obj.area)
       return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
-    if isinstance(obj, str) and (not context.symbolic):
+    if isinstance(obj, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
 
       try:

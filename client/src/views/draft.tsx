@@ -231,7 +231,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       component = (
         <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
           <div className={viewStyles.blankInner}>
-            <p>Please grant the read and write permissions on this file to continue.</p>
+            <p>Please grant read and write permissions on this file to continue.</p>
 
             <div className={viewStyles.blankActions}>
               <Button onClick={() => {

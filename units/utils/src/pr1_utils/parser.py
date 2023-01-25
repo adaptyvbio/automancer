@@ -74,7 +74,7 @@ class Parser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, attrs: Attributes, /, adoption_stack):
+  def parse_block(self, attrs: Attributes, /, adoption_stack, trace):
     if (attr := attrs.get('run')):
       analysis, result = attr.evaluate(adoption_stack)
 

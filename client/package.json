@@ -21,7 +21,7 @@
     "immutable": "^4.0.0",
     "material-symbols": "^0.2.8",
     "modern-websocket": "^0.1.0",
-    "monaco-editor": "^0.33.0",
+    "monaco-editor": "^0.34.0",
     "pyodide": "^0.20.0",
     "react-merge-refs": "^1.1.0",
     "react-split-grid": "^1.0.4",

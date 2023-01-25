@@ -62,6 +62,8 @@ class ErrorFileReference(ErrorReference):
       "path": self.path
     }
 
+Trace = list[ErrorReference]
+
 @dataclass
 class Error(Exportable):
   message: str
@@ -69,6 +71,7 @@ class Error(Exportable):
   description: list[str] = field(default_factory=list)
   id: Optional[str] = None
   references: list[ErrorReference] = field(default_factory=list)
+  trace: Trace = field(default_factory=list)
 
   def as_master(self, *, time: Optional[float] = None):
     return MasterError(
@@ -84,7 +87,8 @@ class Error(Exportable):
       "description": self.description,
       "id": self.id,
       "message": self.message,
-      "references": [ref.export() for ref in self.references]
+      "references": [ref.export() for ref in self.references],
+      "trace": [ref.export() for ref in self.references]
     }
 
   # For compatibility only

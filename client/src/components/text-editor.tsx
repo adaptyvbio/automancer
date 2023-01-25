@@ -3,13 +3,11 @@ import * as monaco from 'monaco-editor';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
-import { Icon } from './icon';
-import { Draft, DraftCompilation, DraftCompletion, DraftRange } from '../draft';
+import textEditorStyles from '../../styles/components/text-editor.module.scss';
+
+import { Draft, DraftCompilation, DraftRange } from '../draft';
 import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
-import { DraftSummary } from '../components/draft-summary';
-
-import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
 
 window.MonacoEnvironment = {
@@ -88,7 +86,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       selectionHighlight: false,
       suggestLineHeight: 24,
       tabSize: 2,
-      overflowWidgetsDomNode: this.refWidgetContainer.current!,
+      // This breaks the RenameProvider.
+      // overflowWidgetsDomNode: this.refWidgetContainer.current!,
       fixedOverflowWidgets: true,
       readOnly: false // !this.props.draft.writable
     }, {
@@ -97,10 +96,12 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         getBoolean(key: string) {
           return ['expandSuggestionDocs'].includes(key);
         },
+        getNumber(key: string) {},
         remove() {},
         store() {},
         onWillSaveState() {},
-        onDidChangeStorage() {}
+        onDidChangeStorage() {},
+        onDidChangeValue() {}
     }
     });
 
@@ -212,6 +213,22 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           }))
         };
       },
+      provideDefinition: async (model, position, token) => {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
+          return null;
+        }
+
+        let relation = compilation.analysis.relations.find((relation) =>
+          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+        );
+
+        return (relation && {
+          range: getModelRangeFromDraftRange(model, relation.definition),
+          uri: model.uri
+        }) ?? null;
+      },
       provideFoldingRanges: async (model, context, token) => {
         if (!this.props.compilation || this.outdatedCompilation) {
           return null;
@@ -244,6 +261,46 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           range: result.range
         };
       },
+      provideReferences: async (model, position, context, token) => {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
+          return null;
+        }
+
+        let relation = compilation.analysis.relations.find((relation) =>
+          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+        );
+
+        return (relation && [relation.definition, ...relation.references].map((range) => ({
+          range: getModelRangeFromDraftRange(model, range),
+          uri: model.uri
+        }))) ?? null;
+      },
+      provideRenameEdits: async (model, position, newName, token) => {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
+          return null;
+        }
+
+        let rename = compilation.analysis.renames.find((rename) =>
+          rename.ranges.some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+        );
+
+        return rename
+          ? {
+            edits: rename.ranges.map((range) => ({
+              resource: model.uri,
+              textEdit: {
+                range: getModelRangeFromDraftRange(model, range),
+                text: newName
+              },
+              versionId: model.getVersionId()
+            } satisfies monaco.languages.IWorkspaceTextEdit))
+          }
+          : null;
+      },
       provideSelectionRanges: async (model, positions, token) => {
         if (!this.props.compilation || this.outdatedCompilation) {
           return null;
@@ -256,7 +313,32 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             .filter((range) => range.containsPosition(position))
             .map((range) => ({ range }))
         );
-      }
+      },
+      resolveRenameLocation: async (model, position, token) => {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
+          return null;
+        }
+
+        let range = util.findMap(compilation.analysis.renames, (rename) =>
+          util.findMap(rename.ranges, (range) => {
+            let modelRange = getModelRangeFromDraftRange(model, range);
+            return modelRange.containsPosition(position)
+              ? modelRange
+              : null;
+          })
+        );
+
+        return range
+          ? {
+            range,
+            text: model.getValueInRange(range)
+          }
+          : {
+            rejectReason: 'You cannot rename this element.'
+          } as (monaco.languages.RenameLocation & monaco.languages.Rejection);
+      },
     }, { signal: this.controller.signal });
   }
 

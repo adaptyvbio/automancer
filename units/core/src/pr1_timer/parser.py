@@ -35,7 +35,7 @@ class TimerParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, attrs: TimerAttributes, /, adoption_stack):
+  def parse_block(self, attrs: TimerAttributes, /, adoption_stack, trace):
     if (attr := attrs.get('wait')):
       analysis, duration = attr.evaluate(adoption_stack)
 

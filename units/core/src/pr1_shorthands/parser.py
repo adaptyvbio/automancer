@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Optional, cast
 
-from pr1.reader import LocationArea, ReliableLocatedDict
+from pr1.error import ErrorDocumentReference
+from pr1.reader import LocatedString, LocationArea, LocationRange, ReliableLocatedDict
 from pr1.fiber.opaque import OpaqueValue
 from pr1.util.decorators import debug
 from pr1.fiber import langservice as lang
@@ -10,13 +11,9 @@ from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
 from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, Transforms, UnresolvedBlockData
 
 
-class ShorthandEnv(EvalEnv):
-  def __init__(self):
-    super().__init__(readonly=True)
-
 @debug
 class ShorthandBlock(BaseBlock):
-  def __init__(self, block: BaseBlock, env: ShorthandEnv):
+  def __init__(self, block: BaseBlock, env: EvalEnv):
     # self._arg = arg
     self._block = block
     self._env = env
@@ -28,9 +25,9 @@ class ShorthandBlock(BaseBlock):
 @dataclass
 class ShorthandItem:
   contents: Attrs | EllipsisType
-  deprecated: bool
-  description: Optional[str]
-  env: ShorthandEnv
+  definition_range: LocationRange
+  env: EvalEnv
+  ref_ranges: list[LocationRange]
 
 ShorthandsData = list[tuple[str, BlockData]]
 
@@ -59,18 +56,19 @@ class ShorthandsParser(BaseParser):
       # assert isinstance(data_shorthand, ReliableLocatedDict)
 
       # comments, _ = data_shorthand.comments
-      shorthand_env = ShorthandEnv()
+      shorthand_env = EvalEnv(readonly=True)
 
       contents = analysis.add(self._fiber.prepare_block(data_shorthand, adoption_envs=[*adoption_envs, shorthand_env], runtime_envs=[*runtime_envs, shorthand_env]))
       # print("$$", contents)
 
+      # deprecated=any(comment == "@deprecated" for comment in comments),
+      # description=(comments[0].value if data_shorthand.comments and not comments[0].startswith("@") else None),
+
       self._shorthands[shorthand_name] = ShorthandItem(
         contents=contents,
-        # deprecated=any(comment == "@deprecated" for comment in comments),
-        # description=(comments[0].value if data_shorthand.comments and not comments[0].startswith("@") else None),
-        deprecated=False,
-        description=None,
-        env=shorthand_env
+        definition_range=shorthand_name.area.single_range(),
+        env=shorthand_env,
+        ref_ranges=list()
       )
 
       self.segment_attributes[shorthand_name] = lang.Attribute(
@@ -82,15 +80,34 @@ class ShorthandsParser(BaseParser):
 
     return analysis
 
+  def leave_protocol(self):
+    analysis = lang.Analysis()
+
+    for shorthand_item in self._shorthands.values():
+      analysis.renames.append(lang.AnalysisRename([
+        shorthand_item.definition_range,
+        *shorthand_item.ref_ranges
+      ]))
+
+      analysis.relations.append(lang.AnalysisRelation(
+        shorthand_item.definition_range,
+        shorthand_item.ref_ranges
+      ))
+
+    return analysis
+
   def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
     analysis = lang.Analysis()
     context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
     prep = dict()
 
     for shorthand_name, shorthand_value in attrs.items():
-      shorthand = self._shorthands[shorthand_name]
+      assert isinstance(shorthand_name, LocatedString)
 
-      if isinstance(shorthand.contents, EllipsisType):
+      shorthand_item = self._shorthands[shorthand_name]
+      shorthand_item.ref_ranges.append(shorthand_name.area.single_range())
+
+      if isinstance(shorthand_item.contents, EllipsisType):
         continue
 
       value = analysis.add(lang.PotentialExprType(lang.AnyType(), static=True).analyze(shorthand_value, context))
@@ -98,33 +115,38 @@ class ShorthandsParser(BaseParser):
 
     return analysis, BlockUnitPreparationData(prep)
 
-  def parse_block(self, attrs, /, adoption_stack):
+  def parse_block(self, attrs, /, adoption_stack, trace):
     analysis = lang.Analysis()
+    failure = False
     shorthands_data = ShorthandsData()
 
     for shorthand_name, shorthand_value in attrs.items():
-      shorthand = self._shorthands[shorthand_name]
-      value = analysis.add(shorthand_value.evaluate(adoption_stack))
+      shorthand_item = self._shorthands[shorthand_name]
+      shorthand_trace = trace + [ErrorDocumentReference.from_value(shorthand_name)]
+
+      value = analysis.add(shorthand_value.evaluate(adoption_stack), shorthand_trace)
 
       if isinstance(value, EllipsisType):
+        failure = True
         continue
 
-      shorthand_adoption_stack = {
+      shorthand_adoption_stack: EvalStack = {
         **adoption_stack,
-        shorthand.env: {
-          'arg': value
+        shorthand_item.env: {
+          'arg': value.value
         }
       }
 
-      assert not isinstance(shorthand.contents, EllipsisType)
-      shorthand_result = analysis.add(self._fiber.parse_block(shorthand.contents, shorthand_adoption_stack))
+      assert not isinstance(shorthand_item.contents, EllipsisType)
+      shorthand_result = analysis.add(self._fiber.parse_block(shorthand_item.contents, shorthand_adoption_stack), shorthand_trace)
 
       if isinstance(shorthand_result, EllipsisType):
+        failure = True
         continue
 
       shorthands_data.append((shorthand_name, shorthand_result))
 
-    return analysis, BlockUnitData(transforms=([ShorthandTransform(shorthands_data, parser=self)] if shorthands_data else list()))
+    return analysis, BlockUnitData(transforms=([ShorthandTransform(shorthands_data, parser=self)] if shorthands_data else list())) if not failure else Ellipsis
 
 
 @debug

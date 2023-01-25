@@ -37,6 +37,15 @@ export interface DraftFold {
   range: DraftRange;
 }
 
+export interface DraftRelation {
+  definition: DraftRange;
+  references: DraftRange[];
+}
+
+export interface DraftRename {
+  ranges: DraftRange[];
+}
+
 export type DraftSelection = DraftRange;
 
 export interface DraftCompilation {
@@ -45,6 +54,8 @@ export interface DraftCompilation {
     diagnostics: DraftDiagnostic[];
     folds: DraftFold[];
     hovers: DraftHover[];
+    relations: DraftRelation[];
+    renames: DraftRename[];
     selections: DraftSelection[];
   };
 

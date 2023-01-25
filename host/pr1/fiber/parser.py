@@ -4,6 +4,7 @@ from pint import UnitRegistry
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, Sequence
 
+from ..error import Trace
 from ..util.misc import Exportable
 from . import langservice as lang
 from .eval import EvalEnv, EvalEnvs, EvalStack
@@ -170,10 +171,13 @@ class BaseParser(Protocol):
   def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     return lang.Analysis()
 
+  def leave_protocol(self):
+    return lang.Analysis()
+
   def prepare_block(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitPreparationData | EllipsisType]:
     return lang.Analysis(), BlockUnitPreparationData(attrs)
 
-  def parse_block(self, attrs, /, adoption_stack: EvalStack) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
+  def parse_block(self, attrs, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     return lang.Analysis(), BlockUnitData()
 
 class BaseTransform:
@@ -363,6 +367,15 @@ class FiberParser:
     if isinstance(root_block, EllipsisType):
       return analysis, Ellipsis
 
+
+    # Leave
+
+    for parser in self._parsers:
+      analysis += parser.leave_protocol()
+
+
+    # Return
+
     return analysis, FiberProtocol(
       draft=self.draft,
       global_env=global_env,
@@ -408,10 +421,11 @@ class FiberParser:
 
     return analysis, (prep if not failure else Ellipsis)
 
-  def parse_block(self, preps: dict[str, Any], /, adoption_stack: EvalStack):
+  def parse_block(self, preps: dict[str, Any], /, adoption_stack: EvalStack, trace: Optional[Trace] = None):
     analysis = lang.Analysis()
     state = BlockState()
     transforms = list[BaseTransform]()
+    trace = trace or Trace()
 
     # for namespace, prep in preps.items():
     #   attrs[namespace] = { attr_name: analysis.add(attr_prep.evaluate(adoption_envs, adoption_stack, done=True)) for attr_name, attr_prep in prep.items() }
@@ -424,7 +438,7 @@ class FiberParser:
       if prep is None:
         continue
 
-      block_data = analysis.add(parser.parse_block(prep, adoption_stack))
+      block_data = analysis.add(parser.parse_block(prep, adoption_stack, trace))
 
       if isinstance(block_data, EllipsisType):
         failure = True

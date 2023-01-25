@@ -10,6 +10,7 @@ div.hover-row.status-bar {
 
 
 .monaco-editor {
+  --vscode-peekViewResult-selectionForeground: #fff !important;
   font-family: $main-font;
 }
 
@@ -19,10 +20,6 @@ div.hover-row.status-bar {
 
 .monaco-custom-checkbox {
   padding: 1.5px !important;
-}
-
-.monaco-list.list_id_2 .monaco-list-row.focused {
-  background-color: $app-blue;
 }
 
 
@@ -127,4 +124,8 @@ $icons: (
       vertical-align: middle;
     }
   }
+}
+
+.monaco-action-bar:not(.vertical) .action-label:not(.disabled):hover {
+  background-color: rgba(184, 184, 184, 0.31);
 }

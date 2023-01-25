@@ -1,4 +1,5 @@
 import builtins
+from dataclasses import dataclass, field
 import io
 from logging import Logger
 from pathlib import Path
@@ -10,8 +11,9 @@ from pint import Quantity, Unit
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast
 
 from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject, ValueAsPythonExpr
-from ..error import Error, ErrorDocumentReference
+from ..error import Error, ErrorDocumentReference, Trace
 from ..ureg import ureg
+from ..util.misc import Exportable
 from ..util.parser import check_identifier
 from ..draft import DraftDiagnostic, DraftGenericError
 from ..reader import LocatedDict, LocatedError, LocatedList, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
@@ -20,9 +22,29 @@ if TYPE_CHECKING:
   from .parser import AnalysisContext
 
 
-class Selection:
-  def __init__(self, range: LocationRange):
-    self.range = range
+@dataclass
+class AnalysisRelation(Exportable):
+  definition: LocationRange
+  references: list[LocationRange]
+
+  def export(self):
+    return {
+      "definition": [self.definition.start, self.definition.end],
+      "references": [[range.start, range.end] for range in self.references]
+    }
+
+@dataclass
+class AnalysisRename(Exportable):
+  ranges: list[LocationRange]
+
+  def export(self):
+    return {
+      "ranges": [[range.start, range.end] for range in self.ranges]
+    }
+
+@dataclass
+class AnalysisSelection(Exportable):
+  range: LocationRange
 
   def export(self):
     return [self.range.start, self.range.end]
@@ -30,40 +52,52 @@ class Selection:
 
 T = TypeVar('T')
 
+@dataclass(kw_only=True)
 class Analysis:
-  def __init__(self, *, errors = None, warnings = None, completions = None, folds = None, hovers = None, selections: Optional[list[Selection]] = None):
-    self.errors = errors or list()
-    self.warnings = warnings or list()
+  errors: list[Any] = field(default_factory=list)
+  warnings: list[Any] = field(default_factory=list)
 
-    self.completions = completions or list()
-    self.folds = folds or list()
-    self.hovers = hovers or list()
-    self.selections = selections or list()
+  completions: list[Any] = field(default_factory=list)
+  folds: list[Any] = field(default_factory=list)
+  hovers: list[Any] = field(default_factory=list)
+  relations: list[AnalysisRelation] = field(default_factory=list)
+  renames: list[AnalysisRename] = field(default_factory=list)
+  selections: list[AnalysisSelection] = field(default_factory=list)
 
-  def add(self, other: tuple['Analysis', T]) -> T:
+  def add(self, other: tuple['Analysis', T], /, trace: Optional[Trace] = None) -> T:
     analysis, value = other
+
+    if trace:
+      for error in analysis.errors:
+        # The isinstance() test is for compatibility.
+        if isinstance(error, Error) and (not error.trace):
+          error.trace = trace
 
     self.errors += analysis.errors
     self.warnings += analysis.warnings
     self.completions += analysis.completions
     self.folds += analysis.folds
     self.hovers += analysis.hovers
+    self.relations += analysis.relations
+    self.renames += analysis.renames
     self.selections += analysis.selections
 
     return value
 
   def __add__(self, other: 'Analysis'):
-    return Analysis(
+    return self.__class__(
       errors=(self.errors + other.errors),
       warnings=(self.warnings + other.warnings),
       completions=(self.completions + other.completions),
       folds=(self.folds + other.folds),
       hovers=(self.hovers + other.hovers),
+      relations=(self.relations + other.relations),
+      renames=(self.renames + other.renames),
       selections=(self.selections + other.selections)
     )
 
   def __repr__(self):
-    return f"Analysis(errors={repr(self.errors)}, warnings={repr(self.warnings)}, completions={repr(self.completions)}, folds={repr(self.folds)}, hovers={repr(self.hovers)}, selection={repr(self.selections)})"
+    return f"{self.__class__.__name__}(errors={self.errors!r})"
 
 
 CompletionItem = namedtuple("CompletionItem", ['documentation', 'kind', 'label', 'namespace', 'signature', 'sublabel', 'text'])
@@ -289,7 +323,7 @@ class CompositeDict:
     if self._foldable:
       analysis.folds.append(FoldingRange(obj.fold_range))
 
-    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
     attr_values = { namespace: dict() for namespace in self._namespaces }
 
@@ -449,7 +483,7 @@ class DivisibleCompositeDictType(Type):
         ]
       ))
 
-    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
     attr_values = { namespace: dict[str, Any]() for namespace in self._namespaces }
 
@@ -585,13 +619,12 @@ class MissingUnitError(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
 
-class InvalidUnitError(LangServiceError):
-  def __init__(self, target, unit):
-    self.unit = unit
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
+class InvalidUnitError(Error):
+  def __init__(self, target: LocatedValue, unit: Unit):
+    super().__init__(
+      f"Invalid unit, expected {unit:~P}",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class UnknownUnitError(LangServiceError):
   def __init__(self, target):
@@ -689,7 +722,7 @@ class ListType(Type):
     if isinstance(obj, ReliableLocatedList) and self._foldable:
       analysis.folds.append(FoldingRange(obj.fold_range))
 
-    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
     result = list()
 
@@ -840,7 +873,8 @@ class ExprType(LiteralOrExprType):
     super().__init__(obj_type, dynamic=dynamic, expr_type=expr_type, field=field, static=static, _force_expr=True)
 
 class QuantityType(Type):
-  def __init__(self, unit: Optional[Unit | str], *, allow_nil: bool = False):
+  def __init__(self, unit: Optional[Unit | str], *, allow_inverse: bool = False, allow_nil: bool = False):
+    self._allow_inverse = allow_inverse # TODO: Add implementation
     self._allow_nil = allow_nil
     self._unit: Unit = ureg.Unit(unit)
 
@@ -1055,7 +1089,7 @@ class KVDictType(Type):
     if isinstance(obj, ReliableLocatedDict):
       analysis.folds.append(FoldingRange(obj.fold_range))
 
-    analysis.selections.append(Selection(obj.full_area.enclosing_range()))
+    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
     result = dict()
 

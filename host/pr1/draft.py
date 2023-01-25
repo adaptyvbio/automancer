@@ -71,6 +71,8 @@ class DraftCompilation:
         ],
         "folds": [fold.export() for fold in self.analysis.folds],
         "hovers": [hover.export() for hover in self.analysis.hovers],
+        "relations": [relation.export() for relation in self.analysis.relations],
+        "renames": [rename.export() for rename in self.analysis.renames],
         "selections": [selection.export() for selection in self.analysis.selections],
       },
       "documentPaths": [str(path) for path in self.document_paths],

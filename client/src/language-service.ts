@@ -4,9 +4,13 @@ import * as monaco from 'monaco-editor';
 export const LanguageName = 'prl';
 export const ThemeName = 'prl-theme';
 
-export type LanguageService = monaco.languages.CompletionItemProvider
+export type LanguageService =
+    monaco.languages.CompletionItemProvider
+  & monaco.languages.DefinitionProvider
   & monaco.languages.FoldingRangeProvider
   & monaco.languages.HoverProvider
+  & monaco.languages.ReferenceProvider
+  & monaco.languages.RenameProvider
   & monaco.languages.SelectionRangeProvider;
 
 
@@ -26,12 +30,25 @@ monaco.languages.registerCompletionItemProvider(LanguageName, {
   provideCompletionItems: async (model, position, context, token) => (await currentLanguageService?.provideCompletionItems(model, position, context, token)) ?? null
 });
 
+monaco.languages.registerDefinitionProvider(LanguageName, {
+  provideDefinition: async (model, position, token) => (await currentLanguageService?.provideDefinition(model, position, token)) ?? null
+});
+
 monaco.languages.registerFoldingRangeProvider(LanguageName, {
   provideFoldingRanges: async (model, context, token) => (await currentLanguageService?.provideFoldingRanges(model, context, token)) ?? null
 });
 
 monaco.languages.registerHoverProvider(LanguageName, {
   provideHover: async (model, position, token) => (await currentLanguageService?.provideHover(model, position, token)) ?? null
+});
+
+monaco.languages.registerReferenceProvider(LanguageName, {
+  provideReferences: async (model, position, context, token) => (await currentLanguageService?.provideReferences(model, position, context, token)) ?? null
+});
+
+monaco.languages.registerRenameProvider(LanguageName, {
+  provideRenameEdits: async (model, position, newName, token) => (await currentLanguageService?.provideRenameEdits(model, position, newName, token)) ?? null,
+  resolveRenameLocation: async (model, position, token) => (await currentLanguageService?.resolveRenameLocation?.(model, position, token)) ?? null
 });
 
 monaco.languages.registerSelectionRangeProvider(LanguageName, {

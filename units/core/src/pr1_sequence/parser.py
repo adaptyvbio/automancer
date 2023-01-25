@@ -60,7 +60,7 @@ class SequenceParser(BaseParser):
     else:
       return lang.Analysis(), BlockUnitPreparationData()
 
-  def parse_block(self, attrs: SequencePrep, /, adoption_stack):
+  def parse_block(self, attrs: SequencePrep, /, adoption_stack, trace):
     analysis = lang.Analysis()
     actions_info = list[SequenceActionInfo]()
 

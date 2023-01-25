@@ -29,7 +29,7 @@ class StateParser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def parse_block(self, attrs, /, adoption_stack):
+  def parse_block(self, attrs, /, adoption_stack, trace):
     return Analysis(), BlockUnitData(transforms=[StateTransform(parser=self)])
 
 @debug

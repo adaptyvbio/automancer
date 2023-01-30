@@ -635,18 +635,18 @@ class MissingUnitError(LangServiceError):
     return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
 
 class InvalidUnitError(Error):
-  def __init__(self, target: LocatedValue, unit: Unit):
+  def __init__(self, target: LocatedValue, /, unit: Unit):
     super().__init__(
       f"Invalid unit, expected {unit:~P}",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
-class UnknownUnitError(LangServiceError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Unknown unit", ranges=self.target.area.ranges)
+class UnknownUnitError(Error):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Unknown unit",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class InvalidExpr(LangServiceError):
   def __init__(self, target):

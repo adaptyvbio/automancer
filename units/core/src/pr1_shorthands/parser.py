@@ -1,35 +1,28 @@
 from dataclasses import dataclass
-from types import EllipsisType
+from types import EllipsisType, NoneType
 from typing import Any, Optional, cast
 
 from pr1.error import ErrorDocumentReference
-from pr1.reader import LocatedString, LocationArea, LocationRange, ReliableLocatedDict
-from pr1.fiber.opaque import OpaqueValue
+from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
+from pr1.reader import LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict
 from pr1.util.decorators import debug
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseTransform, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
-
-
-@debug
-class ShorthandBlock(BaseBlock):
-  def __init__(self, block: BaseBlock, env: EvalEnv):
-    # self._arg = arg
-    self._block = block
-    self._env = env
-
-  def export(self):
-    return self._block.export()
+from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseProgramPoint, BaseTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
 
 
 @dataclass(kw_only=True)
-class ShorthandItem:
+class ShorthandStaticItem:
   contents: Attrs | EllipsisType
   definition_range: LocationRange
   env: EvalEnv
   ref_ranges: list[LocationRange]
 
-ShorthandsData = list[tuple[str, BlockData]]
+@dataclass(kw_only=True)
+class ShorthandDynamicItem:
+  argument: Evaluable[LocatedValue]
+  data: BlockData
+  name: str
 
 class ShorthandsParser(BaseParser):
   namespace = "shorthands"
@@ -45,7 +38,7 @@ class ShorthandsParser(BaseParser):
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
-    self._shorthands = dict[str, ShorthandItem]()
+    self._shorthands = dict[str, ShorthandStaticItem]()
 
     self.segment_attributes = dict[str, lang.Attribute]()
 
@@ -63,7 +56,7 @@ class ShorthandsParser(BaseParser):
         deprecated = any(comment == "@deprecated" for comment in comments)
         description = regular_comments[0] if regular_comments else None
 
-        self._shorthands[name] = ShorthandItem(
+        self._shorthands[name] = ShorthandStaticItem(
           contents=contents,
           definition_range=name.area.single_range(),
           env=env,
@@ -108,15 +101,14 @@ class ShorthandsParser(BaseParser):
       if isinstance(shorthand_item.contents, EllipsisType):
         continue
 
-      value = analysis.add(lang.PotentialExprType(lang.AnyType(), static=True).analyze(shorthand_value, context))
-      prep[shorthand_name] = value
+      prep[shorthand_name] = analysis.add(lang.PotentialExprType(lang.AnyType()).analyze(shorthand_value, context))
 
     return analysis, BlockUnitPreparationData(prep)
 
   def parse_block(self, attrs, /, adoption_stack, trace):
     analysis = lang.Analysis()
     failure = False
-    shorthands_data = ShorthandsData()
+    shorthands_items = list[ShorthandDynamicItem]()
 
     for shorthand_name, shorthand_value in attrs.items():
       shorthand_item = self._shorthands[shorthand_name]
@@ -135,7 +127,7 @@ class ShorthandsParser(BaseParser):
       shorthand_adoption_stack: EvalStack = {
         **adoption_stack,
         shorthand_item.env: {
-          'arg': value.value
+          'arg': value.value().value if isinstance(value, ValueAsPythonExpr) else None
         }
       }
 
@@ -146,38 +138,111 @@ class ShorthandsParser(BaseParser):
         failure = True
         continue
 
-      shorthands_data.append((shorthand_name, shorthand_result))
+      shorthands_items.append(
+        ShorthandDynamicItem(
+          argument=value,
+          data=shorthand_result,
+          name=shorthand_name
+        )
+      )
 
-    return analysis, BlockUnitData(transforms=([ShorthandTransform(shorthands_data, parser=self)] if shorthands_data else list())) if not failure else Ellipsis
+    return analysis, BlockUnitData(transforms=([ShorthandTransform(shorthands_items, parser=self)] if shorthands_items else list())) if not failure else Ellipsis
 
 
 @debug
 class ShorthandTransform(BaseTransform):
-  def __init__(self, shorthands_data: ShorthandsData, /, parser: ShorthandsParser):
+  def __init__(self, items: list[ShorthandDynamicItem], /, parser: ShorthandsParser):
+    self._items = items
     self._parser = parser
-    self._shorthands_data = shorthands_data
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     analysis = lang.Analysis()
     block_state: BlockState = cast(BlockState, None)
     block_transforms = list()
 
-    for _, shorthand_data in self._shorthands_data:
-      transforms += shorthand_data.transforms
+    for item in self._items:
+      transforms += item.data.transforms
 
       if block_state is not None:
-        block_state = shorthand_data.state | block_state
+        block_state = item.data.state | block_state
       else:
-        block_state = shorthand_data.state
+        block_state = item.data.state
 
     block = analysis.add(self._parser._fiber.execute(block_state, block_transforms + transforms, origin_area=origin_area))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
-    for shorthand_name, _ in self._shorthands_data:
-      shorthand = self._parser._shorthands[shorthand_name]
-
-      block = ShorthandBlock(block, env=shorthand.env)
+    for item in self._items:
+      shorthand = self._parser._shorthands[item.name]
+      block = ShorthandBlock(block, argument=item.argument, env=shorthand.env)
 
     return analysis, block
+
+
+@dataclass
+class ShorthandProgramPoint(BaseProgramPoint):
+  child: BaseProgramPoint
+
+@dataclass
+class ShorthandProgramLocation:
+  child: Any
+
+  def export(self):
+    return self.child.export()
+
+class ShorthandProgram(BlockProgram):
+  def __init__(self, block: 'ShorthandBlock', master, parent):
+    self._block = block
+    self._master = master
+    self._parent = parent
+
+    self._child_program: BlockProgram
+
+  def get_child(self, block_key: NoneType, exec_key: NoneType):
+    return self._child_program
+
+  def halt(self):
+    self._child_program.halt()
+
+  # def import_message(self, message: Any):
+  #   match message["type"]:
+  #     case "halt":
+  #       self.halt()
+
+  async def run(self, initial_point: Optional[ShorthandProgramPoint], parent_state_program, stack, symbol):
+    self._child_program = self._block._child.Program(self._block._child, self._master, self)
+
+    analysis, result = self._block._argument.evaluate(stack)
+
+    if isinstance(result, EllipsisType):
+      panic(analysis)
+      return
+
+    runtime_stack: EvalStack = {
+      **stack,
+      self._block._env: {
+        'arg': result.value
+      }
+    }
+
+    async for event in self._child_program.run(initial_point and initial_point.child, parent_state_program, runtime_stack, symbol):
+      yield event.inherit(
+        location=ShorthandProgramLocation(event.location),
+        terminated=event.terminated
+      )
+
+    del self._child_program
+
+@debug
+class ShorthandBlock(BaseBlock):
+  Point = ShorthandProgramPoint
+  Program = ShorthandProgram
+
+  def __init__(self, child: BaseBlock, /, argument: Evaluable[LocatedValue], env: EvalEnv):
+    self._argument = argument
+    self._child = child
+    self._env = env
+
+  def export(self):
+    return self._child.export()

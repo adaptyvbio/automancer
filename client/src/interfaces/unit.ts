@@ -132,7 +132,7 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
   getActiveChildLocation?(location: Location, key: unknown): unknown;
   getBlockClassLabel?(block: Block): string | null;
-  getBlockDefaultLabel?(block: Block, host: Host): string | null;
+  getBlockDefaultLabel?(block: Block, host: Host): React.ReactNode | null;
   getBlockLocationLabelSuffix?(block: Block, location: Location): string | null;
   getChildBlock(block: Block, key: Key): ProtocolBlock;
   getChildrenExecutionKeys(block: Block, location: Location): ProtocolBlockPath | null;

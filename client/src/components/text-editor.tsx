@@ -432,6 +432,7 @@ export interface MarkerProvider {
 
 export class MarkerManager {
   #changedLineNumbers = new Set<number>();
+  #lastUnmovedLineNumber: number | null = null;
   #markers: monaco.editor.IMarkerData[] = [];
   #model: monaco.editor.IModel;
   #provider: MarkerProvider;
@@ -446,12 +447,17 @@ export class MarkerManager {
         Range(change.range.startLineNumber, change.range.endLineNumber + 1).toArray()
       );
 
+      for (let change of event.changes) {
+        if (change.text.includes('\n') || (change.range.startLineNumber !== change.range.endLineNumber)) {
+          this.#lastUnmovedLineNumber = Math.max(change.range.startLineNumber - 1, this.#lastUnmovedLineNumber ?? 0);
+        }
+      }
+
       if (this.#tokenSource) {
         this.#tokenSource.cancel();
         this.#tokenSource = null;
       }
 
-      // TODO: handle NL characters
       this.#changedLineNumbers = new Set([...this.#changedLineNumbers, ...lineNumbers]);
       this.#setMarkers();
     });
@@ -462,7 +468,7 @@ export class MarkerManager {
   #setMarkers() {
     monaco.editor.setModelMarkers(this.#model, 'main', this.#markers.filter((marker) => {
       let range = Range(marker.startLineNumber, marker.endLineNumber + 1);
-      return !Array.from(this.#changedLineNumbers).some((lineNumber) => range.includes(lineNumber));
+      return (marker.endLineNumber <= (this.#lastUnmovedLineNumber ?? Infinity)) && !Array.from(this.#changedLineNumbers).some((lineNumber) => range.includes(lineNumber));
     }));
   }
 
@@ -479,6 +485,7 @@ export class MarkerManager {
 
       if (!tokenSource.token.isCancellationRequested) {
         this.#changedLineNumbers.clear();
+        this.#lastUnmovedLineNumber = null;
         this.#markers = markers;
 
         this.#setMarkers();

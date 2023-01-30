@@ -400,7 +400,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               <div>Last saved: {this.props.draft.lastModified ? new Date(this.props.draft.lastModified).toLocaleTimeString() : '–'}</div>
             </div>
             <div className={editorStyles.infobarRight}>
-              <div>Foo</div>
+              {/* <div>Foo</div> */}
             </div>
           </div>
         </div>

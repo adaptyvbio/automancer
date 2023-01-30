@@ -46,7 +46,7 @@ class Parser(BaseParser):
             lang.PotentialExprType(lang.KVDictType(lang.PotentialExprType(lang.StrType())))
           ),
           'exit_code': lang.Attribute(
-            lang.BindingType(),
+            lang.BindingType()
           ),
           'halt': lang.Attribute(
             lang.UnionType(

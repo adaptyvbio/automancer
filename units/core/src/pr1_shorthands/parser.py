@@ -8,7 +8,7 @@ from pr1.fiber.opaque import OpaqueValue
 from pr1.util.decorators import debug
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, Transforms, UnresolvedBlockData
+from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseTransform, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
 
 
 @debug
@@ -22,7 +22,7 @@ class ShorthandBlock(BaseBlock):
     return self._block.export()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ShorthandItem:
   contents: Attrs | EllipsisType
   definition_range: LocationRange
@@ -52,31 +52,29 @@ class ShorthandsParser(BaseParser):
   def enter_protocol(self, attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     analysis = lang.Analysis()
 
-    for shorthand_name, data_shorthand in attrs.get('shorthands', dict()).items():
-      # assert isinstance(data_shorthand, ReliableLocatedDict)
+    if (attr := attrs.get('shorthands')):
+      for name, data_shorthand in attr.items():
+        env = EvalEnv(readonly=True)
+        contents = analysis.add(self._fiber.prepare_block(data_shorthand, adoption_envs=[*adoption_envs, env], runtime_envs=[*runtime_envs, env]))
 
-      # comments, _ = data_shorthand.comments
-      shorthand_env = EvalEnv(readonly=True)
+        comments = attr.comments[name]
+        regular_comments = [comment for comment in comments if not comment.startswith("@")]
 
-      contents = analysis.add(self._fiber.prepare_block(data_shorthand, adoption_envs=[*adoption_envs, shorthand_env], runtime_envs=[*runtime_envs, shorthand_env]))
-      # print("$$", contents)
+        deprecated = any(comment == "@deprecated" for comment in comments)
+        description = regular_comments[0] if regular_comments else None
 
-      # deprecated=any(comment == "@deprecated" for comment in comments),
-      # description=(comments[0].value if data_shorthand.comments and not comments[0].startswith("@") else None),
+        self._shorthands[name] = ShorthandItem(
+          contents=contents,
+          definition_range=name.area.single_range(),
+          env=env,
+          ref_ranges=list()
+        )
 
-      self._shorthands[shorthand_name] = ShorthandItem(
-        contents=contents,
-        definition_range=shorthand_name.area.single_range(),
-        env=shorthand_env,
-        ref_ranges=list()
-      )
-
-      self.segment_attributes[shorthand_name] = lang.Attribute(
-        deprecated=False,
-        description=None,
-        optional=True,
-        type=lang.AnyType()
-      )
+        self.segment_attributes[name] = lang.Attribute(
+          deprecated=deprecated,
+          description=description,
+          type=lang.AnyType()
+        )
 
     return analysis
 

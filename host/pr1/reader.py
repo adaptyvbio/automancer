@@ -1,5 +1,5 @@
 from collections import namedtuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import ast
 import functools
@@ -471,10 +471,10 @@ class Source(LocatedString):
     self.origin = origin
 
 
-ObjectComments = tuple[list[LocatedString], list[LocatedString]]
+ObjectComments = list[LocatedString]
 
 class ReliableLocatedDict(LocatedDict):
-  def __init__(self, value: dict, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None, fold_range: LocationRange, full_area: LocationArea):
+  def __init__(self, value: dict, /, area: LocationArea, *, comments: dict[LocatedValue, ObjectComments], completion_ranges: Optional[set[LocationRange]] = None, fold_range: LocationRange, full_area: LocationArea):
     super().__init__(value, area)
 
     self.comments = comments
@@ -482,8 +482,18 @@ class ReliableLocatedDict(LocatedDict):
     self.fold_range = fold_range
     self.full_area = full_area
 
+  def transform(self, new_value: dict, /):
+    return self.__class__(
+      new_value,
+      self.area,
+      comments=self.comments,
+      completion_ranges=self.completion_ranges,
+      fold_range=self.fold_range,
+      full_area=self.full_area
+    )
+
 class ReliableLocatedList(LocatedList):
-  def __init__(self, value: list, /, area: LocationArea, *, comments: ObjectComments, completion_ranges = None, fold_range: LocationRange, full_area: LocationArea):
+  def __init__(self, value: list, /, area: LocationArea, *, comments: list[ObjectComments], completion_ranges: Optional[set[LocationRange]] = None, fold_range: LocationRange, full_area: LocationArea):
     super().__init__(value, area)
 
     self.comments = comments
@@ -721,28 +731,18 @@ class StackEntryMode(Enum):
   List = 1
   String = 2
 
+@dataclass(kw_only=True)
 class StackEntry:
-  def __init__(
-    self,
-    *,
-    comments: Optional[ObjectComments] = None,
-    key: Optional[LocatedString] = None,
-    area: Optional[LocationArea] = None,
-    mode: Optional[StackEntryMode] = None,
-    parent_key: Optional[LocatedString] = None,
-    token: Optional[Token] = None,
-    value: Optional[dict | list | str] = None
-  ):
-    self.comments: ObjectComments = comments or (list(), list())
-    self.key = key
-    self.area = area
-    self.mode = mode
-    self.parent_key = parent_key
-    self.token = token
-    self.value = value
+  comments: list[ObjectComments] = field(default_factory=list)
+  key: Optional[LocatedString] = None
+  area: Optional[LocationArea] = None
+  mode: Optional[StackEntryMode] = None
+  parent_key: Optional[LocatedString] = None
+  token: Optional[Token] = None
+  value: Optional[dict | list | str] = None
 
-    self.dict_ranges = set()
-    self.list_ranges = set()
+  dict_ranges: set[LocationRange] = field(default_factory=set, init=False)
+  list_ranges: set[LocationRange] = field(default_factory=set, init=False)
 
 
 class DuplicateKeyError(ReaderError):
@@ -840,7 +840,7 @@ def analyze(tokens: list[Token]):
     head = stack[-1]
 
     # Calculate relevant comments for this token
-    relevant_comments = list()
+    relevant_comments = ObjectComments()
 
     for comment, comment_depth in comments[::-1]:
       if comment_depth != token.depth:
@@ -848,11 +848,10 @@ def analyze(tokens: list[Token]):
 
       relevant_comments.append(comment)
 
-    relevant_comments = relevant_comments[::-1]
+    relevant_comments = relevant_comments[::-1] + ([token.comment] if token.comment else ObjectComments())
     comments.clear()
 
     # If the token is a single string, we add it as a completion range.
-    # elif token.depth == depth
     if (token.kind == TokenKind.Default) and (not token.key):
       assert token.value
 
@@ -888,6 +887,8 @@ def analyze(tokens: list[Token]):
         errors.append(DuplicateKeyError(next(key for key in head.value if key == token.key), token.key))
         continue
 
+      head.comments.append(relevant_comments)
+
       # a: b
       if token.value:
         head.value[token.key] = token.value
@@ -895,7 +896,6 @@ def analyze(tokens: list[Token]):
       # a:
       else:
         entry = StackEntry(
-          comments=(relevant_comments, [token.comment] if token.comment else list()),
           key=token.key,
           parent_key=token.key,
           token=token
@@ -913,12 +913,14 @@ def analyze(tokens: list[Token]):
         errors.append(InvalidTokenError(token.data))
         continue
 
+      head.comments.append(relevant_comments)
+
       # - a: ...
       if token.key:
         # - a: b
         if token.value:
           stack.append(StackEntry(
-            comments=(relevant_comments, list()),
+            comments=[ObjectComments()],
             mode=StackEntryMode.Dict,
             value={ token.key: token.value }
           ))
@@ -929,7 +931,7 @@ def analyze(tokens: list[Token]):
         #     ...
         else:
           stack.append(StackEntry(
-            comments=(relevant_comments, [token.comment] if token.comment else list()),
+            comments=[ObjectComments()],
             mode=StackEntryMode.Dict,
             value=dict()
           ))
@@ -987,7 +989,7 @@ def add_location(entry: StackEntry) -> Any:
       return ReliableLocatedDict(
         entry.value,
         area,
-        comments=entry.comments,
+        comments={ key: entry.comments[index] for index, key in enumerate(entry.value.keys()) },
         completion_ranges=entry.dict_ranges,
         fold_range=((full_area + entry.parent_key.area) if entry.parent_key else full_area).enclosing_range(),
         full_area=full_area
@@ -1097,8 +1099,23 @@ if __name__ == "__main__":
   # e: 3""")
 
   source = f"""
+# This is X
 x:
+  # This is a->b
   a: b
+
+  # bar
+  x:
+    # 1
+    #
+    - a
+    # 2
+    - b
+    # 3
+    - c: d
+    # 4
+    - s:
+        p: n
   c:
   \x20
 """
@@ -1113,8 +1130,7 @@ x:
 
   pprint(errors)
 
-  print(value)
-  print(value['x'].completion_ranges)
+  print(value['x']['x'].comments)
 
   # for r in value['a'].completion_ranges:
   #   # print(repr(source[r.start]))

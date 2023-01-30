@@ -564,7 +564,8 @@ class SimpleDictType(DivisibleCompositeDictType):
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, SimpleDictAsPythonExpr.new(LocatedDict(result, obj.area), depth=context.eval_depth)
+    located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
+    return analysis, SimpleDictAsPythonExpr.new(located_result, depth=context.eval_depth)
 
 class SimpleDictAsPythonExpr(Evaluable):
   def __init__(self, value: LocatedDict, /, *, depth: int):
@@ -1088,8 +1089,7 @@ class KVDictType(Type):
 
     if isinstance(obj, ReliableLocatedDict):
       analysis.folds.append(FoldingRange(obj.fold_range))
-
-    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
+      analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
     result = dict()
 
@@ -1103,7 +1103,8 @@ class KVDictType(Type):
       analysis += key_analysis
       analysis += value_analysis
 
-    return analysis, KVDictValueAsPythonExpr.new(LocatedDict(result, obj.area), depth=context.eval_depth)
+    located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
+    return analysis, KVDictValueAsPythonExpr.new(located_result, depth=context.eval_depth)
 
 class KVDictValueAsPythonExpr:
   def __init__(self, value: LocatedDict, /, *, depth: int):

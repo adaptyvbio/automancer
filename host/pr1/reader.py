@@ -501,6 +501,16 @@ class ReliableLocatedList(LocatedList):
     self.fold_range = fold_range
     self.full_area = full_area
 
+  def transform(self, new_value: list, /):
+    return self.__class__(
+      new_value,
+      self.area,
+      comments=self.comments,
+      completion_ranges=self.completion_ranges,
+      fold_range=self.fold_range,
+      full_area=self.full_area
+    )
+
 
 ## Tokenization
 
@@ -515,6 +525,8 @@ class ReliableLocatedList(LocatedList):
 # Invalid
 #           key: None,  value: None,  kind: Default,  raw_value: '    '
 # a         key: None,  value: 'a',   kind: Default
+# :         key: None,  value: None,  kind: Default
+# : b       key: None,  value: 'b',   kind: Default
 # -         key: None,  value: None,  kind: List,     raw_value: ' '
 
 
@@ -823,7 +835,7 @@ def analyze(tokens: list[Token]):
 
     # If the token is an empty line, we can only process the completion range
     # when we reach the next valid and meaningful token.
-    if (token.kind == TokenKind.Default) and (not token.key) and (not token.value):
+    if (token.kind == TokenKind.Default) and (not token.key) and (not token.value) and (token.raw_value is not None):
       if token.comment:
         comments.append((token.comment, token.depth))
 
@@ -851,11 +863,11 @@ def analyze(tokens: list[Token]):
     relevant_comments = relevant_comments[::-1] + ([token.comment] if token.comment else ObjectComments())
     comments.clear()
 
-    # If the token is a single string, we add it as a completion range.
     if (token.kind == TokenKind.Default) and (not token.key):
-      assert token.value
+      # If the token is a single string, we add it as a completion range.
+      if token.value:
+        head.dict_ranges.add(token.value.area.single_range())
 
-      head.dict_ranges.add(token.value.area.single_range())
       continue
 
     # Look at the first token's kind if we do not yet know the entry's type
@@ -1098,25 +1110,8 @@ if __name__ == "__main__":
 
   # e: 3""")
 
-  source = f"""
-# This is X
-x:
-  # This is a->b
-  a: b
-
-  # bar
-  x:
-    # 1
-    #
-    - a
-    # 2
-    - b
-    # 3
-    - c: d
-    # 4
-    - s:
-        p: n
-  c:
+  source = f"""wash:
+  : a
   \x20
 """
 
@@ -1129,8 +1124,6 @@ x:
   value, errors, warnings = analyze(tokens)
 
   pprint(errors)
-
-  print(value['x']['x'].comments)
 
   # for r in value['a'].completion_ranges:
   #   # print(repr(source[r.start]))

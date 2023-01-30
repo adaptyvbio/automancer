@@ -100,7 +100,15 @@ class Analysis:
     return f"{self.__class__.__name__}(errors={self.errors!r})"
 
 
-CompletionItem = namedtuple("CompletionItem", ['documentation', 'kind', 'label', 'namespace', 'signature', 'sublabel', 'text'])
+@dataclass(kw_only=True)
+class CompletionItem:
+  documentation: Optional[str]
+  kind: str
+  label: str
+  namespace: Optional[str]
+  signature: Optional[str]
+  sublabel: Optional[str]
+  text: str
 
 class Completion:
   def __init__(self, *, items: list[CompletionItem], ranges: list[LocationRange]):
@@ -230,6 +238,10 @@ class Attribute:
     self._required = required
     self._signature = signature
     self._type = type
+
+  @property
+  def type(self):
+    return self._type
 
   def analyze(self, obj, key, context):
     analysis = Analysis()
@@ -413,7 +425,6 @@ class DivisibleCompositeDictType(Type):
   def __init__(self, native_attrs: Optional[dict[str, Attribute | Type]] = None, /, *, foldable: bool = True):
     self._attributes = dict[str, dict[str, Attribute]]()
     self._foldable = foldable
-    self._namespaces = set()
 
     if native_attrs:
       self.add(native_attrs, namespace=self._native_namespace)
@@ -422,10 +433,9 @@ class DivisibleCompositeDictType(Type):
   def completion_items(self):
     completion_items = list[CompletionItem]()
 
-    for attr_name, attr_entries in self._attributes.items():
-      ambiguous = (len(attr_entries) > 1)
-
-      for namespace, attr in attr_entries.items():
+    for namespace, attrs in self._attributes.items():
+      for attr_name, attr in attrs.items():
+        ambiguous = any(attr_name in other_attrs for other_namespace, other_attrs in self._attributes.items() if other_namespace != namespace)
         native = (namespace == self._native_namespace)
 
         completion_items.append(CompletionItem(
@@ -450,19 +460,22 @@ class DivisibleCompositeDictType(Type):
       attr_name = attr_key
       namespace = None
 
-    attr_entries = self._attributes.get(attr_name)
+    attr_entries = dict[str, Attribute]()
+
+    for attrs_namespace, attrs in self._attributes.items():
+      if attr_name in attrs:
+        attr_entries[attrs_namespace] = attrs[attr_name]
 
     return namespace, attr_name, attr_entries
 
   def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], *, namespace: str):
-    assert not (namespace in self._namespaces)
-    self._namespaces.add(namespace)
+    assert not (namespace in self._attributes)
 
     for attr_name, attr in attrs.items():
-      if not (attr_name in self._attributes):
-        self._attributes[attr_name] = dict()
+      if not isinstance(attr, Attribute):
+        attrs[attr_name] = Attribute(cast(Type, attr))
 
-      self._attributes[attr_name][namespace] = attr if isinstance(attr, Attribute) else Attribute(cast(Type, attr))
+    self._attributes[namespace] = cast(dict[str, Attribute], attrs)
 
   def analyze(self, obj, /, context):
     analysis, primitive_result = PrimitiveType(dict).analyze(obj, context)
@@ -473,7 +486,8 @@ class DivisibleCompositeDictType(Type):
     assert isinstance(obj, LocatedDict)
 
     if isinstance(obj, ReliableLocatedDict) and self._foldable:
-      analysis.folds.append(FoldingRange(obj.fold_range))
+      if self._foldable:
+        analysis.folds.append(FoldingRange(obj.fold_range))
 
       analysis.completions.append(Completion(
         items=self.completion_items,
@@ -485,13 +499,13 @@ class DivisibleCompositeDictType(Type):
 
     analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
-    attr_values = { namespace: dict[str, Any]() for namespace in self._namespaces }
+    attr_values = { namespace: dict[str, Any]() for namespace in self._attributes.keys() }
 
     for obj_key, obj_value in obj.items():
       namespace, attr_name, attr_entries = self._parse_attr_key(obj_key)
 
       # e.g. 'invalid/bar'
-      if namespace and not (namespace in self._namespaces):
+      if namespace and not (namespace in self._attributes):
         analysis.errors.append(ExtraneousKeyError(namespace, obj))
         continue
 
@@ -523,8 +537,8 @@ class DivisibleCompositeDictType(Type):
 
     failure = False
 
-    for attr_name, attr_entries in self._attributes.items():
-      for namespace, attr in attr_entries.items():
+    for namespace, attrs in self._attributes.items():
+      for attr_name, attr in attrs.items():
         if attr._required and not (attr_name in attr_values[namespace]):
           analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
           failure = True
@@ -539,7 +553,7 @@ class DivisibleCompositeDictType(Type):
     result = dict[str, Any]()
 
     for attr_name, attr_value in attr_values[namespace].items():
-      attr = self._attributes[attr_name][namespace]
+      attr = self._attributes[namespace][attr_name]
       attr_result = analysis.add(attr.analyze(attr_value, attr_name, context))
 
       if not isinstance(attr_result, EllipsisType):
@@ -735,29 +749,35 @@ class ListType(Type):
       if not isinstance(item_result, EllipsisType):
         result.append(item_result)
 
-    if isinstance(obj, ReliableLocatedList) and isinstance(self._item_type, CompositeDict):
-      completion_ranges = list(obj.completion_ranges)
+    if isinstance(obj, ReliableLocatedList) and isinstance(self._item_type, DivisibleCompositeDictType):
+      analysis += self.create_completion(obj, self._item_type)
 
-      for item in obj:
-        if isinstance(item, LocatedString):
-          completion_ranges.append(item.area.single_range())
+    located_result = obj.transform(result) if isinstance(obj, ReliableLocatedList) else LocatedList(result, obj.area)
+    return analysis, ListAsPythonExpr.new(located_result, depth=context.eval_depth)
 
-      if completion_ranges:
-        analysis.completions.append(Completion(
-          items=self._item_type.completion_items,
-          ranges=completion_ranges
-        ))
+  def create_completion(self, obj, item_type: DivisibleCompositeDictType, /):
+    completion_ranges = list(obj.completion_ranges)
 
-    result = LocatedList(result, obj.area)
+    for item in obj:
+      if isinstance(item, LocatedString):
+        completion_ranges.append(item.area.single_range())
 
-    # This is wrong
-    return analysis, ValueAsPythonExpr.new(ListAsPythonExpr(result), depth=context.eval_depth) if context.eval_depth > 0 else result
+    analysis = Analysis()
+
+    if completion_ranges:
+      analysis.completions.append(Completion(
+        items=item_type.completion_items,
+        ranges=completion_ranges
+      ))
+
+    return analysis
 
 
 S = TypeVar('S', bound=LocatedValue)
 
 class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
-  def __init__(self, value: LocatedList[Evaluable[S]], /):
+  def __init__(self, value: LocatedList[Evaluable[S]], /, *, depth: int):
+    self._depth = depth
     self._value = value
 
   def evaluate(self, stack):
@@ -772,15 +792,17 @@ class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
 
       result.append(item_result)
 
-    located_result = LocatedList(result, self._value.area)
-
-    return analysis, (located_result if done else self.__class__(located_result))
+    return analysis, self.new(LocatedList(result, self._value.area), depth=(self._depth - 1))
 
   def export(self):
     raise NotImplementedError
 
   def __repr__(self):
     return f"{self.__class__.__name__}({self._value!r})"
+
+  @classmethod
+  def new(cls, value: LocatedList, /, *, depth: int):
+    return cls(value, depth=depth) if depth > 0 else value
 
 
 class LiteralOrExprType(Type):
@@ -800,7 +822,7 @@ class LiteralOrExprType(Type):
   def analyze(self, obj, context):
     if isinstance(obj, str):
       assert isinstance(obj, LocatedString)
-      result = PythonExpr.parse(obj, type=self._expr_type)
+      result = PythonExpr.parse(obj)
 
       if result:
         analysis, expr = result

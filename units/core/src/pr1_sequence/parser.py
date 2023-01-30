@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from enum import IntEnum
+import functools
 from types import EllipsisType
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional, TypedDict, cast
 
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalStack
@@ -26,7 +27,7 @@ class SequenceParser(BaseParser):
 
   root_attributes = dict()
 
-  @property
+  @functools.cached_property
   def segment_attributes(self):
     return {
       'actions': lang.Attribute(
@@ -34,7 +35,6 @@ class SequenceParser(BaseParser):
         documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
         kind='class',
         signature="actions:\n  - <action 1>\n  - <action 2>",
-        # type=lang.ListType(self._fiber.segment_type)
         type=lang.ListType(lang.AnyType())
       )
     }
@@ -46,6 +46,7 @@ class SequenceParser(BaseParser):
     if (attr := attrs.get('actions')):
       actions_prep = SequencePrep()
       analysis = lang.Analysis()
+      analysis += cast(lang.ListType, self.segment_attributes['actions'].type).create_completion(attr, self._fiber.block_type)
 
       for action_source in attr:
         action_prep = analysis.add(self._fiber.prepare_block(action_source, adoption_envs=adoption_envs, runtime_envs=runtime_envs))

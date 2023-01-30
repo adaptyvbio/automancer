@@ -122,6 +122,10 @@ class ShorthandsParser(BaseParser):
       shorthand_item = self._shorthands[shorthand_name]
       shorthand_trace = trace + [ErrorDocumentReference.from_value(shorthand_name)]
 
+      if isinstance(shorthand_value, EllipsisType):
+        failure = True
+        continue
+
       value = analysis.add(shorthand_value.evaluate(adoption_stack), shorthand_trace)
 
       if isinstance(value, EllipsisType):

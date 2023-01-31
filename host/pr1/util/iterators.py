@@ -365,6 +365,7 @@ class CoupledStateIterator3(Generic[T, S]):
     self._done = False
     self._future: Optional[Future[Optional[T]]] = None
     self._iterator = iterator
+    self._locked = False
     self._state_events = list[S]()
     self._task: Optional[Task[T]] = None
     self._triggered = False
@@ -377,13 +378,20 @@ class CoupledStateIterator3(Generic[T, S]):
     except StopAsyncIteration as e:
       self._done = True
     else:
+      self._locked = False
+
       if self._future:
         self._future.set_result(value)
         self._future = None
 
+  def lock(self, value: bool = True, /):
+    self._locked = value
+
   def notify(self, state_event: S, /):
     self._state_events.append(state_event)
-    self.trigger()
+
+    if not self._locked:
+      self.trigger()
 
   def trigger(self):
     if self._future:

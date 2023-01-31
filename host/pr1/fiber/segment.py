@@ -164,8 +164,14 @@ class SegmentProgram(BlockProgram):
         self._bypass_future.set_result(None)
         self._bypass_future = None
       case SegmentProgramMode.Paused:
-        self.call_resume()
-        self._process.resume()
+        async def resume():
+          try:
+            await self.call_resume()
+            self._process.resume()
+          except Exception:
+            traceback.print_exc()
+
+        asyncio.create_task(resume())
       case _:
         raise ValueError()
 

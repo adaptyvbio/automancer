@@ -106,7 +106,7 @@ class Master:
     self.transfer_state()
     self.write_state()
 
-  def call_resume(self):
+  async def call_resume(self):
     self.transfer_state(); print("X: Master1")
 
   def send_message(self, block_path: list, exec_path: list, message: object):

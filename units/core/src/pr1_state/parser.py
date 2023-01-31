@@ -21,6 +21,8 @@ from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
                       BlockUnitState, FiberParser, Transforms)
 from pr1.fiber.process import ProgramExecEvent
 
+from . import logger
+
 
 class StateParser(BaseParser):
   namespace = "state"
@@ -60,9 +62,8 @@ class StateTransform(BaseTransform):
 
 
 class StateProgramMode(IntEnum):
-  Resuming = -2
-  Starting = -3
-
+  ApplyingState = 7
+  ApplyingStateAndWaitingForChild = 10
   Halted = 6
   HaltingChild = 0
   HaltingState = 5
@@ -70,6 +71,10 @@ class StateProgramMode(IntEnum):
   PausingChild = 2
   PausingState = 3
   Paused = 4
+  ResumingState = 11
+  ResumingStateAndChild = 8
+  Starting = 12
+  WaitingForChild = 9
 
 @dataclass(kw_only=True)
 class StateProgramLocation:
@@ -97,10 +102,13 @@ class StateProgramPoint:
 counter = 0
 
 class StateProgram(BlockProgram):
+  _next_index = 0
+
   def __init__(self, block: 'StateBlock', master, parent):
-    global counter
-    self._counter = counter
-    counter += 1
+    self._index = self._next_index
+    type(self)._next_index += 1
+
+    self._logger = logger.getChild(f"stateProgram{self._index}")
 
     self._block = block
     self._master = master
@@ -110,11 +118,20 @@ class StateProgram(BlockProgram):
     self._child_stopped: bool
     self._child_state_terminated: bool
     self._iterator: CoupledStateIterator3[ProgramExecEvent, StateRecord]
-    self._mode: StateProgramMode
+    # self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
-    self._state_excess: BlockState
     self._state_instance: StateInstanceCollection
     self._state_location: Optional[StateLocation]
+    self._state_settled_future: Optional[asyncio.Future]
+
+  @property
+  def _mode(self):
+    return self._mode_value
+
+  @_mode.setter
+  def _mode(self, value):
+    self._logger.debug(f"\x1b[33m[{self._index}] Mode: {self._mode.name if hasattr(self, '_mod_value') else '<none>'} → {value.name}\x1b[0m")
+    self._mode_value = value
 
   @property
   def busy(self):
@@ -147,26 +164,42 @@ class StateProgram(BlockProgram):
   def resume(self):
     assert (not self.busy) and (self._mode == StateProgramMode.Paused)
 
-    self._mode = StateProgramMode.Resuming
-    self.call_resume()
+    self._mode = StateProgramMode.ResumingState
 
-    self._iterator.trigger()
+    async def resume():
+      try:
+        await self.call_resume()
+      except Exception:
+        traceback.print_exc()
 
-  def call_resume(self):
+    asyncio.create_task(resume())
+
+    # self._iterator.trigger()
+
+  async def call_resume(self):
     if self._mode == StateProgramMode.Normal:
       self._master.transfer_state(); print("X: State2")
     else:
       self._state_instance.prepare(resume=True)
-      super().call_resume()
+      await super().call_resume()
+
+      if self._mode != StateProgramMode.ResumingState:
+        self._mode = StateProgramMode.ResumingStateAndChild
+
+      self._iterator.trigger()
+
+      self._state_settled_future = asyncio.Future()
+      await self._state_settled_future
 
   async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
+      await state_settled_future
+
       while self._point:
         point = self._point
         self._point = None
 
         self._child_program = self._block.child.Program(self._block.child, master=self._master, parent=self)
-        self._mode = StateProgramMode.Normal
 
         async for event in self._child_program.run(point.child, self, stack, symbol):
           yield cast(ProgramExecEvent, event)
@@ -175,13 +208,18 @@ class StateProgram(BlockProgram):
     self._child_state_terminated = False
     self._mode = StateProgramMode.Starting
     self._point = initial_point or StateProgramPoint(child=None)
+
     self._iterator = CoupledStateIterator3(run())
+    self._iterator.trigger()
+
+    self._state_location = None
+    self._state_settled_future = asyncio.Future()
+    state_settled_future = self._state_settled_future
 
     self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
     self._state_instance.prepare(resume=False)
 
     previous_event: Optional[ProgramExecEvent] = None
-    self._state_location = None
 
     async def suspend_state():
       try:
@@ -189,17 +227,21 @@ class StateProgram(BlockProgram):
       except Exception:
         traceback.print_exc()
 
-    async for event, state_events in self._iterator:
+    async for event, state_records in self._iterator:
+      self._logger.debug(f"\x1b[1;35m[{self._index}] Event loop iteration\x1b[22;0m")
+      self._logger.debug(f"  mode={self._mode!r}")
+      self._logger.debug(f"  event={event}")
+      self._logger.debug(f"  state_records={state_records}")
+
       # self._state_instance._instances['devices']._logger.info("Ok")
 
       last_event = event or previous_event
-      assert last_event
 
       state_errors = list[Error]()
-      self._state_location = (state_events[-1].location if state_events else None) or self._state_location
+      self._state_location = (state_records[-1].location if state_records else None) or self._state_location
 
-      for state_event in state_events:
-        state_errors += state_event.errors
+      for state_record in state_records:
+        state_errors += state_record.errors
 
       if event:
         previous_event = event
@@ -213,10 +255,13 @@ class StateProgram(BlockProgram):
           self._master.write_state(); print("Y: State1")
 
         # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
-        # This corresponds to a pause() call on the state child program, causing itself and all its descendants to become paused.
+        # This corresponds to a pause() call on the state child program, causing itself and all its ascendants to become paused.
         if (self._mode == StateProgramMode.Normal) and event.stopped and (not self._child_stopped) and (not event.state_terminated):
           self._master.transfer_state(); print("X: State1")
           self._master.write_state(); print("Y: State2")
+
+        if self._mode == StateProgramMode.WaitingForChild:
+          self._mode = StateProgramMode.Normal
 
         self._child_stopped = event.stopped
         self._child_state_terminated = event.state_terminated
@@ -241,6 +286,47 @@ class StateProgram(BlockProgram):
             # This is the last iteration of the loop. Same as case (2) above.
             self._mode = StateProgramMode.Halted
 
+      if (self._mode in (StateProgramMode.ApplyingState, StateProgramMode.ApplyingStateAndWaitingForChild)) and self._state_instance.settled:
+        self._logger.debug("State settled")
+
+        if self._state_settled_future:
+          self._state_settled_future.set_result(None)
+          self._state_settled_future = None
+
+        if self._mode == StateProgramMode.ApplyingStateAndWaitingForChild:
+          self._mode = StateProgramMode.WaitingForChild
+          self._iterator.lock()
+
+          for state_record in state_records:
+            self._iterator.notify(state_record)
+
+          continue
+
+        self._mode = StateProgramMode.Normal
+
+      if self._mode in (StateProgramMode.ResumingState, StateProgramMode.ResumingStateAndChild, StateProgramMode.Starting):
+        apply_state_record = self._state_instance.apply(resume=(self._mode != StateProgramMode.Starting))
+        self._logger.debug(f"Applied state, settled={apply_state_record.settled}")
+
+        # If the state has been applied synchronously, skip sending the location and wait for
+        # the next event.
+        if apply_state_record.settled and (self._mode != StateProgramMode.ResumingState):
+          # Notify and lock until an event is received from the child program.
+          self._iterator.lock()
+          self._iterator.notify(apply_state_record)
+          self._mode = StateProgramMode.WaitingForChild
+
+          if self._state_settled_future:
+            self._state_settled_future.set_result(None)
+            self._state_settled_future = None
+
+          continue
+
+        # Otherwise, send the location and wait for the state to settle.
+        self._mode = StateProgramMode.ApplyingStateAndWaitingForChild if self._mode != StateProgramMode.ResumingState else StateProgramMode.ApplyingState
+        self._state_location = apply_state_record.location
+        state_errors += apply_state_record.errors
+
       # If the child was immediately paused, then no event gets emitted.
       if (self._mode == StateProgramMode.PausingChild) and self._child_stopped:
         self._mode = StateProgramMode.PausingState
@@ -252,18 +338,6 @@ class StateProgram(BlockProgram):
 
       if (self._mode == StateProgramMode.HaltingState) and (not self._state_instance.applied):
         self._mode = StateProgramMode.Halted
-
-      resuming = ((self._mode == StateProgramMode.Paused) and (not self._child_stopped)) or (self._mode == StateProgramMode.Resuming)
-
-      if resuming:
-        self._mode = StateProgramMode.Normal
-
-      if (self._mode == StateProgramMode.Normal) and (not self._state_instance.applied):
-        state_record = self._state_instance.apply(resume=resuming)
-        assert state_record.location
-
-        state_errors += state_record.errors
-        self._state_location = state_record.location
 
       if self._mode == StateProgramMode.Halted:
         await self._state_instance.close()
@@ -284,7 +358,7 @@ class StateProgram(BlockProgram):
         yield ProgramExecEvent(
           errors=[error.as_master() for error in state_errors],
           location=StateProgramLocation(
-            child=last_event.location,
+            child=(last_event and last_event.location),
             mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
             state=self._state_location
           ),

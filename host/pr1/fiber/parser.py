@@ -2,7 +2,7 @@ from collections import namedtuple
 from dataclasses import KW_ONLY, dataclass, field
 from pint import UnitRegistry
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Optional, Protocol, Sequence
 
 from ..error import Trace
 from ..util.misc import Exportable
@@ -135,8 +135,8 @@ class BlockProgram(Protocol):
   def pause(self):
     ...
 
-  def call_resume(self):
-    self._parent.call_resume()
+  async def call_resume(self):
+    await self._parent.call_resume()
 
   def run(self, child: Any, /, parent_state_program, stack: EvalStack, symbol) -> AsyncIterator[Any]:
     ...

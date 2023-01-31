@@ -16,6 +16,7 @@ class StateEvent:
   location: Optional[Exportable] = None
   _: KW_ONLY
   errors: list[Error] = field(default_factory=list)
+  fatal: bool = False
   settled: bool = False
   time: Optional[float] = None
 
@@ -49,6 +50,7 @@ class StateLocation:
 class StateRecord:
   errors: list[Error]
   location: StateLocation
+  settled: bool
 
 
 StateInstanceNotifyCallback = Callable[[StateEvent], None]
@@ -77,12 +79,9 @@ class StateInstanceCollection:
   def applied(self):
     return self._applied
 
-  async def settled(self):
-    await self._settled_future
-
-  def _check_all_settled(self):
-    if all(entry.settled for entry in self._location.entries.values()):
-      self._settled_future.set_result(None)
+  @property
+  def settled(self):
+    return all(entry.settled for entry in self._location.entries.values())
 
   def _handle_event(self, namespace: str, event: StateEvent, *, notify: bool):
     entry = self._location.entries[namespace]
@@ -94,7 +93,8 @@ class StateInstanceCollection:
     if notify:
       self._notify(StateRecord(
         errors=event.errors,
-        location=copy.deepcopy(self._location)
+        location=copy.deepcopy(self._location),
+        settled=self.settled
       ))
 
   def apply(self, *, resume: bool):
@@ -115,11 +115,10 @@ class StateInstanceCollection:
         settled=event.settled
       )
 
-    self._check_all_settled()
-
     return StateRecord(
       errors=errors,
-      location=copy.deepcopy(self._location)
+      location=copy.deepcopy(self._location),
+      settled=self.settled
     )
 
   async def close(self):
@@ -142,7 +141,8 @@ class StateInstanceCollection:
 
     record = StateRecord(
       errors=errors,
-      location=copy.deepcopy(self._location)
+      location=copy.deepcopy(self._location),
+      settled=self.settled
     )
 
     del self._location

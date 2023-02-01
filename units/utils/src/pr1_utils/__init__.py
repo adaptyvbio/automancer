@@ -16,7 +16,6 @@ metadata = Metadata(
 client_path = files(__name__ + '.client')
 logger = parent_logger.getChild(namespace)
 
-# from .executor import Executor
-# from .matrix import Matrix
+from .executor import Executor
 from .parser import Parser
 from .runner import Runner

@@ -14,5 +14,9 @@ setup(
   },
   package_data={
     "pr1_utils.client": ["*"]
-  }
+  },
+
+  install_requires=[
+    "psutil==5.9.4"
+  ]
 )

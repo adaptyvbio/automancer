@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 from types import EllipsisType
+from typing import Optional
 import uuid
 from graphlib import TopologicalSorter
 
@@ -32,12 +33,17 @@ class HostRootNode(CollectionNode):
     self.label = "Root"
     self.nodes = devices
 
-  def find(self, path: NodePath) -> BaseNode:
+  def find(self, path: NodePath) -> Optional[BaseNode]:
     node = self
 
     for node_id in path:
-      assert isinstance(node, CollectionNode)
-      node = node.nodes[node_id]
+      if not isinstance(node, CollectionNode):
+        return None
+
+      node = node.nodes.get(node_id)
+
+      if not node:
+        return None
 
     return node
 
@@ -152,6 +158,10 @@ class Host:
       await executor.initialize()
 
     logger.debug("Initialized executors")
+    logger.info("Node tree")
+
+    for line in self.root_node.format().splitlines():
+      logger.debug(line)
 
     for path in self.chips_dir.iterdir():
       if not path.name.startswith("."):

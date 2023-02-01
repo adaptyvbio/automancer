@@ -1,4 +1,5 @@
 import builtins
+import numpy as np
 from dataclasses import dataclass, field
 import io
 from logging import Logger
@@ -196,13 +197,17 @@ class InvalidIdentifierError(LangServiceError):
   def __init__(self, target: LocatedValue, /):
     self.target = target
 
-class InvalidEnumValueError(LangServiceError):
+class InvalidEnumValueError(Error):
   def __init__(self, target: LocatedValue, /):
-    self.target = target
+    super().__init__(f"Invalid enum value", references=[ErrorDocumentReference.from_value(target)])
 
 class MissingAttributeError(Error):
   def __init__(self, target: LocatedValue, attribute: str, /):
     super().__init__(f"Missing attribute '{attribute}'", references=[ErrorDocumentReference.from_value(target)])
+
+class InvalidDataTypeError(Error):
+  def __init__(self, target: LocatedValue, /, message: str):
+    super().__init__(f"Invalid data type: {message}", references=[ErrorDocumentReference.from_value(target)])
 
 
 class Type(Protocol):
@@ -985,7 +990,7 @@ class EnumType:
       analysis.errors.append(InvalidEnumValueError(obj))
       return analysis, Ellipsis
 
-    return analysis, obj
+    return analysis, ValueAsPythonExpr.new(obj, depth=context.eval_depth)
 
 class UnionType(Type):
   def __init__(self, variant: Type, /, *variants: Type):
@@ -1035,6 +1040,7 @@ class PathType(Type):
 
 #     return analysis, result
 
+# TODO: Look into os.PathLike
 class FileRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
     self._text = text
@@ -1044,16 +1050,16 @@ class FileRefType(Type):
     )
 
   def analyze(self, obj, context):
-    analysis, result = self._type.analyze(obj, context)
+    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    if (self._text is not None) and isinstance(result, io.IOBase) and (isinstance(result, io.TextIOBase) != self._text):
+    if (self._text is not None) and isinstance(result.value, io.IOBase) and (isinstance(result.value, io.TextIOBase) != self._text):
       analysis.errors.append(InvalidFileObject(result))
       return analysis, Ellipsis
 
-    return analysis, result
+    return analysis, ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
 class DataRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
@@ -1179,6 +1185,24 @@ class HasAttrType(Type):
       return analysis, Ellipsis
 
     return analysis, result
+
+class DataTypeType(Type):
+  def analyze(self, obj, /, context):
+    if isinstance(obj.value, np.dtype):
+      return Analysis(), obj
+
+    analysis, str_result = StrType().analyze(obj, context.update(eval_depth=0))
+
+    if isinstance(str_result, EllipsisType):
+      return analysis, Ellipsis
+
+    try:
+      value = np.dtype(obj.value)
+    except TypeError as e:
+      analysis.errors.append(InvalidDataTypeError(obj, e.args[0]))
+      return analysis, Ellipsis
+    else:
+      return analysis, ValueAsPythonExpr.new(LocatedValue.new(value, obj.area), depth=context.eval_depth)
 
 
 # TODO: Improve

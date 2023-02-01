@@ -16,7 +16,7 @@ class StateEvent:
   location: Optional[Exportable] = None
   _: KW_ONLY
   errors: list[Error] = field(default_factory=list)
-  fatal: bool = False
+  failure: bool = False
   settled: bool = False
   time: Optional[float] = None
 

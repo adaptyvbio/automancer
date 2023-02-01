@@ -184,8 +184,7 @@ class OPCUADevice(DeviceNode, BatchGroupNode[OPCUADeviceWritableNode]):
       self._reconnect()
 
   async def destroy(self):
-    self._keepalive_reg.cancel()
-
+    await self._keepalive_reg.cancel()
     await self._disconnect()
 
     logger.debug("An error might be printed below. It can be safely discarded.")

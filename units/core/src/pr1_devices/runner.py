@@ -161,7 +161,7 @@ class StateInstance:
         error_unclaimable=(not (info.claim.owner or info.claim.owned_by_child))
       )
 
-      errors += self._eval_errors
+      errors += self._eval_errors # why here?
       self._eval_errors.clear()
 
       self._location.values[info.path] = location
@@ -178,7 +178,7 @@ class StateInstance:
     return StateEvent(copy.deepcopy(self._location), errors=errors)
 
   async def close(self):
-    return StateEvent()
+    pass
 
   async def suspend(self):
     self._logger.debug("Suspending")
@@ -204,8 +204,6 @@ class StateInstance:
     return StateEvent(copy.deepcopy(self._location))
 
 
-counter = 0
-
 class DemoStateLocation:
   def export(self):
     return { "foo": "bar" }
@@ -214,12 +212,11 @@ class DemoStateInstance:
   _next_index = 0
 
   def __init__(self, state: BlockUnitState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
-    global counter
-    self._logger = logger.getChild(f"stateInstance{counter}")
-    self._notify = notify
-
     self._index = self._next_index
     type(self)._next_index += 1
+
+    self._logger = logger.getChild(f"stateInstance{self._index}")
+    self._notify = notify
 
   def prepare(self, *, resume: bool):
     self._logger.debug(f'Prepare, resume={resume}')
@@ -228,18 +225,19 @@ class DemoStateInstance:
     self._logger.debug(f'Apply, resume={resume}')
 
     async def task():
-      await asyncio.sleep(0.3)
+      await asyncio.sleep(1)
+      self._notify(StateEvent(settled=True))
 
-      self._notify(StateEvent(DemoStateLocation(), errors=[
-        Error(f"Problem {self._index}a"),
-        Error(f"Problem {self._index}b")
-      ]))
+      # self._notify(StateEvent(DemoStateLocation(), errors=[
+      #   # Error(f"Problem {self._index}a"),
+      #   # Error(f"Problem {self._index}b")
+      # ]))
 
     # asyncio.create_task(task())
 
     return StateEvent(DemoStateLocation(), errors=[
       Error(f"Hello {self._index}")
-    ])
+    ], settled=True)
 
   async def close(self):
     self._logger.debug('Close')
@@ -257,7 +255,7 @@ class DemoStateInstance:
 
 
 class Runner(BaseRunner):
-  StateInstance = StateInstance
+  StateInstance = DemoStateInstance
 
   def __init__(self, chip, *, host: Host):
     self._chip = chip

@@ -43,7 +43,9 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
     let processFeatures = UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(block.process.data, null, context) ?? []);
     let stateFeatures = state
       ? Object.values(context.host.units).flatMap((unit) => {
-        return UnitTools.asStateUnit(unit)?.createStateFeatures?.(state![unit.namespace], null, null, context) ?? [];
+        return (unit.namespace in state!)
+          ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(state![unit.namespace], null, null, context) ?? []
+          : [];
       })
       : [];
 

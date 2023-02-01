@@ -79,7 +79,7 @@ export default {
   createStateFeatures(state, descendantStates, location, context) {
     let executor = context.host.state.executors[this.namespace] as ExecutorState;
 
-    return state?.values.map(([path, value]) => {
+    return state.values.map(([path, value]) => {
       let node = findNode(executor.root, path);
       let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
 
@@ -107,4 +107,4 @@ export default {
     }) ?? [];
   }
 
-} satisfies StateUnit<State | undefined, Location>
+} satisfies StateUnit<State, Location>

@@ -1,4 +1,4 @@
-import { getBlockExplicitLabel, GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, Unit } from 'pr1';
+import { GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -6,7 +6,7 @@ export interface Block extends ProtocolBlock {
   state: null;
 
   child: ProtocolBlock;
-  count: number;
+  count: DynamicValue;
 }
 
 export interface BlockMetrics extends GraphRendererDefaultMetrics {
@@ -18,6 +18,8 @@ export interface Location {
   child: unknown;
   iteration: number;
 }
+
+export type Key = number;
 
 export interface Point {
   child: unknown | null;
@@ -33,12 +35,15 @@ export interface State {
 const namespace = 'repeat';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, options) {
-    let childMetrics = options.computeMetrics(block.child, [...ancestors, block]);
+  computeMetrics(block, ancestors, location, options, context) {
+    let childMetrics = options.computeMetrics(block.child, [...ancestors, block], location?.child);
 
-    let label = ancestors.at(-1)?.state['name'].value
-      ?? getBlockExplicitLabel(block, options.host)
+    let parent = ancestors.at(-1);
+    let label = (parent && UnitTools.getBlockStateName(parent))
       ?? unit.getBlockDefaultLabel(block);
+    // let label = ancestors.at(-1)?.state['name'].value
+    //   ?? getBlockExplicitLabel(block, context.host)
+    //   ?? unit.getBlockDefaultLabel(block);
 
     return {
       child: childMetrics,
@@ -58,7 +63,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       }
     };
   },
-  render(block, path: ProtocolBlockPath, metrics, position, location, options) {
+  render(block, path: ProtocolBlockPath, metrics, position, location, options, context) {
     // let label = (block.state['name'] as { value: string | null; }).value;
 
     return (
@@ -83,45 +88,53 @@ const unit = {
 
   graphRenderer,
 
-  createActiveBlockMenu(_block, _location, _options) {
+  createActiveBlockMenu(block, location, options) {
     return [
       { id: 'halt', name: 'Skip', icon: 'double_arrow' }
     ];
   },
-  createDefaultPoint(block, _key: number, getChildPoint) {
+  createDefaultPoint(block, key: number, getChildPoint) {
     return {
       child: getChildPoint(block.child),
       iteration: 0
     };
   },
-  getBlockClassLabel(_block) {
+  getBlockClassLabel(block) {
     return 'Repeat';
   },
   getBlockDefaultLabel(block) {
-    return 'Repeat ' + ({
-      1: 'once',
-      2: 'twice'
-    }[block.count] ?? `${block.count} times`);
+    if (block.count.type === 'number') {
+      return 'Repeat ' + ({
+        1: 'once',
+        2: 'twice'
+      }[block.count.value] ?? `${block.count.value} times`);
+    }
+
+    let count = formatDynamicValue(block.count);
+
+    return (
+      <>Repeat {count} times</>
+    );
   },
-  getActiveChildLocation(location, _key: number) {
+  getActiveChildLocation(location, key: number) {
     return location.child;
   },
-  getChildBlock(block, _key: never) {
+  getChildBlock(block, key: never) {
     return block.child;
   },
-  getChildrenExecutionKeys(_block, location) {
+  getChildrenExecutionKeys(block, location) {
     return [location.iteration];
   },
   getBlockLocationLabelSuffix(block, location) {
     return `(${location.iteration}/${block.count})`;
   },
-  onSelectBlockMenu(_block, _location, path) {
+  onSelectBlockMenu(block, location, path) {
     switch (path.first()) {
       case 'halt':
         return { type: 'halt' };
     }
   }
-} satisfies Unit<Block, Location>;
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
 
 
 export default unit

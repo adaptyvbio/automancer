@@ -18,7 +18,8 @@ class Executor(BaseExecutor):
     self._registration = None
 
     from .mock import MockDevice
-    self._host.devices['Mock'] = MockDevice()
+    dev = MockDevice()
+    self._host.devices[dev.id] = dev
 
   async def instruct(self, instruction):
     match instruction["type"]:

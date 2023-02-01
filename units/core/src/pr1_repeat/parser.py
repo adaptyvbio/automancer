@@ -2,55 +2,66 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Optional
 
+from pr1.fiber.expr import Evaluable
 from pr1.fiber.process import ProgramExecEvent
 from pr1.devices.claim import ClaimSymbol
 from pr1.reader import LocationArea
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockAttrs, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitState, FiberParser, Transforms
+from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, Transforms
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
 
+from . import namespace
+
 
 class RepeatParser(BaseParser):
-  namespace = "repeat"
+  namespace = namespace
   priority = 800
 
   root_attributes = dict()
   segment_attributes = {
-    'repeat': lang.Attribute(optional=True, type=lang.PrimitiveType(int))
+    'repeat': lang.Attribute(
+      lang.PotentialExprType(lang.PrimitiveType(int)),
+      decisive=True
+    )
   }
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
-    attrs = block_attrs[self.namespace]
+  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
+    if (attr := attrs.get('repeat')):
+      env = EvalEnv(readonly=True)
+      return lang.Analysis(), BlockUnitPreparationData((attr, env), envs=[env])
 
-    if 'repeat' in attrs and not isinstance(repeat_attr := attrs['repeat'], EllipsisType):
-      env = RepeatEnv()
+    return lang.Analysis(), BlockUnitPreparationData(None)
 
-      return lang.Analysis(), BlockUnitData(
-        envs=[env],
-        transforms=[RepeatTransform(repeat_attr.value, env=env, parser=self)]
-      )
-    else:
-      return lang.Analysis(), BlockUnitData()
+  def parse_block(self, attrs, /, adoption_stack, trace):
+    count, env = attrs
+    analysis, value = count.evaluate(adoption_stack)
+
+    if isinstance(value, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, BlockUnitData(
+      transforms=[RepeatTransform(value, env=env, parser=self)]
+    )
 
 @debug
 class RepeatTransform(BaseTransform):
-  def __init__(self, count: int, *, env: 'RepeatEnv', parser: RepeatParser):
+  def __init__(self, count: Evaluable, *, env: EvalEnv, parser: RepeatParser):
     self._count = count
     self._env = env
     self._parser = parser
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    block = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
+    analysis, block = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
 
     if isinstance(block, EllipsisType):
-      return lang.Analysis(), Ellipsis
+      return analysis, Ellipsis
 
-    return lang.Analysis(), RepeatBlock(block, count=self._count, env=self._env)
+    return analysis, RepeatBlock(block, count=self._count, env=self._env)
 
 
 @dataclass(kw_only=True)
@@ -163,19 +174,14 @@ class RepeatBlock:
   Point = RepeatProgramPoint
   Program = RepeatProgram
 
-  def __init__(self, block: BaseBlock, count: int, env: 'RepeatEnv'):
+  def __init__(self, block: BaseBlock, count: Evaluable, env: EvalEnv):
     self._block = block
     self._count = count
     self._env = env
 
   def export(self):
     return {
-      "namespace": "repeat",
-      "count": self._count,
+      "namespace": namespace,
+      "count": self._count.export(),
       "child": self._block.export()
     }
-
-@debug
-class RepeatEnv(EvalEnv):
-  def __init__(self):
-    pass

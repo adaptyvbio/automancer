@@ -1,14 +1,11 @@
 import functools
-from pint import Quantity
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Optional
 
-from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.langservice import Analysis, AnyType, Attribute, LiteralOrExprType, PotentialExprType, PrimitiveType, QuantityType
-from pr1.fiber.expr import PythonExpr, PythonExprAugmented, PythonExprKind, export_value
-from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState, FiberParser
+from pr1.fiber.langservice import Analysis, AnyType, Attribute, PotentialExprType, PrimitiveType, QuantityType
+from pr1.fiber.expr import Evaluable
+from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser
 from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarWritableNode
-from pr1.util import schema as sc
 from pr1.util.decorators import debug
 
 
@@ -60,41 +57,40 @@ class DevicesParser(BaseParser):
     ) for key, (node, path) in self.node_map.items() }
 
 
-  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[Analysis, BlockUnitData | EllipsisType]:
-    analysis = Analysis()
-    attrs = block_attrs[self.namespace]
-    values = dict[NodePath, PythonExprAugmented]()
+  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
+    values = dict[NodePath, Evaluable]()
 
     for attr_key, attr_value in attrs.items():
-      if isinstance(attr_value, EllipsisType):
+      if isinstance(attr_value, EllipsisType): # ?
         continue
 
-      real_value = attr_value.value
-      node, path = self.node_map[attr_key]
+      # node, path = self.node_map[attr_key]
+      values[attr_key] = attr_value
 
-      eval_analysis, eval_result = real_value.augment(adoption_envs).evaluate(adoption_stack)
-      analysis += eval_analysis
+    return Analysis(), BlockUnitPreparationData(values)
 
-      if not isinstance(eval_result, EllipsisType):
-        values[path] = eval_result.value.augment(runtime_envs)
+  def parse_block(self, attrs, /, adoption_stack, trace):
+    analysis = Analysis()
+    values = dict[NodePath, Evaluable]()
+
+    for key, value in attrs.items():
+      node, path = self.node_map[key]
+      value = analysis.add(value.evaluate(adoption_stack))
+
+      if not isinstance(value, EllipsisType):
+        values[path] = value
 
     return analysis, BlockUnitData(state=DevicesState(values))
 
 
 @debug
 class DevicesState(BlockUnitState):
-  def __init__(self, values: dict[NodePath, PythonExprAugmented]):
+  def __init__(self, values: dict[NodePath, Evaluable]):
     self.values = values
-
-  def __and__(self, other: Optional['DevicesState']):
-    return (
-      DevicesState({ key: value for key, value in self.values.items() if not (other and (key in other.values)) }),
-      other or DevicesState({})
-    )
 
   def export(self) -> object:
     return {
       "values": [
-        [path, export_value(value)] for path, value in self.values.items()
+        [path, value.export()] for path, value in self.values.items()
       ]
     }

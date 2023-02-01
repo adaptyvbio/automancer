@@ -25,7 +25,7 @@ import { BlockInspector } from '../components/block-inspector';
 import * as format from '../format';
 import { ProtocolBlockPath } from '../interfaces/protocol';
 import { StartProtocolModal } from '../components/modals/start-protocol';
-import { ChipId } from '../backends/common';
+import { Chip, ChipId } from '../backends/common';
 import { BaseUrl } from '../constants';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { ViewDrafts } from './protocols';
@@ -54,6 +54,7 @@ export interface ViewDraftState {
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
+  chipIdAwaitingRedirection: ChipId | null = null;
   compilationController: AbortController | null = null;
   compilationPromise: Promise<DraftCompilation> | null = null;
   controller = new AbortController();
@@ -124,6 +125,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     //     await this.compile({ global: true });
     //   });
     // }
+
+    if (this.chipIdAwaitingRedirection) {
+      let chip = this.props.host.state.chips[this.chipIdAwaitingRedirection] as Chip;
+
+      if (chip.master) {
+        ViewExecution.navigate(chip.id);
+      }
+    }
   }
 
   componentWillUnmount() {
@@ -290,26 +299,31 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                     });
                   }
 
-                  await backend.startDraft({
-                    chipId,
-                    draft: {
-                      id: this.props.draft.id,
-                      documents: [
-                        { id: '_',
-                          contents: this.props.draft.item.source!,
-                          owner: null,
-                          path: 'draft.yml' }
-                      ],
-                      entryDocumentId: '_'
-                    },
-                    options: {
-                      trusted: true
-                    }
-                  });
+                  this.chipIdAwaitingRedirection = chipId;
 
-                  setTimeout(() => {
-                    ViewExecution.navigate(chipId);
-                  }, 500);
+                  try {
+                    await backend.startDraft({
+                      chipId,
+                      draft: {
+                        id: this.props.draft.id,
+                        documents: [
+                          { id: '_',
+                            contents: this.props.draft.item.source!,
+                            owner: null,
+                            path: 'draft.yml' }
+                        ],
+                        entryDocumentId: '_'
+                      },
+                      options: {
+                        trusted: true
+                      }
+                    });
+                  } catch (err) {
+                    this.chipIdAwaitingRedirection = null;
+                    throw err;
+                  }
+
+                  console.clear();
                 });
               }} />
           )}

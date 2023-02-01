@@ -196,12 +196,14 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                     .map((aggregate) => aggregate.state!);
 
                   return Object.values(units).flatMap((unit) => {
-                    return UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                      aggregate.state![unit.namespace],
-                      ancestorStates.map((state) => state[unit.namespace]),
-                      location.state?.[unit.namespace].location,
-                      context
-                    ) ?? [];
+                    return (unit.namespace in aggregate.state!)
+                      ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(
+                        aggregate.state![unit.namespace],
+                        ancestorStates.map((state) => state[unit.namespace]),
+                        location.state?.[unit.namespace].location,
+                        context
+                      ) ?? []
+                      : [];
                   }).map((feature) => ({
                     ...feature,
                     disabled: (disabled || feature.disabled)

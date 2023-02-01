@@ -1,4 +1,4 @@
-import { DynamicValue, formatDynamicValue, Host, ProcessUnit, React, Unit } from 'pr1';
+import { DynamicValue, formatDynamicValue, ProcessUnit, React } from 'pr1';
 
 
 export interface ProcessData {
@@ -20,7 +20,7 @@ export default {
     );
   },
 
-  createProcessFeatures(data: ProcessData, location, context) {
+  createProcessFeatures(data, location, context) {
     switch (data.type) {
       case 'run': return [
         { description: 'Run command',

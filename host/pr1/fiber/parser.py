@@ -17,7 +17,8 @@ from ..util import schema as sc
 from ..util.decorators import debug
 
 if TYPE_CHECKING:
-  from .master2 import Master
+  from .master2 import Master, ProgramHandle
+  from .process import ProgramExecEvent
   from ..host import Host
 
 
@@ -116,29 +117,29 @@ class BlockUnitPreparationData:
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 
 class BlockProgram(Protocol):
-  def __init__(self, block: 'BaseBlock', master: 'Master', parent: 'BlockProgram | Master'):
-    self._parent: 'BlockProgram | Master'
+  def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
+    pass
 
-  @property
-  def busy(self):
-    ...
+  # @property
+  # def busy(self):
+  #   ...
 
-  def import_message(self, message: Any):
-    ...
+  # def import_message(self, message: Any):
+  #   ...
 
   def halt(self):
     ...
 
-  # def jump(self, point: Any):
+  # # def jump(self, point: Any):
+  # #   ...
+
+  # def pause(self):
   #   ...
 
-  def pause(self):
-    ...
+  # async def call_resume(self):
+  #   await self._parent.call_resume()
 
-  async def call_resume(self):
-    await self._parent.call_resume()
-
-  def run(self, child: Any, /, parent_state_program, stack: EvalStack, symbol) -> AsyncIterator[Any]:
+  async def run(self, stack: EvalStack) -> 'Optional[ProgramExecEvent]':
     ...
 
 class BaseProgramPoint(Protocol):

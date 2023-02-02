@@ -1,14 +1,15 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import traceback
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
+from ..util.misc import Exportable
 from ..state import StateInstanceCollection
 from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from ..units.base import BaseRunner
-from .parser import BlockProgram, BlockState, FiberProtocol
+from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
 from ..util.iterators import DynamicParallelIterator
@@ -60,14 +61,7 @@ class Master:
   def resume(self):
     self._program.resume()
 
-  async def run(self, initial_location = None):
-    symbol = ClaimSymbol()
-
-    self._program = self.protocol.root.Program(block=self.protocol.root, master=self, parent=self)
-
-    self._child_state_terminated = False
-    self._child_stopped = True
-
+  async def run(self):
     from random import random
 
     runtime_stack = {
@@ -78,33 +72,45 @@ class Master:
       self.protocol.user_env: dict()
     }
 
-    async for event in self._program.run(initial_location, None, runtime_stack, symbol):
-      self._errors += event.errors
 
-      # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
-      if self._child_state_terminated and (not event.state_terminated):
-        self.write_state(); print("Y: Master3")
+    # def listener(event):
+    #   self._errors += event.errors
+    #   print("Event >", event)
 
-      # Write the state if the state child program was paused and is not anymore.
-      elif self._child_stopped and (not event.stopped):
-        self.write_state(); print("Y: Master1")
+    self._handle = ProgramHandle(self, id=0)
+    self._program = self.protocol.root.Program(self.protocol.root, self._handle)
+    owner = ProgramOwner(self._handle, self._program)
 
-      # Transfer and write the state if the state child program is paused but not terminated.
-      if event.stopped and not (event.state_terminated):
-        self.transfer_state(); print("X: Master2")
-        self.write_state(); print("Y: Master2")
+    last_event = await owner.run(runtime_stack)
+    self._handle.collect()
 
-      self._child_state_terminated = event.state_terminated
-      self._child_stopped = event.stopped
+    # async for event in self._program.run(initial_location, None, runtime_stack, symbol):
+    #   self._errors += event.errors
 
-      yield event
+    #   # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
+    #   if self._child_state_terminated and (not event.state_terminated):
+    #     self.write_state(); print("Y: Master3")
 
-      if event.stopped and self._pause_future:
-        self._pause_future.set_result(True)
-        self._pause_future = None
+    #   # Write the state if the state child program was paused and is not anymore.
+    #   elif self._child_stopped and (not event.stopped):
+    #     self.write_state(); print("Y: Master1")
 
-    self.transfer_state()
-    self.write_state()
+    #   # Transfer and write the state if the state child program is paused but not terminated.
+    #   if event.stopped and not (event.state_terminated):
+    #     self.transfer_state(); print("X: Master2")
+    #     self.write_state(); print("Y: Master2")
+
+    #   self._child_state_terminated = event.state_terminated
+    #   self._child_stopped = event.stopped
+
+    #   yield event
+
+    #   if event.stopped and self._pause_future:
+    #     self._pause_future.set_result(True)
+    #     self._pause_future = None
+
+    # self.transfer_state()
+    # self.write_state()
 
   async def call_resume(self):
     self.transfer_state(); print("X: Master1")
@@ -166,3 +172,117 @@ class Master:
       "location": self._location.export(),
       "protocol": self.protocol.export()
     }
+
+
+  def _process_handle_tree(self, handle: Optional['ProgramHandle'] = None, entry: 'Optional[ProgramHandleEventEntry]' = None):
+    handle = handle or self._handle
+
+    if handle._will_update:
+      return None
+
+    entry = ProgramHandleEventEntry(
+      location=(handle._location if handle._updated else None)
+    )
+
+    for child_handle in handle._children.values():
+      child_entry = self._process_handle_tree(child_handle)
+
+      if not child_entry:
+        return None
+
+      entry.children[child_handle._id] = child_entry
+
+    return entry
+
+  def _reset_handle_tree(self, handle: Optional['ProgramHandle'] = None):
+    handle = handle or self._handle
+    handle._updated = False
+
+    for child_handle in handle._children.values():
+      self._reset_handle_tree(child_handle)
+
+  def _update(self):
+    entry = self._process_handle_tree()
+
+    if entry:
+      self._reset_handle_tree()
+      print(entry.format())
+
+
+@dataclass(kw_only=True)
+class ProgramHandleEventEntry:
+  children: 'dict[int, ProgramHandleEventEntry]' = field(default_factory=dict)
+  location: Optional[Exportable] = None
+
+  def format(self, *, prefix: str = str()):
+    output = f"{repr(self.location) if self.location else '<no change>'}\n"
+
+    for index, child in enumerate(self.children.values()):
+      last = index == (len(self.children) - 1)
+      output += prefix + ("└── " if last else "├── ") + child.format(prefix=("    " if last else "│   ")) + (str() if last else "\n")
+
+    return output
+
+
+class ProgramHandle:
+  def __init__(self, parent: 'Master | ProgramHandle', id: int):
+    self._children = dict[int, ProgramHandle]()
+    self._id = id
+    self._next_child_id = 0
+    self._location: Optional[Exportable] = None
+    self._parent = parent
+
+    self._consumed = False
+    self._will_update = True
+    self._updated: bool
+
+  @property
+  def master(self) -> Master:
+    return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
+
+  def create_child(self, child_block: BaseBlock):
+    handle = ProgramHandle(self, id=self._next_child_id)
+    program = child_block.Program(child_block, handle)
+
+    self._children[handle._id] = handle
+    self._next_child_id += 1
+
+    return ProgramOwner(handle, program)
+
+  def collect(self):
+    self.master._update()
+
+    for child_handle in list(self._children.values()):
+      if child_handle._consumed:
+        del self._children[child_handle._id]
+
+  def send(self, event: ProgramExecEvent):
+    self._location = event.location or self._location
+    self._updated = True
+    self._will_update = False
+
+    self.master._update()
+
+class ProgramOwner:
+  def __init__(self, handle: ProgramHandle, program: BlockProgram):
+    self._handle = handle
+    self._program = program
+
+  def halt(self):
+    self._program.halt()
+
+  async def run(self, stack: EvalStack):
+    self._handle._updated = False
+    self._handle._will_update = True
+
+    last_event = await self._program.run(stack)
+
+    if last_event:
+      self._handle._location = last_event.location or self._handle._location
+      self._handle._updated = True
+
+    if isinstance(self._handle._parent, ProgramHandle):
+      for child_handle in self._handle._children.values():
+        assert child_handle._consumed
+
+      self._handle._consumed = True

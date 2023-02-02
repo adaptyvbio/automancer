@@ -6,12 +6,14 @@ from typing import Any, Optional, TypedDict, cast
 
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalStack
+from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import Attrs, BaseBlock, BaseParser, BaseTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
 from pr1.fiber.process import ProgramExecEvent
 from pr1.devices.claim import ClaimSymbol
 from pr1.reader import LocationArea
 from pr1.util.decorators import debug
 from pr1.util.iterators import TriggerableIterator
+from pr1.util.misc import Exportable
 
 
 SequenceActionInfo = tuple[BlockData, LocationArea]
@@ -96,24 +98,17 @@ class SequenceTransform(BaseTransform):
 
 
 class SequenceProgramMode(IntEnum):
-  Halted = -1
-
-  Halting = 0
-  Normal = 1
+  Halted = 0
+  Halting = 1
+  Normal = 2
 
 @dataclass(kw_only=True)
-class SequenceProgramLocation:
-  child: Optional[Any] = None
-  index: int = 0
-  interrupting: bool = False
-  mode: SequenceProgramMode
+class SequenceProgramLocation(Exportable):
+  index: int
 
   def export(self):
     return {
-      "child": self.child and self.child.export(),
-      "index": self.index,
-      "interrupting": self.interrupting,
-      "mode": self.mode
+      "index": self.index
     }
 
 @dataclass(kw_only=True)
@@ -133,111 +128,92 @@ class SequenceProgramPoint:
 
 @debug
 class SequenceProgram(BlockProgram):
-  def __init__(self, block: 'SequenceBlock', master, parent):
+  def __init__(self, block: 'SequenceBlock', handle):
     self._block = block
-    self._master = master
-    self._parent = parent
+    self._block._children = [x.child for x in block._children]
+    self._handle = handle
 
     self._child_index: int
-    self._child_program: BlockProgram
-    self._child_stopped: bool
-    self._interrupting = False
-    self._iterator: TriggerableIterator[ProgramExecEvent[SequenceProgramLocation]]
-    self._mode: SequenceProgramMode
+    self._child_program: ProgramOwner
+    self._halting = False
     self._point: Optional[SequenceProgramPoint]
 
-  @property
-  def busy(self):
-    return (self._mode == SequenceProgramMode.Halting) or self._child_program.busy
+  # @property
+  # def busy(self):
+  #   return (self._mode == SequenceProgramMode.Halting) or self._child_program.busy
 
-  def get_child(self, block_key: int, exec_key: None):
-    assert block_key == self._child_index
-    return self._child_program
+  # def get_child(self, block_key: int, exec_key: None):
+  #   assert block_key == self._child_index
+  #   return self._child_program
 
-  def import_message(self, message: Any):
-    match message["type"]:
-      case "halt":
-        self.halt()
-      case "jump":
-        self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
-      case "setInterrupt":
-        self.set_interrupt(message["value"])
+  # def import_message(self, message: Any):
+  #   match message["type"]:
+  #     case "halt":
+  #       self.halt()
+  #     case "jump":
+  #       self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
+  #     case "setInterrupt":
+  #       self.set_interrupt(message["value"])
+
+  # def halt(self):
+  #   assert self._mode == SequenceProgramMode.Normal
+
+  #   self._mode = SequenceProgramMode.Halting
+  #   self._child_program.halt()
 
   def halt(self):
-    assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
+    assert not self._halting
 
-    self._mode = SequenceProgramMode.Halting
+    self._halting = True
     self._child_program.halt()
 
-  def jump(self, point: SequenceProgramPoint):
-    if point.index != self._child_index:
-      self._point = point
-      self.halt()
-    elif point.child:
-      self._child_program.jump(point.child)
+  # def jump(self, point: SequenceProgramPoint):
+  #   if point.index != self._child_index:
+  #     self._point = point
+  #     self.halt()
+  #   elif point.child:
+  #     self._child_program.jump(point.child)
 
 
-  def pause(self):
-    assert (not self.busy) and (self._mode == SequenceProgramMode.Normal)
+  # def set_interrupt(self, value: bool, /):
+  #   self._interrupting = value
+  #   self._iterator.trigger()
 
-    if not self._child_stopped:
-      self._child_program.pause()
-    else:
-      self._iterator.trigger()
 
-  def set_interrupt(self, value: bool, /):
-    self._interrupting = value
-    self._iterator.trigger()
-
-  async def run(self, initial_point: Optional[SequenceProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
-    async def run():
-      while True:
-        assert self._point
-        self._child_index = self._point.index
-
-        if self._child_index >= len(self._block._children):
-          break
-
-        child_block = self._block._children[self._child_index]
-        self._child_program = child_block.Program(child_block, self._master, self)
-        self._mode = SequenceProgramMode.Normal
-
-        point = self._point
-        self._point = None
-
-        async for event in self._child_program.run(point.child, parent_state_program, stack, ClaimSymbol(symbol)):
-          yield event
-
-        if self._point:
-          pass
-        elif self._mode == SequenceProgramMode.Halted:
-          break
-        else:
-          self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
-
+  async def run(self, stack: EvalStack):
+    initial_point = None
     self._point = initial_point or SequenceProgramPoint(child=None, index=0)
-    self._iterator = TriggerableIterator(run())
 
-    async for event in self._iterator:
-      self._child_stopped = event.stopped
+    while True:
+      assert self._point
+      self._child_index = self._point.index
 
-      if (self._mode == SequenceProgramMode.Halting) and event.stopped:
-        self._mode = SequenceProgramMode.Halted
-      # if ((self._mode == SequenceProgramMode.Paused) and (not event.stopped)) or (self._mode == SequenceProgramMode.Resuming):
-      #   self._mode = SequenceProgramMode.Normal
+      if self._child_index >= len(self._block._children):
+        break
 
-      terminated = (event.terminated and ((self._point and self._point.index >= len(self._block._children)) or (self._child_index + 1 >= len(self._block._children)) or (self._mode == SequenceProgramMode.Halted)))
+      child_block = self._block._children[self._child_index]
 
-      yield event.inherit(
-        key=self._child_index,
-        location=SequenceProgramLocation(
-          child=event.location,
-          index=self._child_index,
-          interrupting=self._interrupting,
-          mode=self._mode
-        ),
-        terminated=terminated
-      )
+      self._child_program = self._handle.create_child(child_block)
+      self._handle.send(ProgramExecEvent(location=SequenceProgramLocation(index=self._child_index)))
+
+      point = self._point
+      self._point = None
+
+      # last_event = await self._child_program.run(stack)
+      await self._child_program.run(stack)
+      next_index = self._point.index if self._point else (self._child_index + 1)
+
+      if self._halting or (next_index >= len(self._block._children)):
+        return
+
+      self._handle.collect()
+
+        # return ProgramExecEvent(
+        #   location=SequenceProgramLocation(index=self._child_index)
+        # )
+
+      # self._handle.send(last_event)
+      self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
 
 
 @debug

@@ -22,7 +22,7 @@ class BaseParser:
 
 
 class BaseRunner(Protocol):
-  Process: Type[Process]
+  Process: type[Process]
   StateInstance: Optional[Any] = None
   dependencies = set()
 

@@ -130,6 +130,9 @@ class BlockProgram(Protocol):
   def halt(self):
     ...
 
+  def receive(self, message: Any):
+    raise ValueError(f"Unknown message type '{message['type']}'")
+
   # # def jump(self, point: Any):
   # #   ...
 

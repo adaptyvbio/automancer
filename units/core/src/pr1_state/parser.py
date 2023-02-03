@@ -96,7 +96,6 @@ class StateProgramLocation:
 
   def export(self):
     return {
-      "child": self.child and self.child.export(),
       "mode": self.mode,
       "state": self.state and self.state.export()
     }
@@ -129,7 +128,6 @@ class StateProgram(BlockProgram):
     self._iterator: CoupledStateIterator3[ProgramExecEvent, StateRecord]
     # self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
-    self._state_instance: StateInstanceCollection
     self._state_location: Optional[StateLocation]
     self._state_settled_future: Optional[asyncio.Future]
 
@@ -226,6 +224,8 @@ class StateProgram(BlockProgram):
 
     await self._child_program.run(stack)
 
+    await manager.suspend(self._handle)
+    await manager.remove(self._handle)
 
   async def _run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():

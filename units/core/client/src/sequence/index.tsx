@@ -12,7 +12,7 @@ export interface BlockMetrics extends GraphRendererDefaultMetrics {
 }
 
 export interface Location {
-  child: unknown;
+  children: { 0: unknown; };
   index: number;
   interrupting: boolean;
   mode: LocationMode;
@@ -43,7 +43,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
     let vertical = options.settings.vertical;
     let verticalFlag = vertical ? 1 : 0;
 
-    let childrenMetrics = block.children.map((child, index) => options.computeMetrics(child, [...ancestors, block]));
+    let childrenMetrics = block.children.map((child, index) => options.computeMetrics(child, [...ancestors, block], location?.children[0]));
     let linksCompact: boolean[] = [];
 
     let xs = 0;
@@ -110,7 +110,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 
     let children = block.children.map((child, childIndex) => {
       let childLocation = (location?.index === childIndex)
-        ? location.child
+        ? location.children[0]
         : null;
 
       let childX = metrics.childrenX[childIndex];
@@ -177,7 +177,7 @@ function getBlockDefaultLabel(block: Block, host: Host) {
 }
 
 function getActiveChildLocation(location: Location, _key: number) {
-  return location.child;
+  return location.children[0];
 }
 
 function getChildrenExecutionKeys(_block: Block, state: Location) {

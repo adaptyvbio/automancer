@@ -201,7 +201,7 @@ class UnitStateManager(Protocol):
   def apply(self, item: StateProgramItem, items: 'dict[ProgramHandle, StateProgramItem]') -> dict[StateProgramItem, StateEvent]:
     ...
 
-  async def suspend(self, node: StateProgramItem) -> Optional[StateEvent]:
+  async def suspend(self, item: StateProgramItem) -> Optional[StateEvent]:
     ...
 
 UnitStateConsumer = type[UnitStateInstance] | UnitStateManager
@@ -238,8 +238,8 @@ class UnitStateInstanceManager(UnitStateManager):
 
     return events
 
-  async def suspend(self, node):
-    return await self._instances[node].suspend()
+  async def suspend(self, item):
+    return await self._instances[item].suspend()
 
 
 class GlobalStateManager:
@@ -247,7 +247,7 @@ class GlobalStateManager:
     self._consumers: dict[str, UnitStateManager] = { namespace: (UnitStateInstanceManager(consumer) if isinstance(consumer, type) else consumer) for namespace, consumer in consumers.items() }
     self._items = dict['ProgramHandle', StateProgramItem]()
 
-  def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent, *, notify: bool):
+  def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent, *, skip_update: bool = False):
     entry = item.location.entries[namespace]
     entry.settled = entry.settled or event.settled
 
@@ -263,12 +263,11 @@ class GlobalStateManager:
     if event.location:
       entry.location = event.location
 
-    if notify:
-      item.update(StateRecord(
-        errors=event.errors,
-        location=copy.deepcopy(item.location),
-        settled=item.settled
-      ), update=(not change))
+    item.update(StateRecord(
+      errors=event.errors,
+      location=copy.deepcopy(item.location),
+      settled=item.settled
+    ), update=((not change) and (not skip_update)))
 
   def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable):
     item = StateProgramItem(
@@ -284,7 +283,7 @@ class GlobalStateManager:
       assert value
 
       def notify(event: StateEvent):
-        self._handle_event(item, namespace, event, notify=True)
+        self._handle_event(item, namespace, event)
 
       consumer.add(item, value, notify=notify, stack=stack)
 
@@ -294,12 +293,8 @@ class GlobalStateManager:
 
     del self._items[handle]
 
-    print("\x1b[35mREMOVE\x1b[0m")
-
   def apply(self, handle: 'ProgramHandle', *, terminal: bool = False):
     from .fiber.master2 import ProgramHandle
-
-    print(f"\x1b[35mAPPLY, terminal={terminal}\x1b[0m")
 
     # origin_item = self._items[handle]
     # assert not origin_item.applied
@@ -361,13 +356,6 @@ class GlobalStateManager:
         if not item.settled:
           item.settle_future = asyncio.Future()
 
-        # if item is target_node:
-        #   target_state_record = state_record
-        # elif not terminal:
-        #   item.notify(state_record)
-
-        # print("\x1b[35mSETTLED\x1b[0m")
-
     unsettled_items = [item for item in relevant_items if not item.settled]
 
     async def func():
@@ -375,38 +363,22 @@ class GlobalStateManager:
 
     return func() if unsettled_items else None
 
-    # unsettled_nodes = [node for node in nodes if not self._items[node].settled]
+  async def suspend(self, handle: 'ProgramHandle'):
+    item = self._items[handle]
+    assert item.applied
 
-    # if terminal:
-    #   if unsettled_nodes:
-    #     return asyncio.wait([item.settle_future for node in unsettled_nodes if (item := self._items[node]).settle_future]) # type: ignore
-    #   else:
-    #     return None
-    # else:
-    #   return target_state_record
+    item.applied = False
+    item.settled = False
 
-  async def suspend(self, node: StateProgramItem):
-    assert node.applied
-    node.applied = False
+    for entry in item.location.entries.values():
+      entry.settled = False
 
-    item = self._items[node]
-    errors = list[Error]()
-
-    for namespace, consumer in self._consumers.items():
-      event = await consumer.suspend(node)
+    for index, (namespace, consumer) in enumerate(self._consumers.items()):
+      event = await consumer.suspend(item)
+      last = index == (len(self._consumers) - 1)
 
       if event:
-        errors += event.errors
-        self._handle_event(node, namespace, event, notify=False)
-
-    record = StateRecord(
-      errors=errors,
-      location=copy.deepcopy(item.location),
-      settled=False
-    )
-
-    print("\x1b[35mSUSPEND\x1b[0m")
-    return record
+        self._handle_event(item, namespace, event, skip_update=last)
 
 
 
@@ -435,7 +407,7 @@ class DemoStateInstance(UnitStateInstance):
   def apply(self, *, resume: bool):
     self._logger.debug(f'Apply, resume={resume}')
 
-    wait = True # self._index == 1
+    wait = False # self._index == 1
 
     async def task():
       # await asyncio.sleep(1)
@@ -474,8 +446,10 @@ class DemoStateInstance(UnitStateInstance):
     # self._notify(StateEvent())
 
     # await asyncio.sleep(1)
-    # self._notify(StateEvent(DemoStateLocation(), errors=[Error(f"Suspend {self._index}")]))
 
-    # await asyncio.sleep(0.6)
+    if 1:
+      self._notify(StateEvent(DemoStateLocation(9)))
+      await asyncio.sleep(0.6)
+      self._logger.debug('Suspended')
 
-    return StateEvent(DemoStateLocation(), errors=[Error(f"Suspend {self._index}")])
+    return StateEvent(DemoStateLocation(10))

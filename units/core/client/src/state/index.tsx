@@ -11,7 +11,7 @@ export interface BlockMetrics {
 }
 
 export interface Location {
-  child: unknown | null;
+  children: { 0?: unknown; };
   mode: LocationMode;
   state: Record<UnitNamespace, unknown>;
 }
@@ -33,11 +33,11 @@ export default {
 
   graphRenderer: {
     computeMetrics(block, ancestors, location, options, context) {
-      return options.computeMetrics(block.child, [...ancestors, block], location?.child ?? null);
+      return options.computeMetrics(block.child, [...ancestors, block], location?.children[0] ?? null);
     },
 
     render(block, path, metrics, position, location, options, context) {
-      return options.render(block.child, [...path, null], metrics, position, location?.child ?? null, options);
+      return options.render(block.child, [...path, null], metrics, position, location?.children[0] ?? null, options);
     }
   },
 
@@ -62,11 +62,11 @@ export default {
     return 'State';
   },
   getActiveChildLocation(location, key) {
-    return location.child;
+    return location.children[0];
   },
   getChildrenExecutionKeys(block, location) {
-    return location.child
-      ? [null]
+    return location.children[0]
+      ? [0]
       : null;
   },
   getChildBlock(block, key) {

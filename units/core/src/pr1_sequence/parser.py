@@ -130,7 +130,7 @@ class SequenceProgramPoint:
 class SequenceProgram(BlockProgram):
   def __init__(self, block: 'SequenceBlock', handle):
     self._block = block
-    self._block._children = [x.child for x in block._children]
+    # self._block._children = [x.child for x in block._children]
     self._handle = handle
 
     self._child_index: int

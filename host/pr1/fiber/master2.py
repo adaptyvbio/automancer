@@ -4,7 +4,7 @@ import traceback
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
 from ..util.misc import Exportable
-from ..state import StateInstanceCollection
+from ..state import DemoStateInstance, GlobalStateManager, StateInstanceCollection
 from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
@@ -24,6 +24,8 @@ class Master:
     self.chip = chip
     self.host = host
     self.protocol = protocol
+
+    self.state_manager = GlobalStateManager({ 'foo': DemoStateInstance })
 
     self._child_state_terminated: bool
     self._child_stopped: bool
@@ -215,11 +217,11 @@ class ProgramHandleEventEntry:
   location: Optional[Exportable] = None
 
   def format(self, *, prefix: str = str()):
-    output = f"{repr(self.location) if self.location else '<no change>'}\n"
+    output = (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>") + "\n"
 
-    for index, child in enumerate(self.children.values()):
+    for index, (child_id, child) in enumerate(self.children.items()):
       last = index == (len(self.children) - 1)
-      output += prefix + ("└── " if last else "├── ") + child.format(prefix=("    " if last else "│   ")) + (str() if last else "\n")
+      output += prefix + ("└── " if last else "├── ") + f"({child_id}) " + child.format(prefix=(prefix + ("    " if last else "│   "))) + (str() if last else "\n")
 
     return output
 
@@ -229,8 +231,10 @@ class ProgramHandle:
     self._children = dict[int, ProgramHandle]()
     self._id = id
     self._next_child_id = 0
-    self._location: Optional[Exportable] = None
     self._parent = parent
+
+    self._errors = list[MasterError]()
+    self._location: Optional[Exportable] = None
 
     self._consumed = False
     self._will_update = True
@@ -256,12 +260,14 @@ class ProgramHandle:
       if child_handle._consumed:
         del self._children[child_handle._id]
 
-  def send(self, event: ProgramExecEvent):
+  def send(self, event: ProgramExecEvent, *, update: bool = True):
+    self._errors += event.errors
     self._location = event.location or self._location
     self._updated = True
     self._will_update = False
 
-    self.master._update()
+    if update:
+      self.master._update()
 
 class ProgramOwner:
   def __init__(self, handle: ProgramHandle, program: BlockProgram):

@@ -7,14 +7,14 @@ from typing import Any, Optional, cast
 
 from pr1.devices.claim import ClaimSymbol
 from pr1.error import Error
-from pr1.fiber.master2 import StateInstanceCollection
+from pr1.fiber.master2 import ProgramHandle, ProgramOwner, StateInstanceCollection
 from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocationArea
 from pr1.state import StateLocation, StateRecord
 from pr1.util import schema as sc
 from pr1.util.decorators import debug
 from pr1.util.iterators import CoupledStateIterator3
-from pr1.fiber.langservice import Analysis
+from pr1.fiber.langservice import Analysis, Attribute, BoolType
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
                       BlockData, BlockProgram, BlockState, BlockUnitData,
@@ -27,17 +27,27 @@ from . import logger
 class StateParser(BaseParser):
   namespace = "state"
   priority = 1000
+  segment_attributes = {
+    'settle': Attribute(
+      BoolType(),
+      description="Sets whether to wait for the state to settle before entering the block."
+    )
+  }
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
   def parse_block(self, attrs, /, adoption_stack, trace):
-    return Analysis(), BlockUnitData(transforms=[StateTransform(parser=self)])
+    return Analysis(), BlockUnitData(transforms=[StateTransform(
+      parser=self,
+      settle=(attrs['settle'].value if ('settle' in attrs) else False)
+    )])
 
 @debug
 class StateTransform(BaseTransform):
-  def __init__(self, parser: StateParser):
+  def __init__(self, parser: StateParser, *, settle: bool):
     self._parser = parser
+    self._settle = settle
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     analysis, child = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
@@ -57,28 +67,30 @@ class StateTransform(BaseTransform):
 
     return analysis, StateBlock(
       child=child,
+      settle=self._settle,
       state=state
     )
 
 
 class StateProgramMode(IntEnum):
-  ApplyingState = 7
-  ApplyingStateAndWaitingForChild = 10
-  Halted = 6
-  HaltingChild = 0
-  HaltingState = 5
-  Normal = 1
-  PausingChild = 2
-  PausingState = 3
-  Paused = 4
-  ResumingState = 11
-  ResumingStateAndChild = 8
-  Starting = 12
-  WaitingForChild = 9
+  ApplyingState = 0
+
+  # ApplyingState = 7
+  # ApplyingStateAndWaitingForChild = 10
+  # Halted = 6
+  # HaltingChild = 0
+  # HaltingState = 5
+  # Normal = 1
+  # PausingChild = 2
+  # PausingState = 3
+  # Paused = 4
+  # ResumingState = 11
+  # ResumingStateAndChild = 8
+  # Starting = 12
+  # WaitingForChild = 9
 
 @dataclass(kw_only=True)
 class StateProgramLocation:
-  child: Optional[Any]
   mode: StateProgramMode
   state: Optional[Any]
 
@@ -99,22 +111,19 @@ class StateProgramPoint:
       child=(block.child.Point.import_value(data["child"], block.child, master=master) if data["child"] is not None else None)
     )
 
-counter = 0
-
 class StateProgram(BlockProgram):
   _next_index = 0
 
-  def __init__(self, block: 'StateBlock', master, parent):
+  def __init__(self, block: 'StateBlock', handle):
     self._index = self._next_index
     type(self)._next_index += 1
 
     self._logger = logger.getChild(f"stateProgram{self._index}")
 
     self._block = block
-    self._master = master
-    self._parent = parent
+    self._handle = handle
 
-    self._child_program: BlockProgram
+    self._child_program: ProgramOwner
     self._child_stopped: bool
     self._child_state_terminated: bool
     self._iterator: CoupledStateIterator3[ProgramExecEvent, StateRecord]
@@ -191,7 +200,49 @@ class StateProgram(BlockProgram):
       self._state_settled_future = asyncio.Future()
       await self._state_settled_future
 
-  async def run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
+  def _update(self, record: StateRecord, *, update: bool):
+    self._handle.send(ProgramExecEvent(
+      errors=[error.as_master() for error in record.errors],
+      location=StateProgramLocation(
+        mode=StateProgramMode.ApplyingState,
+        state=record.location
+      )
+    ), update=update)
+
+  async def run(self, stack):
+    manager = self._handle.master.state_manager
+
+    # Evaluate expressions
+    result = manager.add(self._handle, self._block.state, stack=stack, update=self._update)
+
+    if True: # self._block.settle:
+      future = manager.apply(self._handle)
+
+      if future:
+        self._handle.master._update()
+        await future
+
+      # print(result)
+
+      # result = await manager.apply_wait(self._handle)
+
+      # self._handle.send(ProgramExecEvent(
+      # ))
+
+    self._child_program = self._handle.create_child(self._block.child)
+    # self._handle.master._update()
+
+    # self._handle.send(ProgramExecEvent(
+    #   location=StateProgramLocation(
+    #     mode=StateProgramMode.ApplyingState,
+    #     state=None
+    #   )
+    # ))
+
+    await self._child_program.run(stack)
+
+
+  async def _run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
     async def run():
       await state_settled_future
 
@@ -377,8 +428,9 @@ class StateBlock(BaseBlock):
   Point: type[StateProgramPoint] = StateProgramPoint
   Program = StateProgram
 
-  def __init__(self, child: BaseBlock, state: BlockState):
+  def __init__(self, child: BaseBlock, state: BlockState, *, settle: bool):
     self.child = child
+    self.settle = settle
     self.state: BlockState = state # TODO: Remove explicit type hint
 
   def export(self):

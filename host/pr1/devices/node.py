@@ -151,7 +151,7 @@ class CollectionNode(BaseWatchableNode):
 
     for index, node in enumerate(nodes):
       last = index == (len(nodes) - 1)
-      output += prefix + ("└── " if last else "├── ") + node.format(prefix=("    " if last else "│   ")) + (str() if last else "\n")
+      output += prefix + ("└── " if last else "├── ") + node.format(prefix=(prefix + ("    " if last else "│   "))) + (str() if last else "\n")
 
     return output
 

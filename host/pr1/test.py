@@ -63,13 +63,17 @@ async def main():
 name: Test
 
 steps:
+  # wait: 1s
   actions:
-    - wait: 30 sec
+    - wait: 1 sec
+    - wait: 1 sec
+
+    # - wait: 1 sec
+
     # - wait:
     #     a: ${{ (3 + x) * ureg.sec }}
     #     c: 34 min
     #     d: nil
-  # wait: 2s
     # - wait: 1s
   # actions:
   #   - Mock.valueBool: true
@@ -93,7 +97,7 @@ steps:
 
   # print(parser.protocol.root)
 
-  return
+  # return
 
   from .fiber.master2 import Master
 
@@ -104,18 +108,25 @@ steps:
     master = Master(parser.protocol, chip=chip, host=host)
 
     # Remove the root state block
-    # parser.protocol.root = parser.protocol.root.child
+    # parser.protocol.root = parser.protocol.root.child # type: ignore
+    # parser.protocol.root._children = [block.child for block in parser.protocol.root._children]
+
+    def update_callback():
+      pass
 
     async def a():
-      async for info in master.run():
-        # continue
+      await master.run(update_callback)
+      await master.done()
 
-        # print("[Info]")
-        # print("  Raw:", info)
-        # print("  Exported:", info.location.export())
-        # print()
+      # async for info in master.run():
+      #   # continue
 
-        pass
+      #   # print("[Info]")
+      #   # print("  Raw:", info)
+      #   # print("  Exported:", info.location.export())
+      #   # print()
+
+      #   pass
 
     async def b():
       pass

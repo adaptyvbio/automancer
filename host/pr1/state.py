@@ -247,7 +247,7 @@ class GlobalStateManager:
     self._consumers: dict[str, UnitStateManager] = { namespace: (UnitStateInstanceManager(consumer) if isinstance(consumer, type) else consumer) for namespace, consumer in consumers.items() }
     self._items = dict['ProgramHandle', StateProgramItem]()
 
-  def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent, *, skip_update: bool = False):
+  def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent):
     entry = item.location.entries[namespace]
     entry.settled = entry.settled or event.settled
 
@@ -267,7 +267,7 @@ class GlobalStateManager:
       errors=event.errors,
       location=copy.deepcopy(item.location),
       settled=item.settled
-    ), update=((not change) and (not skip_update)))
+    ), update=(not change))
 
   def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable):
     item = StateProgramItem(
@@ -373,12 +373,11 @@ class GlobalStateManager:
     for entry in item.location.entries.values():
       entry.settled = False
 
-    for index, (namespace, consumer) in enumerate(self._consumers.items()):
+    for (namespace, consumer) in self._consumers.items():
       event = await consumer.suspend(item)
-      last = index == (len(self._consumers) - 1)
 
       if event:
-        self._handle_event(item, namespace, event, skip_update=last)
+        self._handle_event(item, namespace, event)
 
 
 
@@ -447,9 +446,9 @@ class DemoStateInstance(UnitStateInstance):
 
     # await asyncio.sleep(1)
 
-    if 1:
+    if 0:
       self._notify(StateEvent(DemoStateLocation(9)))
-      await asyncio.sleep(0.6)
+      await asyncio.sleep(1.0)
       self._logger.debug('Suspended')
 
     return StateEvent(DemoStateLocation(10))

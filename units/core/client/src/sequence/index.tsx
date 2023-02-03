@@ -181,7 +181,7 @@ function getActiveChildLocation(location: Location, _key: number) {
 }
 
 function getChildrenExecutionKeys(_block: Block, state: Location) {
-  return [state.index];
+  return [0];
 }
 
 function getBlockClassLabel(_block: Block) {
@@ -192,7 +192,7 @@ function createActiveBlockMenu(block: Block, location: Location, options: { host
   let busy = isBlockBusy(block, location, options);
 
   return [
-    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy },
+    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: false },
     { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
   ];
 }

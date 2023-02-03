@@ -74,6 +74,11 @@ class StateTransform(BaseTransform):
 
 class StateProgramMode(IntEnum):
   ApplyingState = 0
+  Halted = 5
+  HaltingChild = 1
+  HaltingState = 2
+  Normal = 3
+  SuspendingState = 4
 
   # ApplyingState = 7
   # ApplyingStateAndWaitingForChild = 10
@@ -123,9 +128,6 @@ class StateProgram(BlockProgram):
     self._handle = handle
 
     self._child_program: ProgramOwner
-    self._child_stopped: bool
-    self._child_state_terminated: bool
-    self._iterator: CoupledStateIterator3[ProgramExecEvent, StateRecord]
     # self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
     self._state_location: Optional[StateLocation]
@@ -137,7 +139,7 @@ class StateProgram(BlockProgram):
 
   @_mode.setter
   def _mode(self, value):
-    self._logger.debug(f"\x1b[33m[{self._index}] Mode: {self._mode.name if hasattr(self, '_mod_value') else '<none>'} → {value.name}\x1b[0m")
+    self._logger.debug(f"\x1b[33m[{self._index}] Mode: {self._mode.name if hasattr(self, '_mode_value') else '<none>'} → {value.name}\x1b[0m")
     self._mode_value = value
 
   @property
@@ -151,11 +153,7 @@ class StateProgram(BlockProgram):
       case "resume":
         self.resume()
 
-  def get_child(self, block_key: None, exec_key: None):
-    return self._child_program
-
   def halt(self):
-    assert not self.busy
     self._mode = StateProgramMode.HaltingChild
     self._child_program.halt()
 
@@ -202,7 +200,7 @@ class StateProgram(BlockProgram):
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
       location=StateProgramLocation(
-        mode=StateProgramMode.ApplyingState,
+        mode=self._mode,
         state=record.location
       )
     ), update=update)
@@ -217,195 +215,21 @@ class StateProgram(BlockProgram):
       future = manager.apply(self._handle)
 
       if future:
+        self._mode = StateProgramMode.ApplyingState
         self._handle.master.update_soon()
         await future
 
+    self._mode = StateProgramMode.Normal
     self._child_program = self._handle.create_child(self._block.child)
 
     await self._child_program.run(stack)
 
+    self._mode = StateProgramMode.SuspendingState
+
     await manager.suspend(self._handle)
     await manager.remove(self._handle)
 
-  async def _run(self, initial_point: Optional[StateProgramPoint], parent_state_program: Optional['StateProgram'], stack: EvalStack, symbol: ClaimSymbol):
-    async def run():
-      await state_settled_future
-
-      while self._point:
-        point = self._point
-        self._point = None
-
-        self._child_program = self._block.child.Program(self._block.child, master=self._master, parent=self)
-
-        async for event in self._child_program.run(point.child, self, stack, symbol):
-          yield cast(ProgramExecEvent, event)
-
-    self._child_stopped = False
-    self._child_state_terminated = False
-    self._mode = StateProgramMode.Starting
-    self._point = initial_point or StateProgramPoint(child=None)
-
-    self._iterator = CoupledStateIterator3(run())
-    self._iterator.trigger()
-
-    self._state_location = None
-    self._state_settled_future = asyncio.Future()
-    state_settled_future = self._state_settled_future
-
-    self._state_instance = self._master.create_instance(self._block.state, notify=self._iterator.notify, stack=stack, symbol=symbol)
-    self._state_instance.prepare(resume=False)
-
-    previous_event: Optional[ProgramExecEvent] = None
-
-    async def suspend_state():
-      try:
-        self._iterator.notify(await self._state_instance.suspend())
-      except Exception:
-        traceback.print_exc()
-
-    async for event, state_records in self._iterator:
-      self._logger.debug(f"\x1b[1;35m[{self._index}] Event loop iteration\x1b[22;0m")
-      self._logger.debug(f"  mode={self._mode!r}")
-      self._logger.debug(f"  event={event}")
-      self._logger.debug(f"  state_records={state_records}")
-
-      # self._state_instance._instances['devices']._logger.info("Ok")
-
-      last_event = event or previous_event
-
-      state_errors = list[Error]()
-      self._state_location = (state_records[-1].location if state_records else None) or self._state_location
-
-      for state_record in state_records:
-        state_errors += state_record.errors
-
-      if event:
-        previous_event = event
-
-        # Write the state if the state child program was terminated and is not anymore, i.e. it was replaced.
-        if (self._mode == StateProgramMode.Normal) and self._child_state_terminated and (not event.state_terminated):
-          self._master.write_state(); print("Y: State3")
-
-        # Write the state if the state child program was paused (but not this program) and is not anymore.
-        elif (self._mode == StateProgramMode.Normal) and self._child_stopped and (not event.stopped):
-          self._master.write_state(); print("Y: State1")
-
-        # Transfer and write the state if the state child program is paused (but not this program) but not terminated.
-        # This corresponds to a pause() call on the state child program, causing itself and all its ascendants to become paused.
-        if (self._mode == StateProgramMode.Normal) and event.stopped and (not self._child_stopped) and (not event.state_terminated):
-          self._master.transfer_state(); print("X: State1")
-          self._master.write_state(); print("Y: State2")
-
-        if self._mode == StateProgramMode.WaitingForChild:
-          self._mode = StateProgramMode.Normal
-
-        self._child_stopped = event.stopped
-        self._child_state_terminated = event.state_terminated
-
-        if event.terminated:
-          if self._state_instance.applied:
-            # Case (1)
-            #   The state instance emits events.
-            #   Once we receive the first event, we yield a corresponding event with child=event.location and stopped=False.
-            #   Following events will be yielded with child=None (or event.location) and stopped=False.
-            #   After the state instance terminates, we will yield a final event with child=None (or event.location) and stopped=True.
-            # Case (2)
-            #   The state instance does not emit anything and is suspended silently.
-            #   We need to yield a last event with child=event.location and stopped=True.
-
-            self._mode = StateProgramMode.HaltingState
-            asyncio.create_task(suspend_state())
-
-            # Wait for the state instance to emit an event or terminate.
-            continue
-          else:
-            # This is the last iteration of the loop. Same as case (2) above.
-            self._mode = StateProgramMode.Halted
-
-      if (self._mode in (StateProgramMode.ApplyingState, StateProgramMode.ApplyingStateAndWaitingForChild)) and self._state_instance.settled:
-        self._logger.debug("State settled")
-
-        if self._state_settled_future:
-          self._state_settled_future.set_result(None)
-          self._state_settled_future = None
-
-        if self._mode == StateProgramMode.ApplyingStateAndWaitingForChild:
-          self._mode = StateProgramMode.WaitingForChild
-          self._iterator.lock()
-
-          for state_record in state_records:
-            self._iterator.notify(state_record)
-
-          continue
-
-        self._mode = StateProgramMode.Normal
-
-      if self._mode in (StateProgramMode.ResumingState, StateProgramMode.ResumingStateAndChild, StateProgramMode.Starting):
-        apply_state_record = self._state_instance.apply(resume=(self._mode != StateProgramMode.Starting))
-        self._logger.debug(f"Applied state, settled={apply_state_record.settled}")
-
-        # If the state has been applied synchronously, skip sending the location and wait for
-        # the next event.
-        if apply_state_record.settled and (self._mode != StateProgramMode.ResumingState):
-          # Notify and lock until an event is received from the child program.
-          self._iterator.lock()
-          self._iterator.notify(apply_state_record)
-          self._mode = StateProgramMode.WaitingForChild
-
-          if self._state_settled_future:
-            self._state_settled_future.set_result(None)
-            self._state_settled_future = None
-
-          continue
-
-        # Otherwise, send the location and wait for the state to settle.
-        self._mode = StateProgramMode.ApplyingStateAndWaitingForChild if self._mode != StateProgramMode.ResumingState else StateProgramMode.ApplyingState
-        self._state_location = apply_state_record.location
-        state_errors += apply_state_record.errors
-
-      # If the child was immediately paused, then no event gets emitted.
-      if (self._mode == StateProgramMode.PausingChild) and self._child_stopped:
-        self._mode = StateProgramMode.PausingState
-        asyncio.create_task(suspend_state())
-        continue
-
-      if (self._mode == StateProgramMode.PausingState) and (not self._state_instance.applied):
-        self._mode = StateProgramMode.Paused
-
-      if (self._mode == StateProgramMode.HaltingState) and (not self._state_instance.applied):
-        self._mode = StateProgramMode.Halted
-
-      if self._mode == StateProgramMode.Halted:
-        await self._state_instance.close()
-
-      if event:
-        yield event.inherit(
-          errors=state_errors,
-          location=StateProgramLocation(
-            child=event.location,
-            mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
-            state=self._state_location
-          ),
-          state_terminated=(self._mode == StateProgramMode.Halted),
-          stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
-          terminated=(self._mode == StateProgramMode.Halted)
-        )
-      else:
-        yield ProgramExecEvent(
-          errors=[error.as_master() for error in state_errors],
-          location=StateProgramLocation(
-            child=(last_event and last_event.location),
-            mode=(StateProgramMode.HaltingState if self._mode == StateProgramMode.Halted else self._mode), # TODO: fix hack
-            state=self._state_location
-          ),
-          state_terminated=(self._mode == StateProgramMode.Halted),
-          stopped=(self._mode in (StateProgramMode.Paused, StateProgramMode.Halted)),
-          terminated=(self._mode == StateProgramMode.Halted)
-        )
-
-      if self._mode == StateProgramMode.Halted:
-        # The iterator never ends, we need to break it here.
-        break
+    self._mode = StateProgramMode.Halted
 
 
 @debug

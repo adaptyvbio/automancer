@@ -199,16 +199,13 @@ class SequenceProgram(BlockProgram):
       point = self._point
       self._point = None
 
-      # last_event = await self._child_program.run(stack)
       await self._child_program.run(stack)
       next_index = self._point.index if self._point else (self._child_index + 1)
 
       if self._halting or (next_index >= len(self._block._children)):
         return
 
-      self._handle.collect()
-
-      # self._handle.send(last_event)
+      self._handle.master.update()
       self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
 
 

@@ -215,29 +215,14 @@ class StateProgram(BlockProgram):
     # Evaluate expressions
     result = manager.add(self._handle, self._block.state, stack=stack, update=self._update)
 
-    if True: # self._block.settle:
+    if self._block.settle:
       future = manager.apply(self._handle)
 
       if future:
-        self._handle.master._update()
+        self._handle.master.update_soon()
         await future
 
-      # print(result)
-
-      # result = await manager.apply_wait(self._handle)
-
-      # self._handle.send(ProgramExecEvent(
-      # ))
-
     self._child_program = self._handle.create_child(self._block.child)
-    # self._handle.master._update()
-
-    # self._handle.send(ProgramExecEvent(
-    #   location=StateProgramLocation(
-    #     mode=StateProgramMode.ApplyingState,
-    #     state=None
-    #   )
-    # ))
 
     await self._child_program.run(stack)
 

@@ -198,7 +198,7 @@ class UnitStateManager(Protocol):
   async def remove(self, item: StateProgramItem):
     ...
 
-  def apply(self, item: StateProgramItem, items: set[StateProgramItem]) -> dict[StateProgramItem, StateEvent]:
+  def apply(self, item: StateProgramItem, items: 'dict[ProgramHandle, StateProgramItem]') -> dict[StateProgramItem, StateEvent]:
     ...
 
   async def suspend(self, node: StateProgramItem) -> Optional[StateEvent]:
@@ -220,15 +220,21 @@ class UnitStateInstanceManager(UnitStateManager):
     del self._instances[item]
 
   def apply(self, item, items):
+    from .fiber.master2 import ProgramHandle
+
     events = dict[StateProgramItem, StateEvent]()
-    current_item = item
+    current_handle = item.handle
 
-    while isinstance(current_item, StateProgramItem) and (current_item in items):
-      if current_item.applied:
-        break
+    while isinstance(current_handle, ProgramHandle):
+      current_item = items.get(current_handle)
 
-      events[current_item] = self._instances[current_item].apply(resume=item.applied)
-      current_item = current_item.handle._parent
+      if current_item:
+        if current_item.applied:
+          break
+
+        events[current_item] = self._instances[current_item].apply(resume=item.applied)
+
+      current_handle = current_handle._parent
 
     return events
 
@@ -295,9 +301,10 @@ class GlobalStateManager:
 
     print(f"\x1b[35mAPPLY, terminal={terminal}\x1b[0m")
 
-    origin_item = self._items[handle]
-    assert not origin_item.applied
+    # origin_item = self._items[handle]
+    # assert not origin_item.applied
 
+    origin_item: Optional[StateProgramItem] = None
     relevant_items = list[StateProgramItem]()
     current_handle = handle
 
@@ -306,17 +313,23 @@ class GlobalStateManager:
 
       if item:
         if not item.applied:
+          origin_item = origin_item or item
           relevant_items.append(item)
         else:
           break
 
       current_handle = current_handle._parent
 
+    if terminal:
+      if not origin_item:
+        return None
+    else:
+      assert origin_item
 
     events_by_item = { item: dict[str, StateEvent]() for item in relevant_items }
 
     for namespace, consumer in self._consumers.items():
-      for item, event in consumer.apply(origin_item, set(self._items.values())).items():
+      for item, event in consumer.apply(origin_item, self._items).items():
         events_by_item[item][namespace] = event
 
     # state_records = dict[ProgramHandle, StateRecord]()
@@ -422,7 +435,7 @@ class DemoStateInstance(UnitStateInstance):
   def apply(self, *, resume: bool):
     self._logger.debug(f'Apply, resume={resume}')
 
-    wait = True
+    wait = True # self._index == 1
 
     async def task():
       # await asyncio.sleep(1)

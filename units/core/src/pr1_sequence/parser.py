@@ -208,10 +208,6 @@ class SequenceProgram(BlockProgram):
 
       self._handle.collect()
 
-        # return ProgramExecEvent(
-        #   location=SequenceProgramLocation(index=self._child_index)
-        # )
-
       # self._handle.send(last_event)
       self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
 

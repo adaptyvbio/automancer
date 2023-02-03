@@ -58,6 +58,7 @@ class SegmentProgramMode(IntEnum):
   Starting = -1
   Terminated = -2
 
+  ApplyingState = 5
   Broken = 0
   Halting = 1
   Normal = 2
@@ -183,6 +184,23 @@ class SegmentProgram(BlockProgram):
 
     process_location: Optional[Exportable] = None
     process_pausable: bool = False
+
+    future = self._handle.master.state_manager.apply(self._handle, terminal=True)
+
+    if future:
+      self._mode = SegmentProgramMode.ApplyingState
+      self._handle.send(ProgramExecEvent(
+        location=SegmentProgramLocation(
+          error=None,
+          mode=self._mode,
+          pausable=process_pausable,
+          process=process_location,
+          time=0.0
+        )
+      ))
+
+      await future
+
 
     async def run():
       while self._point:

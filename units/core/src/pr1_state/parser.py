@@ -131,7 +131,6 @@ class StateProgram(BlockProgram):
     # self._mode: StateProgramMode
     self._point: Optional[StateProgramPoint]
     self._state_location: Optional[StateLocation]
-    self._state_settled_future: Optional[asyncio.Future]
 
   @property
   def _mode(self):
@@ -197,11 +196,13 @@ class StateProgram(BlockProgram):
       await self._state_settled_future
 
   def _update(self, record: StateRecord, *, update: bool):
+    self._state_location = record.location
+
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
       location=StateProgramLocation(
         mode=self._mode,
-        state=record.location
+        state=self._state_location
       )
     ), update=update)
 

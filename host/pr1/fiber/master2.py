@@ -94,7 +94,7 @@ class Master:
       try:
         self.update_soon()
         await self._owner.run(runtime_stack)
-        self._handle.collect()
+        self.update()
       except Exception as e:
         if self._start_future:
           self._start_future.set_exception(e)
@@ -147,11 +147,14 @@ class Master:
     }
 
 
-  def _update(self, *, partial: bool = False):
+  def update(self):
+    self._updating_soon = False
+
     errors = list[MasterError]()
+    useful = False
 
     def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry]):
-      nonlocal errors
+      nonlocal errors, useful
 
       update_entry = ProgramHandleEventEntry(
         location=(handle._location if handle._updated else None)
@@ -161,6 +164,7 @@ class Master:
         existing_entry.location = handle._location
 
       errors += handle._errors
+      useful = useful or (handle._updated and (not handle._consumed))
 
       handle._errors.clear()
       handle._updated = False
@@ -176,6 +180,9 @@ class Master:
         if child_handle._consumed:
           del handle._children[child_id]
 
+          if existing_entry:
+            del existing_entry.children[child_id]
+
       return update_entry
 
     entry = update_handle(self._handle, self._location)
@@ -185,7 +192,7 @@ class Master:
 
     self._errors += errors
 
-    if self._update_callback and (not partial):
+    if self._update_callback and useful:
       self._update_callback()
 
     if self._start_future:
@@ -193,9 +200,10 @@ class Master:
       self._start_future = None
 
     print()
-    print(f"partial={partial}")
+    print(f"useful={useful}")
     print(entry.format())
-    # print(self._location.format())
+    # print()
+    print(self._location.format())
     print(errors)
     print('---')
 
@@ -204,8 +212,8 @@ class Master:
       self._updating_soon = True
 
       def func():
-        self._update()
-        self._updating_soon = False
+        if self._updating_soon:
+          self.update()
 
       asyncio.get_event_loop().call_soon(func)
 
@@ -264,9 +272,6 @@ class ProgramHandle:
 
     return ProgramOwner(handle, handle._program)
 
-  def collect(self):
-    self.master._update(partial=True)
-
   def send(self, event: ProgramExecEvent, *, update: bool = True):
     self._errors += event.errors
     self._location = event.location or self._location
@@ -290,8 +295,7 @@ class ProgramOwner:
       self._handle._location = last_event.location or self._handle._location
       self._handle._updated = True
 
-    if isinstance(self._handle._parent, ProgramHandle):
-      for child_handle in self._handle._children.values():
-        assert child_handle._consumed
+    for child_handle in self._handle._children.values():
+      assert child_handle._consumed
 
-      self._handle._consumed = True
+    self._handle._consumed = True

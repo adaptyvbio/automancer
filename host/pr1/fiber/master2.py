@@ -1,11 +1,11 @@
 import asyncio
 from asyncio import Future, Task
 from dataclasses import dataclass, field
-import traceback
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.types import SimpleCallbackFunction
-from ..util.misc import Exportable
+from ..util.misc import Exportable, IndexCounter, UnreachableError
 from ..state import DemoStateInstance, GlobalStateManager, StateInstanceCollection
 from ..error import MasterError
 from .process import ProgramExecEvent
@@ -14,7 +14,6 @@ from ..units.base import BaseRunner
 from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
-from ..util.iterators import DynamicParallelIterator
 from ..ureg import ureg
 
 if TYPE_CHECKING:
@@ -29,6 +28,7 @@ class Master:
 
     self.state_manager = GlobalStateManager({ 'foo': DemoStateInstance })
 
+    self._entry_counter = IndexCounter(start=1)
     self._errors = list[MasterError]()
     self._events = list[ProgramExecEvent]()
     self._location: Optional[ProgramHandleEventEntry] = None
@@ -39,7 +39,6 @@ class Master:
 
     self._done_future: Optional[Future[None]] = None
     self._start_future: Optional[Future[None]] = None
-    # self._pause_future: Optional[Future] = None
 
   async def done(self):
     assert self._done_future
@@ -153,15 +152,58 @@ class Master:
     errors = list[MasterError]()
     useful = False
 
-    def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry]):
+    changes = list[TreeChange]()
+
+    def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry], entry_id: int = 0, parent_entry: Optional[ProgramHandleEventEntry] = None):
       nonlocal errors, useful
 
       update_entry = ProgramHandleEventEntry(
+        index=(existing_entry.index if existing_entry else self._entry_counter.new()),
         location=(handle._location if handle._updated else None)
       )
 
-      if existing_entry and handle._updated:
+      if not existing_entry:
+        assert handle._location
+
+        if parent_entry:
+          parent_entry.children[entry_id] = update_entry
+        else:
+          self._location = update_entry
+
+        changes.append(TreeAdditionChange(
+          block_child_id=entry_id,
+          location=handle._location,
+          parent_index=(parent_entry.index if parent_entry else 0)
+        ))
+
+      elif handle._updated:
+        assert handle._location
         existing_entry.location = handle._location
+
+        changes.append(TreeUpdateChange(
+          index=existing_entry.index,
+          location=handle._location
+        ))
+
+      for child_id, child_handle in list(handle._children.items()):
+        child_existing_entry = existing_entry and existing_entry.children.get(child_id)
+        update_entry.children[child_id] = update_handle(child_handle, child_existing_entry, child_id, existing_entry or update_entry)
+
+      if handle._consumed:
+        assert existing_entry
+        self._entry_counter.delete(existing_entry.index)
+
+        changes.append(TreeRemovalChange(
+          index=existing_entry.index
+        ))
+
+        if isinstance(parent_handle := handle._parent, ProgramHandle):
+          del parent_handle._children[entry_id]
+
+        if parent_entry:
+          del parent_entry.children[entry_id]
+        else:
+          self._location = None
 
       errors += handle._errors
       useful = useful or (handle._updated and (not handle._consumed))
@@ -169,26 +211,9 @@ class Master:
       handle._errors.clear()
       handle._updated = False
 
-      for child_id, child_handle in list(handle._children.items()):
-        child_existing_entry = existing_entry and existing_entry.children.get(child_id)
-        child_entry = update_handle(child_handle, child_existing_entry)
-        update_entry.children[child_id] = child_entry
-
-        if existing_entry and (not child_existing_entry):
-          existing_entry.children[child_id] = child_entry
-
-        if child_handle._consumed:
-          del handle._children[child_id]
-
-          if existing_entry:
-            del existing_entry.children[child_id]
-
       return update_entry
 
-    entry = update_handle(self._handle, self._location)
-
-    if not self._location:
-      self._location = entry
+    update_entry = update_handle(self._handle, self._location)
 
     self._errors += errors
 
@@ -199,11 +224,17 @@ class Master:
       self._start_future.set_result(None)
       self._start_future = None
 
+    from pprint import pprint
+    pprint(changes)
+
+    # for change in changes:
+    #   print(change.serialize())
+
     print()
     print(f"useful={useful}")
-    print(entry.format())
+    print(update_entry.format())
     # print()
-    print(self._location.format())
+    print(self._location and self._location.format())
     print(errors)
     print('---')
 
@@ -221,6 +252,7 @@ class Master:
 @dataclass(kw_only=True)
 class ProgramHandleEventEntry(Exportable):
   children: 'dict[int, ProgramHandleEventEntry]' = field(default_factory=dict)
+  index: int
   location: Optional[Exportable] = None
 
   def export(self):
@@ -237,7 +269,7 @@ class ProgramHandleEventEntry(Exportable):
     }
 
   def format(self, *, prefix: str = "\n"):
-    output = (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
+    output = f"[{self.index}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
 
     for index, (child_id, child) in enumerate(self.children.items()):
       last = index == (len(self.children) - 1)

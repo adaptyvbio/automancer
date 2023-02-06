@@ -2,6 +2,7 @@ from asyncio import Future
 import asyncio
 import hashlib
 from io import IOBase
+import itertools
 import logging
 import traceback
 from typing import Awaitable, Protocol
@@ -47,6 +48,23 @@ async def race(*awaitables: Awaitable):
   await asyncio.wait(pending)
 
   return futures.index(done_future), done_future.result()
+
+
+class IndexCounter:
+  def __init__(self, *, start: int = 0):
+    self._items = set[int]()
+    self._start = start
+
+  def new(self):
+    for index in itertools.count(start=self._start):
+      if index not in self._items:
+        self._items.add(index)
+        return index
+
+    raise UnreachableError()
+
+  def delete(self, item: int):
+    self._items.remove(item)
 
 
 if __name__ == "__main__":

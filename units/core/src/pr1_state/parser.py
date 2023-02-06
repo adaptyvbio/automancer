@@ -18,7 +18,7 @@ from pr1.fiber.langservice import Analysis, Attribute, BoolType
 from pr1.fiber.eval import EvalEnvs, EvalStack
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
                       BlockData, BlockProgram, BlockState, BlockUnitData,
-                      BlockUnitState, FiberParser, Transforms)
+                      BlockUnitState, FiberParser, HeadProgram, Transforms)
 from pr1.fiber.process import ProgramExecEvent
 
 from . import logger
@@ -73,26 +73,17 @@ class StateTransform(BaseTransform):
 
 
 class StateProgramMode(IntEnum):
-  ApplyingState = 0
-  Halted = 5
+  ApplyingState = 9
   HaltingChild = 1
   HaltingState = 2
   Normal = 3
-  SuspendingState = 4
-
-  # ApplyingState = 7
-  # ApplyingStateAndWaitingForChild = 10
-  # Halted = 6
-  # HaltingChild = 0
-  # HaltingState = 5
-  # Normal = 1
-  # PausingChild = 2
-  # PausingState = 3
-  # Paused = 4
-  # ResumingState = 11
-  # ResumingStateAndChild = 8
-  # Starting = 12
-  # WaitingForChild = 9
+  Paused = 8
+  PausingChild = 4
+  PausingState = 5
+  Resuming = 11
+  ResumingState = 10
+  SuspendingState = 6
+  Terminated = 7
 
 @dataclass(kw_only=True)
 class StateProgramLocation:
@@ -115,7 +106,7 @@ class StateProgramPoint:
       child=(block.child.Point.import_value(data["child"], block.child, master=master) if data["child"] is not None else None)
     )
 
-class StateProgram(BlockProgram):
+class StateProgram(HeadProgram):
   _next_index = 0
 
   def __init__(self, block: 'StateBlock', handle):
@@ -133,6 +124,10 @@ class StateProgram(BlockProgram):
     self._state_location: Optional[StateLocation]
 
   @property
+  def _state_manager(self):
+    return self._handle.master.state_manager
+
+  @property
   def _mode(self):
     return self._mode_value
 
@@ -145,75 +140,90 @@ class StateProgram(BlockProgram):
   def busy(self):
     return (self._mode not in (StateProgramMode.Normal, StateProgramMode.Paused)) or self._child_program.busy
 
-  def import_message(self, message: Any):
+  def receive(self, message: Any):
+    self._logger.debug(f"\x1b[33m[{self._index}] Received message: {message}\x1b[0m")
+
     match message["type"]:
-      case "pause":
-        self.pause()
-      case "resume":
-        self.resume()
+      case _:
+        super().receive(message)
 
   def halt(self):
     self._mode = StateProgramMode.HaltingChild
+    self._handle.send(ProgramExecEvent(location=self._location))
+
     self._child_program.halt()
 
-  def pause(self):
-    assert (not self.busy) and (self._mode == StateProgramMode.Normal)
+  async def pause(self, *, loose):
+    if self._mode != StateProgramMode.Normal:
+      if loose:
+        return
+
+      raise AssertionError
+
     self._mode = StateProgramMode.PausingChild
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-    if not self._child_stopped:
-      self._child_program.pause()
-    else:
-      self._iterator.trigger()
+    await self._handle.pause_children()
 
-  def resume(self):
-    assert (not self.busy) and (self._mode == StateProgramMode.Paused)
+    self._mode = StateProgramMode.PausingState
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-    self._mode = StateProgramMode.ResumingState
+    await self._state_manager.suspend(self._handle)
 
-    async def resume():
-      try:
-        await self.call_resume()
-      except Exception:
-        traceback.print_exc()
+    self._mode = StateProgramMode.Paused
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-    asyncio.create_task(resume())
+  async def resume(self, *, loose):
+    print(f"Resume: {self._mode}, {loose}")
 
-    # self._iterator.trigger()
+    if self._mode != StateProgramMode.Paused:
+      if loose:
+        return
 
-  async def call_resume(self):
-    if self._mode == StateProgramMode.Normal:
-      self._master.transfer_state(); print("X: State2")
-    else:
-      self._state_instance.prepare(resume=True)
-      await super().call_resume()
+      raise AssertionError
 
-      if self._mode != StateProgramMode.ResumingState:
-        self._mode = StateProgramMode.ResumingStateAndChild
+    self._mode = StateProgramMode.Resuming
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-      self._iterator.trigger()
+    try:
+      await self._handle.resume_parent()
+    except Exception:
+      # Set the mode back to Paused if the parent could not be resumed, e.g. because it is being paused.
+      self._mode = StateProgramMode.Paused
+      raise
 
-      self._state_settled_future = asyncio.Future()
-      await self._state_settled_future
+    if self._block.settle or (not loose):
+      future = self._state_manager.apply(self._handle, terminal=(not loose))
+
+      if future:
+        self._mode = StateProgramMode.ResumingState
+        self._handle.master.update_soon()
+        await future
+
+    self._mode = StateProgramMode.Normal
+    self._handle.send(ProgramExecEvent(location=self._location))
+
+  @property
+  def _location(self):
+    return StateProgramLocation(
+      mode=self._mode,
+      state=self._state_location
+    )
 
   def _update(self, record: StateRecord, *, update: bool):
     self._state_location = record.location
 
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
-      location=StateProgramLocation(
-        mode=self._mode,
-        state=self._state_location
-      )
+      location=self._location
     ), update=update)
 
   async def run(self, stack):
-    manager = self._handle.master.state_manager
-
     # Evaluate expressions
-    result = manager.add(self._handle, self._block.state, stack=stack, update=self._update)
+    result = self._state_manager.add(self._handle, self._block.state, stack=stack, update=self._update)
 
     if self._block.settle:
-      future = manager.apply(self._handle)
+      future = self._state_manager.apply(self._handle)
 
       if future:
         self._mode = StateProgramMode.ApplyingState
@@ -225,12 +235,14 @@ class StateProgram(BlockProgram):
 
     await self._child_program.run(stack)
 
-    self._mode = StateProgramMode.SuspendingState
+    if self._mode != StateProgramMode.Paused:
+      self._mode = StateProgramMode.SuspendingState
+      await self._state_manager.suspend(self._handle)
 
-    await manager.suspend(self._handle)
-    await manager.remove(self._handle)
+    await self._state_manager.remove(self._handle)
 
-    self._mode = StateProgramMode.Halted
+    self._mode = StateProgramMode.Terminated
+    self._handle.send(ProgramExecEvent(location=self._location))
 
 
 @debug

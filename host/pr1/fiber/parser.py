@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+import asyncio
 from collections import namedtuple
 from dataclasses import KW_ONLY, dataclass, field
 from pint import UnitRegistry
@@ -15,6 +17,7 @@ from ..draft import Draft, DraftDiagnostic, DraftGenericError
 from ..ureg import ureg
 from ..util import schema as sc
 from ..util.decorators import debug
+from ..util.asyncio import run_anonymous
 
 if TYPE_CHECKING:
   from .master2 import Master, ProgramHandle
@@ -116,7 +119,7 @@ class BlockUnitPreparationData:
 
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 
-class BlockProgram(Protocol):
+class BlockProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
     pass
 
@@ -127,11 +130,16 @@ class BlockProgram(Protocol):
   # def import_message(self, message: Any):
   #   ...
 
+  @abstractmethod
   def halt(self):
     ...
 
-  def receive(self, message: Any):
-    raise ValueError(f"Unknown message type '{message['type']}'")
+  def receive(self, message: Any) -> None:
+    match message["type"]:
+      case "halt":
+        self.halt()
+      case _:
+        raise ValueError(f"Unknown message type '{message['type']}'")
 
   # # def jump(self, point: Any):
   # #   ...
@@ -142,8 +150,27 @@ class BlockProgram(Protocol):
   # async def call_resume(self):
   #   await self._parent.call_resume()
 
+  @abstractmethod
   async def run(self, stack: EvalStack) -> 'Optional[ProgramExecEvent]':
     ...
+
+class HeadProgram(BlockProgram):
+  @abstractmethod
+  async def pause(self, *, loose: bool):
+    ...
+
+  @abstractmethod
+  async def resume(self, *, loose: bool):
+    ...
+
+  def receive(self, message):
+    match message["type"]:
+      case "pause":
+        run_anonymous(self.pause(loose=False))
+      case "resume":
+        run_anonymous(self.resume(loose=False))
+      case _:
+        super().receive(message)
 
 class BaseProgramPoint(Protocol):
   @classmethod

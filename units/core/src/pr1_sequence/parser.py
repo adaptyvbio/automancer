@@ -138,29 +138,6 @@ class SequenceProgram(BlockProgram):
     self._halting = False
     self._point: Optional[SequenceProgramPoint]
 
-  # @property
-  # def busy(self):
-  #   return (self._mode == SequenceProgramMode.Halting) or self._child_program.busy
-
-  # def get_child(self, block_key: int, exec_key: None):
-  #   assert block_key == self._child_index
-  #   return self._child_program
-
-  # def import_message(self, message: Any):
-  #   match message["type"]:
-  #     case "halt":
-  #       self.halt()
-  #     case "jump":
-  #       self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
-  #     case "setInterrupt":
-  #       self.set_interrupt(message["value"])
-
-  # def halt(self):
-  #   assert self._mode == SequenceProgramMode.Normal
-
-  #   self._mode = SequenceProgramMode.Halting
-  #   self._child_program.halt()
-
   def halt(self):
     assert not self._halting
 
@@ -207,6 +184,8 @@ class SequenceProgram(BlockProgram):
 
       self._handle.master.update()
       self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
+
+      await self._handle.resume_parent()
 
 
 @debug

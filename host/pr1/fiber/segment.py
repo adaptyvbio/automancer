@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import Future
 from dataclasses import dataclass
 from enum import IntEnum
 import time
@@ -11,7 +12,7 @@ from ..host import logger
 from ..error import Error
 from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
-from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, Transforms
+from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, HeadProgram, Transforms
 from ..devices.claim import ClaimSymbol
 from ..draft import DraftDiagnostic
 from ..reader import LocationArea
@@ -55,15 +56,16 @@ class SegmentTransform(BaseTransform):
 
 
 class SegmentProgramMode(IntEnum):
-  Starting = -1
-  Terminated = -2
-
   ApplyingState = 5
   Broken = 0
   Halting = 1
   Normal = 2
   Pausing = 3
   Paused = 4
+  ResumingParent = 8
+  ResumingProcess = 9
+  Starting = 6
+  Terminated = 7
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
@@ -103,19 +105,36 @@ class ProcessProtocolError(ProcessError):
     self.message = message
 
 
-class SegmentProgram(BlockProgram):
+class SegmentProgram(HeadProgram):
   def __init__(self, block: 'SegmentBlock', handle):
     self._block = block
     self._handle = handle
 
-    self._bypass_future: Optional[asyncio.Future]
     self._mode: SegmentProgramMode
     self._point: Optional[SegmentProgramPoint]
     self._process: Process
 
+    self._bypass_future: Optional[Future]
+    self._pause_future: Optional[Future]
+    self._resume_future: Optional[Future]
+
+  @property
+  def _location(self):
+    return SegmentProgramLocation(
+      error=None,
+      mode=self._mode,
+      pausable=self._process_pausable,
+      process=self._process_location,
+      time=self._process_time
+    )
+
   @property
   def _settled(self):
     return self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated)
+
+  @property
+  def _state_manager(self):
+    return self._handle.master.state_manager
 
   @property
   def busy(self):
@@ -140,7 +159,7 @@ class SegmentProgram(BlockProgram):
         self._mode = SegmentProgramMode.Halting
         self._process.halt()
       case _:
-        raise ValueError()
+        raise AssertionError
 
   def jump(self, point: SegmentProgramPoint):
     assert (not self.busy) and (self._mode == SegmentProgramMode.Normal)
@@ -151,53 +170,72 @@ class SegmentProgram(BlockProgram):
       self._point = point
       self.halt()
 
-  def pause(self):
-    assert self._mode == SegmentProgramMode.Normal
+  async def pause(self, *, loose):
+    if self._mode != SegmentProgramMode.Normal:
+      if loose:
+        return
+
+      raise AssertionError
 
     self._mode = SegmentProgramMode.Pausing
+    self._pause_future = Future()
     self._process.pause()
 
-  def resume(self):
-    match self._mode:
+    await self._pause_future
+
+  async def resume(self, *, loose):
+    assert self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Paused)
+    initial_mode = self._mode
+
+    self._mode = SegmentProgramMode.ResumingParent
+    self._handle.send(ProgramExecEvent(location=self._location))
+
+    try:
+      await self._handle.resume_parent()
+    except Exception:
+      self._mode = initial_mode
+      raise
+
+    future = self._state_manager.apply(self._handle, terminal=True)
+
+    if future:
+      self._mode = SegmentProgramMode.ApplyingState
+      self._handle.send(ProgramExecEvent(location=self._location))
+
+      await future
+
+    self._mode = SegmentProgramMode.ResumingProcess
+    self._handle.send(ProgramExecEvent(location=self._location))
+
+    match initial_mode:
       case SegmentProgramMode.Broken:
         assert self._bypass_future
         self._bypass_future.set_result(None)
         self._bypass_future = None
       case SegmentProgramMode.Paused:
-        async def resume():
-          try:
-            await self.call_resume()
-            self._process.resume()
-          except Exception:
-            traceback.print_exc()
-
-        asyncio.create_task(resume())
-      case _:
-        raise ValueError()
+        self._process.resume()
+        self._resume_future = Future()
+        await self._resume_future
 
   async def run(self, stack: EvalStack):
     initial_point = None
     runner = self._handle.master.chip.runners[self._block._process.namespace]
 
-    self._bypass_future = None
     self._point = initial_point or SegmentProgramPoint(process=None)
+    self._process_location: Optional[Exportable] = None
 
-    process_location: Optional[Exportable] = None
-    process_pausable: bool = False
+    self._bypass_future = None
+    self._pause_future = None
+    self._resume_future = None
 
-    future = self._handle.master.state_manager.apply(self._handle, terminal=True)
+    self._process_pausable: bool = False
+    self._process_time: float = 0.0
+
+    future = self._state_manager.apply(self._handle, terminal=True)
 
     if future:
       self._mode = SegmentProgramMode.ApplyingState
-      self._handle.send(ProgramExecEvent(
-        location=SegmentProgramLocation(
-          error=None,
-          mode=self._mode,
-          pausable=process_pausable,
-          process=process_location,
-          time=0.0
-        )
-      ))
+      self._handle.send(ProgramExecEvent(location=self._location))
 
       await future
 
@@ -228,7 +266,7 @@ class SegmentProgram(BlockProgram):
           raise event
 
         event_time = event.time
-        process_location = event.location or process_location
+        self._process_location = event.location or self._process_location
 
         if event.errors:
           event_errors += event.errors
@@ -239,13 +277,20 @@ class SegmentProgram(BlockProgram):
         match event:
           case ProcessExecEvent(pausable=pausable):
             if self._mode == SegmentProgramMode.Starting:
-              if not process_location:
+              if not self._process_location:
                 raise ProcessProtocolError(f"Process sent a {ProcessExecEvent.__name__} event with a falsy location while starting")
 
-            self._mode = SegmentProgramMode.Normal
+            if self._mode == SegmentProgramMode.ResumingProcess:
+              assert self._resume_future
+              self._resume_future.set_result(None)
+              self._resume_future = None
+
+              self._mode = SegmentProgramMode.Normal
+
+            # TODO: Check if mode is valid
 
             if pausable is not None:
-              process_pausable = pausable
+              self._process_pausable = pausable
 
           case ProcessFailureEvent(error=error):
             self._mode = SegmentProgramMode.Broken
@@ -256,6 +301,9 @@ class SegmentProgram(BlockProgram):
               raise ProcessProtocolError(f"Process sent a {ProcessPauseEvent.__name__} event not while pausing")
 
             self._mode = SegmentProgramMode.Paused
+
+            if self._pause_future:
+              self._pause_future.set_result(None)
 
           case ProcessTerminationEvent():
             self._mode = SegmentProgramMode.Terminated
@@ -291,18 +339,17 @@ class SegmentProgram(BlockProgram):
           location_error = err
 
       event_time = event_time or time.time()
+      self._process_time = event_time
 
       program_event = ProgramExecEvent(
         errors=[error.as_master(time=event_time) for error in event_errors],
         location=SegmentProgramLocation(
           error=location_error,
           mode=self._mode,
-          pausable=process_pausable,
-          process=process_location,
+          pausable=self._process_pausable,
+          process=self._process_location,
           time=event_time
-        ),
-        partial=True,
-        stopped=(self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Paused, SegmentProgramMode.Terminated))
+        )
       )
 
       if self._mode == SegmentProgramMode.Terminated:
@@ -312,7 +359,7 @@ class SegmentProgram(BlockProgram):
 
 
       # if self._mode == SegmentProgramMode.Broken:
-      #   self._bypass_future = asyncio.Future()
+      #   self._bypass_future = Future()
       #   await self._bypass_future
 
       #   # TODO: Add
@@ -322,7 +369,7 @@ class SegmentProgram(BlockProgram):
       #     location=SegmentProgramLocation(
       #       error=location_error,
       #       mode=self._mode,
-      #       pausable=process_pausable,
+      #       pausable=self._process_pausable,
       #       process=None,
       #       time=event_time
       #     ),

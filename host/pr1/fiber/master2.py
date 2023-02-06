@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import asyncio
 from asyncio import Future, Task
 from dataclasses import dataclass, field
@@ -11,7 +12,7 @@ from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from ..units.base import BaseRunner
-from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol
+from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol, HeadProgram
 from ..chip import Chip
 from ..devices.claim import ClaimSymbol
 from ..ureg import ureg
@@ -45,7 +46,7 @@ class Master:
     await self._done_future
 
   def halt(self):
-    self._program.halt()
+    self._handle._program.halt()
 
   def pause(self):
     self._program.pause()
@@ -53,13 +54,9 @@ class Master:
     # Only set the future after in case the call was illegal and is rejected by the child program.
     self._pause_future = Future()
 
-  async def wait_done(self):
-    assert self._done_future
-    await self._done_future
-
   async def wait_halt(self):
     self.halt()
-    await self.wait_done()
+    await self.done()
 
   async def wait_pause(self):
     self.pause()
@@ -109,32 +106,14 @@ class Master:
     await self._start_future
 
 
-  async def call_resume(self):
-    self.transfer_state(); print("X: Master1")
-
   def receive(self, exec_path: list[int], message: Any):
     current_handle = self._handle
 
     for exec_key in exec_path:
       current_handle = current_handle._children[exec_key]
 
-    match message["type"]:
-      case "halt":
-        current_handle._program.halt()
-      case _:
-        current_handle._program.receive(message)
+    current_handle._program.receive(message)
 
-  def create_instance(self, state: BlockState, *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
-    runners = { namespace: runner for namespace, runner in self.chip.runners.items() if state.get(namespace) }
-    return StateInstanceCollection(state, notify=notify, runners=runners, stack=stack, symbol=symbol)
-
-  def transfer_state(self):
-    for runner in self.chip.runners.values():
-      runner.transfer_state()
-
-  def write_state(self):
-    for runner in self.chip.runners.values():
-      runner.write_state()
 
   def export(self):
     assert self._location
@@ -224,8 +203,8 @@ class Master:
       self._start_future.set_result(None)
       self._start_future = None
 
-    from pprint import pprint
-    pprint(changes)
+    # from pprint import pprint
+    # pprint(changes)
 
     # for change in changes:
     #   print(change.serialize())
@@ -303,6 +282,21 @@ class ProgramHandle:
     self._children[handle._id] = handle
 
     return ProgramOwner(handle, handle._program)
+
+  async def pause_children(self):
+    for child_handle in self._children.values():
+      if isinstance(child_handle._program, HeadProgram):
+        await child_handle._program.pause(loose=True)
+      else:
+        await child_handle.pause_children()
+
+  async def resume_parent(self):
+    current_handle = self
+
+    while (current_handle := current_handle._parent) and isinstance(current_handle, ProgramHandle):
+      if isinstance(current_handle._program, HeadProgram):
+        await current_handle._program.resume(loose=True)
+        break
 
   def send(self, event: ProgramExecEvent, *, update: bool = True):
     self._errors += event.errors

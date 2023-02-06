@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import Future, Task
 from dataclasses import dataclass
 import time
 from types import EllipsisType
@@ -42,8 +43,8 @@ class Process(ProcessIntf):
     self._data = data
 
     self._progress: Optional[float] = None
-    self._resume_future: Optional[asyncio.Future] = None
-    self._task: Optional[asyncio.Task] = None
+    self._resume_future: Optional[Future] = None
+    self._task: Optional[Task] = None
 
   def halt(self):
     if self._task:
@@ -61,7 +62,7 @@ class Process(ProcessIntf):
   def pause(self):
     assert self._task
 
-    self._resume_future = asyncio.Future()
+    self._resume_future = Future()
     self._task.cancel()
 
   def resume(self):

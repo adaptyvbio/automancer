@@ -17,12 +17,17 @@ export interface Location {
 }
 
 export enum LocationMode {
-  Halted = 6,
-  Halting = 0,
-  Normal = 1,
-  PausingChild = 2,
-  PausingState = 3,
-  Paused = 4
+  ApplyingState = 9,
+  HaltingChild = 1,
+  HaltingState = 2,
+  Normal = 3,
+  Paused = 8,
+  PausingChild = 4,
+  PausingState = 5,
+  Resuming = 11,
+  ResumingState = 10,
+  SuspendingState = 6,
+  Terminated = 7
 }
 
 export type Key = null;

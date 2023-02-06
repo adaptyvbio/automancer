@@ -1,7 +1,9 @@
 import asyncio
+from asyncio import Future
 from queue import Queue
 from threading import Thread
-from typing import Any, Callable, Generic, Literal, Optional, TypeVar
+import traceback
+from typing import Any, Awaitable, Callable, Generic, Literal, Optional, TypeVar
 
 
 T = TypeVar('T')
@@ -48,3 +50,48 @@ class AsyncIteratorThread(Generic[T, S]):
       raise StopAsyncIteration
 
     return value
+
+
+class Lock:
+  def __init__(self):
+    self._counter = 0
+    self._unlock_future: Optional[Future[None]] = None
+
+  @property
+  def locked(self):
+    return self._counter > 0
+
+  def lock(self):
+    self._counter += 1
+
+  def unlock(self):
+    assert self._counter > 0
+    self._counter -= 1
+
+    if self._counter < 1:
+      if self._unlock_future:
+        self._unlock_future.set_result(None)
+        self._unlock_future = None
+
+  def __enter__(self):
+    self.lock()
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.unlock()
+
+  async def acquire(self):
+    if self.locked:
+      if not self._unlock_future:
+        self._unlock_future = Future()
+
+      await self._unlock_future
+
+
+def run_anonymous(awaitable: Awaitable, /):
+  async def func():
+    try:
+      await awaitable
+    except Exception:
+      traceback.print_exc()
+
+  return asyncio.create_task(func())

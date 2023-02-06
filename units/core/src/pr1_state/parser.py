@@ -74,7 +74,8 @@ class StateTransform(BaseTransform):
 
 class StateProgramMode(IntEnum):
   ApplyingState = 9
-  HaltingChild = 1
+  HaltingChildThenState = 12
+  HaltingChildWhilePaused = 1
   HaltingState = 2
   Normal = 3
   Paused = 8
@@ -148,7 +149,14 @@ class StateProgram(HeadProgram):
         super().receive(message)
 
   def halt(self):
-    self._mode = StateProgramMode.HaltingChild
+    match self._mode:
+      case StateProgramMode.Normal:
+        self._mode = StateProgramMode.HaltingChildThenState
+      case StateProgramMode.Paused:
+        self._mode = StateProgramMode.HaltingChildWhilePaused
+      case _:
+        raise AssertionError
+
     self._handle.send(ProgramExecEvent(location=self._location))
 
     self._child_program.halt()
@@ -174,8 +182,6 @@ class StateProgram(HeadProgram):
     self._handle.send(ProgramExecEvent(location=self._location))
 
   async def resume(self, *, loose):
-    print(f"Resume: {self._mode}, {loose}")
-
     if self._mode != StateProgramMode.Paused:
       if loose:
         return
@@ -235,7 +241,7 @@ class StateProgram(HeadProgram):
 
     await self._child_program.run(stack)
 
-    if self._mode != StateProgramMode.Paused:
+    if self._mode not in (StateProgramMode.HaltingChildWhilePaused, StateProgramMode.Paused):
       self._mode = StateProgramMode.SuspendingState
       await self._state_manager.suspend(self._handle)
 

@@ -312,12 +312,15 @@ class App:
       self.updating = True
 
       async def send_state():
-        await self.broadcast({
-          "type": "state",
-          "data": self.host.get_state_update()
-        })
+        try:
+          await self.broadcast({
+            "type": "state",
+            "data": self.host.get_state_update()
+          })
 
-        self.updating = False
+          self.updating = False
+        except Exception:
+          traceback.print_exc()
 
       loop = asyncio.get_event_loop()
       loop.create_task(send_state())

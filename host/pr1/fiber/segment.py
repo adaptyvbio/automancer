@@ -18,6 +18,7 @@ from ..draft import DraftDiagnostic
 from ..reader import LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable, UnreachableError
+from ..util.asyncio import run_anonymous
 from .master2 import Master
 
 
@@ -154,7 +155,7 @@ class SegmentProgram(HeadProgram):
   def halt(self):
     match self._mode:
       case SegmentProgramMode.Broken:
-        self.resume()
+        run_anonymous(self.resume(loose=False))
       case SegmentProgramMode.Normal | SegmentProgramMode.Paused:
         self._mode = SegmentProgramMode.Halting
         self._process.halt()
@@ -184,38 +185,39 @@ class SegmentProgram(HeadProgram):
     await self._pause_future
 
   async def resume(self, *, loose):
-    assert self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Paused)
-    initial_mode = self._mode
-
-    self._mode = SegmentProgramMode.ResumingParent
-    self._handle.send(ProgramExecEvent(location=self._location))
-
-    try:
-      await self._handle.resume_parent()
-    except Exception:
-      self._mode = initial_mode
-      raise
-
-    future = self._state_manager.apply(self._handle, terminal=True)
-
-    if future:
-      self._mode = SegmentProgramMode.ApplyingState
-      self._handle.send(ProgramExecEvent(location=self._location))
-
-      await future
-
-    self._mode = SegmentProgramMode.ResumingProcess
-    self._handle.send(ProgramExecEvent(location=self._location))
-
-    match initial_mode:
+    match self._mode:
       case SegmentProgramMode.Broken:
         assert self._bypass_future
         self._bypass_future.set_result(None)
         self._bypass_future = None
       case SegmentProgramMode.Paused:
+        initial_mode = self._mode
+
+        self._mode = SegmentProgramMode.ResumingParent
+        self._handle.send(ProgramExecEvent(location=self._location))
+
+        try:
+          await self._handle.resume_parent()
+        except Exception:
+          self._mode = initial_mode
+          raise
+
+        future = self._state_manager.apply(self._handle, terminal=True)
+
+        if future:
+          self._mode = SegmentProgramMode.ApplyingState
+          self._handle.send(ProgramExecEvent(location=self._location))
+
+          await future
+
+        self._mode = SegmentProgramMode.ResumingProcess
+        self._handle.send(ProgramExecEvent(location=self._location))
+
         self._process.resume()
         self._resume_future = Future()
         await self._resume_future
+      case _:
+        raise AssertionError
 
   async def run(self, stack: EvalStack):
     initial_point = None
@@ -318,7 +320,7 @@ class SegmentProgram(HeadProgram):
           for line in str().join(traceback.format_exception(e.exception)).splitlines():
             logger.debug(line)
 
-        # Cancel the jump request, if any
+        # Cancel the jump request, if any.
         self._point = None
 
         if self._mode == SegmentProgramMode.Terminated:
@@ -341,7 +343,7 @@ class SegmentProgram(HeadProgram):
       event_time = event_time or time.time()
       self._process_time = event_time
 
-      program_event = ProgramExecEvent(
+      self._handle.send(ProgramExecEvent(
         errors=[error.as_master(time=event_time) for error in event_errors],
         location=SegmentProgramLocation(
           error=location_error,
@@ -350,36 +352,24 @@ class SegmentProgram(HeadProgram):
           process=self._process_location,
           time=event_time
         )
-      )
+      ))
 
-      if self._mode == SegmentProgramMode.Terminated:
-        return program_event
-      else:
-        self._handle.send(program_event)
+      if self._mode == SegmentProgramMode.Broken:
+        self._bypass_future = Future()
+        await self._bypass_future
 
+        self._mode = SegmentProgramMode.Terminated
+        self._handle.send(ProgramExecEvent(
+          location=SegmentProgramLocation(
+            error=location_error,
+            mode=self._mode,
+            pausable=self._process_pausable,
+            process=None,
+            time=event_time
+          )
+        ))
 
-      # if self._mode == SegmentProgramMode.Broken:
-      #   self._bypass_future = Future()
-      #   await self._bypass_future
-
-      #   # TODO: Add
-      #   # self._mode = SegmentProgramMode.Terminated
-
-      #   yield ProgramExecEvent(
-      #     location=SegmentProgramLocation(
-      #       error=location_error,
-      #       mode=self._mode,
-      #       pausable=self._process_pausable,
-      #       process=None,
-      #       time=event_time
-      #     ),
-      #     partial=True,
-      #     stopped=True,
-      #     state_terminated=True,
-      #     terminated=True
-      #   )
-
-      #   break
+        break
 
 
 @dataclass

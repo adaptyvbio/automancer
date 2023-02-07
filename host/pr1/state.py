@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 import copy
+from asyncio import Event
 from dataclasses import KW_ONLY, dataclass, field
 import itertools
 from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
@@ -44,11 +45,11 @@ class StateLocationUnitEntry:
 
 @dataclass
 class StateLocation:
-  entries: dict[str, StateLocationUnitEntry]
+  entries: dict[str, Optional[StateLocationUnitEntry]]
 
   def export(self):
     return {
-      namespace: entry.export() for namespace, entry in self.entries.items()
+      namespace: entry and entry.export() for namespace, entry in self.entries.items()
     }
 
 @dataclass(kw_only=True)
@@ -58,22 +59,20 @@ class StateRecord:
   settled: bool
 
 
-StateInstanceNotifyCallback = Callable[[StateEvent], None]
-# StateInstanceCollectionResult = tuple[list[Error], StateLocation]
-
-
 @dataclass(kw_only=True)
 class StateProgramItem:
+  applied: bool = False
   handle: 'ProgramHandle'
   depth: int
+  location: StateLocation
   parent: 'Optional[StateProgramItem]'
 
-  applied: bool = False
-  location: StateLocation
-  settled: bool = False
-  settle_future: Optional[asyncio.Future[None]] = None
-  state: Optional[BlockState] = None
-  update: Callable
+  _settle_event: Event = field(default_factory=Event)
+  _update_program: Callable[[StateRecord], None]
+
+  @property
+  def settled(self):
+    return self._settle_event.is_set()
 
   def ancestors(self):
     current_item = self
@@ -81,12 +80,6 @@ class StateProgramItem:
     while current_item:
       yield current_item
       current_item = current_item.parent
-
-  # self < other => self is an ancestor of other
-  # def __lt__(self, other: 'StateProgramItem'):
-  #   for ancestor_item in other.ancestors():
-  #     if ancestor_item is self:
-  #       return True
 
   # self < other => self is an ancestor of other
   def __lt__(self, other: 'StateProgramItem'):
@@ -128,7 +121,7 @@ class UnitStateManager(ABC):
     ...
 
   @abstractmethod
-  def apply(self, item: StateProgramItem, items: 'dict[ProgramHandle, StateProgramItem]') -> dict[StateProgramItem, StateEvent]:
+  def apply(self, items: list[StateProgramItem]):
     ...
 
   @abstractmethod
@@ -150,24 +143,9 @@ class UnitStateInstanceManager(UnitStateManager):
     await self._instances[item].close()
     del self._instances[item]
 
-  def apply(self, item, items):
-    from .fiber.master2 import ProgramHandle
-
-    events = dict[StateProgramItem, StateEvent]()
-    current_handle = item.handle
-
-    while isinstance(current_handle, ProgramHandle):
-      current_item = items.get(current_handle)
-
-      if current_item:
-        if current_item.applied:
-          break
-
-        events[current_item] = self._instances[current_item].apply(resume=item.applied)
-
-      current_handle = current_handle._parent
-
-    return events
+  def apply(self, items):
+    for item in items:
+      self._instances[item].apply(resume=False)
 
   async def suspend(self, item):
     return await self._instances[item].suspend()
@@ -180,27 +158,30 @@ class GlobalStateManager:
 
   def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent):
     entry = item.location.entries[namespace]
-    entry.settled = entry.settled or event.settled
 
-    was_settled = item.settled
-    item.settled = all(entry.settled for entry in item.location.entries.values())
+    if entry is None:
+      assert event.location
 
-    change = (not was_settled) and item.settled
+      entry = item.location.entries[namespace] = StateLocationUnitEntry(
+        location=event.location,
+        settled=event.settled
+      )
+    else:
+      entry.settled = entry.settled or event.settled
 
-    if change and item.settle_future:
-      item.settle_future.set_result(None)
-      item.settle_future = None
+      if event.location:
+        entry.location = event.location
 
-    if event.location:
-      entry.location = event.location
+    if all(entry and entry.settled for entry in item.location.entries.values()):
+      item._settle_event.set()
 
-    item.update(StateRecord(
+    item._update_program(StateRecord(
       errors=event.errors,
       location=copy.deepcopy(item.location),
       settled=item.settled
-    ), update=(not change))
+    ))
 
-  def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable):
+  def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable[[StateRecord], None]):
     from .fiber.master2 import ProgramHandle
 
     current_handle = handle
@@ -216,9 +197,10 @@ class GlobalStateManager:
     item = StateProgramItem(
       depth=(parent_item.depth + 1 if parent_item else 0),
       handle=handle,
-      location=StateLocation(entries=dict()),
+      location=StateLocation(entries={ namespace: None for namespace in self._consumers.keys() }),
       parent=parent_item,
-      update=update
+
+      _update_program=update
     )
 
     self._items[handle] = item
@@ -238,84 +220,45 @@ class GlobalStateManager:
 
     del self._items[handle]
 
-  def apply(self, handle: 'ProgramHandle', *, terminal: bool = False):
+  async def apply(self, handle: 'ProgramHandle', *, terminal: bool = False):
     from .fiber.master2 import ProgramHandle
 
-    # origin_item = self._items[handle]
-    # assert not origin_item.applied
-
     origin_item: Optional[StateProgramItem] = None
-    relevant_items = list[StateProgramItem]()
     current_handle = handle
 
-    while isinstance(current_handle, ProgramHandle):
-      item = self._items.get(current_handle)
-
-      if item:
-        if not item.applied:
-          origin_item = origin_item or item
-          relevant_items.append(item)
-        else:
-          break
-
+    while isinstance(current_handle, ProgramHandle) and not (origin_item := self._items.get(current_handle)):
       current_handle = current_handle._parent
 
-    if terminal:
-      if not origin_item:
+    if (not origin_item) or origin_item.applied:
+      if terminal:
         return None
-    else:
-      assert origin_item
+      else:
+        raise AssertionError
 
-    events_by_item = { item: dict[str, StateEvent]() for item in relevant_items }
+    relevant_items = [ancestor_item for ancestor_item in origin_item.ancestors() if not ancestor_item.applied]
 
-    for namespace, consumer in self._consumers.items():
-      for item, event in consumer.apply(origin_item, self._items).items():
-        events_by_item[item][namespace] = event
-
-    # state_records = dict[ProgramHandle, StateRecord]()
+    for consumer in self._consumers.values():
+      consumer.apply(relevant_items)
 
     for item in relevant_items:
-      item_events = events_by_item[item]
+      item.applied = True
 
-      if not item.applied:
-        item.applied = True
+    # await wait([item._settle_event.wait() for item in relevant_items if not item.settled])
 
-        for namespace, event in item_events.items():
-          assert event.location
+    for item in relevant_items:
+      await item._settle_event.wait()
 
-          item.location.entries[namespace] = StateLocationUnitEntry(
-            location=event.location,
-            settled=event.settled
-          )
-
-        item.settled = all(entry.settled for entry in item.location.entries.values())
-
-        state_record = StateRecord(
-          errors=list(itertools.chain.from_iterable(record.errors for record in item_events.values())),
-          location=copy.deepcopy(item.location),
-          settled=item.settled
-        )
-
-        item.update(state_record, update=False)
-
-        if not item.settled:
-          item.settle_future = asyncio.Future()
-
-    unsettled_items = [item for item in relevant_items if not item.settled]
-
-    async def func():
-      await asyncio.wait([item.settle_future for item in relevant_items if item.settle_future])
-
-    return func() if unsettled_items else None
+    # TODO: Send state record here if there are no consumers
 
   async def suspend(self, handle: 'ProgramHandle'):
     item = self._items[handle]
     assert item.applied
 
     item.applied = False
-    item.settled = False
+    item._settle_event.clear()
 
     for entry in item.location.entries.values():
+      assert entry
       entry.settled = False
 
     for (namespace, consumer) in self._consumers.items():
@@ -351,7 +294,7 @@ class DemoStateInstance(UnitStateInstance):
   def apply(self, *, resume: bool):
     self._logger.debug(f'Apply, resume={resume}')
 
-    wait = False # self._index == 0 # self._index == 1
+    wait = True # self._index == 0 # self._index == 1
 
     async def task():
       # await asyncio.sleep(1)
@@ -359,9 +302,8 @@ class DemoStateInstance(UnitStateInstance):
       #   Error(f"Problem {self._index}a")
       # ]))
 
-      await asyncio.sleep(1)
-
-      self._notify(StateEvent(DemoStateLocation(2), settled=False))
+      # await asyncio.sleep(1)
+      # self._notify(StateEvent(DemoStateLocation(2), settled=False))
 
       await asyncio.sleep(1)
 
@@ -379,9 +321,9 @@ class DemoStateInstance(UnitStateInstance):
       from .util.asyncio import run_anonymous
       run_anonymous(task())
 
-    return StateEvent(DemoStateLocation(1), errors=[
-      Error(f"Apply {self._index}")
-    ], settled=(not wait))
+    self._notify(StateEvent(DemoStateLocation(1), errors=[
+      Error(f"Applyyy {self._index}")
+    ], settled=(not wait)))
 
   async def close(self):
     self._logger.debug('Close')

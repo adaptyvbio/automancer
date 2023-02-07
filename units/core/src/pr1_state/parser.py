@@ -216,33 +216,26 @@ class StateProgram(HeadProgram):
       state=self._state_location
     )
 
-  def _update(self, record: StateRecord, *, update: bool):
+  def _update(self, record: StateRecord):
     self._state_location = record.location
 
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
       location=self._location
-    ), update=update)
+    ))
 
   async def run(self, stack):
-    self._mode = StateProgramMode.ApplyingState
-
     # Evaluate expressions
     result = self._state_manager.add(self._handle, self._block.state, stack=stack, update=self._update)
 
     if self._block.settle:
-      future = self._state_manager.apply(self._handle)
-
-      if future:
-        self._mode = StateProgramMode.ApplyingState
-        self._handle.send(ProgramExecEvent(location=self._location))
-
-        await future
+      self._mode = StateProgramMode.ApplyingState
+      await self._state_manager.apply(self._handle)
 
       self._mode = StateProgramMode.Normal
       self._handle.send(ProgramExecEvent(location=self._location))
     else:
-      # The mode will be sent later on when the state is settled.
+      # The mode will be sent once the state has settled.
       self._mode = StateProgramMode.Normal
 
     self._child_program = self._handle.create_child(self._block.child)

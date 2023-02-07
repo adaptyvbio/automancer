@@ -227,13 +227,10 @@ class SegmentProgram(HeadProgram):
     self._process_pausable: bool = False
     self._process_time: float = 0.0
 
-    future = self._state_manager.apply(self._handle, terminal=True)
+    self._mode = SegmentProgramMode.ApplyingState
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-    if future:
-      self._mode = SegmentProgramMode.ApplyingState
-      self._handle.send(ProgramExecEvent(location=self._location))
-
-      await future
+    await self._state_manager.apply(self._handle, terminal=True)
 
 
     async def run():

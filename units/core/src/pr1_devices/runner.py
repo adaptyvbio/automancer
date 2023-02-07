@@ -1,25 +1,17 @@
 import asyncio
 import bisect
-import copy
 from asyncio import Event, Task
-from enum import IntEnum
-import time
 from dataclasses import KW_ONLY, dataclass, field
-import traceback
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
 from pr1.devices.claim import Claim
-from pr1.devices.node import AsyncCancelable, BaseWatchableNode, BaseWritableNode, NodePath
+from pr1.devices.node import BaseWatchableNode, BaseWritableNode, NodePath
 from pr1.error import Error
-from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import PythonExprAugmented, export_value
-from pr1.fiber.master2 import ProgramHandle
-from pr1.fiber.parser import BlockUnitState
-from pr1.fiber.process import ProgramExecEvent
+from pr1.fiber.expr import export_value
 from pr1.host import Host
-from pr1.state import StateEvent, StateInstanceNotifyCallback, StateProgramItem, UnitStateManager
-from pr1.units.base import BaseProcessRunner, BaseRunner
+from pr1.state import StateEvent, StateProgramItem, UnitStateManager
+from pr1.units.base import BaseRunner
 from pr1.util.asyncio import run_anonymous
 from pr1.util.misc import race
 
@@ -68,14 +60,6 @@ class DevicesStateItemLocation:
         [path, node_location.export()] for path, node_location in self.values.items()
       ]
     }
-
-  # claim: Optional[PerpetualClaim]
-  # label: str
-  # node: BaseWritableNode
-  # path: NodePath
-  # task: Optional[Task[None]]
-  # value: Any
-  # written: bool
 
 @dataclass
 class DevicesStateItemInfo:

@@ -1,22 +1,26 @@
 import asyncio
+import bisect
 import copy
+from asyncio import Event, Task
 from enum import IntEnum
 import time
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import KW_ONLY, dataclass, field
 import traceback
 from types import EllipsisType
 from typing import Any, Callable, Optional
 
-from pr1.devices.claim import ClaimOwner, ClaimSymbol, PerpetualClaim
-from pr1.devices.node import BaseWritableNode, NodePath
+from pr1.devices.claim import Claim
+from pr1.devices.node import AsyncCancelable, BaseWatchableNode, BaseWritableNode, NodePath
 from pr1.error import Error
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.expr import PythonExprAugmented, export_value
+from pr1.fiber.master2 import ProgramHandle
 from pr1.fiber.parser import BlockUnitState
 from pr1.fiber.process import ProgramExecEvent
 from pr1.host import Host
-from pr1.state import StateEvent, StateInstanceNotifyCallback
+from pr1.state import StateEvent, StateInstanceNotifyCallback, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseProcessRunner, BaseRunner
+from pr1.util.asyncio import run_anonymous
 from pr1.util.misc import race
 
 from . import logger, namespace
@@ -55,8 +59,8 @@ class NodeStateLocation:
     }
 
 @dataclass
-class StateLocation:
-  values: dict[NodePath, NodeStateLocation]
+class DevicesStateItemLocation:
+  values: dict[NodePath, NodeStateLocation] = field(default_factory=dict)
 
   def export(self):
     return {
@@ -65,213 +69,202 @@ class StateLocation:
       ]
     }
 
-@dataclass(kw_only=True)
-class StateInstanceNodeInfo:
-  claim: Optional[PerpetualClaim]
-  label: str
-  node: BaseWritableNode
-  path: NodePath
-  task: Optional[asyncio.Task[None]]
+  # claim: Optional[PerpetualClaim]
+  # label: str
+  # node: BaseWritableNode
+  # path: NodePath
+  # task: Optional[Task[None]]
+  # value: Any
+  # written: bool
+
+@dataclass
+class DevicesStateItemInfo:
+  item: StateProgramItem
+  location: DevicesStateItemLocation = field(default_factory=DevicesStateItemLocation, init=False)
+  nodes: set[BaseWritableNode] = field(default_factory=set, init=False)
+  notify: Callable[[StateEvent], None] = field(kw_only=True)
+
+  def __hash__(self):
+    return id(self)
+
+  def do_notify(self, manager: 'DevicesStateManager'):
+    self.notify(StateEvent(self.location, settled=self.is_settled(manager)))
+
+  def is_settled(self, manager: 'DevicesStateManager'):
+    return all(node_info.settled for node in self.nodes if (node_info := manager._node_infos[node]).current_candidate and (node_info.current_candidate.item_info is self)) # type: ignore
+
+@dataclass
+class DevicesStateNodeCandidate:
+  item_info: DevicesStateItemInfo
   value: Any
-  written: bool
 
+@dataclass(kw_only=True)
+class DevicesStateNodeInfo:
+  candidates: list[DevicesStateNodeCandidate] = field(default_factory=list)
+  claim: Optional[Claim] = None
+  current_candidate: Optional[DevicesStateNodeCandidate] = None
+  path: NodePath
+  settled: bool = False
+  task: Optional[Task] = None
+  update_event: Optional[Event] = None
 
-class StateInstance:
-  _next_index = 0
-
-  def __init__(self, state: DevicesState, runner: 'Runner', *, notify: StateInstanceNotifyCallback, stack: EvalStack, symbol: ClaimSymbol):
-    self._location: StateLocation
-    self._notify = notify
+class DevicesStateManager(UnitStateManager):
+  def __init__(self, runner: 'DevicesRunner'):
+    self._item_infos = dict[StateProgramItem, DevicesStateItemInfo]()
+    self._node_infos = dict[BaseWritableNode, DevicesStateNodeInfo]()
     self._runner = runner
-    self._stack = stack
-    self._state = state
-    self._symbol = symbol
+    self._updated_nodes = set[BaseWritableNode]()
 
-    self._eval_errors = list[Error]()
-    self._infos = dict[NodePath, StateInstanceNodeInfo]()
+  async def _node_lifecycle(self, node: BaseWritableNode, node_info: DevicesStateNodeInfo):
+    assert node_info.claim
+    assert node_info.update_event
 
-    for path, value in self._state.values.items():
-      node = self._runner._host.root_node.find(path)
+    def listener():
+      pass
+
+    reg = node.watch(listener) if isinstance(node, BaseWatchableNode) else None
+
+    try:
+      while True:
+        await node_info.claim.wait()
+        # info.current_candidate.item_info.notify(NodeStateLocation(info.current_candidate.value))
+
+        while True:
+          if node_info.current_candidate:
+            await node.write(node_info.current_candidate.value)
+
+            node_info.settled = True
+            node_info.current_candidate.item_info.do_notify(self)
+
+          race_index, _ = await race(node_info.claim.lost(), node_info.update_event.wait())
+
+          if race_index == 0:
+            # The claim was lost.
+            # node_info.current_candidate.item_info.notify(NodeStateLocation(node_info.current_candidate.value, error_unclaimable=True))
+            break
+          else:
+            # The node was updated.
+            node_info.update_event.clear()
+    except asyncio.CancelledError:
+      pass
+    finally:
+      if reg:
+        reg.cancel()
+
+      node_info.claim.destroy()
+
+  def add(self, item, state: DevicesState, *, notify, stack):
+    item_info = DevicesStateItemInfo(item, notify=notify)
+    self._item_infos[item] = item_info
+
+    for node_path, node_value in state.values.items():
+      node = self._runner._host.root_node.find(node_path)
       assert isinstance(node, BaseWritableNode)
+      item_info.nodes.add(node)
 
-      eval_analysis, eval_result = value.evaluate(self._stack)
-      self._eval_errors += eval_analysis.errors
+      analysis, value = node_value.evaluate(stack)
 
-      info = StateInstanceNodeInfo(
-        claim=None,
-        label=".".join(path),
-        node=node,
-        path=path,
-        task=None,
-        value=(eval_result.value if not isinstance(eval_result, EllipsisType) else Ellipsis),
-        written=False
-      )
+      if isinstance(value, EllipsisType):
+        raise Exception
 
-      self._infos[path] = info
+      # TODO: Handle errors
+      # print(node, analysis, value)
 
-    self._logger = logger.getChild(f"stateInstance{self._next_index}")
-    type(self)._next_index += 1
+      if node in self._node_infos:
+        node_info = self._node_infos[node]
+      else:
+        node_info = DevicesStateNodeInfo(path=node_path)
+        self._node_infos[node] = node_info
 
+      item_info.location.values[node_info.path] = NodeStateLocation(value)
+      bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value), key=(lambda candidate: candidate.item_info.item))
 
-  async def _node_lifecycle(self, info: StateInstanceNodeInfo):
-    while True:
-      assert info.claim
+    self._updated_nodes |= item_info.nodes
 
-      claim_owner = await info.claim.wait()
-      self._logger.debug(f"Claimed node '{info.label}'")
+  async def remove(self, item):
+    nodes = self._item_infos[item].nodes
 
-      self._logger.debug(f"Writing node '{info.label}' with value {repr(info.value)}")
+    for node in nodes:
+      node_info = self._node_infos[node]
+      node_info.candidates = [candidate for candidate in node_info.candidates if candidate.item_info.item is not item]
 
-      write_task = asyncio.create_task(info.node.write(info.value))
+      if node_info.current_candidate and (node_info.current_candidate.item_info.item is item):
+        node_info.current_candidate = None
 
-      try:
-        await asyncio.shield(write_task)
-      except asyncio.CancelledError:
-        await write_task
-        raise
+    self._updated_nodes |= self._item_infos[item].nodes
+    del self._item_infos[item]
 
-      if all(info.written for info in self._infos.values()):
-        self._notify(StateEvent(settled=True))
+  def apply(self, item, items):
+    events = dict[StateProgramItem, StateEvent]()
 
-      await claim_owner.lost()
-      self._logger.debug(f"Lost node '{info.label}'")
+    print()
+    print()
+    print("Apply")
 
-      self._location.values[info.path].error_unclaimable = True
-      self._notify(StateEvent(copy.deepcopy(self._location)))
+    relevant_items = { ancestor_item for ancestor_item in item.ancestors() if not ancestor_item.applied }
 
-  def prepare(self, *, resume: bool):
-    self._logger.debug("Preparing state")
+    for node in self._updated_nodes:
+      node_info = self._node_infos[node]
+      new_candidate = next((candidate for candidate in node_info.candidates[::-1] if (candidate_item := candidate.item_info.item).applied or (candidate_item in relevant_items)), None)
 
-    for info in self._infos.values():
-      info.claim = info.node.create_claim(self._symbol)
+      # print("Check", [(c.value, (candidate_item := c.item_info.item).applied or (candidate_item in relevant_items)) for c in node_info.candidates])
+      # print(">", new_candidate)
+      # print()
+      # print(">", node_info.current_candidate)
 
-  def apply(self, *, resume: bool):
-    self._logger.debug("Applying state")
-    self._location = StateLocation(values=dict())
+      if new_candidate:
+        print("Write", node, new_candidate.value)
 
-    errors = list[Error]()
+      if node_info.current_candidate is not new_candidate:
+        if node_info.current_candidate:
+          current_item_info = node_info.current_candidate.item_info
+          current_node_location = current_item_info.location.values[node_info.path]
 
-    for info in self._infos.values():
-      assert info.claim
+          current_node_location.error_disconnected = False
+          current_node_location.error_evaluation = False
+          current_node_location.error_unclaimable = False
+          current_item_info.do_notify(self)
 
-      location = NodeStateLocation(
-        info.value,
-        error_disconnected=(not info.node.connected),
-        error_evaluation=isinstance(info.value, EllipsisType),
-        error_unclaimable=(not (info.claim.owner or info.claim.owned_by_child))
-      )
+        node_info.current_candidate = new_candidate
 
-      errors += self._eval_errors # why here?
-      self._eval_errors.clear()
+      if not node_info.claim:
+        node_info.claim = node.claim()
 
-      self._location.values[info.path] = location
+      if not node_info.task:
+        node_info.task = run_anonymous(self._node_lifecycle(node, node_info))
+        node_info.update_event = Event()
 
-      if location.error_disconnected:
-        errors.append(NodeDisconnectedError(info.path))
-      if location.error_unclaimable:
-        errors.append(NodeUnclaimableError(info.path))
+    print()
+    print()
 
-      if not isinstance(info.value, EllipsisType):
-        info.task = asyncio.create_task(self._node_lifecycle(info))
+    self._updated_nodes.clear()
 
-    self._logger.debug("Applied state")
-    return StateEvent(copy.deepcopy(self._location), errors=errors)
+    for relevant_item in relevant_items:
+      relevant_item_info = self._item_infos[relevant_item]
 
-  async def close(self):
-    pass
+      # for node in relevant_item_info.nodes:
+      #   node_info = self._node_infos[node]
 
-  async def suspend(self):
-    self._logger.debug("Suspending")
+      events[relevant_item] = StateEvent(relevant_item_info.location, settled=all(node_info.settled for node_info in self._node_infos.values() if node_info.current_candidate and (node_info.current_candidate.item_info.item is relevant_item)))
 
-    for info in self._infos.values():
-      location = self._location.values[info.path]
-      location.error_disconnected = False
-      location.error_unclaimable = False
+      # node_info.update_event = Event()
 
-      if info.task:
-        info.task.cancel()
+      # node = self._runner._host.root_node.find(('Okolab', 'temperature'))
+      # assert isinstance(node, BaseWritableNode)
 
-        try:
-          await info.task
-        except asyncio.CancelledError:
-          pass
+      # events[ancestor] = StateEvent(DevicesStateItemLocation({
+      #   ('Okolab', 'temperature'): NodeStateLocation(error_disconnected=True, value={ "type": "ellipsis" })
+      # }), settled=True)
 
-      assert info.claim
-      info.claim.close()
+    return events
 
-      self._logger.debug(f"Released node '{info.label}'")
-
-    return StateEvent(copy.deepcopy(self._location))
+  async def suspend(self, item):
+    return StateEvent(DevicesStateItemLocation({}))
 
 
-class DemoStateLocation:
-  def export(self):
-    return { "foo": "bar" }
-
-class DemoStateInstance:
-  _next_index = 0
-
-  def __init__(self, state: BlockUnitState, runner: 'Runner', *, notify: Callable, stack: EvalStack, symbol: ClaimSymbol):
-    self._index = self._next_index
-    type(self)._next_index += 1
-
-    self._logger = logger.getChild(f"stateInstance{self._index}")
-    self._notify = notify
-
-  def prepare(self, *, resume: bool):
-    self._logger.debug(f'Prepare, resume={resume}')
-
-  def apply(self, *, resume: bool):
-    self._logger.debug(f'Apply, resume={resume}')
-
-    async def task():
-      await asyncio.sleep(1)
-      self._notify(StateEvent(settled=True))
-
-      # self._notify(StateEvent(DemoStateLocation(), errors=[
-      #   # Error(f"Problem {self._index}a"),
-      #   # Error(f"Problem {self._index}b")
-      # ]))
-
-    # asyncio.create_task(task())
-
-    return StateEvent(DemoStateLocation(), errors=[
-      Error(f"Hello {self._index}")
-    ], settled=True)
-
-  async def close(self):
-    self._logger.debug('Close')
-
-  async def suspend(self):
-    self._logger.debug('Suspend')
-    # self._notify(StateEvent())
-
-    # await asyncio.sleep(1)
-    # self._notify(StateEvent(DemoStateLocation(), errors=[Error(f"Suspend {self._index}")]))
-
-    # await asyncio.sleep(0.6)
-
-    return StateEvent(DemoStateLocation(), errors=[Error(f"Suspend {self._index}")])
-
-
-class Runner(BaseRunner):
-  StateInstance = DemoStateInstance
+class DevicesRunner(BaseRunner):
+  StateConsumer = DevicesStateManager
 
   def __init__(self, chip, *, host: Host):
     self._chip = chip
     self._host = host
-
-  def transfer_state(self):
-    logger.debug('Transfering claims')
-    self._host.root_node.transfer_claims()
-
-  def write_state(self):
-    logger.debug('Write state')
-
-    async def commit():
-      try:
-        await self._host.root_node.walk_commit()
-      except Exception:
-        traceback.print_exc()
-
-    asyncio.create_task(commit())

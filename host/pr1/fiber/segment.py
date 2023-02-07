@@ -141,16 +141,10 @@ class SegmentProgram(HeadProgram):
   def busy(self):
     return self._mode == SegmentProgramMode.Pausing
 
-  def import_message(self, message: dict):
-    match message["type"]:
-      case "halt":
-        self.halt()
-      case "jump":
-        self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
-      case "pause":
-        self.pause()
-      case "resume":
-        self.resume()
+  # def import_message(self, message: dict):
+  #   match message["type"]:
+  #     case "jump":
+  #       self.jump(self._block.Point.import_value(message["point"], block=self._block, master=self._master))
 
   def halt(self):
     match self._mode:
@@ -247,11 +241,15 @@ class SegmentProgram(HeadProgram):
         point = self._point
         self._mode = SegmentProgramMode.Normal
         self._point = None
-        self._process = runner.Process(self._block._process.data, runner=runner)
+
+        RunnerProcess = runner.Process
+        assert RunnerProcess
+
+        self._process = RunnerProcess(self._block._process.data, runner=runner)
 
         try:
           async for event in self._process.run(point.process, stack=stack):
-            yield cast(ProcessEvent, event) # TODO: Remove
+            yield event
         except Exception as e:
           yield ProcessInternalError(e)
 

@@ -180,8 +180,8 @@ function getActiveChildLocation(location: Location, _key: number) {
   return location.children[0];
 }
 
-function getChildrenExecutionKeys(_block: Block, state: Location) {
-  return [0];
+function getChildrenExecutionRefs(block: Block, location: Location) {
+  return [{ blockKey: location.index, executionId: 0 }];
 }
 
 function getBlockClassLabel(_block: Block) {
@@ -237,7 +237,7 @@ export default {
   getActiveChildLocation,
   getBlockDefaultLabel,
   getBlockClassLabel,
-  getChildrenExecutionKeys,
+  getChildrenExecutionRefs,
   graphRenderer,
   isBlockBusy,
   isBlockPaused,

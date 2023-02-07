@@ -30,7 +30,7 @@ export enum LocationMode {
   Terminated = 7
 }
 
-export type Key = null;
+export type Key = never;
 
 
 export default {
@@ -69,9 +69,9 @@ export default {
   getActiveChildLocation(location, key) {
     return location.children[0];
   },
-  getChildrenExecutionKeys(block, location) {
+  getChildrenExecutionRefs(block, location) {
     return location.children[0]
-      ? [0]
+      ? [{ blockKey: undefined as never, executionId: 0 }]
       : null;
   },
   getChildBlock(block, key) {

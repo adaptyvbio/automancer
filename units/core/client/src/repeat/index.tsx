@@ -122,7 +122,7 @@ const unit = {
   getChildBlock(block, key: never) {
     return block.child;
   },
-  getChildrenExecutionKeys(block, location) {
+  getChildrenExecutionRefs(block, location) {
     return [location.iteration];
   },
   getBlockLocationLabelSuffix(block, location) {

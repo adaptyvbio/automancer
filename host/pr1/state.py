@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import asyncio
 import copy
 from dataclasses import KW_ONLY, dataclass, field
@@ -6,13 +7,13 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
 
 from .devices.claim import ClaimSymbol
 from .fiber.eval import EvalStack
-from .units.base import BaseRunner
 from .fiber.parser import BlockState, BlockUnitState
 from .error import Error
 from .util.misc import Exportable
 
 if TYPE_CHECKING:
   from .fiber.master2 import ProgramHandle
+  from .units.base import BaseRunner
 
 
 @dataclass
@@ -60,147 +61,77 @@ class StateRecord:
 StateInstanceNotifyCallback = Callable[[StateEvent], None]
 # StateInstanceCollectionResult = tuple[list[Error], StateLocation]
 
-class StateInstanceCollection:
-  def __init__(self, state: BlockState, *, notify: Callable[[StateRecord], None], runners: dict[str, BaseRunner], stack: EvalStack, symbol: ClaimSymbol):
-    self._applied = False
-    self._notify = notify
-    self._runners = runners
-    self._location: StateLocation
-    self._settled_future: asyncio.Future[None]
-    self._state = state
-
-    self._instances = {
-      namespace: runner.StateInstance(
-        state[namespace],
-        runner,
-        notify=(lambda event, namespace = namespace: self._handle_event(namespace, event, notify=True)),
-        stack=stack,
-        symbol=symbol
-      ) for namespace, runner in runners.items() if runner.StateInstance
-    }
-
-  @property
-  def applied(self):
-    return self._applied
-
-  @property
-  def settled(self):
-    return all(entry.settled for entry in self._location.entries.values())
-
-  def _handle_event(self, namespace: str, event: StateEvent, *, notify: bool):
-    entry = self._location.entries[namespace]
-    entry.settled = entry.settled or event.settled
-
-    if event.location:
-      entry.location = event.location
-
-    if notify:
-      self._notify(StateRecord(
-        errors=event.errors,
-        location=copy.deepcopy(self._location),
-        settled=self.settled
-      ))
-
-  def apply(self, *, resume: bool):
-    self._applied = True
-    self._location = StateLocation({})
-    self._settled_future = asyncio.Future()
-
-    errors = list[Error]()
-
-    for namespace, instance in self._instances.items():
-      event = instance.apply(resume=resume)
-      assert event.location
-
-      errors += event.errors
-
-      self._location.entries[namespace] = StateLocationUnitEntry(
-        location=event.location,
-        settled=event.settled
-      )
-
-    return StateRecord(
-      errors=errors,
-      location=copy.deepcopy(self._location),
-      settled=self.settled
-    )
-
-  async def close(self):
-    await asyncio.gather(*[instance.close() for instance in self._instances.values()])
-
-  def prepare(self, *, resume: bool):
-    for instance in self._instances.values():
-      instance.prepare(resume=resume)
-
-  async def suspend(self):
-    assert self._applied
-
-    events = await asyncio.gather(*[instance.suspend() for instance in self._instances.values()])
-    errors = list[Error]()
-
-    for namespace, event in zip(self._instances.keys(), events):
-      if event:
-        errors += event.errors
-        self._handle_event(namespace, event, notify=False)
-
-    record = StateRecord(
-      errors=errors,
-      location=copy.deepcopy(self._location),
-      settled=self.settled
-    )
-
-    del self._location
-    del self._settled_future
-
-    self._applied = False
-
-    return record
-
-
-# class StateGraphNode(GraphNode):
-#   def __init__(self, state: Optional[BlockState], *, applied: bool = False):
-#     super().__init__()
-
-#     self.applied: bool = applied
-#     self.state = state
-
 
 @dataclass(kw_only=True)
 class StateProgramItem:
-  applied: bool = False
   handle: 'ProgramHandle'
+  depth: int
+  parent: 'Optional[StateProgramItem]'
+
+  applied: bool = False
   location: StateLocation
   settled: bool = False
   settle_future: Optional[asyncio.Future[None]] = None
   state: Optional[BlockState] = None
   update: Callable
 
+  def ancestors(self):
+    current_item = self
+
+    while current_item:
+      yield current_item
+      current_item = current_item.parent
+
+  # self < other => self is an ancestor of other
+  # def __lt__(self, other: 'StateProgramItem'):
+  #   for ancestor_item in other.ancestors():
+  #     if ancestor_item is self:
+  #       return True
+
+  # self < other => self is an ancestor of other
+  def __lt__(self, other: 'StateProgramItem'):
+    depth_diff = other.depth - self.depth
+    return (depth_diff > 0) and next(itertools.islice(other.ancestors(), depth_diff, None)) is self
+
+  def __eq__(self, other: 'StateProgramItem'):
+    return not (self < other) and not (self > other) # type: ignore
+
   def __hash__(self):
     return id(self)
 
-class UnitStateInstance(Protocol):
+class UnitStateInstance(ABC):
   def __init__(self, *, notify: Callable[[StateEvent], None], stack: EvalStack):
     ...
 
+  @abstractmethod
   def apply(self, *, resume: bool) -> StateEvent:
     ...
 
+  @abstractmethod
   async def close(self):
     ...
 
+  @abstractmethod
   async def suspend(self) -> Optional[StateEvent]:
     ...
 
-class UnitStateManager(Protocol):
+class UnitStateManager(ABC):
+  def __init__(self, runner: 'BaseRunner'):
+    ...
+
+  @abstractmethod
   def add(self, item: StateProgramItem, state: BlockUnitState, *, notify: Callable[[StateEvent], None], stack: EvalStack):
     ...
 
+  @abstractmethod
   async def remove(self, item: StateProgramItem):
     ...
 
+  @abstractmethod
   def apply(self, item: StateProgramItem, items: 'dict[ProgramHandle, StateProgramItem]') -> dict[StateProgramItem, StateEvent]:
     ...
 
+  @abstractmethod
   async def suspend(self, item: StateProgramItem) -> Optional[StateEvent]:
     ...
 
@@ -270,16 +201,30 @@ class GlobalStateManager:
     ), update=(not change))
 
   def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable):
+    from .fiber.master2 import ProgramHandle
+
+    current_handle = handle
+
+    while isinstance(parent_handle := current_handle._parent, ProgramHandle):
+      current_handle = parent_handle
+
+      if current_handle in self._items:
+        break
+
+    parent_item = (self._items[current_handle] if current_handle is not handle else None)
+
     item = StateProgramItem(
+      depth=(parent_item.depth + 1 if parent_item else 0),
       handle=handle,
       location=StateLocation(entries=dict()),
+      parent=parent_item,
       update=update
     )
 
     self._items[handle] = item
 
     for namespace, consumer in self._consumers.items():
-      value = state # [namespace]
+      value = state[namespace]
       assert value
 
       def notify(event: StateEvent):
@@ -406,7 +351,7 @@ class DemoStateInstance(UnitStateInstance):
   def apply(self, *, resume: bool):
     self._logger.debug(f'Apply, resume={resume}')
 
-    wait = False # self._index == 1
+    wait = False # self._index == 0 # self._index == 1
 
     async def task():
       # await asyncio.sleep(1)
@@ -431,7 +376,8 @@ class DemoStateInstance(UnitStateInstance):
       # ]))
 
     if wait:
-      asyncio.create_task(task())
+      from .util.asyncio import run_anonymous
+      run_anonymous(task())
 
     return StateEvent(DemoStateLocation(1), errors=[
       Error(f"Apply {self._index}")

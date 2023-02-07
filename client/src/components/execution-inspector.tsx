@@ -50,6 +50,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     let units = this.props.host.units;
 
     let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
+    setTimeout(() => void console.log(this.props.activeBlockPaths), 100);
 
     let lineBlocks = [this.props.protocol.root];
     let lineLocations = [this.props.location];
@@ -57,9 +58,13 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     for (let key of activeBlockPath) {
       let parentBlock = lineBlocks.at(-1);
       let parentLocation = lineLocations.at(-1);
+
       let unit = UnitTools.asBlockUnit(units[parentBlock.namespace])!;
+      let refs = unit.getChildrenExecutionRefs(parentBlock, parentLocation)!;
+      let ref = refs.find((ref) => ref.blockKey === key)!;
+
       let block = unit.getChildBlock(parentBlock, key);
-      let location = unit.getActiveChildLocation!(parentLocation, key);
+      let location = unit.getActiveChildLocation!(parentLocation, ref.executionId);
 
       lineBlocks.push(block);
       lineLocations.push(location);

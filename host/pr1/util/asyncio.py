@@ -87,6 +87,29 @@ class Lock:
       await self._unlock_future
 
 
+class DualEvent:
+  def __init__(self):
+    self._set_event = asyncio.Event()
+    self._unset_event = asyncio.Event()
+
+  def is_set(self):
+    return self._set_event.is_set()
+
+  def set(self):
+    self._set_event.set()
+    self._unset_event.clear()
+
+  def unset(self):
+    self._set_event.clear()
+    self._unset_event.set()
+
+  async def wait_set(self):
+    await self._set_event.wait()
+
+  async def wait_unset(self):
+    await self._unset_event.wait()
+
+
 def run_anonymous(awaitable: Awaitable, /):
   async def func():
     try:

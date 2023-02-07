@@ -1,4 +1,4 @@
-import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MasterError, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, React, SimpleFeatureList, UnitTools } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -19,11 +19,16 @@ export interface Location {
 }
 
 export enum LocationMode {
+  ApplyingState = 5,
   Broken = 0,
   Halting = 1,
   Normal = 2,
   Pausing = 3,
-  Paused = 4
+  Paused = 4,
+  ResumingParent = 8,
+  ResumingProcess = 9,
+  Starting = 6,
+  Terminated = 7
 }
 
 export type Key = never;
@@ -181,10 +186,6 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
   }
 }
 
-function getChildrenExecutionKeys(block: Block, location: Location, path: ProtocolBlockPath) {
-  return null;
-}
-
 function getBlockClassLabel(_block: Block) {
   return 'Segment';
 }
@@ -235,13 +236,20 @@ export default {
     );
   },
 
+  getChildBlock(block, key) {
+    throw new Error();
+  },
+  getChildrenExecutionRefs(block, location) {
+    return null;
+  },
+
   createActiveBlockMenu,
   createDefaultPoint,
   getBlockClassLabel,
   getBlockDefaultLabel,
   getBlockLocationLabelSuffix,
-  getChildrenExecutionKeys,
   isBlockBusy,
   isBlockPaused,
-  onSelectBlockMenu
+  onSelectBlockMenu,
+
 } satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>;

@@ -3,12 +3,10 @@ import pickle
 from collections import namedtuple
 from typing import Any, Optional, Protocol, Type
 
+from ..state import UnitStateInstance, UnitStateManager
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
-from ..fiber.process import Process
-
-# used?
-Device = namedtuple("Device", ["description", "build", "id", "name"])
+from ..fiber.process import Process as ProcessProtocol
 
 Metadata = namedtuple("Metadata", ["author", "description", "icon", "license", "title", "url", "version"], defaults=[None, None, None, None, None, None, None])
 MetadataIcon = namedtuple("MetadataIcon", ["kind", "value"])
@@ -22,9 +20,9 @@ class BaseParser:
 
 
 class BaseRunner(Protocol):
-  Process: type[Process]
-  StateInstance: Optional[Any] = None
-  dependencies = set()
+  Process: Optional[type[ProcessProtocol]] = None
+  StateConsumer: Optional[type[UnitStateInstance] | type[UnitStateManager]] = None
+  dependencies = set[str]()
 
   def __init__(self, *, chip, host):
     pass

@@ -97,13 +97,6 @@ class CollectionNode(BaseWatchableNode):
     self.nodes: dict[str, BaseNode]
     self._listening = False
 
-  def transfer_claims(self):
-    def walk(node: BaseNode):
-      if isinstance(node, Claimable):
-        node.transfer()
-
-    self.walk(walk)
-
   def walk(self, callback: Callable[[BaseNode], None], /):
     for node in self.nodes.values():
       if not isinstance(node, CollectionNode):

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter, UnreachableError
-from ..state import DemoStateInstance, GlobalStateManager, StateInstanceCollection
+from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
 from ..error import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
@@ -27,7 +27,9 @@ class Master:
     self.host = host
     self.protocol = protocol
 
-    self.state_manager = GlobalStateManager({ 'foo': DemoStateInstance })
+    self.state_manager = GlobalStateManager({
+      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else Consumer) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+    })
 
     self._entry_counter = IndexCounter(start=1)
     self._errors = list[MasterError]()
@@ -164,6 +166,9 @@ class Master:
           location=handle._location
         ))
 
+      # Collect errors here for their order to be correct.
+      errors += handle._errors
+
       for child_id, child_handle in list(handle._children.items()):
         child_existing_entry = existing_entry and existing_entry.children.get(child_id)
         update_entry.children[child_id] = update_handle(child_handle, child_existing_entry, child_id, existing_entry or update_entry)
@@ -184,7 +189,6 @@ class Master:
         else:
           self._location = None
 
-      errors += handle._errors
       useful = useful or (handle._updated and (not handle._consumed))
 
       handle._errors.clear()
@@ -213,7 +217,7 @@ class Master:
     print(f"useful={useful}")
     print(update_entry.format())
     # print()
-    print(self._location and self._location.format())
+    # print(self._location and self._location.format())
     print(errors)
     print('---')
 

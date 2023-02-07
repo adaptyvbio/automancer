@@ -7,7 +7,7 @@ from typing import Any, Optional, cast
 
 from pr1.devices.claim import ClaimSymbol
 from pr1.error import Error
-from pr1.fiber.master2 import ProgramHandle, ProgramOwner, StateInstanceCollection
+from pr1.fiber.master2 import ProgramHandle, ProgramOwner
 from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocationArea
 from pr1.state import StateLocation, StateRecord
@@ -225,6 +225,8 @@ class StateProgram(HeadProgram):
     ), update=update)
 
   async def run(self, stack):
+    self._mode = StateProgramMode.ApplyingState
+
     # Evaluate expressions
     result = self._state_manager.add(self._handle, self._block.state, stack=stack, update=self._update)
 
@@ -233,10 +235,16 @@ class StateProgram(HeadProgram):
 
       if future:
         self._mode = StateProgramMode.ApplyingState
-        self._handle.master.update_soon()
+        self._handle.send(ProgramExecEvent(location=self._location))
+
         await future
 
-    self._mode = StateProgramMode.Normal
+      self._mode = StateProgramMode.Normal
+      self._handle.send(ProgramExecEvent(location=self._location))
+    else:
+      # The mode will be sent later on when the state is settled.
+      self._mode = StateProgramMode.Normal
+
     self._child_program = self._handle.create_child(self._block.child)
 
     await self._child_program.run(stack)

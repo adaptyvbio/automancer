@@ -1,10 +1,12 @@
 from asyncio import Future, Task
+from collections import deque
 from dataclasses import dataclass, field
 from traceback import StackSummary
 from typing import TYPE_CHECKING, Any, Optional
 import asyncio
 import traceback
 
+from ..util.asyncio import run_anonymous
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter, UnreachableError
@@ -29,13 +31,15 @@ class Master:
     self.protocol = protocol
 
     self.state_manager = GlobalStateManager({
-      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else Consumer) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      # namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else Consumer) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
       # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      'foo': DemoStateInstance
     })
 
     self._entry_counter = IndexCounter(start=1)
     self._errors = list[MasterError]()
     self._events = list[ProgramExecEvent]()
+    self._handling_failure_soon = False
     self._location: Optional[ProgramHandleEventEntry] = None
     self._owner: ProgramOwner
     self._update_callback: Optional[SimpleCallbackFunction] = None
@@ -260,6 +264,47 @@ class Master:
 
       asyncio.get_event_loop().call_soon(func)
 
+  def _handle_failure_soon(self):
+    async def func():
+      self._handling_failure_soon = False
+      handles = deque([self._handle])
+
+      while handles:
+        handle = handles.popleft()
+
+        if handle._failed:
+          print('Found failed', handle._program, handle._parent)
+
+          current_handle = handle
+          unstable_program = handle._program
+
+          while True:
+            current_handle = current_handle._parent
+
+            if not isinstance(current_handle, ProgramHandle):
+              break
+
+            current_program = current_handle._program
+
+            if isinstance(current_program, HeadProgram):
+              if current_program.stable():
+                break
+
+              unstable_program = current_handle._program
+
+          assert isinstance(unstable_program, HeadProgram)
+          run_anonymous(unstable_program.pause(loose=True))
+
+          handle._failed = False
+
+          break
+
+        handles += handle._children.values()
+
+    if not self._handling_failure_soon:
+      self._handling_failure_soon = True
+      run_anonymous(func())
+
 
 @dataclass(kw_only=True)
 class ProgramHandleEventEntry(Exportable):
@@ -301,6 +346,7 @@ class ProgramHandle:
     self._location: Optional[Exportable] = None
 
     self._consumed = False
+    self._failed = False
     self._updated = False
 
   @property
@@ -322,6 +368,14 @@ class ProgramHandle:
         await child_handle._program.pause(loose=True)
       else:
         await child_handle.pause_children()
+
+  def register_failure(self):
+    self._failed = True
+    self.master._handle_failure_soon()
+    print('Registering failure', self._program)
+
+    # if isinstance(self._parent, ProgramHandle):
+    #   await self._parent.register_failure()
 
   async def resume_parent(self):
     current_handle = self
@@ -348,11 +402,7 @@ class ProgramOwner:
     self._program.halt()
 
   async def run(self, stack: EvalStack):
-    last_event = await self._program.run(stack)
-
-    if last_event:
-      self._handle._location = last_event.location or self._handle._location
-      self._handle._updated = True
+    await self._program.run(stack)
 
     for child_handle in self._handle._children.values():
       assert child_handle._consumed

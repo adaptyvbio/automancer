@@ -1,20 +1,29 @@
-from abc import ABC, abstractmethod
 import asyncio
 import copy
+import itertools
+from abc import ABC, abstractmethod
 from asyncio import Event
 from dataclasses import KW_ONLY, dataclass, field
-import itertools
 from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
 
 from .devices.claim import ClaimSymbol
+from .error import Error
 from .fiber.eval import EvalStack
 from .fiber.parser import BlockState, BlockUnitState
-from .error import Error
 from .util.misc import Exportable
 
 if TYPE_CHECKING:
   from .fiber.master2 import ProgramHandle
   from .units.base import BaseRunner
+
+
+class StateInternalError(Error):
+  def __init__(self, message: str):
+    super().__init__(message)
+
+class StateProtocolError(Error):
+  def __init__(self, message: str):
+    super().__init__(message)
 
 
 @dataclass
@@ -25,12 +34,6 @@ class StateEvent:
   failure: bool = False
   settled: bool = False
   time: Optional[float] = None
-
-
-class StateProtocolError(Error):
-  def __init__(self, message: str):
-    super().__init__(message)
-
 
 @dataclass(kw_only=True)
 class StateLocationUnitEntry:
@@ -55,6 +58,7 @@ class StateLocation:
 @dataclass(kw_only=True)
 class StateRecord:
   errors: list[Error]
+  failure: bool
   location: StateLocation
   settled: bool
 
@@ -68,8 +72,13 @@ class StateProgramItem:
   location: StateLocation
   parent: 'Optional[StateProgramItem]'
 
+  _failed: bool = False
   _settle_event: Event = field(default_factory=Event, init=False)
   _update_program: Callable[[StateRecord], None]
+
+  def __post_init__(self):
+    if not self.location.entries:
+      self._settle_event.set()
 
   @property
   def settled(self):
@@ -95,6 +104,14 @@ class StateProgramItem:
 
   def __hash__(self):
     return id(self)
+
+  def _update(self, *, errors: Optional[list[Error]], failure: bool = False):
+    self._update_program(StateRecord(
+      errors=(errors or list()),
+      failure=failure,
+      location=copy.deepcopy(self.location),
+      settled=self.settled
+    ))
 
 class UnitStateInstance(ABC):
   def __init__(self, *, notify: Callable[[StateEvent], None], stack: EvalStack):
@@ -151,9 +168,15 @@ class UnitStateInstanceManager(UnitStateManager):
     await self._instances[item].close()
     del self._instances[item]
 
-  def apply(self, items):
+  async def apply(self, items):
     for item in items:
-      self._instances[item].apply(resume=False)
+      try:
+        self._instances[item].apply(resume=False)
+      except Exception as e:
+        item._update(
+          errors=[StateInternalError(f"State consumer internal error: {e}")],
+          failure=True
+        )
 
   async def clear(self, item):
     pass
@@ -188,11 +211,12 @@ class GlobalStateManager:
     else:
       item._settle_event.clear()
 
-    item._update_program(StateRecord(
+    item._failed = item._failed or event.failure
+
+    item._update(
       errors=event.errors,
-      location=copy.deepcopy(item.location),
-      settled=item.settled
-    ))
+      failure=event.failure
+    )
 
   def add(self, handle: 'ProgramHandle', state: BlockState, *, stack: EvalStack, update: Callable[[StateRecord], None]):
     from .fiber.master2 import ProgramHandle
@@ -222,7 +246,7 @@ class GlobalStateManager:
     self._items[handle] = item
 
     for namespace, consumer in self._consumers.items():
-      value = state[namespace]
+      value = state # [namespace]
       assert value
 
       def notify(event: StateEvent):
@@ -250,26 +274,44 @@ class GlobalStateManager:
     while isinstance(current_handle, ProgramHandle) and not (origin_item := self._items.get(current_handle)):
       current_handle = current_handle._parent
 
-    if (not origin_item) or origin_item.applied:
-      if terminal:
-        return None
-      else:
-        raise AssertionError
+    assert origin_item
 
+    failed = False
     relevant_items = [ancestor_item for ancestor_item in origin_item.ancestors() if not ancestor_item.applied]
 
-    for consumer in self._consumers.values():
-      await consumer.apply(relevant_items)
+    for item in relevant_items:
+      item._failed = False
+
+    for namespace, consumer in self._consumers.items():
+      try:
+        await consumer.apply(relevant_items)
+      except Exception as e:
+        failed = True
+
+        item = relevant_items[0]
+        item._update(
+          errors=[StateInternalError(f"State consumer '{namespace}' internal error: {e}")],
+          failure=True
+        )
 
     for item in relevant_items:
       item.applied = True
 
-    # await wait([item._settle_event.wait() for item in relevant_items if not item.settled])
+    for item in relevant_items:
+      errors = list[Error]()
+
+      for namespace in self._consumers.keys():
+        entry = item.location.entries[namespace]
+
+        if not entry:
+          errors.append(StateProtocolError(f"State consumer '{namespace}' did not provide a location synchronously"))
+
+      item._update(errors=errors)
 
     for item in origin_item.ancestors():
       await item._settle_event.wait()
 
-    # TODO: Send state record here if there are no consumers
+    return failed or any(item._failed for item in origin_item.ancestors())
 
   async def clear(self, handle: Optional['ProgramHandle'] = None):
     for consumer in self._consumers.values():
@@ -308,18 +350,17 @@ class DemoStateInstance(UnitStateInstance):
     self._index = self._next_index
     type(self)._next_index += 1
 
+    self._flag = 0
+
     from .host import logger
     self._logger = logger.getChild(f"stateInstance{self._index}")
     self._logger.debug("Created")
     self._notify = notify
 
-  def prepare(self, *, resume: bool):
-    self._logger.debug(f'Prepare, resume={resume}')
-
   def apply(self, *, resume: bool):
     self._logger.debug(f'Apply, resume={resume}')
 
-    wait = True # self._index == 0 # self._index == 1
+    wait = 0 # self._index == 0 # self._index == 1
 
     async def task():
       # await asyncio.sleep(1)
@@ -333,9 +374,10 @@ class DemoStateInstance(UnitStateInstance):
       await asyncio.sleep(1)
 
       self._notify(StateEvent(DemoStateLocation(3),
-        settled=True, errors=[
-        Error(f"Problem {self._index}b")
-      ]))
+        failure=True,
+        settled=True,
+        errors=[Error(f"Problem {self._index}b")]
+      ))
 
       # self._notify(StateEvent(DemoStateLocation(), errors=[
       #   # Error(f"Problem {self._index}a"),
@@ -348,7 +390,9 @@ class DemoStateInstance(UnitStateInstance):
 
     self._notify(StateEvent(DemoStateLocation(1), errors=[
       Error(f"Applyyy {self._index}")
-    ], settled=(not wait)))
+    ], failure=(self._index == 1 and self._flag == 0), settled=True)) # (not wait)))
+
+    self._flag += 1
 
   async def close(self):
     self._logger.debug('Close')

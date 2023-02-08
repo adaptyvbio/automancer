@@ -21,6 +21,7 @@ export interface Location {
 export enum LocationMode {
   ApplyingState = 5,
   Broken = 0,
+  FailedState = 10,
   Halting = 1,
   Normal = 2,
   Pausing = 3,
@@ -172,7 +173,7 @@ function isBlockBusy(_block: Block, location: Location, _options: { host: Host; 
 }
 
 function isBlockPaused(_block: Block, location: Location, _options: { host: Host; }) {
-  return [LocationMode.Broken, LocationMode.Paused].includes(location.mode);
+  return [LocationMode.Broken, LocationMode.FailedState, LocationMode.Paused].includes(location.mode);
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {

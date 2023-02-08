@@ -151,7 +151,7 @@ class BlockProgram(ABC):
   #   await self._parent.call_resume()
 
   @abstractmethod
-  async def run(self, stack: EvalStack) -> 'Optional[ProgramExecEvent]':
+  async def run(self, stack: EvalStack):
     ...
 
 class HeadProgram(BlockProgram):
@@ -162,6 +162,9 @@ class HeadProgram(BlockProgram):
   @abstractmethod
   async def resume(self, *, loose: bool):
     ...
+
+  def stable(self):
+    return False
 
   def receive(self, message):
     match message["type"]:

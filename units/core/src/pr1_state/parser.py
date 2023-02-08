@@ -1,25 +1,17 @@
-import asyncio
 from dataclasses import dataclass
 from enum import IntEnum
-import traceback
 from types import EllipsisType
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
-from pr1.devices.claim import ClaimSymbol
-from pr1.error import Error
-from pr1.fiber.master2 import ProgramHandle, ProgramOwner
-from pr1.fiber.segment import SegmentTransform
+from pr1.fiber.langservice import Analysis, Attribute, BoolType
+from pr1.fiber.master2 import ProgramOwner
+from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockState,
+                              BlockUnitData, FiberParser, HeadProgram,
+                              Transforms)
+from pr1.fiber.process import ProgramExecEvent
 from pr1.reader import LocationArea
 from pr1.state import StateLocation, StateRecord
-from pr1.util import schema as sc
 from pr1.util.decorators import debug
-from pr1.util.iterators import CoupledStateIterator3
-from pr1.fiber.langservice import Analysis, Attribute, BoolType
-from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockAttrs,
-                      BlockData, BlockProgram, BlockState, BlockUnitData,
-                      BlockUnitState, FiberParser, HeadProgram, Transforms)
-from pr1.fiber.process import ProgramExecEvent
 
 from . import logger
 
@@ -30,7 +22,11 @@ class StateParser(BaseParser):
   segment_attributes = {
     'settle': Attribute(
       BoolType(),
-      description="Sets whether to wait for the state to settle before entering the block."
+      description="Sets whether to wait for the state to settle before entering the block. Always true for the deepest states."
+    ),
+    'stable': Attribute(
+      BoolType(),
+      description="Sets whether this state should be use as a fallback when an error occurs. Always true for the root states."
     )
   }
 
@@ -40,14 +36,16 @@ class StateParser(BaseParser):
   def parse_block(self, attrs, /, adoption_stack, trace):
     return Analysis(), BlockUnitData(transforms=[StateTransform(
       parser=self,
-      settle=(attrs['settle'].value if ('settle' in attrs) else False)
+      settle=(attrs['settle'].value if ('settle' in attrs) else False),
+      stable=(attrs['stable'].value if ('stable' in attrs) else False)
     )])
 
 @debug
 class StateTransform(BaseTransform):
-  def __init__(self, parser: StateParser, *, settle: bool):
+  def __init__(self, parser: StateParser, *, settle: bool, stable: bool):
     self._parser = parser
     self._settle = settle
+    self._stable = stable
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     analysis, child = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
@@ -68,12 +66,14 @@ class StateTransform(BaseTransform):
     return analysis, StateBlock(
       child=child,
       settle=self._settle,
+      stable=self._stable,
       state=state
     )
 
 
 class StateProgramMode(IntEnum):
   ApplyingState = 9
+  FailedState = 13
   HaltingChildThenState = 12
   HaltingChildWhilePaused = 1
   HaltingState = 2
@@ -208,6 +208,9 @@ class StateProgram(HeadProgram):
     self._mode = StateProgramMode.Normal
     self._handle.send(ProgramExecEvent(location=self._location))
 
+  def stable(self):
+    return self._block.stable
+
   @property
   def _location(self):
     return StateProgramLocation(
@@ -217,6 +220,9 @@ class StateProgram(HeadProgram):
 
   def _update(self, record: StateRecord):
     self._state_location = record.location
+
+    if record.failure:
+      self._handle.register_failure()
 
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
@@ -230,6 +236,8 @@ class StateProgram(HeadProgram):
     if self._block.settle:
       self._mode = StateProgramMode.ApplyingState
       await self._state_manager.apply(self._handle)
+
+      # TODO: Do something if mode is FailedState
 
       self._mode = StateProgramMode.Normal
       self._handle.send(ProgramExecEvent(location=self._location))
@@ -256,9 +264,10 @@ class StateBlock(BaseBlock):
   Point: type[StateProgramPoint] = StateProgramPoint
   Program = StateProgram
 
-  def __init__(self, child: BaseBlock, state: BlockState, *, settle: bool):
+  def __init__(self, child: BaseBlock, state: BlockState, *, settle: bool, stable: bool):
     self.child = child
     self.settle = settle
+    self.stable = stable
     self.state: BlockState = state # TODO: Remove explicit type hint
 
   def export(self):
@@ -266,5 +275,8 @@ class StateBlock(BaseBlock):
       "namespace": "state",
 
       "child": self.child.export(),
-      "state": self.state.export()
+      "state": self.state.export(),
+
+      "settle": self.settle,
+      "stable": self.stable
     }

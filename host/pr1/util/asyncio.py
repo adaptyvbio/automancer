@@ -1,9 +1,10 @@
 import asyncio
 from asyncio import Future
 from queue import Queue
+import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Generic, Literal, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Literal, Optional, TypeVar
 
 
 T = TypeVar('T')
@@ -111,10 +112,16 @@ class DualEvent:
 
 
 def run_anonymous(awaitable: Awaitable, /):
+  call_trace = traceback.extract_stack()
+
   async def func():
     try:
       await awaitable
     except Exception:
-      traceback.print_exc()
+      _, _, exc_traceback = sys.exc_info()
+      exc_trace = traceback.extract_tb(exc_traceback)
+
+      for line in traceback.StackSummary(call_trace[:-1] + exc_trace).format():
+        print(line, end=str(), file=sys.stderr)
 
   return asyncio.create_task(func())

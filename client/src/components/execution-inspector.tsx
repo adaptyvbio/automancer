@@ -50,7 +50,6 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     let units = this.props.host.units;
 
     let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
-    setTimeout(() => void console.log(this.props.activeBlockPaths), 100);
 
     let lineBlocks = [this.props.protocol.root];
     let lineLocations = [this.props.location];

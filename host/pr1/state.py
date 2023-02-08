@@ -62,12 +62,13 @@ class StateRecord:
 @dataclass(kw_only=True)
 class StateProgramItem:
   applied: bool = False
+  children: 'list[StateProgramItem]' = field(default_factory=list, init=False)
   handle: 'ProgramHandle'
   depth: int
   location: StateLocation
   parent: 'Optional[StateProgramItem]'
 
-  _settle_event: Event = field(default_factory=Event)
+  _settle_event: Event = field(default_factory=Event, init=False)
   _update_program: Callable[[StateRecord], None]
 
   @property
@@ -80,6 +81,9 @@ class StateProgramItem:
     while current_item:
       yield current_item
       current_item = current_item.parent
+
+  def descendants(self):
+    return itertools.chain.from_iterable(item.children for item in self.ancestors())
 
   # self < other => self is an ancestor of other
   def __lt__(self, other: 'StateProgramItem'):
@@ -167,13 +171,15 @@ class GlobalStateManager:
         settled=event.settled
       )
     else:
-      entry.settled = entry.settled or event.settled
+      entry.settled = event.settled
 
       if event.location:
         entry.location = event.location
 
     if all(entry and entry.settled for entry in item.location.entries.values()):
       item._settle_event.set()
+    else:
+      item._settle_event.clear()
 
     item._update_program(StateRecord(
       errors=event.errors,
@@ -203,6 +209,9 @@ class GlobalStateManager:
       _update_program=update
     )
 
+    if parent_item:
+      parent_item.children.append(item)
+
     self._items[handle] = item
 
     for namespace, consumer in self._consumers.items():
@@ -215,8 +224,13 @@ class GlobalStateManager:
       consumer.add(item, value, notify=notify, stack=stack)
 
   async def remove(self, handle: 'ProgramHandle'):
+    item = self._items[handle]
+
     for consumer in self._consumers.values():
-      await consumer.remove(self._items[handle])
+      await consumer.remove(item)
+
+    if item.parent:
+      item.parent.children.remove(item)
 
     del self._items[handle]
 
@@ -245,7 +259,7 @@ class GlobalStateManager:
 
     # await wait([item._settle_event.wait() for item in relevant_items if not item.settled])
 
-    for item in relevant_items:
+    for item in origin_item.ancestors():
       await item._settle_event.wait()
 
     # TODO: Send state record here if there are no consumers

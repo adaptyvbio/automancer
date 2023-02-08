@@ -178,38 +178,31 @@ class DevicesStateManager(UnitStateManager):
     self._updated_nodes |= self._item_infos[item].nodes
     del self._item_infos[item]
 
-  def apply(self, item, items):
-    events = dict[StateProgramItem, StateEvent]()
-
-    print()
-    print()
-    print("Apply")
-
-    relevant_items = { ancestor_item for ancestor_item in item.ancestors() if not ancestor_item.applied }
-
+  def apply(self, items):
     for node in self._updated_nodes:
       node_info = self._node_infos[node]
-      new_candidate = next((candidate for candidate in node_info.candidates[::-1] if (candidate_item := candidate.item_info.item).applied or (candidate_item in relevant_items)), None)
-
-      # print("Check", [(c.value, (candidate_item := c.item_info.item).applied or (candidate_item in relevant_items)) for c in node_info.candidates])
-      # print(">", new_candidate)
-      # print()
-      # print(">", node_info.current_candidate)
-
-      if new_candidate:
-        print("Write", node, new_candidate.value)
+      new_candidate = next((candidate for candidate in node_info.candidates[::-1] if (candidate_item := candidate.item_info.item).applied or (candidate_item in items)), None)
 
       if node_info.current_candidate is not new_candidate:
+
         if node_info.current_candidate:
           current_item_info = node_info.current_candidate.item_info
           current_node_location = current_item_info.location.values[node_info.path]
+          current_node_new_location = NodeStateLocation(current_node_location.value)
 
-          current_node_location.error_disconnected = False
-          current_node_location.error_evaluation = False
-          current_node_location.error_unclaimable = False
-          current_item_info.do_notify(self)
+          if current_node_new_location != current_node_location:
+            current_item_info.location.values[node_info.path] = current_node_new_location
+            current_item_info.do_notify(self)
 
         node_info.current_candidate = new_candidate
+
+        if new_candidate:
+          node_info.settled = False
+
+          if node_info.update_event:
+            node_info.update_event.set()
+
+          new_candidate.item_info.do_notify(self)
 
       if not node_info.claim:
         node_info.claim = node.claim()
@@ -218,29 +211,13 @@ class DevicesStateManager(UnitStateManager):
         node_info.task = run_anonymous(self._node_lifecycle(node, node_info))
         node_info.update_event = Event()
 
-    print()
-    print()
+    # TODO: Clear inactive tasks
 
     self._updated_nodes.clear()
 
-    for relevant_item in relevant_items:
-      relevant_item_info = self._item_infos[relevant_item]
-
-      # for node in relevant_item_info.nodes:
-      #   node_info = self._node_infos[node]
-
-      events[relevant_item] = StateEvent(relevant_item_info.location, settled=all(node_info.settled for node_info in self._node_infos.values() if node_info.current_candidate and (node_info.current_candidate.item_info.item is relevant_item)))
-
-      # node_info.update_event = Event()
-
-      # node = self._runner._host.root_node.find(('Okolab', 'temperature'))
-      # assert isinstance(node, BaseWritableNode)
-
-      # events[ancestor] = StateEvent(DevicesStateItemLocation({
-      #   ('Okolab', 'temperature'): NodeStateLocation(error_disconnected=True, value={ "type": "ellipsis" })
-      # }), settled=True)
-
-    return events
+    for item in items:
+      item_info = self._item_infos[item]
+      item_info.do_notify(self)
 
   async def suspend(self, item):
     return StateEvent(DevicesStateItemLocation({}))

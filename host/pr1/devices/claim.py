@@ -36,6 +36,7 @@ class ClaimSymbol:
 class Claim:
   def __init__(self, target: 'Claimable'):
     self._event = DualEvent()
+    self._ref = weakref.ref[Claim](self, target._finalize_claim)
     self._target = target
 
   @property
@@ -46,7 +47,7 @@ class Claim:
     if self.owned:
       self._target._designate_owner()
     else:
-      self._target._claims.remove(self)
+      self._target._claim_refs.remove(self._ref)
 
   async def lost(self):
     await self._event.wait_unset()
@@ -56,7 +57,7 @@ class Claim:
 
 class Claimable:
   def __init__(self):
-    self._claims = list[Claim]() # TODO: Change to weakrefs
+    self._claim_refs = list[weakref.ref[Claim]]()
     self._current_claim_ref: Optional[weakref.ref[Claim]] = None
 
   def _get_current_claim(self):
@@ -66,21 +67,28 @@ class Claimable:
     if current_claim := self._get_current_claim():
       current_claim._event.unset()
 
-    if self._claims:
-      new_claim, *self._claims = self._claims
-      new_claim._event.set()
+    result = next(((claim_ref, claim) for claim_ref in self._claim_refs if (claim := claim_ref())), None)
 
-      self._current_claim_ref = weakref.ref(new_claim, self._finalize_claim)
+    if result:
+      owning_claim_ref, owning_claim = result
+      self._claim_refs.remove(owning_claim_ref)
+
+      owning_claim._event.set()
+      self._current_claim_ref = owning_claim_ref
+    else:
+      self._current_claim_ref = None
 
   def _finalize_claim(self, ref):
-    warnings.warn(f"Leak of claim to {self}")
-
     if self._current_claim_ref is ref:
       self._designate_owner()
+      warnings.warn(f"Leak of owning claim to {self}")
+    elif self._current_claim_ref in self._claim_refs:
+      self._claim_refs.remove(self._current_claim_ref)
+      warnings.warn(f"Leak of awaiting claim to {self}")
 
   def claim(self):
     claim = Claim(self)
-    self._claims.append(claim)
+    self._claim_refs.append(claim._ref)
 
     if not self._get_current_claim():
       self._designate_owner()

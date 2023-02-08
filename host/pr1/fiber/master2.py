@@ -1,8 +1,9 @@
-from abc import abstractmethod
-import asyncio
 from asyncio import Future, Task
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from traceback import StackSummary
+from typing import TYPE_CHECKING, Any, Optional
+import asyncio
+import traceback
 
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.types import SimpleCallbackFunction
@@ -29,6 +30,7 @@ class Master:
 
     self.state_manager = GlobalStateManager({
       namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else Consumer) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
     })
 
     self._entry_counter = IndexCounter(start=1)
@@ -38,6 +40,8 @@ class Master:
     self._owner: ProgramOwner
     self._update_callback: Optional[SimpleCallbackFunction] = None
     self._updating_soon = False
+    self._update_status = 0
+    self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
 
     self._done_future: Optional[Future[None]] = None
@@ -93,6 +97,7 @@ class Master:
         self.update_soon()
         await self._owner.run(runtime_stack)
         self.update()
+        await self.state_manager.clear()
       except Exception as e:
         if self._start_future:
           self._start_future.set_exception(e)
@@ -128,7 +133,15 @@ class Master:
 
 
   def update(self):
+    if False:
+      for index, trace in enumerate(self._update_traces):
+        print(f"Trace {index}")
+
+        for line in trace.format():
+          print(line, end=str())
+
     self._updating_soon = False
+    self._update_traces.clear()
 
     errors = list[MasterError]()
     useful = False
@@ -221,7 +234,23 @@ class Master:
     print(errors)
     print('---')
 
+  # def update_soon(self):
+    # def func():
+    #   if self._update_status == 3:
+    #     self._update_status = 0
+    #     self.update()
+    #   else:
+    #     self._update_status += 1
+    #     asyncio.get_event_loop().call_soon(func)
+
+    # if self._update_status == 0:
+    #   asyncio.get_event_loop().call_soon(func)
+
+    # self._update_status = 1
+
   def update_soon(self):
+    self._update_traces.append(StackSummary(traceback.extract_stack()[:-2]))
+
     if not self._updating_soon:
       self._updating_soon = True
 

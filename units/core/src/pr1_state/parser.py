@@ -137,9 +137,9 @@ class StateProgram(HeadProgram):
     self._logger.debug(f"\x1b[33m[{self._index}] Mode: {self._mode.name if hasattr(self, '_mode_value') else '<none>'} → {value.name}\x1b[0m")
     self._mode_value = value
 
-  @property
-  def busy(self):
-    return (self._mode not in (StateProgramMode.Normal, StateProgramMode.Paused)) or self._child_program.busy
+  # @property
+  # def busy(self):
+  #   return (self._mode not in (StateProgramMode.Normal, StateProgramMode.Paused)) or self._child_program.busy
 
   def receive(self, message: Any):
     self._logger.debug(f"\x1b[33m[{self._index}] Received message: {message}\x1b[0m")
@@ -177,6 +177,7 @@ class StateProgram(HeadProgram):
     self._handle.send(ProgramExecEvent(location=self._location))
 
     await self._state_manager.suspend(self._handle)
+    await self._state_manager.clear(self._handle)
 
     self._mode = StateProgramMode.Paused
     self._handle.send(ProgramExecEvent(location=self._location))
@@ -199,12 +200,10 @@ class StateProgram(HeadProgram):
       raise
 
     if self._block.settle or (not loose):
-      future = self._state_manager.apply(self._handle, terminal=(not loose))
+      self._mode = StateProgramMode.ResumingState
+      self._handle.send(ProgramExecEvent(location=self._location))
 
-      if future:
-        self._mode = StateProgramMode.ResumingState
-        self._handle.master.update_soon()
-        await future
+      await self._state_manager.apply(self._handle, terminal=(not loose))
 
     self._mode = StateProgramMode.Normal
     self._handle.send(ProgramExecEvent(location=self._location))

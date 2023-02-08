@@ -185,24 +185,19 @@ class SegmentProgram(HeadProgram):
         self._bypass_future.set_result(None)
         self._bypass_future = None
       case SegmentProgramMode.Paused:
-        initial_mode = self._mode
-
         self._mode = SegmentProgramMode.ResumingParent
         self._handle.send(ProgramExecEvent(location=self._location))
 
         try:
           await self._handle.resume_parent()
         except Exception:
-          self._mode = initial_mode
+          self._mode = SegmentProgramMode.Paused
           raise
 
-        future = self._state_manager.apply(self._handle, terminal=True)
+        self._mode = SegmentProgramMode.ApplyingState
+        self._handle.send(ProgramExecEvent(location=self._location))
 
-        if future:
-          self._mode = SegmentProgramMode.ApplyingState
-          self._handle.send(ProgramExecEvent(location=self._location))
-
-          await future
+        await self._state_manager.apply(self._handle, terminal=True)
 
         self._mode = SegmentProgramMode.ResumingProcess
         self._handle.send(ProgramExecEvent(location=self._location))

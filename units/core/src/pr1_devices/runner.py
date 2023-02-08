@@ -117,6 +117,8 @@ class DevicesStateManager(UnitStateManager):
           if node_info.current_candidate:
             await node.write(node_info.current_candidate.value)
 
+            # TODO: node_info.current_candidate could have changed here
+
             node_info.settled = True
             node_info.current_candidate.item_info.do_notify(self)
 
@@ -163,8 +165,6 @@ class DevicesStateManager(UnitStateManager):
       item_info.location.values[node_info.path] = NodeStateLocation(value)
       bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value), key=(lambda candidate: candidate.item_info.item))
 
-    self._updated_nodes |= item_info.nodes
-
   async def remove(self, item):
     nodes = self._item_infos[item].nodes
 
@@ -175,16 +175,23 @@ class DevicesStateManager(UnitStateManager):
       if node_info.current_candidate and (node_info.current_candidate.item_info.item is item):
         node_info.current_candidate = None
 
-    self._updated_nodes |= self._item_infos[item].nodes
     del self._item_infos[item]
 
-  def apply(self, items):
+  async def apply(self, items):
+    obsolete_nodes = set[BaseWritableNode]()
+
+    for item in items:
+      self._updated_nodes |= self._item_infos[item].nodes
+
     for node in self._updated_nodes:
+      # TODO: Discriminate across branches
+
       node_info = self._node_infos[node]
       new_candidate = next((candidate for candidate in node_info.candidates[::-1] if (candidate_item := candidate.item_info.item).applied or (candidate_item in items)), None)
 
-      if node_info.current_candidate is not new_candidate:
+      # print('New candidate', node_info.current_candidate is not None, new_candidate is not None, node_info.current_candidate is not new_candidate)
 
+      if node_info.current_candidate is not new_candidate:
         if node_info.current_candidate:
           current_item_info = node_info.current_candidate.item_info
           current_node_location = current_item_info.location.values[node_info.path]
@@ -204,14 +211,15 @@ class DevicesStateManager(UnitStateManager):
 
           new_candidate.item_info.do_notify(self)
 
-      if not node_info.claim:
-        node_info.claim = node.claim()
+          if not node_info.claim:
+            node_info.claim = node.claim()
 
-      if not node_info.task:
-        node_info.task = run_anonymous(self._node_lifecycle(node, node_info))
-        node_info.update_event = Event()
+          if not node_info.task:
+            node_info.task = run_anonymous(self._node_lifecycle(node, node_info))
+            node_info.update_event = Event()
 
-    # TODO: Clear inactive tasks
+      if not node_info.candidates:
+        obsolete_nodes.add(node)
 
     self._updated_nodes.clear()
 
@@ -219,7 +227,26 @@ class DevicesStateManager(UnitStateManager):
       item_info = self._item_infos[item]
       item_info.do_notify(self)
 
+    for node in obsolete_nodes:
+      node_info = self._node_infos[node]
+
+      assert node_info.task
+      node_info.task.cancel()
+
+      try:
+        await node_info.task
+      except asyncio.CancelledError:
+        pass
+
+      node_info.task = None
+      del self._node_infos[node]
+
+  async def clear(self, item):
+    await self.apply(list())
+
   async def suspend(self, item):
+    self._updated_nodes |= self._item_infos[item].nodes
+
     return StateEvent(DevicesStateItemLocation({}))
 
 

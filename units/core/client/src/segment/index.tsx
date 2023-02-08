@@ -210,7 +210,7 @@ export default {
     let processLocation = props.location?.process ?? null;
     let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
 
-    let ProcessComponent = props.location && processUnit.ProcessComponent;
+    let ProcessComponent = processLocation && processUnit.ProcessComponent;
     let broken = (props.location?.mode === LocationMode.Broken);
 
     return (
@@ -218,6 +218,8 @@ export default {
         <SimpleFeatureList list={[
           UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(process.data, processLocation, props.context))
         ]} />
+
+        {props.location && <p style={{ margin: '1rem' }}>Mode: {LocationMode[props.location.mode]}</p>}
 
         {ProcessComponent && (
           !broken
@@ -247,9 +249,8 @@ export default {
   createDefaultPoint,
   getBlockClassLabel,
   getBlockDefaultLabel,
-  getBlockLocationLabelSuffix,
+  // getBlockLocationLabelSuffix,
   isBlockBusy,
   isBlockPaused,
-  onSelectBlockMenu,
-
+  onSelectBlockMenu
 } satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>;

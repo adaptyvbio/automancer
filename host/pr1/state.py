@@ -125,7 +125,11 @@ class UnitStateManager(ABC):
     ...
 
   @abstractmethod
-  def apply(self, items: list[StateProgramItem]):
+  async def apply(self, items: list[StateProgramItem]):
+    ...
+
+  @abstractmethod
+  async def clear(self, item: Optional[StateProgramItem]):
     ...
 
   @abstractmethod
@@ -150,6 +154,9 @@ class UnitStateInstanceManager(UnitStateManager):
   def apply(self, items):
     for item in items:
       self._instances[item].apply(resume=False)
+
+  async def clear(self, item):
+    pass
 
   async def suspend(self, item):
     return await self._instances[item].suspend()
@@ -252,7 +259,7 @@ class GlobalStateManager:
     relevant_items = [ancestor_item for ancestor_item in origin_item.ancestors() if not ancestor_item.applied]
 
     for consumer in self._consumers.values():
-      consumer.apply(relevant_items)
+      await consumer.apply(relevant_items)
 
     for item in relevant_items:
       item.applied = True
@@ -263,6 +270,10 @@ class GlobalStateManager:
       await item._settle_event.wait()
 
     # TODO: Send state record here if there are no consumers
+
+  async def clear(self, handle: Optional['ProgramHandle'] = None):
+    for consumer in self._consumers.values():
+      await consumer.clear(self._items[handle] if handle else None)
 
   async def suspend(self, handle: 'ProgramHandle'):
     item = self._items[handle]

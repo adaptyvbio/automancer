@@ -11,7 +11,7 @@ from pr1.devices.claim import ClaimSymbol
 from pr1.devices.node import AsyncCancelable, NodePath, PolledReadableNode, ScalarReadableNode, SubscribableReadableNode
 from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalStack
-from pr1.state import StateEvent, StateInstanceNotifyCallback
+from pr1.state import StateEvent
 from pr1.util.misc import Exportable
 from pr1.reader import LocatedString
 from pr1.units.base import BaseProcessRunner
@@ -75,7 +75,7 @@ class RecordStateLocation(Exportable):
     return {}
 
 class RecordStateInstance:
-  def __init__(self, state: RecordState, runner: 'Runner', *, notify: StateInstanceNotifyCallback, stack: EvalStack, symbol: ClaimSymbol):
+  def __init__(self, state: RecordState, runner: 'Runner', *, notify, stack: EvalStack, symbol: ClaimSymbol):
     self._runner = runner
     self._state = state
     self._stack = stack

@@ -4,6 +4,7 @@ from enum import IntEnum
 from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
+from .eval import EvalStack
 from ..error import Error, MasterError
 from .parser import BlockState
 from ..util.decorators import debug
@@ -110,5 +111,5 @@ class Process(Protocol[T]):
   def resume(self):
     ...
 
-  def run(self, block_state: BlockState, initial_state: Optional[T]) -> AsyncIterator[ProgramExecEvent[T]]:
+  def run(self, initial_point: Optional[T], *, stack: EvalStack) -> AsyncIterator[ProcessEvent]:
     ...

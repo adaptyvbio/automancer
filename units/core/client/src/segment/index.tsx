@@ -1,4 +1,4 @@
-import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MasterError, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, ProtocolState, React, SimpleFeatureList, UnitTools, UnknownUnit } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, React, SimpleFeatureList, UnitTools } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -19,11 +19,17 @@ export interface Location {
 }
 
 export enum LocationMode {
+  ApplyingState = 5,
   Broken = 0,
+  FailedState = 10,
   Halting = 1,
   Normal = 2,
   Pausing = 3,
-  Paused = 4
+  Paused = 4,
+  ResumingParent = 8,
+  ResumingProcess = 9,
+  Starting = 6,
+  Terminated = 7
 }
 
 export type Key = never;
@@ -167,7 +173,7 @@ function isBlockBusy(_block: Block, location: Location, _options: { host: Host; 
 }
 
 function isBlockPaused(_block: Block, location: Location, _options: { host: Host; }) {
-  return [LocationMode.Broken, LocationMode.Paused].includes(location.mode);
+  return [LocationMode.Broken, LocationMode.FailedState, LocationMode.Paused].includes(location.mode);
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
@@ -179,10 +185,6 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
     case 'resume':
       return { 'type': 'resume' };
   }
-}
-
-function getChildrenExecutionKeys(block: Block, location: Location, path: ProtocolBlockPath) {
-  return null;
 }
 
 function getBlockClassLabel(_block: Block) {
@@ -209,7 +211,7 @@ export default {
     let processLocation = props.location?.process ?? null;
     let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
 
-    let ProcessComponent = props.location && processUnit.ProcessComponent;
+    let ProcessComponent = processLocation && processUnit.ProcessComponent;
     let broken = (props.location?.mode === LocationMode.Broken);
 
     return (
@@ -217,6 +219,8 @@ export default {
         <SimpleFeatureList list={[
           UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(process.data, processLocation, props.context))
         ]} />
+
+        {props.location && <p style={{ margin: '1rem' }}>Mode: {LocationMode[props.location.mode]}</p>}
 
         {ProcessComponent && (
           !broken
@@ -235,12 +239,18 @@ export default {
     );
   },
 
+  getChildBlock(block, key) {
+    throw new Error();
+  },
+  getChildrenExecutionRefs(block, location) {
+    return null;
+  },
+
   createActiveBlockMenu,
   createDefaultPoint,
   getBlockClassLabel,
   getBlockDefaultLabel,
-  getBlockLocationLabelSuffix,
-  getChildrenExecutionKeys,
+  // getBlockLocationLabelSuffix,
   isBlockBusy,
   isBlockPaused,
   onSelectBlockMenu

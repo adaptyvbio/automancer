@@ -11,21 +11,26 @@ export interface BlockMetrics {
 }
 
 export interface Location {
-  child: unknown | null;
+  children: { 0?: unknown; };
   mode: LocationMode;
   state: Record<UnitNamespace, unknown>;
 }
 
 export enum LocationMode {
-  Halted = 6,
-  Halting = 0,
-  Normal = 1,
-  PausingChild = 2,
-  PausingState = 3,
-  Paused = 4
+  ApplyingState = 9,
+  HaltingChild = 1,
+  HaltingState = 2,
+  Normal = 3,
+  Paused = 8,
+  PausingChild = 4,
+  PausingState = 5,
+  Resuming = 11,
+  ResumingState = 10,
+  SuspendingState = 6,
+  Terminated = 7
 }
 
-export type Key = null;
+export type Key = never;
 
 
 export default {
@@ -33,11 +38,11 @@ export default {
 
   graphRenderer: {
     computeMetrics(block, ancestors, location, options, context) {
-      return options.computeMetrics(block.child, [...ancestors, block], location?.child ?? null);
+      return options.computeMetrics(block.child, [...ancestors, block], location?.children[0] ?? null);
     },
 
     render(block, path, metrics, position, location, options, context) {
-      return options.render(block.child, [...path, null], metrics, position, location?.child ?? null, options);
+      return options.render(block.child, [...path, null], metrics, position, location?.children[0] ?? null, options);
     }
   },
 
@@ -62,11 +67,11 @@ export default {
     return 'State';
   },
   getActiveChildLocation(location, key) {
-    return location.child;
+    return location.children[0];
   },
-  getChildrenExecutionKeys(block, location) {
-    return location.child
-      ? [null]
+  getChildrenExecutionRefs(block, location) {
+    return location.children[0]
+      ? [{ blockKey: undefined as never, executionId: 0 }]
       : null;
   },
   getChildBlock(block, key) {

@@ -391,7 +391,7 @@ class Host:
         chip = self.chips[request["chipId"]]
         assert chip.master
 
-        chip.master.send_message(request["path"], [None] * len(request["path"]), request["message"]) # TODO: Set real execution path
+        chip.master.receive(request["path"], request["message"])
 
         return None
 
@@ -405,7 +405,7 @@ class Host:
         compilation = draft.compile(host=self)
         assert compilation.protocol
 
-        def done_callback():
+        def done_callback(task):
           logger.info(f"Ran protocol on chip '{chip.id}'")
           chip.master = None
           self.update_callback()
@@ -416,7 +416,8 @@ class Host:
         logger.info(f"Running protocol on chip '{chip.id}'")
 
         chip.master = Master(compilation.protocol, chip, host=self)
-        await chip.master.start(done_callback, update_callback)
+        await chip.master.run(update_callback)
+        asyncio.ensure_future(chip.master.done()).add_done_callback(done_callback)
 
       case "upgradeChip":
         chip = self.chips[request["chipId"]]

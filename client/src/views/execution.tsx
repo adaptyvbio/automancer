@@ -117,13 +117,13 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
     let getActiveBlockPaths = (block: ProtocolBlock, location: unknown, path: ProtocolBlockPath): ProtocolBlockPath[] => {
       let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-      let keys = unit.getChildrenExecutionKeys(block, location);
+      let refs = unit.getChildrenExecutionRefs(block, location);
 
-      return keys
-        ? keys.flatMap((key) => getActiveBlockPaths(
-            unit.getChildBlock!(block, key),
-            unit.getActiveChildLocation!(location, key),
-            [...path, key]
+      return refs
+        ? refs.flatMap((ref) => getActiveBlockPaths(
+            unit.getChildBlock!(block, ref.blockKey),
+            unit.getActiveChildLocation!(location, ref.executionId),
+            [...path, ref.blockKey]
           ))
         : [path];
     };

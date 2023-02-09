@@ -73,7 +73,7 @@ def export_value(value: Any, /):
         "type": "quantity",
         "formatted": f"{value:~.2fP}",
         "magnitude": magnitude,
-        "unit_formatted": f"{unit:~P}"
+        "unitFormatted": f"{unit:~P}"
       }
     case _:
       return {

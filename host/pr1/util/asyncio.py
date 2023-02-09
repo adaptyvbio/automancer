@@ -1,7 +1,10 @@
 import asyncio
+from asyncio import Future
 from queue import Queue
+import sys
 from threading import Thread
-from typing import Any, Callable, Generic, Literal, Optional, TypeVar
+import traceback
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Literal, Optional, TypeVar
 
 
 T = TypeVar('T')
@@ -48,3 +51,77 @@ class AsyncIteratorThread(Generic[T, S]):
       raise StopAsyncIteration
 
     return value
+
+
+class Lock:
+  def __init__(self):
+    self._counter = 0
+    self._unlock_future: Optional[Future[None]] = None
+
+  @property
+  def locked(self):
+    return self._counter > 0
+
+  def lock(self):
+    self._counter += 1
+
+  def unlock(self):
+    assert self._counter > 0
+    self._counter -= 1
+
+    if self._counter < 1:
+      if self._unlock_future:
+        self._unlock_future.set_result(None)
+        self._unlock_future = None
+
+  def __enter__(self):
+    self.lock()
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.unlock()
+
+  async def acquire(self):
+    if self.locked:
+      if not self._unlock_future:
+        self._unlock_future = Future()
+
+      await self._unlock_future
+
+
+class DualEvent:
+  def __init__(self):
+    self._set_event = asyncio.Event()
+    self._unset_event = asyncio.Event()
+
+  def is_set(self):
+    return self._set_event.is_set()
+
+  def set(self):
+    self._set_event.set()
+    self._unset_event.clear()
+
+  def unset(self):
+    self._set_event.clear()
+    self._unset_event.set()
+
+  async def wait_set(self):
+    await self._set_event.wait()
+
+  async def wait_unset(self):
+    await self._unset_event.wait()
+
+
+def run_anonymous(awaitable: Awaitable, /):
+  call_trace = traceback.extract_stack()
+
+  async def func():
+    try:
+      await awaitable
+    except Exception:
+      _, _, exc_traceback = sys.exc_info()
+      exc_trace = traceback.extract_tb(exc_traceback)
+
+      for line in traceback.StackSummary(call_trace[:-1] + exc_trace).format():
+        print(line, end=str(), file=sys.stderr)
+
+  return asyncio.create_task(func())

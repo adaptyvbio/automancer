@@ -1,16 +1,18 @@
+from asyncio import Event
 from dataclasses import dataclass
 from enum import IntEnum
 from types import EllipsisType
 from typing import Any, Optional
 
 from pr1.fiber.langservice import Analysis, Attribute, BoolType
-from pr1.fiber.master2 import ProgramOwner
+from pr1.fiber.master2 import ProgramHandle, ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockState,
                               BlockUnitData, FiberParser, HeadProgram,
                               Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.reader import LocationArea
 from pr1.state import StateLocation, StateRecord
+from pr1.util.asyncio import DualEvent, run_anonymous
 from pr1.util.decorators import debug
 
 from . import logger
@@ -73,7 +75,6 @@ class StateTransform(BaseTransform):
 
 class StateProgramMode(IntEnum):
   ApplyingState = 9
-  FailedState = 13
   HaltingChildThenState = 12
   HaltingChildWhilePaused = 1
   HaltingState = 2
@@ -81,7 +82,7 @@ class StateProgramMode(IntEnum):
   Paused = 8
   PausingChild = 4
   PausingState = 5
-  Resuming = 11
+  ResumingParent = 11
   ResumingState = 10
   SuspendingState = 6
   Terminated = 7
@@ -121,6 +122,8 @@ class StateProgram(HeadProgram):
 
     self._child_program: ProgramOwner
     # self._mode: StateProgramMode
+    self._interrupted_event = DualEvent()
+    # self._interrupting = False
     self._point: Optional[StateProgramPoint]
     self._state_location: Optional[StateLocation]
 
@@ -161,26 +164,49 @@ class StateProgram(HeadProgram):
 
     self._child_program.halt()
 
-  async def pause(self, *, loose):
-    if self._mode != StateProgramMode.Normal:
-      if loose:
-        return
+  async def pause(self):
+    match self._mode:
+      # Doing something else
+      # case StateProgramMode.ApplyingState:
+      #   self._interrupting = True
+      #   await self._interrupted_event.wait_set()
+      #   return True
 
-      raise AssertionError
+      # Doing something else
+      case StateProgramMode.ApplyingState | StateProgramMode.ResumingParent | StateProgramMode.ResumingState:
+        return False
 
-    self._mode = StateProgramMode.PausingChild
-    self._handle.send(ProgramExecEvent(location=self._location))
+      # Already paused
+      case StateProgramMode.HaltingChildWhilePaused | StateProgramMode.Paused | StateProgramMode.Terminated:
+        await self._interrupted_event.wait_set()
+        return True
 
-    await self._handle.pause_children()
+      # Already pausing
+      case StateProgramMode.HaltingChildThenState | StateProgramMode.HaltingState | StateProgramMode.PausingChild | StateProgramMode.PausingState | StateProgramMode.SuspendingState:
+        await self._interrupted_event.wait_set()
+        return True
 
-    self._mode = StateProgramMode.PausingState
-    self._handle.send(ProgramExecEvent(location=self._location))
+      # Can pause
+      case StateProgramMode.Normal:
+        self._mode = StateProgramMode.PausingChild
+        self._handle.send(ProgramExecEvent(location=self._location))
 
-    await self._state_manager.suspend(self._handle)
-    await self._state_manager.clear(self._handle)
+        await self._handle.pause_children()
 
-    self._mode = StateProgramMode.Paused
-    self._handle.send(ProgramExecEvent(location=self._location))
+        self._mode = StateProgramMode.PausingState
+        self._handle.send(ProgramExecEvent(location=self._location))
+
+        await self._state_manager.suspend(self._handle)
+        await self._state_manager.clear(self._handle)
+
+        self._mode = StateProgramMode.Paused
+        self._handle.send(ProgramExecEvent(location=self._location))
+
+        self._interrupted_event.set()
+        return True
+
+      case _:
+        return False
 
   async def resume(self, *, loose):
     if self._mode != StateProgramMode.Paused:
@@ -189,7 +215,9 @@ class StateProgram(HeadProgram):
 
       raise AssertionError
 
-    self._mode = StateProgramMode.Resuming
+    self._interrupted_event.unset()
+
+    self._mode = StateProgramMode.ResumingParent
     self._handle.send(ProgramExecEvent(location=self._location))
 
     try:
@@ -222,7 +250,7 @@ class StateProgram(HeadProgram):
     self._state_location = record.location
 
     if record.failure:
-      self._handle.register_failure()
+      run_anonymous(self._handle.pause_stable())
 
     self._handle.send(ProgramExecEvent(
       errors=[error.as_master() for error in record.errors],
@@ -237,7 +265,10 @@ class StateProgram(HeadProgram):
       self._mode = StateProgramMode.ApplyingState
       await self._state_manager.apply(self._handle)
 
-      # TODO: Do something if mode is FailedState
+      # if self._interrupting:
+      #   self._interrupting = False
+      #   self._mode = StateProgramMode.SuspendingState
+      #   await self._state_manager.suspend(self._handle)
 
       self._mode = StateProgramMode.Normal
       self._handle.send(ProgramExecEvent(location=self._location))
@@ -257,6 +288,8 @@ class StateProgram(HeadProgram):
 
     self._mode = StateProgramMode.Terminated
     self._handle.send(ProgramExecEvent(location=self._location))
+
+    self._interrupted_event.set()
 
 
 @debug

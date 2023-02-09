@@ -374,7 +374,6 @@ class DemoStateInstance(UnitStateInstance):
       await asyncio.sleep(1)
 
       self._notify(StateEvent(DemoStateLocation(3),
-        failure=True,
         settled=True,
         errors=[Error(f"Problem {self._index}b")]
       ))

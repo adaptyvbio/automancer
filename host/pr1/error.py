@@ -74,6 +74,8 @@ class Error(Exportable):
   trace: Trace = field(default_factory=list)
 
   def as_master(self, *, time: Optional[float] = None):
+    from .master.analysis import MasterError
+
     return MasterError(
       description=self.description,
       message=self.message,
@@ -96,22 +98,6 @@ class Error(Exportable):
     return DraftDiagnostic(self.message, ranges=[
       range for ref in self.references if isinstance(ref, ErrorDocumentReference) and ref.area for range in ref.area.ranges
     ])
-
-@dataclass(kw_only=True)
-class MasterError(Error, Exportable):
-  id: str
-  path: list[Any] = field(default_factory=list)
-  time: Optional[float] = None
-
-  def as_master(self, time: float, /):
-    return self
-
-  def export(self):
-    return {
-      **super().export(),
-      "date": self.time,
-      "path": self.path
-    }
 
 
 class SomeRandomError(Error):

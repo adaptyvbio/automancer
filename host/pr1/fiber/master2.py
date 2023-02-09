@@ -11,7 +11,7 @@ from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpd
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter, UnreachableError
 from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
-from ..error import MasterError
+from ..master.analysis import MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from ..units.base import BaseRunner
@@ -365,9 +365,23 @@ class ProgramHandle:
   async def pause_children(self):
     for child_handle in self._children.values():
       if isinstance(child_handle._program, HeadProgram):
-        await child_handle._program.pause(loose=True)
+        await child_handle._program.pause()
       else:
         await child_handle.pause_children()
+
+  async def pause_stable(self):
+    current_handle = self
+    unstable_program = self._program
+    assert isinstance(unstable_program, HeadProgram) # TODO: Make it possible to report failures from non-head programs
+
+    while isinstance(current_handle := current_handle._parent, ProgramHandle):
+      if isinstance(current_handle._program, HeadProgram):
+        if current_handle._program.stable():
+          break
+
+        unstable_program = current_handle._program
+
+    await unstable_program.pause()
 
   def register_failure(self):
     self._failed = True

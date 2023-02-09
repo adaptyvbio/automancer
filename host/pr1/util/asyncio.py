@@ -117,11 +117,12 @@ def run_anonymous(awaitable: Awaitable, /):
   async def func():
     try:
       await awaitable
-    except Exception:
-      _, _, exc_traceback = sys.exc_info()
-      exc_trace = traceback.extract_tb(exc_traceback)
+    except Exception as exc:
+      exc_trace = traceback.extract_tb(exc.__traceback__)
 
       for line in traceback.StackSummary(call_trace[:-1] + exc_trace).format():
         print(line, end=str(), file=sys.stderr)
+
+      print(f"{exc.__class__.__name__}: {exc}", file=sys.stderr)
 
   return asyncio.create_task(func())

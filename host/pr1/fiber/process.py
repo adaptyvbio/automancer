@@ -5,7 +5,8 @@ from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
 from typing import TYPE_CHECKING
 
 from .eval import EvalStack
-from ..error import Error, MasterError
+from ..error import Error
+from ..master.analysis import MasterError
 from .parser import BlockState
 from ..util.decorators import debug
 from ..util.misc import Exportable

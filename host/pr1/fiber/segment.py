@@ -172,18 +172,17 @@ class SegmentProgram(HeadProgram):
       self._point = point
       self.halt()
 
-  async def pause(self, *, loose):
+  async def pause(self):
     if self._mode != SegmentProgramMode.Normal:
-      if loose:
-        return
-
-      raise AssertionError
+      return False
 
     self._mode = SegmentProgramMode.Pausing
     self._pause_future = Future()
     self._process.pause()
 
     await self._pause_future
+
+    return True
 
   async def resume(self, *, loose):
     match self._mode:
@@ -239,34 +238,10 @@ class SegmentProgram(HeadProgram):
     self._process_pausable: bool = False
     self._process_time: float = 0.0
 
-    while True:
-      self._mode = SegmentProgramMode.ApplyingState
-      self._handle.send(ProgramExecEvent(location=self._location))
+    self._mode = SegmentProgramMode.ApplyingState
+    self._handle.send(ProgramExecEvent(location=self._location))
 
-      apply_failed = await self._state_manager.apply(self._handle, terminal=True)
-
-      if apply_failed:
-        self._mode = SegmentProgramMode.FailedState
-        self._handle.send(ProgramExecEvent(location=self._location))
-
-        self._bypass_future = Future()
-        await self._bypass_future
-
-        if self._mode == SegmentProgramMode.Halting:
-          self._mode = SegmentProgramMode.Terminated
-          self._handle.send(ProgramExecEvent(
-            location=SegmentProgramLocation(
-              error=None,
-              mode=self._mode,
-              pausable=self._process_pausable,
-              process=None,
-              time=time.time()
-            )
-          ))
-
-          return
-      else:
-        break
+    await self._state_manager.apply(self._handle, terminal=True)
 
 
     async def run():

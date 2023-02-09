@@ -156,7 +156,7 @@ class BlockProgram(ABC):
 
 class HeadProgram(BlockProgram):
   @abstractmethod
-  async def pause(self, *, loose: bool):
+  async def pause(self) -> bool:
     ...
 
   @abstractmethod
@@ -169,7 +169,7 @@ class HeadProgram(BlockProgram):
   def receive(self, message):
     match message["type"]:
       case "pause":
-        run_anonymous(self.pause(loose=False))
+        run_anonymous(self.pause())
       case "resume":
         run_anonymous(self.resume(loose=False))
       case _:

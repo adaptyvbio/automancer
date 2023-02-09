@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence, 
 from .eval import EvalStack
 from ..host import logger
 from ..error import Error
+from ..master.analysis import MasterAnalysis, MasterError
 from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
 from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, HeadProgram, Transforms
@@ -20,7 +21,6 @@ from ..util.decorators import debug
 from ..util.misc import Exportable, UnreachableError
 from ..util.asyncio import run_anonymous
 from .master2 import Master
-
 
 logger = logger.getChild("segment")
 
@@ -265,7 +265,7 @@ class SegmentProgram(HeadProgram):
           yield ProcessProtocolError(f"Process returned without sending a {ProcessFailureEvent.__name__} or {ProcessTerminationEvent.__name__} event")
 
     async for event in run():
-      event_errors = list[Error]()
+      event_analysis = MasterAnalysis()
       event_time = None
       location_error: Optional[Any] = None
 
@@ -273,11 +273,9 @@ class SegmentProgram(HeadProgram):
         if isinstance(event, ProcessError):
           raise event
 
+        event_analysis += event.analysis
         event_time = event.time
         self._process_location = event.location or self._process_location
-
-        if event.errors:
-          event_errors += event.errors
 
         if self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated):
           raise ProcessProtocolError(f"Process sent a {type(event).__name__} event while terminated")
@@ -302,7 +300,7 @@ class SegmentProgram(HeadProgram):
 
           case ProcessFailureEvent(error=error):
             self._mode = SegmentProgramMode.Broken
-            location_error = error or event.errors[0]
+            location_error = error or event.analysis.errors[0]
 
           case ProcessPauseEvent():
             if self._mode != SegmentProgramMode.Pausing:
@@ -337,20 +335,20 @@ class SegmentProgram(HeadProgram):
 
           match e:
             case ProcessInternalError():
-              err = Error("Process internal error")
+              err = MasterError("Process internal error")
             case ProcessProtocolError():
-              err = Error(e.message)
+              err = MasterError(e.message)
             case _:
               raise UnreachableError()
 
-          event_errors.append(err)
+          event_analysis.errors.append(err)
           location_error = err
 
       event_time = event_time or time.time()
       self._process_time = event_time
 
       self._handle.send(ProgramExecEvent(
-        errors=[error.as_master(time=event_time) for error in event_errors],
+        analysis=event_analysis,
         location=SegmentProgramLocation(
           error=location_error,
           mode=self._mode,
@@ -377,11 +375,6 @@ class SegmentProgram(HeadProgram):
 
         break
 
-
-@dataclass
-class LinearSegment:
-  process: SegmentProcessData
-  state: BlockState
 
 @debug
 class SegmentBlock(BaseBlock):

@@ -135,6 +135,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                         let blockIndex = item.aggregate.offset + blockRelIndex;
                         let blockPath = activeBlockPath.slice(0, blockIndex);
+                        let execPath = activeExecPath.slice(0, blockIndex);
 
                         let location = lineLocations[blockIndex];
                         let unit = UnitTools.asBlockUnit(units[block.namespace])!;
@@ -143,7 +144,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                         if (message) {
                           this.pool.add(async () => {
-                            await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, blockPath, message);
+                            await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, execPath, message);
                           });
                         }
                       }}>

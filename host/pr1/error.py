@@ -3,7 +3,6 @@ from typing import Any, Optional
 import uuid
 
 from .draft import DraftDiagnostic
-
 from .reader import LocatedString, LocatedValue, LocationArea
 from .util.misc import Exportable
 

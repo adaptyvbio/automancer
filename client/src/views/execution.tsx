@@ -18,7 +18,7 @@ import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { ViewChips } from './chips';
 import { ViewChip } from './chip';
-import { DiagnosticsReport } from '../components/diagnostics-report';
+import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 
 
 export interface ViewExecutionRoute {
@@ -200,12 +200,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                         id: 'report',
                         label: 'Report',
                         contents: () => (
-                          <DiagnosticsReport diagnostics={this.master.errors.slice().reverse().map((error, index) => ({
-                            id: error.id ?? index,
-                            kind: 'error',
-                            message: error.message,
-                            ranges: []
-                          }))} />
+                          <ExecutionDiagnosticsReport analysis={this.master.analysis} />
                         )
                       }
                     ]} />

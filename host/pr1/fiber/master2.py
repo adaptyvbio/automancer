@@ -11,7 +11,7 @@ from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpd
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter, UnreachableError
 from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
-from ..master.analysis import MasterError
+from ..master.analysis import MasterAnalysis, MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from ..units.base import BaseRunner
@@ -36,10 +36,9 @@ class Master:
       'foo': DemoStateInstance
     })
 
+    self._analysis = MasterAnalysis()
     self._entry_counter = IndexCounter(start=1)
-    self._errors = list[MasterError]()
     self._events = list[ProgramExecEvent]()
-    self._handling_failure_soon = False
     self._location: Optional[ProgramHandleEventEntry] = None
     self._owner: ProgramOwner
     self._update_callback: Optional[SimpleCallbackFunction] = None
@@ -58,24 +57,24 @@ class Master:
   def halt(self):
     self._handle._program.halt()
 
-  def pause(self):
-    self._program.pause()
+  # def pause(self):
+  #   self._program.pause()
 
-    # Only set the future after in case the call was illegal and is rejected by the child program.
-    self._pause_future = Future()
+  #   # Only set the future after in case the call was illegal and is rejected by the child program.
+  #   self._pause_future = Future()
 
   async def wait_halt(self):
     self.halt()
     await self.done()
 
-  async def wait_pause(self):
-    self.pause()
+  # async def wait_pause(self):
+  #   self.pause()
 
-    assert self._pause_future
-    await self._pause_future
+  #   assert self._pause_future
+  #   await self._pause_future
 
-  def resume(self):
-    self._program.resume()
+  # def resume(self):
+  #   self._program.resume()
 
   async def run(self, update_callback: SimpleCallbackFunction):
     from random import random
@@ -130,7 +129,7 @@ class Master:
     assert self._location
 
     return {
-      "errors": [error.export() for error in self._errors],
+      "analysis": self._analysis.export(),
       "location": self._location.export(),
       "protocol": self.protocol.export()
     }
@@ -147,13 +146,13 @@ class Master:
     self._updating_soon = False
     self._update_traces.clear()
 
-    errors = list[MasterError]()
+    analysis = MasterAnalysis()
     useful = False
 
     changes = list[TreeChange]()
 
     def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry], entry_id: int = 0, parent_entry: Optional[ProgramHandleEventEntry] = None):
-      nonlocal errors, useful
+      nonlocal analysis, useful
 
       update_entry = ProgramHandleEventEntry(
         index=(existing_entry.index if existing_entry else self._entry_counter.new()),
@@ -184,7 +183,7 @@ class Master:
         ))
 
       # Collect errors here for their order to be correct.
-      errors += handle._errors
+      analysis += handle._analysis
 
       for child_id, child_handle in list(handle._children.items()):
         child_existing_entry = existing_entry and existing_entry.children.get(child_id)
@@ -208,14 +207,14 @@ class Master:
 
       useful = useful or (handle._updated and (not handle._consumed))
 
-      handle._errors.clear()
+      handle._analysis.clear()
       handle._updated = False
 
       return update_entry
 
     update_entry = update_handle(self._handle, self._location)
 
-    self._errors += errors
+    self._analysis += analysis
 
     if self._update_callback and useful:
       self._update_callback()
@@ -235,7 +234,7 @@ class Master:
     print(update_entry.format())
     # print()
     # print(self._location and self._location.format())
-    print(errors)
+    print(analysis)
     print('---')
 
   # def update_soon(self):
@@ -263,47 +262,6 @@ class Master:
           self.update()
 
       asyncio.get_event_loop().call_soon(func)
-
-  def _handle_failure_soon(self):
-    async def func():
-      self._handling_failure_soon = False
-      handles = deque([self._handle])
-
-      while handles:
-        handle = handles.popleft()
-
-        if handle._failed:
-          print('Found failed', handle._program, handle._parent)
-
-          current_handle = handle
-          unstable_program = handle._program
-
-          while True:
-            current_handle = current_handle._parent
-
-            if not isinstance(current_handle, ProgramHandle):
-              break
-
-            current_program = current_handle._program
-
-            if isinstance(current_program, HeadProgram):
-              if current_program.stable():
-                break
-
-              unstable_program = current_handle._program
-
-          assert isinstance(unstable_program, HeadProgram)
-          run_anonymous(unstable_program.pause(loose=True))
-
-          handle._failed = False
-
-          break
-
-        handles += handle._children.values()
-
-    if not self._handling_failure_soon:
-      self._handling_failure_soon = True
-      run_anonymous(func())
 
 
 @dataclass(kw_only=True)
@@ -342,7 +300,7 @@ class ProgramHandle:
     self._parent = parent
     self._program: BlockProgram
 
-    self._errors = list[MasterError]()
+    self._analysis = MasterAnalysis()
     self._location: Optional[Exportable] = None
 
     self._consumed = False
@@ -383,14 +341,6 @@ class ProgramHandle:
 
     await unstable_program.pause()
 
-  def register_failure(self):
-    self._failed = True
-    self.master._handle_failure_soon()
-    print('Registering failure', self._program)
-
-    # if isinstance(self._parent, ProgramHandle):
-    #   await self._parent.register_failure()
-
   async def resume_parent(self):
     current_handle = self
 
@@ -400,7 +350,7 @@ class ProgramHandle:
         break
 
   def send(self, event: ProgramExecEvent, *, update: bool = True):
-    self._errors += event.errors
+    self._analysis += event.analysis
     self._location = event.location or self._location
     self._updated = True
 

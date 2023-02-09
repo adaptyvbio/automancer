@@ -9,6 +9,7 @@ from pr1.error import Error
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.expr import export_value
 from pr1.fiber.process import Process as ProcessIntf, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent
+from pr1.master.analysis import MasterAnalysis
 from pr1.units.base import BaseProcessRunner
 from pr1.ureg import ureg
 
@@ -75,7 +76,7 @@ class Process(ProcessIntf):
     eval_analysis, eval_result = self._data.value.evaluate(stack)
 
     if isinstance(eval_result, EllipsisType):
-      yield ProcessFailureEvent(errors=eval_analysis.errors)
+      yield ProcessFailureEvent(analysis=MasterAnalysis.cast(eval_analysis))
       return
 
     total_duration: float = eval_result.value.m_as('sec')
@@ -91,12 +92,11 @@ class Process(ProcessIntf):
       task_time = time.time()
 
       yield ProcessExecEvent(
+        analysis=(MasterAnalysis.cast(eval_analysis) if initial else MasterAnalysis()),
         duration=remaining_duration,
         location=ProcessLocation(duration=total_duration, progress=progress),
         pausable=True,
-        time=task_time,
-
-        errors=(eval_analysis.errors if initial else list())
+        time=task_time
       )
 
       initial = False

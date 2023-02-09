@@ -1,18 +1,11 @@
-from dataclasses import dataclass, field
 import datetime
-from enum import IntEnum
-from typing import Any, AsyncIterator, Generic, Optional, Protocol, TypeVar
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator, Optional, Protocol, TypeVar
 
-from .eval import EvalStack
 from ..error import Error
-from ..master.analysis import MasterError
-from .parser import BlockState
-from ..util.decorators import debug
+from ..master.analysis import MasterAnalysis, MasterError
 from ..util.misc import Exportable
-
-if TYPE_CHECKING:
-  from .segment import SegmentProgram
+from .eval import EvalStack
 
 
 DateLike = datetime.datetime | float
@@ -33,46 +26,16 @@ class ProgramExecDuration:
     }
 
 
-T = TypeVar('T', bound=Exportable)
-
 @dataclass(kw_only=True)
-class ProgramExecEvent(Generic[T]):
-  errors: list[MasterError] = field(default_factory=list)
-  location: Optional[T] = None
-  partial: bool = False
-  state_terminated: bool = False
-  terminated: bool = False
-  stopped: bool = False
+class ProgramExecEvent:
+  analysis: MasterAnalysis = field(default_factory=MasterAnalysis)
+  location: Optional[Exportable] = None
   time: Optional[float] = None
-
-  def inherit(
-    self,
-    *,
-    errors: Optional[list[Error]] = None,
-    key: Optional[Any] = None,
-    location: Optional[T],
-    state_terminated: Optional[bool] = None,
-    stopped: Optional[bool] = None,
-    terminated: bool = False
-  ):
-    for err in self.errors:
-      err.path.insert(0, key)
-
-    return type(self)(
-      # The child errors (self.errors) are considered to happen after the parent errors (errors), so they are added last.
-      errors=([error.as_master(time=self.time) for error in (errors or list())] + self.errors),
-      location=location,
-      partial=self.partial,
-      state_terminated=(state_terminated if state_terminated is not None else self.state_terminated),
-      terminated=terminated,
-      stopped=(stopped if stopped is not None else self.stopped),
-      time=self.time
-    )
 
 
 @dataclass(kw_only=True)
 class BaseProcessEvent:
-  errors: list[Error] = field(default_factory=list)
+  analysis: MasterAnalysis = field(default_factory=MasterAnalysis)
   location: Optional[Exportable] = None
   time: Optional[float] = None
 
@@ -87,7 +50,7 @@ class ProcessPauseEvent(BaseProcessEvent):
 
 @dataclass(kw_only=True)
 class ProcessFailureEvent(BaseProcessEvent):
-  error: Optional[Error] = None
+  error: Optional[MasterError] = None
 
 @dataclass(kw_only=True)
 class ProcessTerminationEvent(BaseProcessEvent):
@@ -95,6 +58,8 @@ class ProcessTerminationEvent(BaseProcessEvent):
 
 ProcessEvent = ProcessExecEvent | ProcessFailureEvent | ProcessPauseEvent | ProcessTerminationEvent
 
+
+T = TypeVar('T', bound=Exportable, contravariant=True)
 
 class Process(Protocol[T]):
   def __init__(self, process_data: Any, /, runner: Any):

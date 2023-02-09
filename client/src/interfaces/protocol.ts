@@ -38,15 +38,20 @@ export interface ProtocolError {
 
 
 export interface Master {
-  errors: MasterError[];
+  analysis: MasterAnalysis;
   location: unknown;
   protocol: Protocol;
+}
+
+export interface MasterAnalysis {
+  errors: MasterError[];
+  warnings: MasterError[];
 }
 
 export interface MasterError extends ProtocolError {
   id: string;
   date: number;
-  path: ProtocolBlockPath
+  path: ProtocolBlockPath;
 }
 
 export type MasterErrorReference = MasterErrorDocumentReference | MasterErrorFileReference;

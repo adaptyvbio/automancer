@@ -253,7 +253,7 @@ class StateProgram(HeadProgram):
       run_anonymous(self._handle.pause_stable())
 
     self._handle.send(ProgramExecEvent(
-      errors=[error.as_master() for error in record.errors],
+      analysis=record.analysis,
       location=self._location
     ))
 

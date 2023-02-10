@@ -2,7 +2,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar
 
 from ..error import Error, ErrorReference
 from ..util.misc import Exportable
@@ -58,6 +58,8 @@ class MasterErrorReference(ErrorReference):
   relation: Literal['default', 'close'] = 'default'
 
 
+T = TypeVar('T')
+
 @dataclass(kw_only=True)
 class MasterAnalysis(Exportable):
   effects: list[Effect] = field(default_factory=list)
@@ -70,6 +72,20 @@ class MasterAnalysis(Exportable):
       errors=(self.errors + other.errors),
       warnings=(self.warnings + other.warnings)
     )
+
+  def add(self, value: 'tuple[Analysis | MasterAnalysis, T]', /) -> T:
+    from ..fiber.langservice import Analysis
+
+    analysis, result = value
+
+    if isinstance(analysis, Analysis):
+      return self.add((MasterAnalysis.cast(analysis), result))
+
+    self.effects += analysis.effects
+    self.errors += analysis.errors
+    self.warnings += analysis.warnings
+
+    return result
 
   def clear(self):
     self.effects.clear()

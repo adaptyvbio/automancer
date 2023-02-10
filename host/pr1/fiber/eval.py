@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass, field
+from pathlib import Path
 from typing import Any, Optional, Protocol
 
 from ..error import Error, ErrorDocumentReference
@@ -17,9 +18,15 @@ EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]
 EvalStack = dict[EvalEnv, Optional[EvalVariables]]
 
+@dataclass
 class EvalContext:
-  def __init__(self, variables: Optional[EvalVariables] = None, /):
-    self.variables = variables or dict()
+  stack: EvalStack
+  _: KW_ONLY
+  cwd_path: Optional[Path]
+
+@dataclass
+class EvalOptions:
+  variables: EvalVariables = field(default_factory=EvalVariables)
 
 class EvalError(Exception, Error):
   def __init__(self, area: LocationArea, /, message: str):
@@ -29,8 +36,8 @@ class EvalError(Exception, Error):
     self.area = area
 
 
-def evaluate(compiled: Any, /, contents: LocatedString, context: EvalContext):
+def evaluate(compiled: Any, /, contents: LocatedString, options: EvalOptions):
   try:
-    return LocatedValue.new(eval(compiled, globals(), context.variables), area=contents.area, deep=True)
+    return LocatedValue.new(eval(compiled, globals(), options.variables), area=contents.area, deep=True)
   except Exception as e:
     raise EvalError(contents.area, message=f"{e} ({e.__class__.__name__})") from e

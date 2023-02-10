@@ -74,6 +74,7 @@ class StateTransform(BaseTransform):
 
 
 class StateProgramMode(IntEnum):
+  AbortedState = 0
   ApplyingState = 9
   HaltingChildThenState = 12
   HaltingChildWhilePaused = 1
@@ -122,10 +123,11 @@ class StateProgram(HeadProgram):
 
     self._child_program: ProgramOwner
     # self._mode: StateProgramMode
+    self._bypass_event = Event()
     self._interrupted_event = DualEvent()
     # self._interrupting = False
     self._point: Optional[StateProgramPoint]
-    self._state_location: Optional[StateLocation]
+    self._state_location: Optional[StateLocation] = None
 
   @property
   def _state_manager(self):
@@ -153,16 +155,18 @@ class StateProgram(HeadProgram):
 
   def halt(self):
     match self._mode:
+      case StateProgramMode.AbortedState:
+        self._bypass_event.set()
       case StateProgramMode.Normal:
         self._mode = StateProgramMode.HaltingChildThenState
+        self._child_program.halt()
       case StateProgramMode.Paused:
         self._mode = StateProgramMode.HaltingChildWhilePaused
+        self._child_program.halt()
       case _:
         raise AssertionError
 
     self._handle.send(ProgramExecEvent(location=self._location))
-
-    self._child_program.halt()
 
   async def pause(self):
     match self._mode:
@@ -177,7 +181,7 @@ class StateProgram(HeadProgram):
         return False
 
       # Already paused
-      case StateProgramMode.HaltingChildWhilePaused | StateProgramMode.Paused | StateProgramMode.Terminated:
+      case StateProgramMode.AbortedState | StateProgramMode.HaltingChildWhilePaused | StateProgramMode.Paused | StateProgramMode.Terminated:
         await self._interrupted_event.wait_set()
         return True
 
@@ -258,31 +262,44 @@ class StateProgram(HeadProgram):
     ))
 
   async def run(self, stack):
-    # Evaluate expressions
-    result = self._state_manager.add(self._handle, self._block.state, stack=stack, update=self._update)
+    analysis, result = self._state_manager.add(self._handle, self._block.state, stack=stack, update=self._update)
 
-    if self._block.settle:
-      self._mode = StateProgramMode.ApplyingState
-      await self._state_manager.apply(self._handle)
+    if isinstance(result, EllipsisType):
+      self._interrupted_event.set()
+      self._mode = StateProgramMode.AbortedState
 
-      # if self._interrupting:
-      #   self._interrupting = False
-      #   self._mode = StateProgramMode.SuspendingState
-      #   await self._state_manager.suspend(self._handle)
+      self._handle.send(ProgramExecEvent(
+        analysis=analysis,
+        location=self._location
+      ))
 
-      self._mode = StateProgramMode.Normal
-      self._handle.send(ProgramExecEvent(location=self._location))
+      await self._state_manager.clear(self._handle)
+      # await self._handle.pause_stable()
+
+      await self._bypass_event.wait()
     else:
-      # The mode will be sent once the state has settled.
-      self._mode = StateProgramMode.Normal
+      if self._block.settle:
+        self._mode = StateProgramMode.ApplyingState
+        await self._state_manager.apply(self._handle)
 
-    self._child_program = self._handle.create_child(self._block.child)
+        # if self._interrupting:
+        #   self._interrupting = False
+        #   self._mode = StateProgramMode.SuspendingState
+        #   await self._state_manager.suspend(self._handle)
 
-    await self._child_program.run(stack)
+        self._mode = StateProgramMode.Normal
+        self._handle.send(ProgramExecEvent(location=self._location))
+      else:
+        # The mode will be sent once the state has settled.
+        self._mode = StateProgramMode.Normal
 
-    if self._mode not in (StateProgramMode.HaltingChildWhilePaused, StateProgramMode.Paused):
-      self._mode = StateProgramMode.SuspendingState
-      await self._state_manager.suspend(self._handle)
+      self._child_program = self._handle.create_child(self._block.child)
+
+      await self._child_program.run(stack)
+
+      if self._mode not in (StateProgramMode.HaltingChildWhilePaused, StateProgramMode.Paused):
+        self._mode = StateProgramMode.SuspendingState
+        await self._state_manager.suspend(self._handle)
 
     await self._state_manager.remove(self._handle)
 

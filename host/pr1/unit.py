@@ -9,6 +9,7 @@ from typing import Any
 
 from . import logger
 from .fiber.langservice import Analysis
+from .fiber.parser import AnalysisContext
 
 
 Unit = Any
@@ -60,13 +61,14 @@ class UnitManager:
     self.revision = 0
 
   def create_executor(self, namespace: str, /, *, host):
+    analysis_context = AnalysisContext()
     info = self.units_info[namespace]
 
     if hasattr(info.unit, 'Executor'):
       Executor = info.unit.Executor
 
       if info.options:
-        analysis, conf = Executor.options_type.analyze(info.options, host.analysis_context)
+        analysis, conf = Executor.options_type.analyze(info.options, analysis_context)
       else:
         analysis, conf = Analysis(), None
 
@@ -75,7 +77,7 @@ class UnitManager:
         return analysis, Ellipsis
 
       executor = Executor(conf, host=host)
-      analysis_load = executor.load(host.analysis_context)
+      analysis_load = executor.load(analysis_context)
 
       if analysis_load:
         analysis += analysis_load

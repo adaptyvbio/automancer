@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import ast
 import builtins
 import functools
@@ -5,9 +6,9 @@ import re
 from enum import Enum
 from pint import Quantity
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
-from .eval import EvalContext, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
+from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
@@ -105,7 +106,7 @@ class PotentialPythonExpr(Exportable, Protocol):
   def augment(self) -> 'PythonExprAugmented':
     ...
 
-  def evaluate(self, context: EvalContext) -> 'tuple[Analysis, LocatedValue]':
+  def evaluate(self, options: EvalOptions) -> 'tuple[Analysis, LocatedValue]':
     ...
 
 
@@ -119,12 +120,12 @@ class PythonExpr:
   def _compiled(self):
     return compile(self.tree, filename="<string>", mode="eval")
 
-  def evaluate(self, context: EvalContext, mode: Literal['static', 'dynamic'] = 'dynamic'):
+  def evaluate(self, options: EvalOptions, mode: Literal['static', 'dynamic'] = 'dynamic'):
     match mode:
       case 'dynamic':
-        return dynamic_evaluate(self._compiled, self.contents, context)
+        return dynamic_evaluate(self._compiled, self.contents, options)
       case 'static':
-        return static_evaluate(self.tree.body, self.contents, context)
+        return static_evaluate(self.tree.body, self.contents, options)
 
   def export(self):
     return {
@@ -201,38 +202,57 @@ class PythonExpr:
     return analysis, output
 
 
-# T = LocatedValue[...] | Evaluable[...]
-T = TypeVar('T', covariant=True)
+T = TypeVar('T', bound=LocatedValue, covariant=True)
 
-class Evaluable(Exportable, Protocol[T]):
-  def evaluate(self, stack: EvalStack) -> 'tuple[Analysis, T | EllipsisType]':
+class Evaluable(Exportable, ABC, Generic[T]):
+  @abstractmethod
+  def evaluate(self, context: EvalContext) -> 'tuple[Analysis, Evaluable[T] | T | EllipsisType]':
     ...
 
-class PythonExprObject(Evaluable):
+  @overload
+  def eval(self, context: EvalContext, *, final: Literal[False]) -> 'tuple[Analysis, Evaluable[T] | EllipsisType]':
+    ...
+
+  @overload
+  def eval(self, context: EvalContext, *, final: Literal[True]) -> 'tuple[Analysis, T | EllipsisType]':
+    ...
+
+  # @overload
+  # def eval(self, context: EvalContext, *, final: Optional[bool] = None) -> 'tuple[Analysis, Evaluable[T] | T | EllipsisType]':
+  #   ...
+
+  def eval(self, context: EvalContext, *, final: bool):
+    return self.evaluate(context) # type: ignore
+
+  def export(self):
+    raise NotImplementedError
+
+
+class PythonExprObject(Evaluable[LocatedValue[Any]]):
   def __init__(self, expr: PythonExpr, /, type: 'Type', *, depth: int, envs: EvalEnvs):
     self._depth = depth
     self._envs = envs
     self._expr = expr
     self._type = type
 
-  def evaluate(self, stack) -> 'tuple[Analysis, Any | EllipsisType]':
+  def evaluate(self, context):
     from .langservice import Analysis
     from .parser import AnalysisContext
 
     variables = dict[str, Any]()
 
     for env in self._envs:
-      if (env_vars := stack[env]) is not None:
+      if (env_vars := context.stack[env]) is not None:
         variables.update(env_vars)
 
-    context = EvalContext(variables)
+    options = EvalOptions(variables)
 
     try:
-      result = self._expr.evaluate(context)
+      result = self._expr.evaluate(options)
     except EvalError as e:
       return Analysis(errors=[e]), Ellipsis
     else:
-      analysis, result = self._type.analyze(result, AnalysisContext(symbolic=True))
+      analysis, result = self._type.analyze(result, AnalysisContext(eval_context=context, symbolic=True))
       return analysis, ValueAsPythonExpr.new(result, depth=(self._depth - 1))
 
   def export(self):
@@ -242,12 +262,14 @@ class PythonExprObject(Evaluable):
     return f"{self.__class__.__name__}({repr(self._expr)}, depth={self._depth})"
 
 
-class ValueAsPythonExpr(Evaluable):
-  def __init__(self, value: Evaluable | LocatedValue | EllipsisType, /, *, depth: int):
+S = TypeVar('S', bound=(Evaluable | LocatedValue))
+
+class ValueAsPythonExpr(Evaluable[S], Generic[S]):
+  def __init__(self, value: S | EllipsisType, /, *, depth: int):
     self._depth = depth
     self._value = value
 
-  def evaluate(self, stack):
+  def evaluate(self, context):
     from .langservice import Analysis
     return Analysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
 
@@ -261,7 +283,7 @@ class ValueAsPythonExpr(Evaluable):
     return f"{self.__class__.__name__}({repr(self._value)}, depth={(self._depth + 1)})"
 
   @classmethod
-  def new(cls, value: Evaluable | LocatedValue | EllipsisType, /, *, depth: int = 0):
+  def new(cls, value: S | EllipsisType, /, *, depth: int = 0):
     return cls(value, depth=(depth - 1)) if (depth > 0) and (not isinstance(value, EllipsisType)) else value
 
 
@@ -281,7 +303,7 @@ class PythonExprAugmented:
       if (env_vars := stack[env]) is not None:
         variables.update(env_vars)
 
-    context = EvalContext(variables)
+    context = EvalOptions(variables)
 
     try:
       result = self._expr.evaluate(context)

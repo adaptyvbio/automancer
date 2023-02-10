@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional, Protocol, TypeVar
@@ -5,7 +6,7 @@ import ast
 
 from ..draft import DraftDiagnostic
 from ..error import Error, ErrorDocumentReference
-from .eval import EvalContext, EvalEnv, EvalEnvs, EvalStack, EvalVariables
+from .eval import EvalEnv, EvalEnvs, EvalStack
 from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject
 from .langservice import Analysis, AnyType, HasAttrType, LangServiceError
 from ..reader import LocatedString, LocatedValue, Source
@@ -22,7 +23,8 @@ class BindingWriter(Protocol[T]):
   def __call__(self, value: T):
     ...
 
-class Binding(Evaluable, Protocol):
+class Binding(Evaluable):
+  @abstractmethod
   def evaluate(self, stack: EvalStack) -> 'tuple[Analysis, BindingWriter | EllipsisType]':
     ...
 

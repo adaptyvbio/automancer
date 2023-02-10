@@ -66,7 +66,7 @@ class Parser(BaseParser):
         ),
         'source': lang.Attribute(
           lang.LiteralOrExprType(
-            lang.DataRefType(text=False),
+            lang.ReadableDataRefType(text=False),
             dynamic=True
           ),
           description="The source of the data to upload. This can be a path as a literal string, a `Path` instance, a file object or a `bytes` object."

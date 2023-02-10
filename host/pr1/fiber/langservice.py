@@ -1,7 +1,10 @@
+from abc import ABC, abstractmethod
 import builtins
+from os import PathLike
+import os
 import numpy as np
 from dataclasses import dataclass, field
-import io
+from io import FileIO, IOBase, TextIOBase
 from logging import Logger
 from pathlib import Path
 from tokenize import TokenError
@@ -17,7 +20,7 @@ from ..ureg import ureg
 from ..util.misc import Exportable
 from ..util.parser import check_identifier
 from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedDict, LocatedError, LocatedList, LocatedString, LocatedValue, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
+from ..reader import LocatedDict, LocatedError, LocatedList, LocatedString, LocatedValue, LocatedValueContainer, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
 
 if TYPE_CHECKING:
   from .parser import AnalysisContext
@@ -674,9 +677,10 @@ class InvalidFileObject(LangServiceError):
   def diagnostic(self):
     return DraftDiagnostic(f"Invalid file object", ranges=self.target.area.ranges)
 
-# class MissingFileError(Error):
-#   def __init__(self, target: LocatedValue[Path], /):
-#     super().__init__(f"Missing file '{str(target.value)}'", references=[ErrorDocumentReference.from_value(target)])
+class PathOutsideDirError(Error):
+  def __init__(self, target: LocatedValue[Path], dir_path: Path, /):
+    delta = os.path.relpath(target.value, dir_path)
+    super().__init__(f"Path '{str(delta)}' is outside target directory", references=[ErrorDocumentReference.from_value(target)])
 
 
 class AnyType(Type):
@@ -960,13 +964,14 @@ class StrType(PrimitiveType):
   def __init__(self):
     super().__init__(str)
 
-class IdentifierType(StrType):
-  def __init__(self, *, allow_leading_digit = False):
+class IdentifierType(Type):
+  def __init__(self, *, allow_leading_digit: bool = False):
     super().__init__()
+
     self._allow_leading_digit = allow_leading_digit
 
-  def analyze(self, obj, context):
-    analysis, obj_new = super().analyze(obj, context)
+  def analyze(self, obj, /, context):
+    analysis, obj_new = StrType().analyze(obj, context)
 
     if isinstance(obj_new, EllipsisType):
       return analysis, Ellipsis
@@ -992,6 +997,7 @@ class EnumType:
 
     return analysis, ValueAsPythonExpr.new(obj, depth=context.eval_depth)
 
+
 class UnionType(Type):
   def __init__(self, variant: Type, /, *variants: Type):
     self._variants = [variant, *variants]
@@ -1007,10 +1013,32 @@ class UnionType(Type):
 
     return analysis, Ellipsis
 
+class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
+  def __init__(self, value: LocatedValue[Path], /, *, depth: int):
+    self._depth = depth
+    self._ensure_inside_cwd = True
+    self._path = value
+
+  def evaluate(self, context):
+    if context.cwd_path:
+      path = (context.cwd_path / self._path.value).resolve()
+
+      if self._ensure_inside_cwd and (not path.is_relative_to(context.cwd_path)):
+        return Analysis(errors=[PathOutsideDirError(LocatedValueContainer(path, self._path.area), context.cwd_path)]), Ellipsis
+
+      return Analysis(), LocatedValueContainer(path, self._path.area)
+
+    return Analysis(), self._path
+
+  @classmethod
+  def new(cls, value: LocatedValue[Path], /, *, depth: int):
+    return cls(value, depth=depth) if depth > 0 else value
+
 class PathType(Type):
-  def __init__(self):
+  def __init__(self, *, resolve_cwd: bool = True):
+    self._resolve_cwd = resolve_cwd
     self._type = UnionType(
-      PrimitiveType(Path),
+      PrimitiveType(PathLike),
       PrimitiveType(str)
     )
 
@@ -1020,48 +1048,101 @@ class PathType(Type):
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, LocatedValue.new(Path(result.value), result.area) if isinstance(result, LocatedString) else result
+    result = LocatedValueContainer(Path(result.value), result.area)
 
-# class RealPathType(Type):
-#   def __init__(self, obj_type: Type, /):
-#     self._type = obj_type
+    if context.eval_context:
+      eval_analysis, eval_result = EvaluableRelativePath(result, depth=(context.eval_depth + 1)).evaluate(context.eval_context)
+      return (analysis + eval_analysis), eval_result
+    else:
+      return analysis, EvaluableRelativePath.new(result, depth=context.eval_depth)
+
+# class PathInDirType(Type):
+#   def __init__(self, dir_path: Path):
+#     self._dir_path = dir_path
 
 #   def analyze(self, obj, /, context):
-#     analysis, result = self._type.analyze(obj, context)
+#     analysis, result = PathType().analyze(obj, context)
 
 #     if isinstance(result, EllipsisType):
 #       return analysis, Ellipsis
 
-#     assert isinstance(result, LocatedValue)
-#     assert isinstance(result.value, Path)
+#     new_path = self._dir_path / result.value
 
-#     if not result.value.exists():
-#       analysis.errors.append(MissingFileError(result))
+#     if not new_path.is_relative_to(self._dir_path):
+#       analysis.errors.append(PathOutsideDirError(result, self._dir_path))
+#       return analysis, Ellipsis
 
-#     return analysis, result
+#     return analysis, LocatedValueContainer(new_path, result.area)
 
-# TODO: Look into os.PathLike
+
+class FileRef(ABC):
+  @abstractmethod
+  def close(self):
+    ...
+
+  @abstractmethod
+  def open(self, mode: str):
+    ...
+
+class IOBaseFileRef(FileRef):
+  def __init__(self, file: IOBase, /):
+    self._file = file
+
+  def close(self):
+    pass
+
+  def open(self, mode: str):
+    if isinstance(self._file, FileIO):
+      assert self._file.mode == mode
+
+    return self._file
+
+class PathFileRef(FileRef):
+  def __init__(self, path: Path, /):
+    self._file: Optional[IOBase] = None
+    self._path = path
+
+  def close(self):
+    assert self._file
+    self._file.close()
+
+  def open(self, mode: str):
+    file = self._path.open(mode)
+
+    assert isinstance(file, IOBase)
+    self._file = file
+
+    return file
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({str(self._path)!r})"
+
 class FileRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
     self._text = text
     self._type = UnionType(
       PathType(),
-      PrimitiveType(io.IOBase)
+      PrimitiveType(IOBase)
     )
 
-  def analyze(self, obj, context):
+  def analyze(self, obj, /, context):
     analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    if (self._text is not None) and isinstance(result.value, io.IOBase) and (isinstance(result.value, io.TextIOBase) != self._text):
+    if (self._text is not None) and isinstance(result.value, IOBase) and (isinstance(result.value, TextIOBase) != self._text):
       analysis.errors.append(InvalidFileObject(result))
       return analysis, Ellipsis
 
-    return analysis, ValueAsPythonExpr.new(result, depth=context.eval_depth)
+    if isinstance(result.value, Path):
+      ref = PathFileRef(result.value)
+    else:
+      ref = IOBaseFileRef(result.value)
 
-class DataRefType(Type):
+    return analysis, ValueAsPythonExpr.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
+
+class ReadableDataRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
     self._type = UnionType(
       FileRefType(text=text),
@@ -1070,6 +1151,14 @@ class DataRefType(Type):
 
   def analyze(self, obj, context):
     return self._type.analyze(obj, context)
+
+# class WritableDataRefType(Type):
+#   def __init__(self, *, text: Optional[bool] = None):
+#     self._type = UnionType(
+#       BindingType(),
+#       FileRefType(text=text)
+#     )
+
 
 class BindingType(Type):
   def analyze(self, obj, /, context):
@@ -1134,14 +1223,18 @@ class KVDictType(Type):
     located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
     return analysis, KVDictValueAsPythonExpr.new(located_result, depth=context.eval_depth)
 
-class KVDictValueAsPythonExpr:
-  def __init__(self, value: LocatedDict, /, *, depth: int):
+K = TypeVar('K', bound=LocatedValue)
+V = TypeVar('V', bound=LocatedValue)
+
+class KVDictValueAsPythonExpr(Evaluable[LocatedDict[K, V]], Generic[K, V]):
+  def __init__(self, value: LocatedDict[Evaluable[K], Evaluable[V]], /, *, depth: int):
     self._depth = depth
     self._value = value
 
   def evaluate(self, stack):
     analysis = Analysis()
-    result = dict[Any, Any]()
+    failure = False
+    result = dict[Evaluable[K] | K, Evaluable[V] | V]()
 
     # TODO: Same as lists
     for key, value in self._value.items():
@@ -1151,9 +1244,12 @@ class KVDictValueAsPythonExpr:
       analysis += key_analysis
       analysis += value_analysis
 
-      result[key_result] = value_result
+      if not isinstance(key_result, EllipsisType) and not isinstance(value_result, EllipsisType):
+        result[key_result] = value_result
+      else:
+        failure = True
 
-    return analysis, self.new(LocatedDict(result, self._value.area), depth=(self._depth - 1))
+    return analysis, self.new(LocatedDict(result, self._value.area), depth=(self._depth - 1)) if not failure else Ellipsis
 
   def __repr__(self):
     return f"{self.__class__.__name__}({self._value!r}, depth={self._depth})"
@@ -1169,6 +1265,24 @@ class EvaluableContainerType(Type):
 
   def analyze(self, obj, /, context):
     return self._type.analyze(obj, context.update(eval_depth=self._depth))
+
+class DeferredAnalysisType(Type):
+  def __init__(self, obj_type: Type, /, *, depth: int):
+    self._depth = depth
+    self._type = obj_type
+
+  def analyze(self, obj, /, context):
+    return (Analysis(), ValueAsPythonExpr.new(DeferredAnalysisValueAsPythonExpr(obj, self._type, depth=(context.eval_depth - self._depth)), depth=self._depth)) if self._depth > 0 else self._type.analyze(obj, context)
+
+class DeferredAnalysisValueAsPythonExpr(Evaluable):
+  def __init__(self, obj: LocatedValue, obj_type: Type, /, *, depth: int):
+    self._depth = depth
+    self._type = obj_type
+    self._obj = obj
+
+  def evaluate(self, context):
+    from .parser import AnalysisContext
+    return self._type.analyze(self._obj, AnalysisContext(eval_context=context, eval_depth=self._depth, symbolic=True))
 
 class HasAttrType(Type):
   def __init__(self, attribute: str, /):

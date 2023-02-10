@@ -440,15 +440,18 @@ class LocatedString(str, LocatedValue[str]):
     return match.string[span[0]:span[1]]
 
 
-class LocatedDict(dict, LocatedValue[dict]):
+K = TypeVar('K')
+V = TypeVar('V')
+
+class LocatedDict(dict[K, V], LocatedValue[dict[K, V]], Generic[K, V]):
   def __new__(cls, *args, **kwargs):
     return super(LocatedDict, cls).__new__(cls)
 
-  def __init__(self, value: dict, area: LocationArea):
+  def __init__(self, value: dict[K, V], area: LocationArea):
     LocatedValue.__init__(self, value, area)
     self.update(value)
 
-  def get_key(self, target):
+  def get_key(self, target: V):
     return next(key for key in self.keys() if key == target)
 
 

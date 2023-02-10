@@ -4,12 +4,12 @@ import itertools
 from abc import ABC, abstractmethod
 from asyncio import Event
 from dataclasses import KW_ONLY, dataclass, field
+from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
 
-from .devices.claim import ClaimSymbol
-from .error import Error
 from .fiber.eval import EvalStack
 from .fiber.parser import BlockState, BlockUnitState
+from .master.analysis import MasterAnalysis, MasterError
 from .util.misc import Exportable
 
 if TYPE_CHECKING:
@@ -17,11 +17,11 @@ if TYPE_CHECKING:
   from .units.base import BaseRunner
 
 
-class StateInternalError(Error):
+class StateInternalError(MasterError):
   def __init__(self, message: str):
     super().__init__(message)
 
-class StateProtocolError(Error):
+class StateProtocolError(MasterError):
   def __init__(self, message: str):
     super().__init__(message)
 
@@ -30,7 +30,7 @@ class StateProtocolError(Error):
 class StateEvent:
   location: Optional[Exportable] = None
   _: KW_ONLY
-  errors: list[Error] = field(default_factory=list)
+  analysis: MasterAnalysis = field(default_factory=MasterAnalysis)
   failure: bool = False
   settled: bool = False
   time: Optional[float] = None
@@ -57,7 +57,7 @@ class StateLocation:
 
 @dataclass(kw_only=True)
 class StateRecord:
-  errors: list[Error]
+  analysis: MasterAnalysis
   failure: bool
   location: StateLocation
   settled: bool
@@ -72,6 +72,7 @@ class StateProgramItem:
   location: StateLocation
   parent: 'Optional[StateProgramItem]'
 
+  _aborted: bool = False
   _failed: bool = False
   _settle_event: Event = field(default_factory=Event, init=False)
   _update_program: Callable[[StateRecord], None]
@@ -105,20 +106,23 @@ class StateProgramItem:
   def __hash__(self):
     return id(self)
 
-  def _update(self, *, errors: Optional[list[Error]], failure: bool = False):
+  def _update(self, *, analysis: Optional[MasterAnalysis], failure: bool = False):
     self._update_program(StateRecord(
-      errors=(errors or list()),
+      analysis=(analysis or MasterAnalysis()),
       failure=failure,
       location=copy.deepcopy(self.location),
       settled=self.settled
     ))
 
 class UnitStateInstance(ABC):
-  def __init__(self, *, notify: Callable[[StateEvent], None], stack: EvalStack):
+  def __init__(self, runner: 'BaseRunner', *, notify: Callable[[StateEvent], None], stack: EvalStack):
     ...
 
+  def prepare(self, state: BlockUnitState) -> tuple[MasterAnalysis, None | EllipsisType]:
+    return MasterAnalysis(), None
+
   @abstractmethod
-  def apply(self, *, resume: bool) -> StateEvent:
+  def apply(self) -> StateEvent:
     ...
 
   @abstractmethod
@@ -129,12 +133,17 @@ class UnitStateInstance(ABC):
   async def suspend(self) -> Optional[StateEvent]:
     ...
 
+class UnitStateInstanceFactory(Protocol):
+  def __call__(self, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> UnitStateInstance:
+    ...
+
+
 class UnitStateManager(ABC):
   def __init__(self, runner: 'BaseRunner'):
     ...
 
   @abstractmethod
-  def add(self, item: StateProgramItem, state: BlockUnitState, *, notify: Callable[[StateEvent], None], stack: EvalStack):
+  def add(self, item: StateProgramItem, state: BlockUnitState, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> tuple[MasterAnalysis, None | EllipsisType]:
     ...
 
   @abstractmethod
@@ -153,16 +162,19 @@ class UnitStateManager(ABC):
   async def suspend(self, item: StateProgramItem) -> Optional[StateEvent]:
     ...
 
-UnitStateConsumer = type[UnitStateInstance] | UnitStateManager
+UnitStateConsumer = UnitStateInstanceFactory | UnitStateManager
 
 
 class UnitStateInstanceManager(UnitStateManager):
-  def __init__(self, Instance: type[UnitStateInstance], /):
-    self._Instance = Instance
+  def __init__(self, factory: UnitStateInstanceFactory, /):
+    self._factory = factory
     self._instances = dict[StateProgramItem, UnitStateInstance]()
 
   def add(self, item, state, *, notify, stack):
-    self._instances[item] = self._Instance(notify=notify, stack=stack)
+    instance = self._factory(notify=notify, stack=stack)
+    self._instances[item] = instance
+
+    return instance.prepare(state)
 
   async def remove(self, item):
     await self._instances[item].close()
@@ -174,7 +186,7 @@ class UnitStateInstanceManager(UnitStateManager):
         self._instances[item].apply(resume=False)
       except Exception as e:
         item._update(
-          errors=[StateInternalError(f"State consumer internal error: {e}")],
+          analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer internal error: {e}")]),
           failure=True
         )
 
@@ -187,7 +199,7 @@ class UnitStateInstanceManager(UnitStateManager):
 
 class GlobalStateManager:
   def __init__(self, consumers: dict[str, UnitStateConsumer]):
-    self._consumers: dict[str, UnitStateManager] = { namespace: (UnitStateInstanceManager(consumer) if isinstance(consumer, type) else consumer) for namespace, consumer in consumers.items() }
+    self._consumers: dict[str, UnitStateManager] = { namespace: (UnitStateInstanceManager(consumer) if isinstance(consumer, Callable) else consumer) for namespace, consumer in consumers.items() }
     self._items = dict['ProgramHandle', StateProgramItem]()
 
   def _handle_event(self, item: StateProgramItem, namespace: str, event: StateEvent):
@@ -214,7 +226,7 @@ class GlobalStateManager:
     item._failed = item._failed or event.failure
 
     item._update(
-      errors=event.errors,
+      analysis=event.analysis,
       failure=event.failure
     )
 
@@ -245,14 +257,20 @@ class GlobalStateManager:
 
     self._items[handle] = item
 
+    aborted = False
+    analysis = MasterAnalysis()
+
     for namespace, consumer in self._consumers.items():
-      value = state # [namespace]
+      value = state[namespace]
       assert value
 
       def notify(event: StateEvent):
         self._handle_event(item, namespace, event)
 
-      consumer.add(item, value, notify=notify, stack=stack)
+      result = analysis.add(consumer.add(item, value, notify=notify, stack=stack))
+      aborted = aborted or isinstance(result, EllipsisType)
+
+    return analysis, (Ellipsis if aborted else None)
 
   async def remove(self, handle: 'ProgramHandle'):
     item = self._items[handle]
@@ -290,7 +308,7 @@ class GlobalStateManager:
 
         item = relevant_items[0]
         item._update(
-          errors=[StateInternalError(f"State consumer '{namespace}' internal error: {e}")],
+          analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer '{namespace}' internal error: {e}")]),
           failure=True
         )
 
@@ -298,7 +316,7 @@ class GlobalStateManager:
       item.applied = True
 
     for item in relevant_items:
-      errors = list[Error]()
+      errors = list[MasterError]()
 
       for namespace in self._consumers.keys():
         entry = item.location.entries[namespace]
@@ -306,7 +324,7 @@ class GlobalStateManager:
         if not entry:
           errors.append(StateProtocolError(f"State consumer '{namespace}' did not provide a location synchronously"))
 
-      item._update(errors=errors)
+      item._update(analysis=MasterAnalysis(errors=errors))
 
     for item in origin_item.ancestors():
       await item._settle_event.wait()
@@ -357,8 +375,11 @@ class DemoStateInstance(UnitStateInstance):
     self._logger.debug("Created")
     self._notify = notify
 
-  def apply(self, *, resume: bool):
-    self._logger.debug(f'Apply, resume={resume}')
+  def prepare(self, state):
+    return MasterAnalysis(), Ellipsis
+
+  def apply(self):
+    self._logger.debug('Apply')
 
     wait = 0 # self._index == 0 # self._index == 1
 
@@ -375,7 +396,7 @@ class DemoStateInstance(UnitStateInstance):
 
       self._notify(StateEvent(DemoStateLocation(3),
         settled=True,
-        errors=[Error(f"Problem {self._index}b")]
+        analysis=MasterAnalysis(errors=[MasterError(f"Problem {self._index}b")])
       ))
 
       # self._notify(StateEvent(DemoStateLocation(), errors=[
@@ -387,9 +408,9 @@ class DemoStateInstance(UnitStateInstance):
       from .util.asyncio import run_anonymous
       run_anonymous(task())
 
-    self._notify(StateEvent(DemoStateLocation(1), errors=[
-      Error(f"Applyyy {self._index}")
-    ], failure=(self._index == 1 and self._flag == 0), settled=True)) # (not wait)))
+    self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
+      MasterError(f"Applyyy {self._index}")
+    ]), failure=(self._index == 1 and self._flag == 0 and False), settled=True)) # (not wait)))
 
     self._flag += 1
 

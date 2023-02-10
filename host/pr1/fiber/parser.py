@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import namedtuple
 from dataclasses import KW_ONLY, dataclass, field
+from pathlib import Path, PurePath
 from pint import UnitRegistry
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Optional, Protocol, Sequence
@@ -9,7 +10,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Optional, Proto
 from ..error import Trace
 from ..util.misc import Exportable
 from . import langservice as lang
-from .eval import EvalEnv, EvalEnvs, EvalStack
+from .eval import EvalContext, EvalEnv, EvalEnvs, EvalStack
 from .expr import PythonExpr, PythonExprAugmented
 from .. import reader
 from ..reader import LocatedValue, LocationArea
@@ -227,46 +228,12 @@ Transforms = list[BaseTransform]
 @dataclass(kw_only=True)
 class AnalysisContext:
   envs_list: list[EvalEnvs] = field(default_factory=list)
+  eval_context: Optional[EvalContext] = None
   eval_depth: int = 0
   symbolic: bool = False
 
   def update(self, **kwargs):
     return type(self)(**{ **self.__dict__, **kwargs })
-
-
-class UnresolvedBlockData:
-  def evaluate(self, stack: EvalStack) -> tuple[lang.Analysis, BlockData | EllipsisType]:
-    ...
-
-@debug
-class UnresolvedBlockDataExpr(UnresolvedBlockData):
-  def __init__(self, expr: PythonExprAugmented):
-    self._expr = expr
-
-  def evaluate(self, stack: EvalStack):
-    from .opaque import ConsumedValueError
-
-    analysis, value = self._expr.evaluate(stack)
-
-    if value is Ellipsis:
-      return analysis, Ellipsis
-
-    try:
-      return analysis, value.value.as_block()
-    except ConsumedValueError:
-      analysis.errors.append(DraftGenericError("Value already consumed", ranges=value.area.ranges))
-      return analysis, Ellipsis
-
-@debug
-class UnresolvedBlockDataLiteral(UnresolvedBlockData):
-  def __init__(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, fiber: 'FiberParser'):
-    self._attrs = attrs
-    self._fiber = fiber
-    self._adoption_envs = adoption_envs
-    self._runtime_envs = runtime_envs
-
-  def evaluate(self, stack: EvalStack):
-    return lang.Analysis(), self._fiber.parse_block_attrs(self._attrs, adoption_envs=self._adoption_envs, adoption_stack=stack, runtime_envs=self._runtime_envs)
 
 
 # ----
@@ -295,8 +262,6 @@ class FiberParser:
     self.draft = draft
     self.host = host
     self.user_env = EvalEnv()
-
-    self.analysis_context = AnalysisContext() # @deprecated
 
     self.analysis, protocol = self._parse()
     self.protocol = protocol if not isinstance(protocol, EllipsisType) else None
@@ -377,8 +342,14 @@ class FiberParser:
     if isinstance(root_result_native, EllipsisType):
       return analysis, Ellipsis
 
+    # def adoption_open(**kwargs):
+    #   raise NotImplementedError
+
     adoption_stack: EvalStack = {
       global_env: {
+        'ExpPath': PurePath,
+        'Path': Path,
+        # 'open': adoption_open,
         'unit': ureg
       }
     }

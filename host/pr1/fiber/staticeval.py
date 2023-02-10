@@ -4,7 +4,7 @@ import functools
 import math
 from typing import Optional
 
-from .eval import EvalContext, EvalError
+from .eval import EvalOptions, EvalError
 from .. import reader as reader
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea, LocationRange, Source
@@ -19,13 +19,13 @@ class InvalidNode(EvalError):
     return DraftDiagnostic("Invalid node", ranges=self.area.ranges)
 
 
-def evaluate(expr: ast.expr, /, input: LocatedString, context: EvalContext):
+def evaluate(expr: ast.expr, /, input: LocatedString, options: EvalOptions):
   area = input.compute_ast_node_area(expr)
 
   match expr:
     case ast.BinOp():
-      left = evaluate(expr.left, input, context)
-      right = evaluate(expr.right, input, context)
+      left = evaluate(expr.left, input, options)
+      right = evaluate(expr.right, input, options)
 
       try:
         match expr.op:
@@ -42,17 +42,17 @@ def evaluate(expr: ast.expr, /, input: LocatedString, context: EvalContext):
 
     case ast.Call(args=args, func=ast.Name(ctx=ast.Load(), id=func_name), keywords=kwargs):
       # TODO: Add checks for duplicate kwargs
-      kwargs = { keyword.arg: evaluate(keyword.value, input, context).value for keyword in kwargs }
+      kwargs = { keyword.arg: evaluate(keyword.value, input, options).value for keyword in kwargs }
 
       match func_name, args, kwargs:
         case "abs", [arg], {}:
-          return LocatedValue.new(abs(evaluate(arg, input, context).value), area)
+          return LocatedValue.new(abs(evaluate(arg, input, options).value), area)
         case "cos", [arg], {}:
-          return LocatedValue.new(math.cos(evaluate(arg, input, context).value), area)
+          return LocatedValue.new(math.cos(evaluate(arg, input, options).value), area)
         case "int", [arg], {}:
-          return LocatedValue.new(int(evaluate(arg, input, context).value), area)
-        case name, args, kwargs if name in context.variables:
-          return LocatedValue.new(context.variables[name](*args, **kwargs), area)
+          return LocatedValue.new(int(evaluate(arg, input, options).value), area)
+        case name, args, kwargs if name in options.variables:
+          return LocatedValue.new(options.variables[name](*args, **kwargs), area)
         case _:
           raise InvalidCall(area)
 
@@ -61,23 +61,23 @@ def evaluate(expr: ast.expr, /, input: LocatedString, context: EvalContext):
 
     case ast.Dict(keys=keys, values=values):
       return LocatedValue.new({
-        evaluate(key, input, context): evaluate(value, input, context) for key, value in zip(keys, values)
+        evaluate(key, input, options): evaluate(value, input, options) for key, value in zip(keys, values)
       }, area)
 
     case ast.List(ctx=ast.Load(), elts=items):
       return LocatedValue.new([
-        evaluate(item, input, context) for item in items
+        evaluate(item, input, options) for item in items
       ], area)
 
-    case ast.Name(ctx=ast.Load(), id=name) if name in context.variables:
-      return LocatedValue.new(context.variables[name], area)
+    case ast.Name(ctx=ast.Load(), id=name) if name in options.variables:
+      return LocatedValue.new(options.variables[name], area)
 
     case ast.Subscript(ctx=ast.Load(), slice=slice, value=value):
       # Re-locating the result in case we are indexing a string, which will generate a non-located string.
-      return LocatedValue.new(evaluate(value, input, context).value[evaluate(slice, input, context).value], area)
+      return LocatedValue.new(evaluate(value, input, options).value[evaluate(slice, input, options).value], area)
 
     case ast.UnaryOp(op=ast.USub(), operand=operand):
-      return LocatedValue.new(-evaluate(operand, input, context).value, area)
+      return LocatedValue.new(-evaluate(operand, input, options).value, area)
 
     case _:
       raise InvalidNode(area)
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     # )))
 
     try:
-      x = evaluate(tree.body, context=EvalContext(dict(foo=3)), input=input)
+      x = evaluate(tree.body, options=EvalOptions(dict(foo=3)), input=input)
     except EvalError as e:
       print("Error: " + type(e).__name__)
       print(e.area.format())

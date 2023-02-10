@@ -33,7 +33,7 @@ logger = logging.getLogger("pr1.test")
 class Backend:
   def __init__(self) -> None:
     self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
-    self.data_dir = Path("tmp/master-host")
+    self.data_dir = Path("tmp/master-host").resolve()
     logger.debug(f"Storing data in '{self.data_dir}'")
 
 
@@ -63,23 +63,11 @@ async def main():
 name: Test
 
 steps:
-  # wait: 1s
-  actions:
-    - wait: 1 sec
-    - wait: 1 sec
-
-    # - wait: 1 sec
-
-    # - wait:
-    #     a: ${{ (3 + x) * ureg.sec }}
-    #     c: 34 min
-    #     d: nil
-    # - wait: 1s
-  # actions:
-  #   - Mock.valueBool: true
-  #     wait: 1s
-  #   - wait: 1s
-  # Mock.valueBool: false
+  wait: 1s
+  record:
+    fields:
+      - value: Okolab.temperature
+    output: foo.bar
 """)
 
   draft = Draft(

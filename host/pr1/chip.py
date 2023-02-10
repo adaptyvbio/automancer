@@ -1,6 +1,7 @@
 import base64
 import json
 import math
+from pathlib import Path
 import pickle
 import struct
 import time
@@ -114,7 +115,7 @@ class UnreadableChip(BaseChip):
 class Chip(BaseChip):
   version = 2
 
-  def __init__(self, *, dir, id):
+  def __init__(self, *, dir: Path, id: str):
     from .fiber.master2 import Master
 
     self.dir = dir

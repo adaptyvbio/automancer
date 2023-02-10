@@ -17,6 +17,7 @@ export interface Location {
 }
 
 export enum LocationMode {
+  AbortedState = 0,
   ApplyingState = 9,
   HaltingChild = 1,
   HaltingState = 2,
@@ -78,7 +79,7 @@ export default {
     return block.child;
   },
   isBlockPaused(block, location, options) {
-    return location.mode == LocationMode.Paused;
+    return [LocationMode.AbortedState, LocationMode.Paused].includes(location.mode);
   },
   onSelectBlockMenu(block, location, path) {
     switch (path.first()) {

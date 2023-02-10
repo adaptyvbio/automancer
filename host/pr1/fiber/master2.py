@@ -1,6 +1,9 @@
 from asyncio import Future, Task
 from collections import deque
 from dataclasses import dataclass, field
+import functools
+from os import PathLike
+from pathlib import Path
 from traceback import StackSummary
 from typing import TYPE_CHECKING, Any, Optional
 import asyncio
@@ -31,9 +34,9 @@ class Master:
     self.protocol = protocol
 
     self.state_manager = GlobalStateManager({
-      # namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else Consumer) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
       # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
-      'foo': DemoStateInstance
+      # 'foo': DemoStateInstance
     })
 
     self._analysis = MasterAnalysis()
@@ -79,11 +82,20 @@ class Master:
   async def run(self, update_callback: SimpleCallbackFunction):
     from random import random
 
+    def ExpPath(path: PathLike[str] | str):
+      return self.chip.dir / path
+
+    def runtime_open(path: PathLike[str] | str, /, **kwargs):
+      return open(ExpPath(path), **kwargs)
+
     runtime_stack = {
-      self.protocol.global_env: dict(
-        random=random,
-        unit=ureg
-      ),
+      self.protocol.global_env: {
+        'ExpPath': ExpPath,
+        'Path': Path,
+        'open': runtime_open,
+        'random': random,
+        'unit': ureg
+      },
       self.protocol.user_env: dict()
     }
 

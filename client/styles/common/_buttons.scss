@@ -41,4 +41,8 @@
 .actions {
   display: flex;
   column-gap: 0.4rem;
+
+  > * {
+    flex-shrink: 0;
+  }
 }

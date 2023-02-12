@@ -28,6 +28,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
   pool = new Pool();
 
   render() {
+    let documents = this.props.app.state.documents;
     let drafts = Object.values(this.props.app.state.drafts);
 
     return (
@@ -53,31 +54,43 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
                 }}>New file</button>
                 <button type="button" className="btn" onClick={() => {
                   this.pool.add(async () => {
-                    let draftId = await this.props.app.loadDraft({ directory: false });
+                    await this.props.app.queryDraft({ directory: false });
 
-                    if (draftId) {
-                      ViewDraft.navigate(draftId);
-                    }
+                    // if (draftId) {
+                    //   ViewDraft.navigate(draftId);
+                    // }
                   });
                 }}>Open file</button>
+                <button type="button" className="btn" onClick={() => {
+                  this.pool.add(async () => {
+                    await this.props.app.queryDraft({ directory: true });
+
+                    // if (draftId) {
+                    //   ViewDraft.navigate(draftId);
+                    // }
+                  });
+                }}>Open directory</button>
               </div>
             </header>
 
             <div className="lproto-list">
               {drafts.map((draft) => {
                 // let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
+                let entryDocument = documents[draft.entryDocumentId];
 
                 return (
                   <DraftEntry
                     href={`${BaseUrl}/draft/${draft.id}`}
                     name={draft.name ?? '[Untitled]'}
                     properties={[
-                      ...(draft.item.locationInfo
-                        ? [{ id: 'location', label: draft.item.locationInfo.name, icon: { directory: 'folder', file: 'description' }[draft.item.locationInfo.type] }]
-                        : []),
-                      ...(draft.item.lastModified
-                        ? [{ id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.item.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' }]
-                        : []),
+                      { id: 'location', label: entryDocument.path.join('/'), icon: 'description' }
+                      // ...(draft.item.locationInfo
+                      //   ? [{ id: 'location', label: draft.item.locationInfo.name, icon: { directory: 'folder', file: 'description' }[draft.item.locationInfo.type] }]
+                      //   : []),
+                      // ...(draft.lastModified
+                      //   ? [{ id: 'lastModified', label: 'Last modified ' + rtf.format(Math.round((draft.item.lastModified - Date.now()) / 3600e3 / 24), 'day'), icon: 'calendar_today' }]
+                      //   : []),
+
                       // ...(draft.compilation
                       //   ? [analysis
                       //     ? { id: 'display', label: formatDuration(analysis.done.time), icon: 'schedule' }
@@ -91,8 +104,8 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
                       // { id: 'archive', name: 'Archive', icon: 'archive' },
                       // { id: 'open-readonly', name: 'Open in read-only mode' },
                       // { id: '_divider1', type: 'divider' },
-                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !draft.item.revealFile },
-                      { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !draft.item.openFile },
+                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !entryDocument.model.reveal },
+                      { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !entryDocument.model.open },
                       { id: '_divider2', type: 'divider' },
                       // { id: 'download', name: 'Download', icon: 'download', disabled: true },
                       { id: 'save', name: 'Save as...', icon: 'save', disabled: true },
@@ -111,7 +124,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
 
                         case 'open': {
                           this.pool.add(async () => {
-                            await draft.item.openFile!();
+                            await entryDocument.model.open!();
                           });
 
                           break;
@@ -119,7 +132,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
 
                         case 'reveal': {
                           this.pool.add(async () => {
-                            await draft.item.revealFile!();
+                            await entryDocument.model.reveal!();
                           });
 
                           break;
@@ -148,6 +161,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
 
 
 export function DraftEntry(props: ContextMenuAreaProps & {
+  disabled?: unknown;
   href?: string | null;
   name: string;
   properties: {

@@ -1,10 +1,13 @@
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
-import type { AppBackend, DraftItem } from './app-backends/base';
+import styles from '../styles/components/application.module.scss';
+
+import type { AppBackend, DraftDocumentId, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
 import type { Chip, ChipId } from './backends/common';
+import type { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { Sidebar } from './components/sidebar';
-import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import { createDraftFromItem, Draft, DraftCompilation, DraftId } from './draft';
 import type { Host } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
@@ -18,9 +21,6 @@ import { Unit, UnitNamespace } from './units';
 import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
-import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-
-import styles from '../styles/components/application.module.scss';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
@@ -71,12 +71,10 @@ export interface ApplicationProps {
 }
 
 export interface ApplicationState {
-  host: Host | null;
-
-  drafts: DraftsRecord;
-  openDraftIds: ImSet<DraftId>;
-
+  drafts: Record<DraftInstanceId, DraftInstanceSnapshot>;
+  documents: Record<DraftDocumentId, DraftDocumentSnapshot>;
   currentRouteData: RouteData | null;
+  host: Host | null;
 }
 
 export class Application extends React.Component<ApplicationProps, ApplicationState> {
@@ -88,12 +86,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     super(props);
 
     this.state = {
-      host: null,
-
+      currentRouteData: null,
+      documents: {},
       drafts: {},
-      openDraftIds: ImSet(),
-
-      currentRouteData: null
+      host: null
     };
   }
 
@@ -298,20 +294,32 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // List and compile known drafts if available
 
-      let draftItems = await this.appBackend.listDrafts();
-      let drafts = Object.fromEntries(
-        draftItems.map((draftItem) => {
-          return [draftItem.id, createDraftFromItem(draftItem)];
-        })
-      );
+      this.setState((state) => ({
+        ...state,
+        ...this.appBackend.getSnapshot()
+      }));
 
-      this.setState({ drafts });
+      // let draftItems = await this.appBackend.listDrafts();
+      // let drafts = Object.fromEntries(
+      //   draftItems.map((draftItem) => {
+      //     return [draftItem.id, createDraftFromItem(draftItem)];
+      //   })
+      // );
 
-      // for (let draft of Object.values(drafts)) {
-      //   if (draft.item.readable) {
-      //     this.setDraft(draft, { skipAnalysis: true, skipWrite: true });
-      //   }
-      // }
+      // let createDraftItemFromInstance = (instance: DraftInstance): DraftItem => {
+      //   return {
+      //     id: instance.id,
+      //     instance
+      //   };
+      // };
+
+      // this.setState({
+      //   drafts: Object.fromEntries(
+      //     Object.values(this.appBackend.draftInstances)
+      //       .map((instance) => instance.getSnapshot())
+      //       .map((snapshot) => [snapshot.id, snapshot])
+      //   )
+      // });
 
 
       // Initialize the route
@@ -343,29 +351,43 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async deleteDraft(draftId: DraftId) {
-    this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
+    let instance = this.state.drafts[draftId].model;
+    await instance.remove();
 
-    this.setState((state) => {
-      let { [draftId]: _, ...drafts } = state.drafts;
-      return { drafts };
-    });
-
-    await this.appBackend.deleteDraft(draftId);
+    this.setState((state) => ({
+      ...state,
+      ...this.appBackend.getSnapshot()
+    }));
   }
 
-  async loadDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-    let draftItem = await this.appBackend.loadDraft(options);
+  async queryDraft(options: { directory: boolean; }): Promise<void> {
+    let candidates = await this.appBackend.queryDraftCandidates({ directory: options.directory });
+    let candidate = candidates[0];
 
-    if (draftItem) {
+    if (candidate) {
+      let instance = await candidate.createInstance();
+
       this.setState((state) => ({
-        drafts: {
-          ...state.drafts,
-          [draftItem!.id]: createDraftFromItem(draftItem!)
-        }
+        ...state,
+        ...this.appBackend.getSnapshot()
       }));
-    }
 
-    return (draftItem?.id ?? null);
+      // this.setState((state) => {
+      //   let documentSnapshot = instance.entryDocument.getSnapshot();
+      //   let instanceSnapshot = instance.getSnapshot();
+
+      //   return {
+      //     documents: {
+      //       ...state.documents,
+      //       [documentSnapshot.id]: documentSnapshot
+      //     },
+      //     drafts: {
+      //       ...state.drafts,
+      //       [instanceSnapshot.id]: instanceSnapshot
+      //     }
+      //   };
+      // });
+    }
   }
 
   async saveDraftSource(draft: Draft, source: string) {
@@ -434,11 +456,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         };
       });
     }, { signal: options.signal });
-  }
-
-
-  setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
-    this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
   }
 
 

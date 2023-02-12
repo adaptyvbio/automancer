@@ -7,7 +7,7 @@ import styles from '../../styles/components/title-bar.module.scss';
 
 
 export interface TitleBarProps {
-  subtitle?: string | null;
+  subtitle?: React.ReactNode | null;
   subtitleVisible?: unknown;
   title: string;
 
@@ -25,7 +25,7 @@ export interface TitleBarState {
 }
 
 export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
-  lastSubtitle: string | null = null;
+  lastSubtitle: React.ReactNode | null = null;
   notificationHideTimeout: number | null = null;
   refTitle = React.createRef<HTMLDivElement>();
 

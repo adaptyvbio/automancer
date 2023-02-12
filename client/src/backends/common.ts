@@ -3,7 +3,7 @@ import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, ProtocolData, SegmentData, Unit, UnitInfo, UnitNamespace } from '../units';
 
 import type { Master, Protocol, ProtocolBlockPath } from '../interfaces/protocol';
-import type { HostDraft, HostDraftCompilerOptions } from '../interfaces/draft';
+import type { HostDraft, HostDraftCompilerOptions, HostDraftCompilerResult } from '../interfaces/draft';
 
 
 export abstract class BackendCommon implements BaseBackend {
@@ -34,7 +34,7 @@ export abstract class BackendCommon implements BaseBackend {
   abstract compileDraft(options: {
     draft: HostDraft;
     options: HostDraftCompilerOptions;
-  }): Promise<DraftCompilation>;
+  }): Promise<HostDraftCompilerResult>;
   abstract createChip(): Promise<{ chipId: ChipId; }>;
   abstract createDraftSample(): Promise<string>;
   abstract deleteChip(chipId: ChipId, options: { trash: boolean; }): Promise<void>;

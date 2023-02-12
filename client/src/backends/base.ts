@@ -2,7 +2,7 @@ import type { Codes, Unit, UnitInfo, UnitNamespace } from '../units';
 import type { ChipId, HostState, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
 import type { ProtocolBlockPath } from '../interfaces/protocol';
-import type { HostDraft, HostDraftCompilerOptions } from '../interfaces/draft';
+import type { HostDraft, HostDraftCompilerOptions, HostDraftCompilerResult } from '../interfaces/draft';
 
 
 export interface BaseBackend {
@@ -19,7 +19,7 @@ export interface BaseBackend {
   compileDraft(options: {
     draft: HostDraft;
     options: HostDraftCompilerOptions;
-  }): Promise<DraftCompilation>;
+  }): Promise<HostDraftCompilerResult>;
   createChip(): Promise<{ chipId: ChipId; }>;
   createDraftSample(): Promise<string>;
   deleteChip(chipId: ChipId, options: { trash: boolean; }): Promise<void>;

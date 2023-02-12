@@ -1,11 +1,10 @@
 import * as idb from 'idb-keyval';
 
-import { DraftId, DraftPrimitive } from '../draft';
-import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
-import * as util from '../util';
-import { HostId } from '../backends/common';
 import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
 import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
+import * as util from '../util';
+import { Pool } from '../util';
+import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 
 
 interface BrowserStoreMainEntry {
@@ -24,14 +23,19 @@ export type BrowserStoreHostSettingsEntry = HostSettingsData;
 export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot> implements DraftDocument {
   id: DraftDocumentId = crypto.randomUUID();
   lastModified: number | null = null;
-  readonly: boolean = false;
-  source: string | null = null;
+  readonly = false;
+  source: {
+    contents: string;
+    lastModified: number;
+  } | null = null;
 
   readable: boolean = false;
   writable: boolean = false;
 
   _attachedDraftInstances = new Set<BrowserDraftInstance>();
   _handle: FileSystemFileHandle;
+  _loadingPromise: Promise<void> | null = null;
+  _writing = false;
 
   constructor(handle: FileSystemFileHandle) {
     super();
@@ -43,9 +47,13 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
       model: this,
 
       id: this.id,
+      deleted: false,
       lastModified: this.lastModified,
       path: [this._handle.name],
-      readonly: this.readonly
+      possiblyWritable: true,
+      readable: this.readable,
+      source: this.source,
+      writable: this.writable
     };
   }
 
@@ -54,7 +62,58 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     this.writable = ((await this._handle.queryPermission({ mode: 'readwrite' })) === 'granted');
   }
 
+  async _load() {
+    if (!this._loadingPromise) {
+      this._loadingPromise = (async () => {
+        let file = await this._handle.getFile();
+
+        if (file.lastModified !== this.lastModified) {
+          this.lastModified = file.lastModified;
+          this.source = {
+            contents: await file.text(),
+            lastModified: file.lastModified
+          };
+
+          this._update();
+        }
+
+        this._loadingPromise = null;
+      })();
+    }
+
+    await this._loadingPromise;
+  }
+
+  async request() {
+    try {
+      if (this.readonly) {
+        this.readable = ((await this._handle.requestPermission({ mode: 'read' })) === 'granted');
+      } else {
+        this.writable = ((await this._handle.requestPermission({ mode: 'readwrite' })) === 'granted');
+        this.readable = this.writable;
+      }
+    } catch (err) {
+      if ((err as { name: string; }).name === 'SecurityError') {
+        return;
+      }
+
+      throw err;
+    }
+
+    this._update();
+
+    if (this.readable) {
+      await this._load();
+    }
+  }
+
   async write(contents: string) {
+    if (this._writing) {
+      throw new Error('Already writing');
+    }
+
+    this._writing = true;
+
     let writable = await this._handle.createWritable();
     await writable.write(contents);
     await writable.close();
@@ -63,6 +122,7 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
 
     this.lastModified = file.lastModified;
     this._update();
+    this._writing = false;
 
     return {
       lastModified: file.lastModified
@@ -141,10 +201,6 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
     this.#appBackend._update();
   }
 
-  async watch(handler: (documentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }) {
-
-  }
-
   async _save() {
     await idb.update<BrowserStoreDraftsEntry>('drafts', (entry) => ({
       ...entry,
@@ -155,6 +211,114 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
         rootHandle: this._rootHandle
       }
     }), this.#appBackend._store);
+  }
+}
+
+
+export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
+  closed: Promise<void>;
+
+  private _appBackend: BrowserAppBackend;
+  private _callback: ((changedDocumentIds: Set<DraftDocumentId>) => void);
+  private _documents = new Set<BrowserDraftDocument>();
+  private _pool = new Pool();
+  private _signal: AbortSignal;
+  private _timeoutId!: number | null;
+
+  constructor(callback: ((changedDocumentIds: Set<DraftDocumentId>) => void), options: { signal: AbortSignal; }, appBackend: BrowserAppBackend) {
+    this._appBackend = appBackend;
+    this._callback = callback;
+    this._signal = options.signal;
+
+    this._planPoll();
+
+    this.closed = new Promise<void>((resolve) => {
+      this._signal.addEventListener('abort', () => void resolve());
+    }).then(async () => {
+      if (this._timeoutId !== null) {
+        clearTimeout(this._timeoutId);
+        this._timeoutId = null;
+      }
+
+      await this._pool.wait();
+    });
+  }
+
+  async _poll() {
+    for (let document of this._documents) {
+      if (document.readable && !document._writing) {
+        await document._load();
+      }
+    }
+  }
+
+  // async _old_poll() {
+  //   let changedDocumentIds = new Set<DraftDocumentId>();
+
+  //   for (let document of this._documents) {
+  //     if (document.readable && !document._writing) {
+  //       let file = await document._handle.getFile();
+
+  //       if (file.lastModified !== document.lastModified) {
+  //         changedDocumentIds.add(document.id);
+
+  //         document.lastModified = file.lastModified;
+  //         document.source = await file.text();
+  //         document._update();
+  //       }
+  //     }
+  //   }
+
+  //   if (this._signal.aborted) {
+  //     return;
+  //   }
+
+  //   // Make sure that changed documents have not been removed from the watcher.
+  //   for (let changedDocumentId of changedDocumentIds) {
+  //     let document = this._appBackend._documents[changedDocumentId];
+
+  //     if (!document || !this._documents.has(document)) {
+  //       changedDocumentIds.delete(changedDocumentId);
+  //     }
+  //   }
+
+  //   if (changedDocumentIds.size > 0) {
+  //     this._callback(changedDocumentIds);
+  //   }
+
+  //   this._planPoll();
+  // }
+
+  _planPoll() {
+    this._timeoutId = setTimeout(() => {
+      this._pool.add(this._poll());
+    }, 1000);
+  }
+
+  async add(documentIds: Iterable<string>) {
+    let documents = Array.from(documentIds).map((id) => this._appBackend._documents[id]);
+
+    for (let document of documents) {
+      document.watchSnapshot(() => {
+        this._callback(new Set([document.id]));
+      });
+    }
+
+    for (let document of documents) {
+      if (document.readable) {
+        await document._load();
+      }
+    }
+
+    for (let document of documents) {
+      this._documents.add(document);
+    }
+  }
+
+  remove(documentIds: Iterable<string>) {
+    for (let documentId of documentIds) {
+      this._documents.delete(this._appBackend._documents[documentId]);
+    }
   }
 }
 
@@ -287,7 +451,7 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
           id: crypto.randomUUID(),
           path,
 
-          createInstance: async () => await this.#createInstanceFromCandidate(handle, rootHandle)
+          createInstance: async () => await this._createInstanceFromCandidate(handle, rootHandle)
         });
       }
     }
@@ -295,7 +459,11 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     return candidates;
   }
 
-  async #createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
+  watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }) {
+    return new BrowserDraftDocumentWatcher(callback, options, this);
+  }
+
+  async _createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
     for (let draftInstance of Object.values(this.draftInstances)) {
       if (await draftInstance.entryDocument._handle.isSameEntry(entryDocumentHandle)) {
         return draftInstance;

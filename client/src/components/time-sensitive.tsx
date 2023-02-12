@@ -1,11 +1,13 @@
 import * as React from 'react';
 
+import * as util from '../util';
+
 
 export function TimeSensitive(props: React.PropsWithChildren<{
   child(): React.ReactElement;
   interval?: number;
 }>) {
-  const [_, forceUpdate] = React.useReducer((x) => x + 1, 0);
+  let forceUpdate = util.useForceUpdate();
 
   React.useEffect(() => {
     let interval = setInterval(() => {
@@ -15,7 +17,7 @@ export function TimeSensitive(props: React.PropsWithChildren<{
     return () => {
       clearInterval(interval);
     };
-  }, []);
+  }, [props.interval]);
 
   return props.child();
 }

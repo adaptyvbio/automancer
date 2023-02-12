@@ -4,7 +4,7 @@ import type { ProtocolBlock, ProtocolBlockPath } from './protocol';
 import type { Point, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
 import type { Host } from '../host';
-import { UnitContext } from './unit';
+import type { UnitContext } from './unit';
 
 
 export interface GraphRendererDefaultMetrics {

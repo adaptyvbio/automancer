@@ -2,7 +2,7 @@ import { BackendCommon, ChipId, ProtocolLocation } from './common';
 import type { DraftCompilation, DraftId } from '../draft';
 import type { Codes, UnitNamespace } from '../units';
 import type { ProtocolBlockPath } from '../interfaces/protocol';
-import type { HostDraft, HostDraftCompilerOptions } from '../interfaces/draft';
+import type { HostDraft, HostDraftCompilerOptions, HostDraftCompilerResult } from '../interfaces/draft';
 
 
 export abstract class RawMessageBackend extends BackendCommon {
@@ -28,7 +28,7 @@ export abstract class RawMessageBackend extends BackendCommon {
       type: 'compileDraft',
       draft: options.draft,
       options: options.options
-    }) as DraftCompilation;
+    }) as HostDraftCompilerResult;
   }
 
   async createChip() {

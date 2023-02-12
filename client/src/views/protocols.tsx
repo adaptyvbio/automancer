@@ -54,20 +54,20 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
                 }}>New file</button>
                 <button type="button" className="btn" onClick={() => {
                   this.pool.add(async () => {
-                    await this.props.app.queryDraft({ directory: false });
+                    let draftId = await this.props.app.queryDraft({ directory: false });
 
-                    // if (draftId) {
-                    //   ViewDraft.navigate(draftId);
-                    // }
+                    if (draftId) {
+                      ViewDraft.navigate(draftId);
+                    }
                   });
                 }}>Open file</button>
                 <button type="button" className="btn" onClick={() => {
                   this.pool.add(async () => {
-                    await this.props.app.queryDraft({ directory: true });
+                    let draftId = await this.props.app.queryDraft({ directory: true });
 
-                    // if (draftId) {
-                    //   ViewDraft.navigate(draftId);
-                    // }
+                    if (draftId) {
+                      ViewDraft.navigate(draftId);
+                    }
                   });
                 }}>Open directory</button>
               </div>

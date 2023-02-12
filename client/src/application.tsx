@@ -294,32 +294,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // List and compile known drafts if available
 
-      this.setState((state) => ({
-        ...state,
-        ...this.appBackend.getSnapshot()
-      }));
-
-      // let draftItems = await this.appBackend.listDrafts();
-      // let drafts = Object.fromEntries(
-      //   draftItems.map((draftItem) => {
-      //     return [draftItem.id, createDraftFromItem(draftItem)];
-      //   })
-      // );
-
-      // let createDraftItemFromInstance = (instance: DraftInstance): DraftItem => {
-      //   return {
-      //     id: instance.id,
-      //     instance
-      //   };
-      // };
-
-      // this.setState({
-      //   drafts: Object.fromEntries(
-      //     Object.values(this.appBackend.draftInstances)
-      //       .map((instance) => instance.getSnapshot())
-      //       .map((snapshot) => [snapshot.id, snapshot])
-      //   )
-      // });
+      this.setState(() => this.appBackend.getSnapshot());
 
 
       // Initialize the route
@@ -360,34 +335,19 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     }));
   }
 
-  async queryDraft(options: { directory: boolean; }): Promise<void> {
+  async queryDraft(options: { directory: boolean; }): Promise<DraftInstanceId | null> {
     let candidates = await this.appBackend.queryDraftCandidates({ directory: options.directory });
     let candidate = candidates[0];
 
-    if (candidate) {
-      let instance = await candidate.createInstance();
-
-      this.setState((state) => ({
-        ...state,
-        ...this.appBackend.getSnapshot()
-      }));
-
-      // this.setState((state) => {
-      //   let documentSnapshot = instance.entryDocument.getSnapshot();
-      //   let instanceSnapshot = instance.getSnapshot();
-
-      //   return {
-      //     documents: {
-      //       ...state.documents,
-      //       [documentSnapshot.id]: documentSnapshot
-      //     },
-      //     drafts: {
-      //       ...state.drafts,
-      //       [instanceSnapshot.id]: instanceSnapshot
-      //     }
-      //   };
-      // });
+    if (!candidate) {
+      return null;
     }
+
+    let instance = await candidate.createInstance();
+    this.setState(() => this.appBackend.getSnapshot());
+
+    return instance.id;
+
   }
 
   async saveDraftSource(draft: Draft, source: string) {

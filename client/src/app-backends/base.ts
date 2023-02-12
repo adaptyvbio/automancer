@@ -13,6 +13,7 @@ export type DraftInstanceId = string;
 export type DraftDocumentId = string;
 
 export interface DraftInstance<T extends DraftDocument = DraftDocument> extends SnapshotTarget<DraftInstanceSnapshot> {
+  id: DraftInstanceId;
   entryDocument: T;
 
   /**
@@ -34,7 +35,7 @@ export interface DraftInstance<T extends DraftDocument = DraftDocument> extends 
    * @param options.signal A signal used to stop watching.
    * @returns A promise that resolves once the watch operation has started.
    */
-  watch(callback: (documentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): Promise<void>;
+  // watch(callback: (documentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): Promise<void>;
 };
 
 export interface DraftInstanceSnapshot {
@@ -47,10 +48,17 @@ export interface DraftInstanceSnapshot {
 
 
 export interface DraftDocument extends SnapshotTarget<DraftDocumentSnapshot> {
+  id: DraftDocumentId;
+
   /**
    * Opens the document in an external application. Optional.
    */
   open?(): Promise<void>;
+
+  /**
+   * Requests permission to read or read and write to the document. Optional when permission is always granted.
+   */
+  request?(): Promise<void>;
 
   /**
    * Reveals the document in the file explorer. Optional.
@@ -69,10 +77,16 @@ export interface DraftDocumentSnapshot {
   model: DraftDocument;
 
   id: DraftDocumentId;
-  // source: string | null;
+  deleted: boolean;
   lastModified: number | null;
   path: DraftDocumentPath;
-  readonly: boolean;
+  possiblyWritable: boolean;
+  readable: boolean;
+  source: {
+    contents: string;
+    lastModified: number;
+  } | null;
+  writable: boolean;
 }
 
 
@@ -86,6 +100,14 @@ export interface DraftCandidate {
    * Creates a {@link DraftInstance} from this candidate.
    */
   createInstance(): Promise<DraftInstance>;
+}
+
+
+export interface DraftDocumentWatcher {
+  closed: Promise<void>;
+
+  add(documentIds: Iterable<DraftDocumentId>): Promise<void>;
+  remove(documentIds: Iterable<DraftDocumentId>): void;
 }
 
 
@@ -116,13 +138,10 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
   queryDraftCandidates(options: { directory: boolean; }): Promise<DraftCandidate[]>;
 
   /**
-   * Lists all known {@link DraftInstance} objects.
-   * @returns A promise that resolves to an array of {@link DraftInstance} objects.
+   * Watches a set of documents for changes. The callback is not called immediately after calling `watchDocuments()` nor after writing to a document with {@link DraftDocument.write}.
+   * @returns A watcher object that can be used to add or remove documents to watch.
    */
-  // listDraftInstances(): Promise<DraftInstance[]>;
-
-  // listDrafts(): Promise<DraftInstance[]>;
-  // moveDocument(documentId: DraftDocumentId, newPath: string): Promise<void>;
+  watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): DraftDocumentWatcher;
 }
 
 export interface AppBackendSnapshot {

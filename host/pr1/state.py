@@ -37,12 +37,12 @@ class StateEvent:
 
 @dataclass(kw_only=True)
 class StateLocationUnitEntry:
-  location: Exportable
+  location: Optional[Exportable]
   settled: bool
 
   def export(self):
     return {
-      "location": self.location.export(),
+      "location": self.location and self.location.export(),
       "settled": self.settled
     }
 
@@ -143,7 +143,7 @@ class UnitStateManager(ABC):
     ...
 
   @abstractmethod
-  def add(self, item: StateProgramItem, state: BlockUnitState, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> tuple[MasterAnalysis, None | EllipsisType]:
+  def add(self, item: StateProgramItem, state: Any, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> tuple[MasterAnalysis, None | EllipsisType]:
     ...
 
   @abstractmethod
@@ -168,33 +168,50 @@ UnitStateConsumer = UnitStateInstanceFactory | UnitStateManager
 class UnitStateInstanceManager(UnitStateManager):
   def __init__(self, factory: UnitStateInstanceFactory, /):
     self._factory = factory
-    self._instances = dict[StateProgramItem, UnitStateInstance]()
+    self._instances = dict[StateProgramItem, Optional[UnitStateInstance]]()
+    self._notify = dict[StateProgramItem, Callable]()
 
   def add(self, item, state, *, notify, stack):
-    instance = self._factory(notify=notify, stack=stack)
-    self._instances[item] = instance
+    if state is not None:
+      instance = self._factory(notify=notify, stack=stack)
+      self._instances[item] = instance
 
-    return instance.prepare(state)
+      return instance.prepare(state)
+    else:
+      self._instances[item] = None
+      self._notify[item] = notify
+      return MasterAnalysis(), None
 
   async def remove(self, item):
-    await self._instances[item].close()
-    del self._instances[item]
+    instance = self._instances[item]
+
+    if instance:
+      await instance.close()
+      del self._instances[item]
 
   async def apply(self, items):
     for item in items:
-      try:
-        self._instances[item].apply(resume=False)
-      except Exception as e:
-        item._update(
-          analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer internal error: {e}")]),
-          failure=True
-        )
+      instance = self._instances[item]
+
+      if instance:
+        try:
+          instance.apply()
+        except Exception as e:
+          item._update(
+            analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer internal error: {e}")]),
+            failure=True
+          )
+      else:
+        self._notify[item](StateEvent(settled=True))
 
   async def clear(self, item):
     pass
 
   async def suspend(self, item):
-    return await self._instances[item].suspend()
+    instance = self._instances[item]
+
+    if instance:
+      return await instance.suspend()
 
 
 class GlobalStateManager:
@@ -206,8 +223,6 @@ class GlobalStateManager:
     entry = item.location.entries[namespace]
 
     if entry is None:
-      assert event.location
-
       entry = item.location.entries[namespace] = StateLocationUnitEntry(
         location=event.location,
         settled=event.settled
@@ -262,7 +277,6 @@ class GlobalStateManager:
 
     for namespace, consumer in self._consumers.items():
       value = state[namespace]
-      assert value
 
       def notify(event: StateEvent):
         self._handle_event(item, namespace, event)

@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+from asyncio import Event, Future, Task
 from dataclasses import dataclass
 from pint import Quantity, Measurement, Unit, UnitRegistry
 from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Optional, Protocol, Sequence, TypeVar
@@ -8,6 +10,7 @@ import warnings
 
 from .claim import Claimable
 from ..ureg import ureg
+from ..util.asyncio import run_anonymous
 
 
 T = TypeVar('T')
@@ -26,7 +29,8 @@ class AsyncCancelable:
 class NodeUnavailableError(Exception):
   pass
 
-class BaseNode:
+
+class BaseNode(ABC):
   icon = None
 
   def __init__(self):
@@ -55,10 +59,7 @@ class BaseNode:
     }
 
   def format(self, *, prefix: str = str()):
-    # class_self, *class_others = self.__class__.__mro__
-    # return (self.label or f'"{self.id}"') + f" ({class_self.__name__} / {', '.join(class_other.__name__ for class_other in class_others)})"
-
-    return (self.label or f'"{self.id}"') + f" ({self.__class__.__module__}.{self.__class__.__qualname__})"
+    return (f"{self.label} ({self.id})" if self.label else self.id) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
 class BaseWatchableNode(BaseNode):
   def __init__(self):
@@ -83,12 +84,15 @@ class BaseWatchableNode(BaseNode):
 
     return AsyncCancelable(cancel)
 
-class ConfigurableNode(BaseNode):
+class BaseConfigurableNode(BaseNode):
+  @abstractmethod
   async def _configure(self):
-    pass
+    ...
 
+  @abstractmethod
   async def _unconfigure(self):
-    pass
+    ...
+
 
 class CollectionNode(BaseWatchableNode):
   def __init__(self):
@@ -233,7 +237,7 @@ class ScalarReadableNode(BaseNode):
         self.error = error
         self.value = value
       case _:
-        raise ValueError()
+        raise ValueError
 
   def export(self):
     return {
@@ -259,11 +263,13 @@ class BaseWritableNode(BaseNode, Claimable, Generic[T]):
 
   # To be implemented
 
+  @abstractmethod
   async def write(self, value: Optional[T], /):
-    raise NotImplementedError()
+    raise NotImplementedError
 
+  @abstractmethod
   async def write_import(self, value: Any, /):
-    raise NotImplementedError()
+    raise NotImplementedError
 
 class BooleanWritableNode(BaseWritableNode[bool]):
   async def write_import(self, value: bool):
@@ -375,10 +381,10 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
   # This method may raise a NodeUnavailableError exception to indicate that the node is not available
   # on the underlying device, e.g. because of a configuration or disconnection issue.
   async def _read(self) -> T:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   async def _write(self, value: T) -> None:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   # Called by the producer
 
@@ -433,7 +439,7 @@ class BatchableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
   # To be implemented
 
   async def _read(self) -> T:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   # Called by the consumer
 
@@ -456,10 +462,11 @@ class BatchableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
 
 S = TypeVar('S', bound=BatchableWritableNode)
 
+# @deprecated
 class BatchGroupNode(BaseNode, Generic[S]):
   def __init__(self):
     self._changed_nodes = set[S]()
-    self._future = asyncio.Future[None]()
+    self._future = Future[None]()
     self._group_nodes: set[S]
 
   # Internal
@@ -473,10 +480,10 @@ class BatchGroupNode(BaseNode, Generic[S]):
   # To be implemented
 
   async def _read(self, nodes: set[S], /) -> dict[S, Any]:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   async def _write(self, nodes: set[S], /) -> None:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   # Called by the producer
 
@@ -529,23 +536,22 @@ class BatchGroupNode(BaseNode, Generic[S]):
         self._future.set_exception(e)
       else:
         self._future.set_result(None)
-        self._future = asyncio.Future[None]()
+        self._future = Future[None]()
         self._changed_nodes.clear()
 
 
 # Polled nodes
 
-class PolledReadableNode(BaseWatchableNode, ConfigurableNode, Generic[T]):
-  def __init__(self, *, min_interval: float = 0.0):
+class PolledReadableNode(BaseWatchableNode, BaseConfigurableNode, Generic[T]):
+  def __init__(self, *, min_interval: float = 1.0):
     super().__init__()
 
     self.connected = False
-    self.interval: float
     self.value: Optional[T] = None
 
     self._intervals = list[float]()
     self._min_interval = min_interval
-    self._poll_task: Optional[asyncio.Task[None]] = None
+    self._poll_task: Optional[Task[None]] = None
 
   # Internal
 
@@ -555,8 +561,10 @@ class PolledReadableNode(BaseWatchableNode, ConfigurableNode, Generic[T]):
 
   async def _poll(self):
     try:
-      while self._interval is not None:
+      while True:
+        assert self._interval is not None
         await asyncio.sleep(self._interval)
+
         value = await self._read()
 
         if value != self.value:
@@ -567,13 +575,11 @@ class PolledReadableNode(BaseWatchableNode, ConfigurableNode, Generic[T]):
     finally:
       self._poll_task = None
 
-    self._poll_task = asyncio.create_task(poll_loop())
-
   # To be implemented
 
-  # This method may throw a NodeUnavailableError exception.
+  @abstractmethod
   async def _read(self) -> T:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   # Called by the producer
 
@@ -587,7 +593,7 @@ class PolledReadableNode(BaseWatchableNode, ConfigurableNode, Generic[T]):
     self._trigger_listeners()
 
     if self._interval is not None:
-      self._poll()
+      self._poll_task = run_anonymous(self._poll())
 
   async def _unconfigure(self):
     self.connected = False
@@ -595,78 +601,77 @@ class PolledReadableNode(BaseWatchableNode, ConfigurableNode, Generic[T]):
 
     if self._poll_task:
       self._poll_task.cancel()
+      await self._poll_task
 
   # Called by the consumer
 
-  def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
+  def watch(self, listener: Callable[[], None], /, interval: float):
     reg = super().watch(listener)
+    self._intervals.append(interval)
 
-    if interval is not None:
-      self._intervals.append(interval)
+    if self.connected and (not self._poll_task):
+      self._poll_task = run_anonymous(self._poll())
 
-      if (not self._poll_task) and self.connected:
-        self._poll()
+    async def cancel():
+      nonlocal reg
+      await reg.cancel()
 
-      async def cancel():
-        nonlocal reg
-        await reg.cancel()
-        self._intervals.remove(interval)
+      self._intervals.remove(interval)
 
-      return AsyncCancelable(cancel)
+      if (self._interval is not None) and self._poll_task:
+        self._poll_task.cancel()
+        await self._poll_task
 
-    return reg
+    return AsyncCancelable(cancel)
 
-class SubscribableReadableNode(BaseReadableNode, BaseWatchableNode, ConfigurableNode, Generic[T]):
+class SubscribableReadableNode(BaseReadableNode, BaseWatchableNode, BaseConfigurableNode, Generic[T]):
   def __init__(self):
     super().__init__()
 
     self.connected = False
     self.value: Optional[T] = None
 
-    self._watch_task: Optional[asyncio.Task[None]] = None
+    self._watch_task: Optional[Task[None]] = None
 
   # Internal
 
-  async def _cancel_watch_task(self):
-    assert self._watch_task
-    self._watch_task.cancel()
+  def _watch(self):
+    initial_future = Future[None]()
 
-    try:
-      await self._watch_task
-    except asyncio.CancelledError:
-      pass
+    async def func():
+      nonlocal initial_future
 
-    self._watch_task = None
+      try:
+        async for value in self._subscribe():
+          self._set_value(value)
+          self._trigger_listeners()
 
-  async def _watch(self, initial_future: Optional[asyncio.Future[None]] = None):
-    future = initial_future
+          if initial_future:
+            initial_future.set_result(None)
+            initial_future = None
+      except asyncio.CancelledError:
+        pass
+      except NodeUnavailableError as e:
+        if initial_future:
+          initial_future.set_exception(e)
+      else:
+        warnings.warn("Subscription ended unexpectedly")
+      finally:
+        self._watch_task = None
 
-    try:
-      async for value in self._subscribe():
-        self._set_value(value)
-        self._trigger_listeners()
-
-        if future:
-          future.set_result(None)
-          future = None
-    except NodeUnavailableError as e:
-      if future:
-        future.set_exception(e)
-    else:
-      warnings.warn("Subscription ended unexpectedly")
-    finally:
-      self._watch_task = None
+    return func(), initial_future
 
   # To be implemented
 
+  @abstractmethod
   def _subscribe(self) -> AsyncIterator[T]:
-    raise NotImplementedError()
+    raise NotImplementedError
 
   # Called by the producer
 
   async def _configure(self):
     if self._listeners and (not self._watch_task):
-      future = asyncio.Future[None]()
+      future = Future[None]()
       self._watch_task = asyncio.create_task(self._watch(future))
 
       try:
@@ -680,25 +685,36 @@ class SubscribableReadableNode(BaseReadableNode, BaseWatchableNode, Configurable
     self.connected = False
 
     if self._watch_task:
-      await self._cancel_watch_task()
+      self._watch_task.cancel()
+      await self._watch_task
 
   # Called by the consumer
 
   def watch(self, listener: Optional[Callable[[], None]] = None, /):
     reg = super().watch(listener)
+    ready_event = Event()
 
     if self.connected and (not self._watch_task):
-      self._watch_task = asyncio.create_task(self._watch())
+      coro, ready_future = self._watch()
+      self._watch_task = run_anonymous(coro)
+
+      def ready_callback(future):
+        if future.exception() is None:
+          ready_event.set()
+
+      ready_future.add_done_callback(ready_callback)
+    else:
+      ready_event.set()
 
     async def cancel():
       nonlocal reg
-
       await reg.cancel()
 
-      if not self._listeners:
-        await self._cancel_watch_task()
+      if (not self._listeners) and self._watch_task:
+        self._watch_task.cancel()
+        await self._watch_task
 
-    return AsyncCancelable(cancel)
+    return AsyncCancelable(cancel), ready_event
 
 
 if __name__ == "__main__":

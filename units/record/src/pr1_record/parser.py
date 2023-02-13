@@ -1,16 +1,20 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TypedDict
+from typing import Literal, TypedDict
 
-from pr1.fiber.expr import Evaluable
-from pr1.fiber.segment import SegmentTransform
 from pr1.fiber import langservice as lang
+from pr1.fiber.expr import Evaluable
 from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState
-from pr1.reader import LocatedDict, LocatedString, LocationArea
+from pr1.fiber.segment import SegmentTransform
+from pr1.reader import LocatedDict, LocatedString, LocatedValue, LocationArea
 
 
-# class Attributes(TypedDict, total=False):
-#   run: Evaluable[LocatedDict]
+OutputFormat = Literal['csv', 'npy', 'npz', 'xlsx']
+
+class StateData(TypedDict):
+  fields: list
+  format: LocatedValue[OutputFormat]
+  output: LocatedValue[lang.FileRef]
 
 class Parser(BaseParser):
   namespace = "record"
@@ -26,12 +30,12 @@ class Parser(BaseParser):
             })),
             required=True
           ),
-          'file': lang.Attribute(
-            lang.PotentialExprType(lang.FileRefType(text=False)),
-            required=True
-          ),
           'format': lang.Attribute(
             lang.PotentialExprType(lang.EnumType('csv', 'npy', 'npz', 'xlsx'))
+          ),
+          'output': lang.Attribute(
+            lang.DeferredAnalysisType(lang.PotentialExprType(lang.FileRefType(text=False)), depth=1),
+            required=True
           )
         }),
         depth=2
@@ -56,7 +60,7 @@ class Parser(BaseParser):
 
 @dataclass
 class RecordState(BlockUnitState):
-  data: Evaluable
+  data: Evaluable[LocatedValue[StateData]]
 
   def export(self):
     return {}

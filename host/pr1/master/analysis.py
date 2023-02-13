@@ -58,6 +58,11 @@ class MasterErrorReference(ErrorReference):
   relation: Literal['default', 'close'] = 'default'
 
 
+class SystemMasterError(MasterError):
+  def __init__(self, err: OSError, /):
+    super().__init__(message=f"{err.__class__.__name__}: {err}")
+
+
 T = TypeVar('T')
 
 @dataclass(kw_only=True)

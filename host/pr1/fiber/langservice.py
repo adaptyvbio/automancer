@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import builtins
+from contextlib import contextmanager
 from os import PathLike
 import os
 import numpy as np
@@ -1077,21 +1078,30 @@ class PathType(Type):
 
 class FileRef(ABC):
   @abstractmethod
-  def close(self):
+  def close_file(self):
     ...
 
   @abstractmethod
-  def open(self, mode: str):
+  def open_file(self, mode: str) -> IOBase:
     ...
+
+  @contextmanager
+  def open(self, mode: str):
+    file = self.open_file(mode)
+
+    try:
+      yield file
+    finally:
+      self.close_file()
 
 class IOBaseFileRef(FileRef):
   def __init__(self, file: IOBase, /):
     self._file = file
 
-  def close(self):
+  def close_file(self):
     pass
 
-  def open(self, mode: str):
+  def open_file(self, mode: str):
     if isinstance(self._file, FileIO):
       assert self._file.mode == mode
 
@@ -1102,11 +1112,14 @@ class PathFileRef(FileRef):
     self._file: Optional[IOBase] = None
     self._path = path
 
-  def close(self):
+  def path(self):
+    return self._path
+
+  def close_file(self):
     assert self._file
     self._file.close()
 
-  def open(self, mode: str):
+  def open_file(self, mode: str):
     file = self._path.open(mode)
 
     assert isinstance(file, IOBase)

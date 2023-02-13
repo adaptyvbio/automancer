@@ -2,7 +2,7 @@ import asyncio
 from typing import Any
 
 import psutil
-from pr1.devices.node import ConfigurableNode, DeviceNode, PolledReadableNode, ScalarReadableNode, SubscribableReadableNode
+from pr1.devices.node import BaseConfigurableNode, DeviceNode, PolledReadableNode, ScalarReadableNode, SubscribableReadableNode
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
@@ -21,7 +21,7 @@ class SystemNode(DeviceNode):
   def __init__(self):
     super().__init__()
 
-    self.nodes: dict[str, ConfigurableNode] = { node.id: node for node in {ProcessMemoryUsageNode()} }
+    self.nodes: dict[str, BaseConfigurableNode] = { node.id: node for node in {ProcessMemoryUsageNode()} }
 
 class ProcessMemoryUsageNode(SubscribableReadableNode[ureg.Quantity], ScalarReadableNode):
   description = None

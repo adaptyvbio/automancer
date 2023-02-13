@@ -6,7 +6,7 @@ export interface State {
 }
 
 export interface Location {
-
+  rows: number;
 }
 
 export default {
@@ -15,7 +15,7 @@ export default {
     return state
       ? [
         { icon: 'monitoring',
-          label: 'Record data' }
+          label: 'Record data' + (location ? ` (${location.rows} rows)` : '') }
       ]
       : [];
   }

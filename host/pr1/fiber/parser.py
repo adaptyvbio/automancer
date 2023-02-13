@@ -35,6 +35,7 @@ class MissingProcessError(Exception):
     return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
 
 
+# @deprecated
 class BlockUnitState(Exportable):
   def __or__(self, other):
     return other

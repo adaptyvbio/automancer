@@ -2,7 +2,7 @@ import ast
 import builtins
 from collections import ChainMap
 from dataclasses import KW_ONLY, dataclass, field
-from types import GenericAlias
+from types import EllipsisType, GenericAlias
 from typing import Any, Literal, Optional, cast
 
 
@@ -256,28 +256,6 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
 
             case ast.FunctionDef(name=func_name):
               overload = parse_func(class_statement, variables | values)
-
-              # if overload.args_pos:
-              #   match overload.args_pos[0].name:
-              #     case 'cls':
-              #       kind = 'class'
-              #     case 'self':
-              #       kind = 'instance'
-              #     case _:
-              #       kind = 'static'
-              # else:
-              #   kind = 'static'
-
-              # if kind == 'self':
-              #   assert not (func_name in cls.instance_attrs)
-              # else:
-              #   assert not (func_name in cls.class_attrs)
-
-              # if not (func_name in cls.methods):
-              #   cls.methods[func_name] = MethodDef(kind=kind)
-
-              # cls.methods[func_name].overloads.append(overload)
-
               assert (overload.args_posonly + overload.args_both)[0].name == 'self'
 
               if overload.args_posonly:
@@ -294,7 +272,7 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
 
               func.overloads.append(overload)
 
-            case ast.Pass():
+            case ast.Expr(ast.Constant(EllipsisType())) | ast.Pass():
               pass
 
             case _:
@@ -337,7 +315,7 @@ def process_source(contents: str, /, variables):
 #     return overload.return_type
 
 def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables):
-  print(ast.dump(node, indent=2))
+  # print(ast.dump(node, indent=2))
 
   match node:
     case ast.BinOp(left=left, right=right, op=ast.Add()):
@@ -352,13 +330,22 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables)
 
     case ast.Call(func, args, keywords):
       func_ref = check(func, builtin_variables, variables)
+
+      args = [check(arg, builtin_variables, variables) for arg in args]
+      kwargs = { keyword.arg: check(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
+
+      if func_ref.cls is TypeType:
+        target = func_ref.arguments[0]
+
+        if '__init__' in target.cls.instance_attrs:
+          overload = find_overload(target.cls.instance_attrs['__init__'].cls, args=args, kwargs=kwargs)
+          assert overload
+
+        return target
+
       assert isinstance(func_ref.cls, FuncDef)
 
-      overload = find_overload(
-        func_ref.cls,
-        args=[check(arg, builtin_variables, variables) for arg in args],
-        kwargs={ keyword.arg: check(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
-      )
+      overload = find_overload(func_ref.cls, args=args, kwargs=kwargs)
 
       assert overload
       return overload.return_type
@@ -372,8 +359,13 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables)
     case _:
       raise Exception
 
-def check_type(type1: ClassRef, type2: ClassRef):
-  return True
+# Checks if lhs < rhs (lhs is a subtype of rhs)
+def check_type(lhs: ClassRef, rhs: ClassRef, /):
+  for base in [lhs, *lhs.cls.bases]:
+    if base.cls is rhs.cls:
+      return True
+
+  return False
 
 def find_overload(func: FuncDef, /, args: list[ClassRef], kwargs: dict[str, ClassRef]):
   for overload in func.overloads:
@@ -457,7 +449,14 @@ class int:
   AuxVariables = process_source("""
 x: int
 
-def foo() -> int:
+class A:
+  # def __init__(self):
+  ...
+
+class B(A):
+  ...
+
+def foo(a: A) -> int:
   ...
 """, PreludeVariables | BuiltinVariables)
 
@@ -482,7 +481,25 @@ def foo() -> int:
 
   # pprint(BuiltinVariables)
 
-  print(check(ast.parse("(356 + x) + foo()", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
+  print(check(ast.parse("(356 + x) + foo(B())", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
 
 
 # see: typing.get_type_hints
+
+
+# from typing import Generic, TypeVar
+
+# T = TypeVar('T')
+
+# class X(Generic[T]):
+#   class Y:
+#     def foo(self) -> T:
+#       ...
+
+#   def a(self):
+#     return self.Y()
+
+
+# a = X[int]().a()
+# b = a.foo()
+# print(b + 1)

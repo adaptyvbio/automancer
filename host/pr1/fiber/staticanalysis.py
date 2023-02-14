@@ -12,18 +12,33 @@ from typing import Any, Literal, Optional, cast
 class TypeVarDef:
   name: str
 
-@dataclass
+@dataclass(kw_only=True)
 class FuncArgDef:
-  # has_default: bool = False
   name: str
   type: 'Optional[ClassRef | TypeVarDef]'
 
-@dataclass
+@dataclass(kw_only=True)
+class FuncKwArgDef(FuncArgDef):
+  has_default: bool
+
+@dataclass(kw_only=True)
 class FuncOverloadDef:
-  args_pos: list[FuncArgDef]
+  args_posonly: list[FuncArgDef]
   args_both: list[FuncArgDef]
-  args_kw: list[FuncArgDef]
+  args_kwonly: list[FuncKwArgDef]
+  default_count: int
   return_type: 'Optional[ClassRef | TypeVarDef]'
+
+  def __repr__(self):
+    args = [
+      *[f"{arg.name}" for arg in self.args_posonly],
+      *(["/"] if self.args_posonly else list()),
+      *[f"{arg.name}" for arg in self.args_both],
+      *(["*"] if self.args_kwonly else list()),
+      *[f"{arg.name}" for arg in self.args_kwonly]
+    ]
+
+    return f"{self.__class__.__name__}({', '.join(args)})"
 
 @dataclass
 class ClassDef:
@@ -154,20 +169,34 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
 
 
 def parse_func(node: ast.FunctionDef, /, variables: VariableOrTypeDefs):
-  process_args = lambda args: [FuncArgDef(
+  process_arg_type = lambda annotation: (annotation and parse_type(annotation, variables))
+
+  args_pos = [FuncArgDef(
     name=arg.arg,
-    type=(arg.annotation and parse_type(arg.annotation, variables))
-  ) for arg in args]
+    type=process_arg_type(arg.annotation)
+  ) for arg in node.args.posonlyargs]
+
+  args_both = [FuncArgDef(
+    name=arg.arg,
+    type=process_arg_type(arg.annotation)
+  ) for arg in node.args.args]
+
+  args_kw = [FuncKwArgDef(
+    has_default=(default is not None),
+    name=arg.arg,
+    type=process_arg_type(arg.annotation)
+  ) for arg, default in zip(node.args.kwonlyargs, node.args.kw_defaults)]
 
   return FuncOverloadDef(
-    args_pos=process_args(node.args.posonlyargs),
-    args_both=process_args(node.args.args),
-    args_kw=process_args(node.args.kwonlyargs),
+    args_posonly=args_pos,
+    args_both=args_both,
+    args_kwonly=args_kw,
+    default_count=len(node.args.defaults),
     return_type=(node.returns and parse_type(node.returns, variables))
   )
 
 
-## Main function
+## Process module
 
 def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Variables:
   values = VariableOrTypeDefs()
@@ -249,10 +278,10 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
 
               # cls.methods[func_name].overloads.append(overload)
 
-              assert (overload.args_pos + overload.args_both)[0].name == 'self'
+              assert (overload.args_posonly + overload.args_both)[0].name == 'self'
 
-              if overload.args_pos:
-                overload.args_pos = overload.args_pos[1:]
+              if overload.args_posonly:
+                overload.args_posonly = overload.args_posonly[1:]
               else:
                 overload.args_both = overload.args_both[1:]
 
@@ -296,6 +325,8 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
 
 def process_source(contents: str, /, variables):
   module = ast.parse(contents)
+  # print(ast.dump(module, indent=2))
+
   return process_module(module, variables)
 
 
@@ -309,24 +340,28 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables)
   print(ast.dump(node, indent=2))
 
   match node:
-    # case ast.BinOp(left=left, right=right, op=ast.Add()):
-    #   left_type = check(left, builtin_variables, variables)
-    #   right_type = check(right, builtin_variables, variables)
+    case ast.BinOp(left=left, right=right, op=ast.Add()):
+      left_type = check(left, builtin_variables, variables)
+      right_type = check(right, builtin_variables, variables)
 
-    #   if '__add__' in left_type.instance_attrs:
-    #     return
+      if '__add__' in left_type.cls.instance_attrs:
+        overload = find_overload(left_type.cls.instance_attrs['__add__'].cls, args=[right_type], kwargs=dict())
 
-    #   print(left_type)
-    #   print(right_type)
+        if overload:
+          return overload.return_type
 
     case ast.Call(func, args, keywords):
       func_ref = check(func, builtin_variables, variables)
       assert isinstance(func_ref.cls, FuncDef)
 
-      for overload in func_ref.cls.overloads:
-        return overload.return_type
+      overload = find_overload(
+        func_ref.cls,
+        args=[check(arg, builtin_variables, variables) for arg in args],
+        kwargs={ keyword.arg: check(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
+      )
 
-      raise Exception
+      assert overload
+      return overload.return_type
 
     case ast.Constant(builtins.int()):
       return builtin_variables['int'].arguments[0] # type: ignore
@@ -336,6 +371,60 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables)
 
     case _:
       raise Exception
+
+def check_type(type1: ClassRef, type2: ClassRef):
+  return True
+
+def find_overload(func: FuncDef, /, args: list[ClassRef], kwargs: dict[str, ClassRef]):
+  for overload in func.overloads:
+    args_pos = overload.args_posonly + overload.args_both
+    args_kw = overload.args_kwonly + overload.args_both
+
+    args_pos_index = 0
+    args_kw_written = set[str]()
+
+    failure = False
+
+    for input_arg in args:
+      if args_pos_index >= len(args_pos):
+        failure = True
+        break
+
+      arg = args_pos[args_pos_index]
+      args_pos_index += 1
+
+      if (arg.type is not None) and (not check_type(input_arg, arg.type)): # type: ignore
+        failure = True
+        break
+
+    for input_arg_name, input_arg in kwargs.items():
+      arg = next((arg for arg in args_kw if arg.name == input_arg_name), None)
+
+      if arg is None:
+        failure = True
+        break
+
+      args_kw_written.add(arg.name)
+
+      if (arg.type is not None) and (not check_type(input_arg, arg.type)): # type: ignore
+        failure = True
+        break
+
+    if failure:
+      continue
+
+    if any((arg.name not in args_kw_written) and (not arg.has_default) for arg in overload.args_kwonly):
+      continue
+
+    if any((arg.name not in args_kw_written) for arg in overload.args_both[max(0, args_pos_index - len(overload.args_posonly)):(-overload.default_count if overload.default_count > 0 else None)]):
+      continue
+
+    if args_pos_index < (len(args_pos) - overload.default_count):
+      continue
+
+    return overload
+
+  return None
 
 
 ## Tests
@@ -362,22 +451,14 @@ if __name__ == "__main__":
   BuiltinVariables = process_source("""
 class int:
   def __add__(self, other: int, /) -> int:
-    pass
-
-# class list:
-#   def get(self, index: int) -> T | None:
-#     ...
-
-# class dict(Generic[K, V]):
-#   def __new__(cls, x: int, /, y, *, z, e = 5):
-#     ...
-
-#   def get(self, key: K, /) -> Optional[V]:
-#     ...
+    ...
 """, PreludeVariables)
 
   AuxVariables = process_source("""
 x: int
+
+def foo() -> int:
+  ...
 """, PreludeVariables | BuiltinVariables)
 
   # tree = ast.parse("devices.get", mode='eval').body
@@ -388,9 +469,20 @@ x: int
   # print()
 
   from pprint import pprint
+
+  # print()
+  # pprint(BuiltinVariables)
+  # print()
+
+  # pprint(BuiltinVariables['x'])
+  # i = BuiltinVariables['int']
+
+  # print(find_overload(BuiltinVariables['foo'].cls, [i, i], { 'c': i, 'd': i }))
+  # print(find_overload(BuiltinVariables['foo'].cls, [], {}))
+
   # pprint(BuiltinVariables)
 
-  # print(check(ast.parse("356 + x", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
+  print(check(ast.parse("(356 + x) + foo()", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
 
 
 # see: typing.get_type_hints

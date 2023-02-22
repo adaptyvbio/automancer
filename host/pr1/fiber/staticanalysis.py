@@ -2,8 +2,9 @@ import ast
 import builtins
 from collections import ChainMap
 from dataclasses import KW_ONLY, dataclass, field
+from pprint import pprint
 from types import EllipsisType, GenericAlias
-from typing import Any, Literal, Optional, cast
+from typing import Any, Literal, Optional, TypeVar, cast
 
 
 ## Type system
@@ -11,6 +12,16 @@ from typing import Any, Literal, Optional, cast
 @dataclass
 class TypeVarDef:
   name: str
+
+  def __hash__(self):
+    return id(self)
+
+@dataclass
+class TypeVarTupleDef:
+  name: str
+
+  def __hash__(self):
+    return id(self)
 
 @dataclass(kw_only=True)
 class FuncArgDef:
@@ -41,13 +52,30 @@ class FuncOverloadDef:
     return f"{self.__class__.__name__}({', '.join(args)})"
 
 @dataclass
+class ClassGenericsDef:
+  before_tuple: list[TypeVarDef] = field(default_factory=list)
+  _: KW_ONLY
+  tuple: Optional[TypeVarTupleDef] = None
+  after_tuple: list[TypeVarDef] = field(default_factory=list)
+
+  def format(self):
+    return ", ".join([
+      *[arg.name for arg in self.before_tuple],
+      *(f"*{self.tuple.name}" if self.tuple else list()),
+      *[arg.name for arg in self.after_tuple]
+    ])
+
+@dataclass
 class ClassDef:
   name: str
   _: KW_ONLY
   bases: 'list[ClassRef]' = field(default_factory=list)
-  generics: list[TypeVarDef] = field(default_factory=list)
+  generics: ClassGenericsDef = field(default_factory=ClassGenericsDef)
   class_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
   instance_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.name}[{self.generics.format()}]())"
 
 @dataclass
 class FuncDef(ClassDef):
@@ -61,13 +89,33 @@ class FuncDef(ClassDef):
 class ClassRef:
   cls: ClassDef
   _: KW_ONLY
-  arguments: 'list[ClassRef | TypeVarDef]' = field(default_factory=list)
+  arguments: 'Optional[dict[TypeVarDef, ClassRef]]' = None
+  context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
 
 
-@dataclass
-class GenericClassDef(ClassDef):
-  def __init__(self):
-    super().__init__('Generic')
+# @dataclass
+# class GenericClassDef(ClassDef):
+#   def __init__(self):
+#     super().__init__('Generic', generics=[TypeVarDef('GenericT')])
+
+
+GenericType = ClassDef('Generic')
+
+class GenericClassRef(ClassRef):
+  def __init__(self, generics: ClassGenericsDef, /):
+    super().__init__(GenericType)
+    self.generics = generics
+
+
+TypeType = ClassDef('type', generics=ClassGenericsDef([TypeVarDef('TypeT')]))
+
+class TypeClassRef(ClassRef):
+  def __init__(self, ref: ClassRef, /):
+    super().__init__(TypeType, arguments={ TypeType.generics.before_tuple[0]: ref })
+
+  def extract(self):
+    assert self.arguments is not None
+    return self.arguments[TypeType.generics.before_tuple[0]]
 
 
 ## Builtins types & Prelude
@@ -79,10 +127,9 @@ FunctionType = ClassDef('function')
 MethodType = ClassDef('method')
 NoneType = ClassDef('None')
 UnionType = ClassDef('Union')
-TypeType = ClassDef('type', generics=[TypeVarDef('T')])
 
 PreludeVariables = Variables({
-  'Generic': ClassRef(GenericClassDef()),
+  'Generic': TypeClassRef(ClassRef(GenericType)),
   'NoneType': ClassRef(NoneType),
   'Union': ClassRef(UnionType),
 
@@ -97,8 +144,8 @@ PreludeVariables = Variables({
 # TODO: Accept class generics here
 def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_types: bool = True):
   match node:
-    case ast.BinOp(left=left, op=ast.BitOr(), right=right):
-      return ClassRef(UnionType, arguments=[parse_type(left, variables), parse_type(right, variables)])
+    # case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+    #   return ClassRef(UnionType, arguments=[parse_type(left, variables), parse_type(right, variables)])
 
     case ast.Constant(None):
       return ClassRef(NoneType)
@@ -111,16 +158,23 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
           return ClassRef(value)
         case ClassRef() if (not resolve_types):
           return value
-        case ClassRef(cls=cls, arguments=[ClassRef()]) if resolve_types and (cls is TypeType):
-          return value.arguments[0]
+        case TypeClassRef() if resolve_types:
+          return value.extract()
+        # case ClassRef(cls) if resolve_types and (cls is TypeType):
+        #   print(value)
+        #   assert value.arguments is not None
+        #   return value.arguments[cls.generics[0]]
         case TypeVarDef():
           return value
         case _:
           raise Exception
 
     case ast.Subscript(value=ast.Name(id=name, ctx=ast.Load()), slice=subscript, ctx=ast.Load()):
-      cls = variables[name]
-      assert isinstance(cls, ClassDef)
+      type_ref = variables[name]
+      assert isinstance(type_ref, TypeClassRef)
+      ref = type_ref.extract()
+
+      assert ref.arguments is None
 
       match subscript:
         case ast.Tuple(subscript_args, ctx=ast.Load()):
@@ -134,35 +188,26 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
         arg_value = parse_type(arg, variables)
         args.append(arg_value)
 
-        if isinstance(cls, GenericClassDef):
+        if ref.cls is GenericType:
           assert isinstance(arg_value, TypeVarDef)
+        else:
+          assert isinstance(arg_value, ClassRef)
 
-        assert isinstance(arg_value, (ClassRef, TypeVarDef))
+      # TODO: Handle union types
 
-        # match arg:
-        #   case ast.Constant(None):
-        #     assert not isinstance(cls, GenericClassDef)
-        #     args.append(ClassRef(NoneType))
+      if ref.cls is GenericType:
+        return TypeClassRef(
+          GenericClassRef(ClassGenericsDef(
+            before_tuple=cast(list[TypeVarDef], args)
+          ))
+        )
 
-        #   case ast.Name(arg_name, ctx=ast.Load()):
-        #     arg_value = variables[arg_name]
-
-        #     if isinstance(cls, GenericClassDef):
-        #       assert isinstance(arg_value, TypeVarDef)
-
-        #     assert isinstance(arg_value, (ClassRef, TypeVarDef))
-
-        #     args.append(arg_value)
-        #   case _:
-        #     raise Exception
-
-      if not isinstance(cls, GenericClassDef) and (cls is not UnionType):
-        assert len(args) == len(cls.generics)
-
-      return ClassRef(
-        arguments=args,
-        cls=cls
+      new_ref = ClassRef(
+        arguments={ typevar: arg for typevar, arg in zip(ref.cls.generics.before_tuple, cast(list[ClassRef], args)) },
+        cls=ref.cls
       )
+
+      return new_ref if resolve_types else TypeClassRef(new_ref)
 
     case _:
       raise Exception
@@ -231,20 +276,18 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
         generics_set = False
 
         for class_base in class_bases:
-          base = parse_type(class_base, variables | values, resolve_types=False)
-          assert isinstance(base, ClassRef) and (base.cls is TypeType)
+          base_type_ref = parse_type(class_base, variables | values, resolve_types=False)
+          assert isinstance(base_type_ref, TypeClassRef)
+          base_ref = base_type_ref.extract()
 
-          ref = base.arguments[0]
-          assert isinstance(ref, ClassRef)
-
-          cls.bases.append(ref)
-
-          if isinstance(ref.cls, GenericClassDef):
+          if isinstance(base_ref, GenericClassRef):
             assert not generics_set
-            cls.generics = cast(list[TypeVarDef], ref.arguments)
+            cls.generics = base_ref.generics
             generics_set = True
+          else:
+            cls.bases.append(base_ref)
 
-        values[class_name] = ClassRef(TypeType, arguments=[ClassRef(cls)])
+        values[class_name] = TypeClassRef(ClassRef(cls))
 
         for class_statement in class_body:
           match class_statement:
@@ -310,20 +353,32 @@ def process_source(contents: str, /, variables):
 
 ## Evaluation checker
 
-# def check_call(func: FuncDef, /, args: list[ClassRef], kwargs: dict[str, ClassRef]):
-#   for overload in func.overloads:
-#     return overload.return_type
+def resolve_generics(input_type: ClassRef | TypeVarDef, /, generics: dict[TypeVarDef, ClassRef]):
+  match input_type:
+    case ClassRef(cls, arguments=args):
+      return ClassRef(cls, arguments=args, context=generics)
 
-def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables):
+    case TypeVarDef():
+      return generics[input_type]
+
+    case _:
+      raise Exception
+
+
+def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None):
   # print(ast.dump(node, indent=2))
 
   match node:
+    case ast.Attribute(value, attr, ctx=ast.Load()):
+      value_type = check(value, builtin_variables, variables)
+      return resolve_generics(value_type.cls.instance_attrs[attr], (value_type.arguments or dict()))
+
     case ast.BinOp(left=left, right=right, op=ast.Add()):
       left_type = check(left, builtin_variables, variables)
       right_type = check(right, builtin_variables, variables)
 
       if '__add__' in left_type.cls.instance_attrs:
-        overload = find_overload(left_type.cls.instance_attrs['__add__'].cls, args=[right_type], kwargs=dict())
+        overload = find_overload(left_type.cls.instance_attrs['__add__'], args=[right_type], kwargs=dict())
 
         if overload:
           return overload.return_type
@@ -338,17 +393,17 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables)
         target = func_ref.arguments[0]
 
         if '__init__' in target.cls.instance_attrs:
-          overload = find_overload(target.cls.instance_attrs['__init__'].cls, args=args, kwargs=kwargs)
+          overload = find_overload(target.cls.instance_attrs['__init__'], args=args, kwargs=kwargs)
           assert overload
 
         return target
 
       assert isinstance(func_ref.cls, FuncDef)
 
-      overload = find_overload(func_ref.cls, args=args, kwargs=kwargs)
+      overload = find_overload(func_ref, args=args, kwargs=kwargs)
 
       assert overload
-      return overload.return_type
+      return resolve_generics(overload.return_type, func_ref.context) if overload.return_type else None
 
     case ast.Constant(builtins.int()):
       return builtin_variables['int'].arguments[0] # type: ignore
@@ -367,7 +422,10 @@ def check_type(lhs: ClassRef, rhs: ClassRef, /):
 
   return False
 
-def find_overload(func: FuncDef, /, args: list[ClassRef], kwargs: dict[str, ClassRef]):
+def find_overload(func_ref: ClassRef, /, args: list[ClassRef], kwargs: dict[str, ClassRef]):
+  func = func_ref.cls
+  assert isinstance(func, FuncDef)
+
   for overload in func.overloads:
     args_pos = overload.args_posonly + overload.args_both
     args_kw = overload.args_kwonly + overload.args_both
@@ -447,59 +505,33 @@ class int:
 """, PreludeVariables)
 
   AuxVariables = process_source("""
-x: int
+U = TypeVar('U')
 
-class A:
-  # def __init__(self):
-  ...
+class list(Generic[U]):
+  def a(self) -> U:
+    ...
 
-class B(A):
-  ...
-
-def foo(a: A) -> int:
-  ...
+y: list[int]
 """, PreludeVariables | BuiltinVariables)
-
-  # tree = ast.parse("devices.get", mode='eval').body
-  # print(ast.dump(tree, indent=2))
-  # print(analyze(tree, stack=ChainMap({}, stack)))
-
-  # print()
-  # print()
 
   from pprint import pprint
 
   # print()
-  # pprint(BuiltinVariables)
+  pprint(AuxVariables)
   # print()
 
-  # pprint(BuiltinVariables['x'])
-  # i = BuiltinVariables['int']
-
-  # print(find_overload(BuiltinVariables['foo'].cls, [i, i], { 'c': i, 'd': i }))
-  # print(find_overload(BuiltinVariables['foo'].cls, [], {}))
-
-  # pprint(BuiltinVariables)
-
-  print(check(ast.parse("(356 + x) + foo(B())", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
+  print(check(ast.parse("y.a()", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
 
 
-# see: typing.get_type_hints
+# class Employee:
+#   pass
 
+# class Manager(Employee):
+#   pass
 
-# from typing import Generic, TypeVar
+# x = list[Manager]()
 
-# T = TypeVar('T')
+# def a(x: list[Employee]):
+#   pass
 
-# class X(Generic[T]):
-#   class Y:
-#     def foo(self) -> T:
-#       ...
-
-#   def a(self):
-#     return self.Y()
-
-
-# a = X[int]().a()
-# b = a.foo()
-# print(b + 1)
+# a(x)

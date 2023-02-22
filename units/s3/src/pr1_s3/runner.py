@@ -198,7 +198,7 @@ class Process:
 
       try:
         if self._halted:
-          raise asyncio.CancelledError()
+          raise asyncio.CancelledError
 
         if self._resume_future:
           yield ProcessExecEvent(

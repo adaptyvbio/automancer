@@ -68,11 +68,11 @@ export class LocalHost {
       executable = 'arch';
     }
 
-    this.logger.debug(`Using command "${hostOptions.pythonPath} ${args.map((arg) => arg.replaceAll(' ', '\\ ')).join(' ')}"`)
+    this.logger.debug(`Using command "${executable} ${args.map((arg) => arg.replaceAll(' ', '\\ ')).join(' ')}"`)
     this.logger.debug(`With environment variables: ${JSON.stringify(env)}`)
 
     // TODO: Add architecture
-    this.process = childProcess.spawn(hostOptions.pythonPath, args, { env });
+    this.process = childProcess.spawn(executable, args, { env });
 
 
     // Wait for the process to close

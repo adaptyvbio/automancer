@@ -192,6 +192,7 @@ $drag-region-height: 3rem;
   &-editor {
     &-root {
       height: 100%;
+      overflow-x: hidden;
       overflow-y: hidden;
 
       background-color: $color-left;

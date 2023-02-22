@@ -18,8 +18,7 @@ setup(
   install_requires=[
     "aiohttp==3.7.4",
     "bcrypt==3.2.2",
-    "pyOpenSSL==22.0.0",
-    "pyinstaller==5.1",
+    "pyOpenSSL==23.0.0",
     "websockets==10.2",
     "zeroconf==0.47.1"
   ]

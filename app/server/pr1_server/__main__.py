@@ -1,7 +1,9 @@
+from logging import Formatter
 import logging
+import sys
 
 
-class ColoredFormatter(logging.Formatter):
+class ColoredFormatter(Formatter):
   def format(self, record):
     reset = "\x1b[0m"
     color = {
@@ -14,8 +16,14 @@ class ColoredFormatter(logging.Formatter):
     formatter = logging.Formatter(f"{color}%(levelname)-8s{reset} :: %(name)-18s :: %(message)s")
     return formatter.format(record)
 
+class DefaultFormatter(Formatter):
+  def format(self, record):
+    formatter = logging.Formatter(f"%(levelname)-8s :: %(name)-18s :: %(message)s")
+    return formatter.format(record)
+
+
 ch = logging.StreamHandler()
-ch.setFormatter(ColoredFormatter())
+ch.setFormatter(ColoredFormatter() if sys.stderr.isatty() else DefaultFormatter())
 
 logging.getLogger().addHandler(ch)
 logging.getLogger().setLevel(logging.INFO)

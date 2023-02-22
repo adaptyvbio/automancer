@@ -239,20 +239,30 @@ export class CoreApplication {
       let architecture = options.pythonInstallationSettings.architecture;
       let pythonPath = pythonInstallation.path;
 
+      this.logger.info(`Creating local host with settings id '${hostSettingsId}'`);
+      this.logger.debug('Creating host directory');
+
       await fs.mkdir(hostDirPath, { recursive: true });
 
       if (options.pythonInstallationSettings.virtualEnv) {
+        this.logger.debug('Creating virtual environment');
+
         await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
         pythonPath = path.join(envPath, 'bin/python');
 
         let corePackagesDirPath = util.getResourcePath('packages');
         for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
+          this.logger.debug(`Installing core package '${corePackageRelPath}'`);
           await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
         }
       }
 
-      let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture });
+      this.logger.debug('Initializing host configuration');
+
+      let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
       let conf = JSON.parse(confStdout);
+
+      this.logger.info(`Created host with identifier '${conf.identifier}'`);
 
       await this.setData({
         hostSettings: {

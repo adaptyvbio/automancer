@@ -8,9 +8,6 @@
     "module": "esnext",
     "moduleResolution": "node",
     "noEmit": true,
-    "paths": {
-      "pr1": ["../client/src/index.tsx"]
-    },
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,

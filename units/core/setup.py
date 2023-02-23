@@ -11,6 +11,7 @@ setup(
     'pr1.units': [
       "devices = pr1_devices",
       "do = pr1_do",
+      "metadata = pr1_metadata",
       "name = pr1_name",
       "repeat = pr1_repeat",
       "segment = pr1_segment",
@@ -22,6 +23,7 @@ setup(
   },
   package_data={
     "pr1_devices.client": ["*"],
+    "pr1_metadata.client": ["*"],
     "pr1_repeat.client": ["*"],
     "pr1_segment.client": ["*"],
     "pr1_sequence.client": ["*"],

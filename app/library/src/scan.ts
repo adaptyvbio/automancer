@@ -20,7 +20,12 @@ type GeneralRecordEntries = Record<string, { data: any; expires: number; }>;
 type PTRRecordEntries = Record<string, Record<string, { expires: number; }>>;
 
 export class Scanner {
+  private _debounceDelay = 400;
   private _instance = mdns();
+  private _listeners = new Set<{
+    callback(services: Services): void;
+    types: string[];
+  }>();
   private _records: {
     A: GeneralRecordEntries;
     AAAA: GeneralRecordEntries;
@@ -34,6 +39,7 @@ export class Scanner {
     SRV: {},
     TXT: {}
   };
+  private _timeout: ReturnType<typeof setTimeout>  | null = null;
 
   constructor() {
     this._instance.on('response', (response) => {
@@ -58,10 +64,33 @@ export class Scanner {
           }
         }
       }
+
+      if (this._debounceDelay > 0) {
+        if (this._timeout !== null) {
+          clearTimeout(this._timeout);
+        }
+
+        this._timeout = setTimeout(() => {
+          this._timeout = null;
+          this._callListeners();
+        }, this._debounceDelay);
+      } else {
+        this._callListeners();
+      }
     });
   }
 
-  _cleanup() {
+  private _callListeners() {
+    if (this._listeners.size > 0) {
+      this._cleanup();
+    }
+
+    for (let listener of this._listeners) {
+      listener.callback(this._listServices(listener.types));
+    }
+  }
+
+  private _cleanup() {
     let now = Date.now();
 
     for (let entries of Object.values(this._records.PTR)) {
@@ -83,34 +112,7 @@ export class Scanner {
     }
   }
 
-  close() {
-    this._instance.destroy();
-  }
-
-  async getServices(types: string[], options?: { queryDelay?: number; }) {
-    let queryDelay = (options?.queryDelay ?? 400);
-
-    if (queryDelay > 0) {
-      await new Promise<void>((resolve, reject) => {
-        this._instance.query(
-          types.map((type) => ({ name: type, type: 'PTR', class: 'IN' })),
-          (err) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          }
-        );
-      });
-
-      await new Promise<void>((resolve) => {
-        setTimeout(() => void resolve(), queryDelay);
-      });
-    }
-
-    this._cleanup();
-
+  private _listServices(types: string[]) {
     let services: Services = {};
 
     for (let type of types) {
@@ -167,6 +169,60 @@ export class Scanner {
     return services;
   }
 
+  close() {
+    if (this._timeout !== null) {
+      clearTimeout(this._timeout);
+      this._timeout = null;
+    }
+
+    this._instance.destroy();
+    this._listeners.clear();
+  }
+
+  async getServices(types: string[], options?: { queryDelay?: number; }) {
+    let queryDelay = (options?.queryDelay ?? 400);
+
+    if (queryDelay > 0) {
+      await this.queryServices(types);
+      await new Promise<void>((resolve) => void setTimeout(() => void resolve(), queryDelay));
+    }
+
+    return this.listServices(types);
+  }
+
+  async queryServices(types: string[]) {
+    await new Promise<void>((resolve, reject) => {
+      this._instance.query(
+        types.map((type) => ({ name: type, type: 'PTR', class: 'IN' })),
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  listServices(types: string[]) {
+    this._cleanup();
+    return this._listServices(types);
+  }
+
+  listenToServices(callback: ((services: Services) => void), types: string[], options?: { signal?: AbortSignal; }) {
+    let listener = {
+      callback,
+      types
+    };
+
+    this._listeners.add(listener);
+
+    options?.signal?.addEventListener('abort', () => {
+      this._listeners.delete(listener);
+    });
+  }
+
   static async getServices(types: string[], options?: { queryDelay?: number; }) {
     let scanner = new Scanner();
     let services = await scanner.getServices(types, options);
@@ -178,13 +234,11 @@ export class Scanner {
 }
 
 
-// let x = new Scanner();
+// let scanner = new Scanner();
 
-// x.getServices([
-//   '_prone._tcp.local',
-//   '_prone._http._tcp.local',
-//   '_ssh._tcp.local'
-// ]).then((services) => {
+// scanner.listenToServices((services) => {
 //   console.log(services);
-//   x.close();
-// });
+// }, [
+//   '_prone._tcp.local',
+//   '_prone._http._tcp.local'
+// ]);

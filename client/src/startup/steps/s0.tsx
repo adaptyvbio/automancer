@@ -5,10 +5,10 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 
 export interface Data extends HostCreatorStepData {
+  stepIndex: 0;
+
   address: string;
   port: string;
-
-  stepIndex: 0;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -48,9 +48,9 @@ export function Component(props: HostCreatorStepProps<Data>) {
             label="Protocol"
             onInput={(_id) => { }}
             options={[
-              { id: 'websocket', label: 'Insecure WebSocket' }
+              { id: 'tcp', label: 'TCP' }
             ]}
-            value="websocket"
+            value="tcp"
             targetRef={firstInputRef} />
           <Form.TextField
             label="Address"
@@ -67,11 +67,18 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
       <div className="startup-editor-action-root">
         <div className="startup-editor-action-list">
-          <button type="button" className="startup-editor-action-item" onClick={
-            () => void props.setData({ stepIndex: 4, mode: 'remote' })
-          }>Back</button>
+          <button type="button" className="startup-editor-action-item" onClick={() => {
+            props.setData({ stepIndex: 4, mode: 'remote' });
+          }}>Back</button>
         </div>
         <div className="startup-editor-action-list">
+          <button type="button" className="startup-editor-action-item" onClick={() => {
+            props.setData({
+              stepIndex: 7,
+
+              selectedHostIdentifier: null
+            });
+          }}>Search on this network</button>
           <button type="submit" className="startup-editor-action-item">Next</button>
         </div>
       </div>

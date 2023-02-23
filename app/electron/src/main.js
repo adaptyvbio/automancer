@@ -1,5 +1,7 @@
 import 'source-map-support/register';
 
+import { searchForAdvertistedHosts } from 'pr1-library';
+
 const chokidar = require('chokidar');
 const crypto = require('crypto');
 const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
@@ -30,6 +32,7 @@ export class CoreApplication {
 
     let userData = this.app.getPath('userData');
 
+    /** @type {import('./interfaces').AppData} */
     this.data = null;
     this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
@@ -362,6 +365,15 @@ export class CoreApplication {
 
     ipcMain.handle('hostSettings.setDefault', async (_event, { hostSettingsId }) => {
       await this.setData({ defaultHostSettingsId: hostSettingsId });
+    });
+
+    ipcMain.handle('hostSettings.queryRemoteHosts', async (_event) => {
+      return (await searchForAdvertistedHosts()).filter((info) =>
+        true
+        // !Object.values(this.data.hostSettings).some((hostSettings) =>
+        //   (hostSettings.options.type === 'local') && (hostSettings.options.identifier === info.identifier)
+        // )
+      );
     });
 
 

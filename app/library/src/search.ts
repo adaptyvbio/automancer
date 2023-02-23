@@ -1,9 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import type { HostSettings, HostSettingsId } from 'pr1';
+import type { HostSettings } from 'pr1';
 import type { AppData } from 'pr1-app';
-import { Scanner } from './scan';
+import { Scanner, type Service } from './scan';
 import { SocketClient } from './socket-client';
 
 
@@ -87,11 +87,56 @@ export interface HostEnvironment {
 
 export type HostEnvironments = Record<HostIdentifier, HostEnvironment>;
 
+export interface AdvertisedHostInfo {
+  bridges: BridgeRemote[];
+  identifier: string;
+  ipAddress: string;
+  description: string;
+}
+
 
 export const UnixSocketDirPath = '/tmp/pr1';
 
 export const SocketServiceType = '_prone._tcp.local';
 export const WebsocketServiceType = '_prone._http._tcp.local';
+
+
+export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHostInfo | null {
+  let bridges: BridgeRemote[] = [];
+  let ipAddress = (service.address?.ipv4 || service.address?.ipv6);
+
+  if (service.address && service.properties && ipAddress) {
+    if (service.types.includes(SocketServiceType)) {
+      bridges.push({
+        type: 'socket',
+        options: {
+          type: 'inet',
+          hostname: ipAddress,
+          port: service.address.port
+        }
+      });
+    }
+
+    if (service.types.includes(WebsocketServiceType)) {
+      bridges.push({
+        type: 'websocket',
+        options: {
+          hostname: ipAddress,
+          port: service.address.port
+        }
+      });
+    }
+
+    return {
+      bridges,
+      identifier: service.properties['identifier'],
+      ipAddress,
+      description: service.properties['description']
+    };
+  }
+
+  return null;
+}
 
 
 export async function searchForHostEnvironments() {
@@ -124,42 +169,20 @@ export async function searchForHostEnvironments() {
   ]);
 
   for (let service of Object.values(services)) {
-    let ipAddress = (service.address?.ipv4 || service.address?.ipv6);
+    let info = getAdvertisedHostInfoFromService(service);
 
-    if (service.address && service.properties && ipAddress) {
-      let identifier = service.properties['identifier'];
-
-      if (!(identifier in environments)) {
-        environments[identifier] = {
+    if (info) {
+      if (!(info.identifier in environments)) {
+        environments[info.identifier] = {
           bridges: [],
-          identifier,
+          identifier: info.identifier,
           hostSettings: null,
-          label: service.properties['description']
+          label: info.description
         };
       }
 
-      let environment = environments[identifier];
-
-      if (service.types.includes(SocketServiceType)) {
-        environment.bridges.push({
-          type: 'socket',
-          options: {
-            type: 'inet',
-            hostname: ipAddress,
-            port: service.address.port
-          }
-        });
-      }
-
-      if (service.types.includes(WebsocketServiceType)) {
-        environment.bridges.push({
-          type: 'websocket',
-          options: {
-            hostname: ipAddress,
-            port: service.address.port
-          }
-        });
-      }
+      let environment = environments[info.identifier];
+      environment.bridges.push(...info.bridges);
     }
   }
 
@@ -215,6 +238,14 @@ export async function searchForHostEnvironments() {
   return environments;
 }
 
-// searchForHostEnvironments().then((x) => {
-//   console.log(require('util').inspect(x, { colors: true, depth: 1/0 }))
-// });
+
+export async function searchForAdvertistedHosts() {
+  let services = await Scanner.getServices([
+    SocketServiceType,
+    WebsocketServiceType
+  ]);
+
+  return Object.values(services)
+    .map((service) => getAdvertisedHostInfoFromService(service))
+    .filter((info) : info is AdvertisedHostInfo => info !== null);
+}

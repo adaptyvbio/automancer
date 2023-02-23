@@ -182,7 +182,8 @@ class App:
     if self.zeroconf:
       logger.debug(f"Unregistering {len(self.zeroconf_services)} zeroconf services")
 
-      await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in self.zeroconf_services])
+      background_tasks = await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in self.zeroconf_services])
+      await asyncio.gather(*background_tasks)
       await self.zeroconf.async_close()
 
       self.zeroconf = None

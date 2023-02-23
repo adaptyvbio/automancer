@@ -71,7 +71,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
               icon: 'architecture' },
             { id: 'remote',
               name: 'Remote setup',
-              description: 'Connect to an existing setup on the same or another network',
+              description: 'Connect to an existing setup on this network',
               icon: 'cloud' }
           ]}
           onSelect={(mode) => void props.setData({ mode })}

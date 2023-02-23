@@ -11,6 +11,7 @@ import * as S3 from './steps/s3';
 import * as S4 from './steps/s4';
 import * as S5 from './steps/s5';
 import * as S6 from './steps/s6';
+import * as S7 from './steps/s7';
 
 
 export interface HostCreatorContext {
@@ -31,7 +32,8 @@ export type HostCreatorData =
   | S3.Data
   | S4.Data
   | S5.Data
-  | S6.Data;
+  | S6.Data
+  | S7.Data;
 
 export interface HostCreatorState {
   context: HostCreatorContext | null;
@@ -72,7 +74,8 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
       S3.Component,
       S4.Component,
       S5.Component,
-      S6.Component
+      S6.Component,
+      S7.Component
     ][this.state.data.stepIndex] as HostCreatorStepComponent<unknown>;
 
     return (

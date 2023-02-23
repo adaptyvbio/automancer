@@ -1,7 +1,6 @@
-import * as React from 'react';
+import { Form, React, Selector } from 'pr1';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { Selector } from '../selector';
 
 
 export type HostSettingsMode = 'advanced' | 'automatic' | 'remote';

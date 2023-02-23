@@ -3,7 +3,7 @@
 import '@fontsource/space-mono/latin-400.css';
 import * as React from 'react';
 
-import { HostCreator, HostCreatorProps } from './startup/host-creator';
+// import { HostCreator, HostCreatorProps } from '../../app/electron/src/startup/host-creator';
 import type { HostId } from './backends/common';
 import * as util from './util';
 import { formatHostSettings } from './host';
@@ -18,13 +18,12 @@ interface StartupProps {
   defaultSettingsId: string | null;
   hostSettings: HostSettingsCollection;
 
-  createHostSettings(options: { settings: HostSettings; }): void;
-  createLocalHost: HostCreatorProps['createLocalHost'];
   deleteHostSettings(settingsId: string): void;
   launchHost(settingsId: string): void;
-  setDefaultHostSettings(settingsId: string | null): void;
+  renderHostCreator(options: { close(): void; }): React.ReactElement;
   revealHostSettingsDirectory?(settingsId: string): void;
   revealHostLogsDirectory?(settingsId: string): void;
+  setDefaultHostSettings(settingsId: string | null): void;
 }
 
 interface StartupState {
@@ -97,16 +96,9 @@ export class Startup extends React.Component<StartupProps, StartupState> {
             <div className="startup-editor-holder">
               <div className="startup-editor-dragregion" />
               {this.state.hostCreatorVisible && (
-                <HostCreator
-                  cancel={() => {
-                    this.resetHostCreator();
-                  }}
-                  createLocalHost={this.props.createLocalHost}
-                  launchHost={(hostSettingsId) => {
-                    this.resetHostCreator();
-                    this.props.launchHost(hostSettingsId);
-                  }}
-                  key={this.state.hostCreatorIndex} />
+                this.props.renderHostCreator({
+                  close: () => void this.resetHostCreator()
+                })
               )}
             </div>
           </div>

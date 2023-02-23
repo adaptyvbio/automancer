@@ -1,7 +1,5 @@
-import * as React from 'react';
+import { LargeIcon, React } from 'pr1';
 
-import { LargeIcon } from '../../components/large-icon';
-import { HostBackendOptions } from '../../host';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 

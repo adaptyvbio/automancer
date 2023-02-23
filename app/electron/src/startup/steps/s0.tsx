@@ -1,6 +1,4 @@
-import * as React from 'react';
-
-import * as Form from '../../components/standard-form';
+import { Form, React } from 'pr1';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 

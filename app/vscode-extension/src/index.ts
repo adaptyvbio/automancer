@@ -2,7 +2,7 @@ import { machineId as getMachineId } from 'node-machine-id';
 import path from 'path';
 import type { DraftCompilation, DraftRange } from 'pr1';
 import { SocketClient, searchForHostEnvironments, BridgeSocket, HostEnvironments, HostIdentifier, HostEnvironment, SocketClientClosed } from 'pr1-library';
-import { HostDraft, HostDraftCompilerOptions } from 'pr1/src/interfaces/draft';
+import { HostDraft, HostDraftCompilerOptions } from 'pr1';
 import vscode, { TextDocument } from 'vscode';
 
 import { Deferred, findMap } from './util';

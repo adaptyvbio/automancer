@@ -34,9 +34,11 @@ export * from './components/description';
 export * from './components/diagnostics-report';
 export * from './components/features';
 export * from './components/graph-editor';
+export * from './components/large-icon';
 export * from './components/progress-bar';
 export * from './components/timed-progress-bar';
 export * from './components/item-list';
+export * from './components/selector';
 export * from './unit';
 
 export * from './interfaces/host';

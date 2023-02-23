@@ -47,13 +47,18 @@ export async function getDesktopAppData() {
 }
 
 
-export interface BridgeSocket {
+export interface BridgeSocketInet {
   type: 'socket';
   options: {
     type: 'inet';
     hostname: string;
     port: number;
-  } | {
+  }
+}
+
+export interface BridgeSocketUnix {
+  type: 'socket';
+  options: {
     type: 'unix';
     path: string;
   };
@@ -72,14 +77,14 @@ export interface BridgeStdio {
   options: {};
 }
 
-export type Bridge = BridgeSocket | BridgeStdio | BridgeWebsocket;
-export type BridgeRemote = BridgeSocket | BridgeWebsocket;
+export type Bridge = BridgeSocketInet | BridgeSocketUnix | BridgeStdio | BridgeWebsocket;
+export type BridgeRemote = BridgeSocketInet | BridgeWebsocket;
 
 
 export type HostIdentifier = string;
 
 export interface HostEnvironment {
-  bridges: BridgeRemote[];
+  bridges: Bridge[];
   identifier: HostIdentifier;
   hostSettings: HostSettings | null;
   label: string | null;

@@ -1,9 +1,7 @@
-import * as React from 'react';
+import { LargeIcon, React, util } from 'pr1';
 
-import { LargeIcon } from '../../components/large-icon';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import * as util from '../../util';
-import { LocalHostOptions } from '../interfaces';
+import { LocalHostOptions } from '../../interfaces';
 
 
 export interface Data extends HostCreatorStepData {

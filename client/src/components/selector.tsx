@@ -1,10 +1,8 @@
 import * as React from 'react';
 
-import { Icon } from '../components/icon';
-import * as util from '../util';
+import type { OrdinaryId } from '../interfaces/util';
+import { Icon } from './icon';
 
-
-export type OrdinaryId = number | string;
 
 export function Selector<EntryId extends OrdinaryId, Entry extends {
   id: EntryId;

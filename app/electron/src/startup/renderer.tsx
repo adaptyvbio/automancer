@@ -1,21 +1,31 @@
-import { Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostSettingsCollection, HostSettingsId, Pool, React, ReactDOM, Startup } from 'pr1';
 
+import { HostCreator } from './host-creator';
 import { NativeContextMenuProvider } from '../shared/context-menu';
 
 
-class App extends React.Component {
+export interface AppProps {
+
+}
+
+export interface AppState {
+  defaultHostSettingsId: HostSettingsId | null;
+  hostSettings: HostSettingsCollection | null;
+}
+
+export class App extends React.Component<AppProps, AppState> {
   pool = new Pool();
 
-  constructor(props) {
+  constructor(props: AppProps) {
     super(props);
 
     this.state = {
-      defaultHostSettingsId: props.defaultHostSettingsId,
-      hostSettings: props.hostSettings
+      defaultHostSettingsId: null,
+      hostSettings: null
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.pool.add(async () => {
       await this.query();
       await window.api.ready();
@@ -31,7 +41,7 @@ class App extends React.Component {
     });
   }
 
-  render() {
+  override render() {
     if (!this.state.hostSettings) {
       return null;
     }
@@ -42,17 +52,12 @@ class App extends React.Component {
           defaultSettingsId={this.state.defaultHostSettingsId}
           hostSettings={this.state.hostSettings}
 
-          createHostSettings={(options) => {
-            this.pool.add(async () => {
-              await window.api.hostSettings.create({ hostSettings: options.settings });
-              await this.query();
-            });
-          }}
-          createLocalHost={async (options) => {
-            let result = await window.api.hostSettings.createLocalHost(options);
-            await this.query();
-            return result;
-          }}
+          // createHostSettings={(options) => {
+          //   this.pool.add(async () => {
+          //     await window.api.hostSettings.create({ hostSettings: options.settings });
+          //     await this.query();
+          //   });
+          // }}
           deleteHostSettings={(hostSettingsId) => {
             this.pool.add(async () => {
               await window.api.hostSettings.delete({ hostSettingsId });
@@ -62,6 +67,11 @@ class App extends React.Component {
           launchHost={(hostSettingsId) => {
             window.api.launchHost({ hostSettingsId });
           }}
+          renderHostCreator={({ close }) => (
+            <HostCreator
+              close={close}
+              update={async () => void await this.query()} />
+          )}
           revealHostLogsDirectory={(hostSettingsId) => {
             window.api.hostSettings.revealLogsDirectory({ hostSettingsId });
           }}
@@ -91,5 +101,5 @@ if (!window.common.isDarwin) {
 }
 
 
-let root = ReactDOM.createRoot(document.getElementById('root'));
+let root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);

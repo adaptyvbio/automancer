@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('api', api);
 
 declare global {
   interface Window {
-    readonly api: typeof api;
+    readonly api: any;
+    readonly common: any;
   }
 }

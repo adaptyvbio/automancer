@@ -1,14 +1,13 @@
-import * as React from 'react';
+import { Pool, React, Selector } from 'pr1';
+import type { AdvertisedHostInfo, HostIdentifier } from 'pr1-library';
 
-import { Pool, usePool } from '../../util';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { Selector } from '../selector';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 7;
 
-  selectedHostIdentifier: string | null;
+  selectedHostIdentifier: HostIdentifier | null;
 }
 
 export interface State {
@@ -37,7 +36,7 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
 
       this.setState({ remoteHostInfos });
 
-      if (this.props.data.selectedHostIdentifier && !remoteHostInfos.some((hostInfo) => hostInfo.identifier === props.data.selectedHostIdentifier)) {
+      if (this.props.data.selectedHostIdentifier && !remoteHostInfos.some((hostInfo) => hostInfo.identifier === this.props.data.selectedHostIdentifier)) {
         this.props.setData({
           selectedHostIdentifier: null
         });
@@ -45,15 +44,15 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
     });
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.queryRemoteHostInfos();
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
-  render() {
+  override render() {
     return (
       <form className="startup-editor-contents" onSubmit={(event) => {
         event.preventDefault();
@@ -72,8 +71,8 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
                     let bridge = hostInfo.bridges[0];
                     let description: string;
 
-                    switch (bridge.options.type) {
-                      case 'inet':
+                    switch (bridge.type) {
+                      case 'socket':
                         description = `${bridge.options.hostname}:${bridge.options.port}`;
                         break;
                       default:

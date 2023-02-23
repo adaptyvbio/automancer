@@ -6,6 +6,6 @@
   },
   "files": [
     "src/host/renderer.tsx",
-    "src/startup/renderer.jsx"
+    "src/startup/renderer.tsx"
   ]
 }

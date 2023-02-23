@@ -1,8 +1,6 @@
-import * as React from 'react';
+import { HostSettings, Pool, React } from 'pr1';
 
-import type { LocalHostOptions, PythonInstallation, PythonInstallationRecord } from './interfaces';
-import type { HostSettings } from '../host';
-import { Pool } from '../util';
+import type { LocalHostOptions, PythonInstallationRecord } from '../interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
@@ -19,12 +17,6 @@ export interface HostCreatorContext {
   pythonInstallations: PythonInstallationRecord;
 }
 
-export interface HostCreatorProps {
-  cancel(): void;
-  createLocalHost(options: LocalHostOptions): Promise<{ ok: boolean; id: string; }>;
-  launchHost(hostSettingsId: HostSettings['id']): void;
-}
-
 export type HostCreatorData =
     S0.Data
   | S1.Data
@@ -34,6 +26,11 @@ export type HostCreatorData =
   | S5.Data
   | S6.Data
   | S7.Data;
+
+export interface HostCreatorProps {
+  close(): void;
+  update(): Promise<void>;
+}
 
 export interface HostCreatorState {
   context: HostCreatorContext | null;
@@ -55,14 +52,14 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.pool.add(async () => {
       let context = await window.api.hostSettings.getCreatorContext();
       this.setState({ context });
     });
   }
 
-  render() {
+  override render() {
     if (!this.state.context) {
       return <></>;
     }
@@ -80,10 +77,16 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
 
     return (
       <Step
-        cancel={this.props.cancel}
+        cancel={() => void this.props.close()}
         context={this.state.context}
-        createLocalHost={this.props.createLocalHost}
-        launchHost={this.props.launchHost}
+        createLocalHost={async (options) => {
+          let result = await window.api.hostSettings.createLocalHost(options);
+          await this.query();
+          return result;
+        }}
+        launchHost={(hostSettingsId) => {
+
+        }}
         data={this.state.data}
         setData={(data) => {
           this.setState({
@@ -99,10 +102,14 @@ export interface HostCreatorStepData {
   stepIndex: number;
 }
 
-export type HostCreatorStepProps<Data = HostCreatorData> = HostCreatorProps & {
+export type HostCreatorStepProps<Data = HostCreatorData> = {
   context: HostCreatorContext;
   data: Data;
   setData(data: HostCreatorData | Omit<Data, 'stepIndex'>): void;
+
+  cancel(): void;
+  createLocalHost(options: LocalHostOptions): Promise<{ ok: boolean; id: string; }>;
+  launchHost(hostSettingsId: HostSettings['id']): void;
 }
 
 export type HostCreatorStepComponent<Data> = React.FunctionComponent<HostCreatorStepProps<Data>>;

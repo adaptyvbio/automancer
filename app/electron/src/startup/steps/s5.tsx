@@ -1,10 +1,7 @@
-import * as React from 'react';
+import { Form, React } from 'pr1';
+import type { LocalHostOptions, PythonInstallation, PythonInstallationId } from '../../interfaces';
 
-import * as Form from '../../components/standard-form';
-import { HostBackendOptions, HostRemoteBackendOptions } from '../../host';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { LocalHostOptions, PythonInstallation, PythonInstallationId } from '../interfaces';
-import * as util from '../../util';
 
 
 export interface Data extends HostCreatorStepData {

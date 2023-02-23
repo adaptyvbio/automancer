@@ -59,11 +59,11 @@ class ClassGenericsDef:
   after_tuple: list[TypeVarDef] = field(default_factory=list)
 
   def format(self):
-    return ", ".join([
+    return [
       *[arg.name for arg in self.before_tuple],
       *(f"*{self.tuple.name}" if self.tuple else list()),
       *[arg.name for arg in self.after_tuple]
-    ])
+    ]
 
 @dataclass
 class ClassDef:
@@ -75,7 +75,8 @@ class ClassDef:
   instance_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({self.name}[{self.generics.format()}]())"
+    generics = self.generics.format()
+    return f"<{self.__class__.__name__} {self.name}" + (f"[{', '.join(generics)}]" if generics else str()) + ">"
 
 @dataclass
 class FuncDef(ClassDef):
@@ -92,11 +93,11 @@ class ClassRef:
   arguments: 'Optional[dict[TypeVarDef, ClassRef]]' = None
   context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
 
+  def mro(self):
+    yield self
 
-# @dataclass
-# class GenericClassDef(ClassDef):
-#   def __init__(self):
-#     super().__init__('Generic', generics=[TypeVarDef('GenericT')])
+    for base_ref in self.cls.bases:
+      yield base_ref
 
 
 GenericType = ClassDef('Generic')
@@ -292,8 +293,14 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
         for class_statement in class_body:
           match class_statement:
             case ast.AnnAssign(target=ast.Name(id=attr_name, ctx=ast.Store()), annotation=attr_ann, value=None, simple=1):
-              assert not (attr_name in cls.class_attrs)
-              assert not (attr_name in cls.instance_attrs)
+              if attr_name in cls.class_attrs:
+                raise Exception("Duplicate class attribute")
+
+              cls.class_attrs[attr_name] = parse_type(attr_ann, variables | values)
+
+            case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
+              if attr_name in cls.instance_attrs:
+                raise Exception("Duplicate instance attribute")
 
               cls.instance_attrs[attr_name] = parse_type(attr_ann, variables | values)
 
@@ -319,6 +326,7 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
               pass
 
             case _:
+              print('Missing', ast.dump(class_statement, indent=2))
               raise Exception
 
       case ast.FunctionDef(name=func_name):
@@ -365,32 +373,65 @@ def resolve_generics(input_type: ClassRef | TypeVarDef, /, generics: dict[TypeVa
       raise Exception
 
 
-def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None):
+BinOpMethodMap: dict[type[ast.operator], str] = {
+  ast.Add: 'add',
+  ast.BitAnd: 'and',
+  ast.Mod: 'divmod',
+  ast.FloorDiv: 'floordiv',
+  ast.LShift: 'lshift',
+  ast.MatMult: 'matmul',
+  ast.Mod: 'mod',
+  ast.Mult: 'mul',
+  ast.BitOr: 'or',
+  ast.Pow: 'pow',
+  ast.RShift: 'rshift',
+  ast.Sub: 'sub',
+  ast.Div: 'truediv',
+  ast.BitXor: 'xor'
+}
+
+def evaluate(node: ast.expr, /, builtin_variables: Variables, variables: Variables, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None):
   # print(ast.dump(node, indent=2))
 
   match node:
-    case ast.Attribute(value, attr, ctx=ast.Load()):
-      value_type = check(value, builtin_variables, variables)
-      return resolve_generics(value_type.cls.instance_attrs[attr], (value_type.arguments or dict()))
+    case ast.Attribute(value, attr=attr_name, ctx=ast.Load()):
+      value_type = evaluate(value, builtin_variables, variables)
 
-    case ast.BinOp(left=left, right=right, op=ast.Add()):
-      left_type = check(left, builtin_variables, variables)
-      right_type = check(right, builtin_variables, variables)
+      if isinstance(value_type, TypeClassRef):
+        for class_ref in value_type.extract().mro():
+          if attr := class_ref.cls.instance_attrs.get(attr_name):
+            return resolve_generics(attr, (class_ref.arguments or dict()))
 
-      if '__add__' in left_type.cls.instance_attrs:
-        overload = find_overload(left_type.cls.instance_attrs['__add__'], args=[right_type], kwargs=dict())
+      for class_ref in value_type.mro():
+        if attr := class_ref.cls.instance_attrs.get(attr_name):
+          return resolve_generics(attr, (class_ref.arguments or dict()))
 
-        if overload:
-          return overload.return_type
+      raise Exception("Missing attribute")
+
+    case ast.BinOp(left=left, right=right, op=op):
+      left_type = evaluate(left, builtin_variables, variables)
+      right_type = evaluate(right, builtin_variables, variables)
+
+      operator_name = BinOpMethodMap[op.__class__]
+
+      if (method := left_type.cls.instance_attrs.get(f"__{operator_name}__"))\
+        and (overload := find_overload(method, args=[right_type], kwargs=dict())):
+        return overload.return_type
+
+      if (method := right_type.cls.instance_attrs.get(f"__r{operator_name}__"))\
+        and (overload := find_overload(method, args=[left_type], kwargs=dict())):
+        return overload.return_type
+
+      raise Exception("Invalid operation")
 
     case ast.Call(func, args, keywords):
-      func_ref = check(func, builtin_variables, variables)
+      func_ref = evaluate(func, builtin_variables, variables)
 
-      args = [check(arg, builtin_variables, variables) for arg in args]
-      kwargs = { keyword.arg: check(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
+      args = [evaluate(arg, builtin_variables, variables) for arg in args]
+      kwargs = { keyword.arg: evaluate(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
 
       if func_ref.cls is TypeType:
-        target = func_ref.arguments[0]
+        target = func_ref.extract()
 
         if '__init__' in target.cls.instance_attrs:
           overload = find_overload(target.cls.instance_attrs['__init__'], args=args, kwargs=kwargs)
@@ -405,8 +446,13 @@ def check(node: ast.expr, /, builtin_variables: Variables, variables: Variables,
       assert overload
       return resolve_generics(overload.return_type, func_ref.context) if overload.return_type else None
 
+    case ast.Constant(builtins.float()):
+      assert isinstance(const_type := builtin_variables['float'], TypeClassRef)
+      return const_type.extract()
+
     case ast.Constant(builtins.int()):
-      return builtin_variables['int'].arguments[0] # type: ignore
+      assert isinstance(const_type := builtin_variables['int'], TypeClassRef)
+      return const_type.extract()
 
     case ast.Name(id=name, ctx=ast.Load()):
       return variables[name]
@@ -500,38 +546,42 @@ if __name__ == "__main__":
 
   BuiltinVariables = process_source("""
 class int:
-  def __add__(self, other: int, /) -> int:
-    ...
+  def __add__(self, other: int, /) -> int: ...
+  def __mul__(self, other: int, /) -> int: ...
+
+class float:
+  def __add__(self, other: float, /) -> float: ...
+  def __add__(self, other: int, /) -> float: ...
+  def __radd__(self, other: int, /) -> float: ...
+  def __mul__(self, other: float, /) -> float: ...
+  def __mul__(self, other: int, /) -> float: ...
+  def __rmul__(self, other: int, /) -> float: ...
 """, PreludeVariables)
 
   AuxVariables = process_source("""
-U = TypeVar('U')
+# U = TypeVar('U')
 
-class list(Generic[U]):
-  def a(self) -> U:
-    ...
+# class list(Generic[U]):
+#   def a(self) -> U:
+#     ...
 
-y: list[int]
+# x: int
+# y: list[int]
+
+class A:
+  p: int
+  self.x: int
+
+class B(A):
+  pass
 """, PreludeVariables | BuiltinVariables)
+
+  AuxVariables['devices'] = devices
 
   from pprint import pprint
 
   # print()
-  pprint(AuxVariables)
+  # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  print(check(ast.parse("y.a()", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
-
-
-# class Employee:
-#   pass
-
-# class Manager(Employee):
-#   pass
-
-# x = list[Manager]()
-
-# def a(x: list[Employee]):
-#   pass
-
-# a(x)
+  pprint(evaluate(ast.parse("devices.Okolab.temperature", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))

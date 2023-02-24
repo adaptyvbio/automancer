@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
+
+import { HostSettingsId } from '../interfaces';
 import '../shared/preload';
 
 
-contextBridge.exposeInMainWorld('api', {
+const api = {
   launchHost: (options) => void ipcRenderer.send('launchHost', options),
   ready: () => void ipcRenderer.send('ready'),
 
@@ -16,6 +18,8 @@ contextBridge.exposeInMainWorld('api', {
     revealLogsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealLogsDirectory', options),
     revealSettingsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealSettingsDirectory', options),
     selectPythonInstallation: async () => await ipcRenderer.invoke('hostSettings.selectPythonInstallation'),
-    setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options)
+    setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options),
   }
-});
+};
+
+contextBridge.exposeInMainWorld('api', api);

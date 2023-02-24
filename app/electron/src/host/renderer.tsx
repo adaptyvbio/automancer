@@ -151,7 +151,7 @@ class App extends React.Component<AppProps, AppState> {
           hostInfo={{
             imageUrl: null,
             subtitle: 'Local',
-            title: this.state.hostSettings.label
+            description: this.state.hostSettings.label
           }}
           onHostStarted={() => {
             window.api.ready();

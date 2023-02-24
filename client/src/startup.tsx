@@ -3,30 +3,27 @@
 import '@fontsource/space-mono/latin-400.css';
 import * as React from 'react';
 
-// import { HostCreator, HostCreatorProps } from '../../app/electron/src/startup/host-creator';
-import type { HostId } from './backends/common';
-import * as util from './util';
-import { formatHostSettings } from './host';
-import { ContextMenuArea } from './components/context-menu-area';
-import { MenuDef } from './components/context-menu';
-import { HostSettings, HostSettingsCollection } from './interfaces/host';
-
 import logoUrl from '../static/logo.jpeg';
 
+import * as util from './util';
+import { ContextMenuArea } from './components/context-menu-area';
+import { MenuDef } from './components/context-menu';
+import type { HostInfo, HostInfoId } from './interfaces/host';
 
-interface StartupProps {
-  defaultSettingsId: string | null;
-  hostSettings: HostSettingsCollection;
 
-  deleteHostSettings(settingsId: string): void;
-  launchHost(settingsId: string): void;
+export interface StartupProps {
+  defaultHostInfoId: HostInfoId | null;
+  hostInfos: HostInfo[];
+
+  deleteHostInfo(hostInfoId: HostInfoId): void;
+  launchHostInfo(hostInfoId: HostInfoId): void;
   renderHostCreator(options: { close(): void; }): React.ReactElement;
-  revealHostSettingsDirectory?(settingsId: string): void;
-  revealHostLogsDirectory?(settingsId: string): void;
-  setDefaultHostSettings(settingsId: string | null): void;
+  revealHostInfoLogsDirectory?(hostInfoId: HostInfoId): void;
+  revealHostInfoSettingsDirectory?(hostInfoId: HostInfoId): void;
+  setDefaultHostInfo(hostInfoId: HostInfoId | null): void;
 }
 
-interface StartupState {
+export interface StartupState {
   fullDisplay: boolean;
   hostCreatorIndex: number;
   hostCreatorOpen: boolean;
@@ -122,22 +119,21 @@ export class Startup extends React.Component<StartupProps, StartupState> {
             </div>
             <div className="startup-right-root">
               <div className="startup-right-entry-list">
-                {Object.values(this.props.hostSettings).map((hostSettings) => {
-                  let isDefault = (this.props.defaultSettingsId === hostSettings.id);
-                  let isLocal = (hostSettings.options.type === 'local');
+                {Object.values(this.props.hostInfos).map((hostInfo) => {
+                  let isDefault = (this.props.defaultHostInfoId === hostInfo.id);
 
                   return (
                     <ContextMenuArea
                       createMenu={(_event) => [
                         { id: 'toggleDefault', name: 'Default', checked: isDefault },
                         { id: 'divider', type: 'divider' },
-                        ...(this.props.revealHostSettingsDirectory
-                          ? [{ id: 'revealSettings', name: 'Reveal settings in explorer', icon: 'folder_open', disabled: !isLocal }]
+                        ...(this.props.revealHostInfoSettingsDirectory
+                          ? [{ id: 'revealSettings', name: 'Reveal settings in explorer', icon: 'folder_open', disabled: !hostInfo.local }]
                           : []),
-                        ...(this.props.revealHostLogsDirectory
-                          ? [{ id: 'revealLogs', name: 'Reveal logs in explorer', icon: 'folder_open', disabled: !isLocal }]
+                        ...(this.props.revealHostInfoLogsDirectory
+                          ? [{ id: 'revealLogs', name: 'Reveal logs in explorer', icon: 'folder_open', disabled: !hostInfo.local }]
                           : []),
-                        ...(this.props.revealHostLogsDirectory || this.props.revealHostSettingsDirectory
+                        ...(this.props.revealHostInfoLogsDirectory || this.props.revealHostInfoSettingsDirectory
                           ? [{ id: 'divider2', type: 'divider' }]
                           : []),
                         { id: 'delete', name: 'Delete', icon: 'delete' },
@@ -145,24 +141,24 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                       onSelect={(path) => {
                         switch (path.first()!) {
                           case 'delete':
-                            this.props.deleteHostSettings(hostSettings.id);
+                            this.props.deleteHostInfo(hostInfo.id);
                             break;
                           case 'revealLogs':
-                            this.props.revealHostLogsDirectory!(hostSettings.id);
+                            this.props.revealHostInfoLogsDirectory!(hostInfo.id);
                             break;
                           case 'revealSettings':
-                            this.props.revealHostSettingsDirectory!(hostSettings.id);
+                            this.props.revealHostInfoSettingsDirectory!(hostInfo.id);
                             break;
                           case 'toggleDefault':
-                            this.props.setDefaultHostSettings(isDefault ? null : hostSettings.id);
+                            this.props.setDefaultHostInfo(isDefault ? null : hostInfo.id);
                         }
                       }}
-                      key={hostSettings.id}>
+                      key={hostInfo.id}>
                       <button type="button" className="startup-right-entry-item" onClick={() => {
-                        this.props.launchHost(hostSettings.id);
+                        this.props.launchHostInfo(hostInfo.id);
                       }}>
-                        <div className="startup-right-entry-title">{hostSettings.label ?? 'Untitled host'}{isDefault ? ' (default)' : ''}</div>
-                        <div className="startup-right-entry-path">{formatHostSettings(hostSettings)}</div>
+                        <div className="startup-right-entry-title">{hostInfo.label}{isDefault ? ' (default)' : ''}</div>
+                        <div className="startup-right-entry-path">{hostInfo.description}</div>
                         <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none" /><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z" /></svg>
                       </button>
                     </ContextMenuArea>

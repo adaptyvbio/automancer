@@ -54,8 +54,8 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
           backend={new WebsocketBackend(hostSettings.options)}
           hostInfo={{
             imageUrl: null,
-            subtitle: 'localhost:4567',
-            title: hostSettings.label
+            description: 'localhost:4567',
+            label: hostSettings.label
           }}
           setStartup={() => void this.setState({ currentSettingsId: null })}
           key={this.state.currentSettingsId} />
@@ -79,7 +79,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
             }
           }));
         }}
-        deleteHostSettings={(settingsId) => {
+        deleteHostInfo={(settingsId) => {
           this.pool.add(async () => {
             await this.appBackend.deleteHostSettings(settingsId);
           });
@@ -92,10 +92,10 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
             }
           }));
         }}
-        launchHost={(settingsId) => {
+        launchHostInfo={(settingsId) => {
           this.setState({ currentSettingsId: settingsId });
         }}
-        setDefaultHostSettings={(settingsId) => {
+        setDefaultHostInfo={(settingsId) => {
           this.pool.add(async () => {
             await this.appBackend.setDefaultHostSettings(settingsId);
           });
@@ -108,8 +108,8 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
           }));
         }}
 
-        defaultSettingsId={this.state.hostSettingsData!.defaultHostSettingsId}
-        hostSettings={this.state.hostSettingsData!.hosts} />
+        defaultHostInfoId={this.state.hostSettingsData!.defaultHostSettingsId}
+        hostInfos={this.state.hostSettingsData!.hosts} />
     );
   }
 }

@@ -44,7 +44,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           props.setData({
             stepIndex: 0,
 
-            address: '',
+            hostname: '',
             port: ''
           });
 

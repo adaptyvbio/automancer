@@ -1,7 +1,9 @@
-import { HostSettingsCollection, HostSettingsId, Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostInfo, HostInfoId, Pool, React, ReactDOM, Startup } from 'pr1';
+import seqOrd from 'seq-ord';
 
 import { HostCreator } from './host-creator';
 import { NativeContextMenuProvider } from '../shared/context-menu';
+import { HostSettingsId, HostSettingsRecord } from '../interfaces';
 
 
 export interface AppProps {
@@ -10,7 +12,7 @@ export interface AppProps {
 
 export interface AppState {
   defaultHostSettingsId: HostSettingsId | null;
-  hostSettings: HostSettingsCollection | null;
+  hostSettings: HostSettingsRecord | null;
 }
 
 export class App extends React.Component<AppProps, AppState> {
@@ -49,38 +51,44 @@ export class App extends React.Component<AppProps, AppState> {
     return (
       <NativeContextMenuProvider>
         <Startup
-          defaultSettingsId={this.state.defaultHostSettingsId}
-          hostSettings={this.state.hostSettings}
+          defaultHostInfoId={this.state.defaultHostSettingsId as string as HostInfoId}
+          hostInfos={
+            Object.values(this.state.hostSettings)
+              .map((hostSettings): HostInfo => ({
+                id: (hostSettings.id as string as HostInfoId),
+                description: '–',
+                imageUrl: null,
+                label: hostSettings.label,
+                local: (hostSettings.type !== 'local')
+              }))
+              .sort(seqOrd(function* (a, b, rules) {
+                yield rules.text(a.label, b.label);
+              }))
+          }
 
-          // createHostSettings={(options) => {
-          //   this.pool.add(async () => {
-          //     await window.api.hostSettings.create({ hostSettings: options.settings });
-          //     await this.query();
-          //   });
-          // }}
-          deleteHostSettings={(hostSettingsId) => {
+          deleteHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.delete({ hostSettingsId });
+              await window.api.hostSettings.delete({ hostSettingsId: hostInfoId });
               await this.query();
             });
           }}
-          launchHost={(hostSettingsId) => {
-            window.api.launchHost({ hostSettingsId });
+          launchHostInfo={(hostInfoId) => {
+            window.api.launchHost({ hostSettingsId: hostInfoId });
           }}
           renderHostCreator={({ close }) => (
             <HostCreator
               close={close}
               update={async () => void await this.query()} />
           )}
-          revealHostLogsDirectory={(hostSettingsId) => {
-            window.api.hostSettings.revealLogsDirectory({ hostSettingsId });
+          revealHostInfoLogsDirectory={(hostInfoId) => {
+            window.api.hostSettings.revealLogsDirectory({ hostSettingsId: hostInfoId });
           }}
-          revealHostSettingsDirectory={(hostSettingsId) => {
-            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId });
+          revealHostInfoSettingsDirectory={(hostInfoId) => {
+            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId: hostInfoId });
           }}
-          setDefaultHostSettings={(hostSettingsId) => {
+          setDefaultHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.setDefault({ hostSettingsId });
+              await window.api.hostSettings.setDefault({ hostSettingsId: hostInfoId });
               await this.query();
             });
           }} />

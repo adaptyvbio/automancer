@@ -107,7 +107,7 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
               this.props.setData({
                 stepIndex: 0,
 
-                address: '',
+                hostname: '',
                 port: ''
               });
             }}>Back</button>

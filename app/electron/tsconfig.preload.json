@@ -3,6 +3,6 @@
 
   "files": [
     "src/host/preload.ts",
-    "src/startup/preload.js"
+    "src/startup/preload.ts"
   ]
 }

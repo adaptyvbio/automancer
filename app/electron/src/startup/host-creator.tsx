@@ -1,6 +1,6 @@
 import { HostSettings, Pool, React } from 'pr1';
 
-import type { LocalHostOptions, PythonInstallationRecord } from '../interfaces';
+import type { HostSettingsId, LocalHostOptions, PythonInstallationRecord } from '../interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
@@ -79,11 +79,6 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
       <Step
         cancel={() => void this.props.close()}
         context={this.state.context}
-        createLocalHost={async (options) => {
-          let result = await window.api.hostSettings.createLocalHost(options);
-          await this.query();
-          return result;
-        }}
         launchHost={(hostSettingsId) => {
 
         }}
@@ -108,8 +103,7 @@ export type HostCreatorStepProps<Data = HostCreatorData> = {
   setData(data: HostCreatorData | Omit<Data, 'stepIndex'>): void;
 
   cancel(): void;
-  createLocalHost(options: LocalHostOptions): Promise<{ ok: boolean; id: string; }>;
-  launchHost(hostSettingsId: HostSettings['id']): void;
+  launchHost(hostSettingsId: HostSettingsId): void;
 }
 
 export type HostCreatorStepComponent<Data> = React.FunctionComponent<HostCreatorStepProps<Data>>;

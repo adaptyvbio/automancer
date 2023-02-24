@@ -5,7 +5,7 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 export interface Data extends HostCreatorStepData {
   stepIndex: 0;
 
-  address: string;
+  hostname: string;
   port: string;
 }
 
@@ -22,18 +22,15 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
       props.setData({
         stepIndex: 1,
+
         options: {
-          type: 'remote',
-          auth: null,
-          address: props.data.address,
-          port: parseInt(props.data.port),
-          secure: false
+          hostname: props.data.hostname,
+          port: parseInt(props.data.port)
         },
         rawOptions: {
-          address: props.data.address,
+          hostname: props.data.hostname,
           port: props.data.port
-        },
-        rawPassword: null
+        }
       });
     }}>
       <div className="startup-editor-inner">
@@ -52,9 +49,9 @@ export function Component(props: HostCreatorStepProps<Data>) {
             targetRef={firstInputRef} />
           <Form.TextField
             label="Address"
-            onInput={(address) => void props.setData({ ...props.data, address })}
+            onInput={(address) => void props.setData({ ...props.data, hostname: address })}
             placeholder="e.g. 192.168.1.143"
-            value={props.data.address} />
+            value={props.data.hostname} />
           <Form.TextField
             label="Port"
             onInput={(port) => void props.setData({ ...props.data, port })}

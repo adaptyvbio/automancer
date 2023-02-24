@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-
-import type { DraftId, HostSettingsId } from 'pr1';
+import type { DraftId } from 'pr1';
 
 import type { DraftEntry } from '../interfaces';
 
@@ -56,7 +55,7 @@ const api = {
     }
   },
   localHost: {
-    ready: async (hostSettingsId: HostSettingsId) => {
+    ready: async (hostSettingsId: label) => {
       await ipcRenderer.invoke('localHost.ready', hostSettingsId);
     },
     onMessage: (callback) => {
@@ -64,7 +63,7 @@ const api = {
         callback(message);
       });
     },
-    sendMessage: (hostSettingsId: HostSettingsId, message) => {
+    sendMessage: (hostSettingsId: label, message) => {
       ipcRenderer.send('localHost.message', hostSettingsId, message);
     }
   },

@@ -1,12 +1,13 @@
 import { LargeIcon, React } from 'pr1';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
+import { HostSettingsId } from '../../interfaces';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 2;
 
-  id: string;
+  hostSettingsId: HostSettingsId;
   label: string;
 }
 
@@ -31,7 +32,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
         </div>
         <div className="startup-editor-action-list">
           <button type="button" className="startup-editor-action-item" onClick={() => {
-            props.launchHost(props.data.id);
+            props.launchHost(props.data.hostSettingsId);
           }}>Launch</button>
         </div>
       </div>

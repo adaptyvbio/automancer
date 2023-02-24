@@ -1,19 +1,20 @@
 import chokidar from 'chokidar';
+import { ok as assert } from 'assert';
 import crypto from 'crypto';
-import { BrowserWindow, Menu, dialog, ipcMain, shell, App } from 'electron';
-import electron from 'electron';
+import electron, { App, BrowserWindow, dialog, Menu, shell } from 'electron';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { searchForAdvertistedHosts } from 'pr1-library';
+import { searchForAdvertistedHosts, SocketClient, SocketClientBackend } from 'pr1-library';
 import 'source-map-support/register';
 import uol from 'uol';
 
+import { MenuDef, MenuEntryId } from 'pr1';
 import { HostWindow } from './host';
+import { AppData, DraftEntryState, HostSettingsId, IPC, IPC2d, PythonInstallationRecord } from './interfaces';
+import type { MainAPI } from './shared/preload';
 import { StartupWindow } from './startup';
 import * as util from './util';
-import { AppData, DraftEntryState, PythonInstallationRecord } from './interfaces';
-import { HostSettings, HostSettingsId, MenuDef, MenuEntryId } from 'pr1';
 
 
 const ProtocolFileFilters = [
@@ -23,6 +24,8 @@ const ProtocolFileFilters = [
 
 export class CoreApplication {
   static version = 1;
+
+  logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
 
   private electronApp: electron.App;
   private quitting: boolean;
@@ -38,7 +41,6 @@ export class CoreApplication {
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
   private startupWindow: StartupWindow | null = null;
 
-  private logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
   private pool = new util.Pool();
 
   constructor(electronApp: electron.App) {
@@ -165,6 +167,9 @@ export class CoreApplication {
     this.logger.info('Ready');
 
 
+    let ipcMain = electron.ipcMain as IPC2d<MainAPI>;
+    // let ipcMain = electron.ipcMain as IPC<MainAPI['hostSettings']>;
+
     // Window management
 
     ipcMain.on('ready', (event) => {
@@ -217,8 +222,8 @@ export class CoreApplication {
       let hostSettingsId = crypto.randomUUID();
 
       await this.setData({
-        hostSettings: {
-          ...this.data.hostSettings,
+        hostSettingsRecord: {
+          ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
@@ -236,6 +241,15 @@ export class CoreApplication {
         ok: true,
         id: hostSettingsId
       };
+    });
+
+    ipcMain.handle('hostSettings.connectRemoteHost', async (_event, options) => {
+      let result = await SocketClient.test({
+        host: options.hostname,
+        port: options.port
+      });
+
+      return result;
     });
 
     ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
@@ -276,8 +290,8 @@ export class CoreApplication {
       this.logger.info(`Created host with identifier '${conf.identifier}'`);
 
       await this.setData({
-        hostSettings: {
-          ...this.data.hostSettings,
+        hostSettingsRecord: {
+          ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
@@ -301,11 +315,11 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
-      let { [hostSettingsId]: deletedHostSettings, ...hostSettings } = this.data.hostSettings;
-      await this.setData({ hostSettings });
+      let { [hostSettingsId]: deletedHostSettings, ...hostSettingsRecord } = this.data.hostSettingsRecord;
+      await this.setData({ hostSettingsRecord });
 
-      if (deletedHostSettings.options.type === 'local') {
-        await shell.trashItem(deletedHostSettings.options.dirPath);
+      if (deletedHostSettings.type === 'local') {
+        await shell.trashItem(deletedHostSettings.dirPath);
       }
     });
 
@@ -321,7 +335,7 @@ export class CoreApplication {
     ipcMain.handle('hostSettings.query', async (_event) => {
       return {
         defaultHostSettingsId: this.data.defaultHostSettingsId,
-        hostSettings: this.data.hostSettings
+        hostSettingsRecord: this.data.hostSettingsRecord
       };
     });
 
@@ -333,8 +347,10 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
-      let hostSettings = this.data.hostSettings[hostSettingsId];
-      shell.showItemInFolder(hostSettings.options.dirPath);
+      let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
+
+      assert(hostSettings.type === 'local');
+      shell.showItemInFolder(hostSettings.dirPath);
     });
 
     ipcMain.handle('hostSettings.selectPythonInstallation', async (event) => {
@@ -630,7 +646,7 @@ export class CoreApplication {
   }
 
 
-  launchHost(hostSettingsId: HostSettingsId) {
+  launchHost(hostSettingsId: label) {
     this.logger.info(`Launching host settings with id '${hostSettingsId}`);
 
     let existingWindow = this.hostWindows[hostSettingsId];
@@ -641,7 +657,7 @@ export class CoreApplication {
         existingWindow.focus();
       }
     } else {
-      let hostSettings = this.data.hostSettings[hostSettingsId];
+      let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
 
       this.startupWindow?.window.close();
       this.createHostWindow(hostSettings);
@@ -672,7 +688,7 @@ export class CoreApplication {
         embeddedPythonInstallation: null,
         defaultHostSettingsId: null,
         drafts: {},
-        hostSettings: {},
+        hostSettingsRecord: {},
         preferences: {},
         version: CoreApplication.version
       });

@@ -1,18 +1,19 @@
-import 'source-map-support/register';
-
+import chokidar from 'chokidar';
+import crypto from 'crypto';
+import { BrowserWindow, Menu, dialog, ipcMain, shell, App } from 'electron';
+import electron from 'electron';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import { searchForAdvertistedHosts } from 'pr1-library';
+import 'source-map-support/register';
+import uol from 'uol';
 
-const chokidar = require('chokidar');
-const crypto = require('crypto');
-const { BrowserWindow, Menu, app, dialog, ipcMain, shell } = require('electron');
-const path = require('path');
-const fs = require('fs/promises');
-const os = require('os');
-const uol = require('uol');
-
-const { HostWindow } = require('./host');
-const { StartupWindow } = require('./startup');
-const util = require('./util');
+import { HostWindow } from './host';
+import { StartupWindow } from './startup';
+import * as util from './util';
+import { AppData, DraftEntryState, PythonInstallationRecord } from './interfaces';
+import { HostSettings, HostSettingsId, MenuDef, MenuEntryId } from 'pr1';
 
 
 const ProtocolFileFilters = [
@@ -23,48 +24,55 @@ const ProtocolFileFilters = [
 export class CoreApplication {
   static version = 1;
 
-  logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
-  pool = new util.Pool();
+  private electronApp: electron.App;
+  private quitting: boolean;
 
-  constructor(coreApp) {
-    this.app = coreApp;
+  private data!: AppData;
+  private pythonInstallations!: PythonInstallationRecord;
+
+  private dataDirPath: string;
+  private dataPath: string;
+  private hostsDirPath: string;
+  private logsDirPath: string;
+
+  private hostWindows: Record<HostSettingsId, HostWindow> = {};
+  private startupWindow: StartupWindow | null = null;
+
+  private logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
+  private pool = new util.Pool();
+
+  constructor(electronApp: electron.App) {
+    this.electronApp = electronApp;
     this.quitting = false;
 
-    let userData = this.app.getPath('userData');
+    let userData = this.electronApp.getPath('userData');
 
-    /** @type {import('./interfaces').AppData} */
-    this.data = null;
     this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
 
     this.hostsDirPath = path.join(userData, 'App Hosts');
-    this.logsDirPath = this.app.getPath('logs');
+    this.logsDirPath = this.electronApp.getPath('logs');
 
-    this.startupWindow = null;
-    this.hostWindows = {};
 
-    this.localHostModels = null;
-    this.pythonInstallations = null;
-
-    this.app.on('before-quit', () => {
+    this.electronApp.on('before-quit', () => {
       this.quitting = true;
     });
 
-    this.app.on('will-quit', (event) => {
+    this.electronApp.on('will-quit', (event) => {
       if (!this.pool.empty) {
         event.preventDefault();
 
         this.pool.wait().then(() => {
-          this.app.quit();
+          this.electronApp.quit();
         });
       }
     });
 
-    this.app.on('window-all-closed', () => {
+    this.electronApp.on('window-all-closed', () => {
 
     });
 
-    this.app.on('second-instance', () => {
+    this.electronApp.on('second-instance', () => {
       this.createStartupWindow();
     });
 
@@ -119,17 +127,17 @@ export class CoreApplication {
       this.startupWindow = new StartupWindow(this);
 
       this.pool.add(async () => {
-        await this.startupWindow.closed;
+        await this.startupWindow!.closed;
         this.startupWindow = null;
 
         if (!this.quitting && (Object.keys(this.hostWindows).length < 1)) {
-          this.app.quit();
+          this.electronApp.quit();
         }
       });
     }
   }
 
-  async createHostWindow(hostSettings) {
+  async createHostWindow(hostSettings: HostSettings) {
     let hostWindow = new HostWindow(this, hostSettings);
     this.hostWindows[hostSettings.id] = hostWindow;
 
@@ -144,14 +152,14 @@ export class CoreApplication {
   }
 
   async initialize() {
-    if (!this.app.requestSingleInstanceLock()) {
-      this.app.quit();
+    if (!this.electronApp.requestSingleInstanceLock()) {
+      this.electronApp.quit();
       return;
     }
 
     this.pythonInstallations = await util.findPythonInstallations();
 
-    await app.whenReady();
+    await this.electronApp.whenReady();
     await this.loadData();
 
     this.logger.info('Ready');
@@ -160,7 +168,7 @@ export class CoreApplication {
     // Window management
 
     ipcMain.on('ready', (event) => {
-      BrowserWindow.fromWebContents(event.sender).show();
+      BrowserWindow.fromWebContents(event.sender)!.show();
     });
 
 
@@ -169,7 +177,7 @@ export class CoreApplication {
     ipcMain.handle('contextMenu.trigger', async (event, { menu, position }) => {
       let deferred = util.defer();
 
-      let createAppMenuFromMenu = (menu, ancestors = []) => Menu.buildFromTemplate(menu.flatMap((entry) => {
+      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry) => {
         let path = [...ancestors, entry.id];
 
         switch (entry.type) {
@@ -196,7 +204,7 @@ export class CoreApplication {
         callback: () => void deferred.resolve(null),
         x: position.x,
         y: position.y,
-        window: BrowserWindow.fromWebContents(event.sender)
+        window: BrowserWindow.fromWebContents(event.sender)!
       });
 
       return await deferred.promise;
@@ -331,7 +339,7 @@ export class CoreApplication {
 
     ipcMain.handle('hostSettings.selectPythonInstallation', async (event) => {
       let result = await dialog.showOpenDialog(
-        BrowserWindow.fromWebContents(event.sender),
+        BrowserWindow.fromWebContents(event.sender)!,
         { buttonLabel: 'Select',
           filters: [
             ...(process.platform === 'win32'
@@ -386,12 +394,12 @@ export class CoreApplication {
 
     // Draft management
 
-    let createDraftEntryState = () => ({
+    let createDraftEntryState = (): DraftEntryState => ({
       lastModified: null,
       waiting: false,
       watcher: null,
       writePromise: Promise.resolve()
-    })
+    });
 
     let draftEntryStates = Object.fromEntries(
       Object.values(this.data.drafts).map((draftEntry) => [draftEntry.id, createDraftEntryState()])
@@ -402,7 +410,7 @@ export class CoreApplication {
 
       try {
         stats = await fs.stat(draftEntry.path);
-      } catch (err) {
+      } catch (err: any) {
         if (err.code === 'ENOENT') {
           return null;
         }
@@ -421,7 +429,7 @@ export class CoreApplication {
 
     ipcMain.handle('drafts.create', async (event, source) => {
       let result = await dialog.showSaveDialog(
-        BrowserWindow.fromWebContents(event.sender),
+        BrowserWindow.fromWebContents(event.sender)!,
         { filters: ProtocolFileFilters,
           buttonLabel: 'Create' }
       );
@@ -433,11 +441,11 @@ export class CoreApplication {
       let draftEntry = {
         id: crypto.randomUUID(),
         lastOpened: Date.now(),
-        name: path.basename(result.filePath),
+        name: path.basename(result.filePath!),
         path: result.filePath
       };
 
-      await fs.writeFile(draftEntry.path, source);
+      await fs.writeFile(draftEntry.path!, source);
 
       await this.setData({
         drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
@@ -484,7 +492,7 @@ export class CoreApplication {
 
     ipcMain.handle('drafts.load', async (event) => {
       let result = await dialog.showOpenDialog(
-        BrowserWindow.fromWebContents(event.sender),
+        BrowserWindow.fromWebContents(event.sender)!,
         { filters: ProtocolFileFilters,
           properties: ['openFile'] }
       );
@@ -571,7 +579,7 @@ export class CoreApplication {
     ipcMain.handle('drafts.watchStop', async (_event, draftId) => {
       let draftEntryState = draftEntryStates[draftId];
 
-      await draftEntryState.watcher.close();
+      await draftEntryState.watcher!.close();
       draftEntryState.watcher = null;
     });
 
@@ -606,11 +614,11 @@ export class CoreApplication {
     // Internal host
 
     ipcMain.handle('localHost.ready', async (_event, hostSettingsId) => {
-      await this.hostWindows[hostSettingsId].localHost.ready();
+      await this.hostWindows[hostSettingsId].localHost!.ready();
     });
 
     ipcMain.on('localHost.message', async (_event, hostSettingsId, message) => {
-      this.hostWindows[hostSettingsId].localHost.sendMessage(message);
+      this.hostWindows[hostSettingsId].localHost!.sendMessage(message);
     });
 
 
@@ -622,7 +630,7 @@ export class CoreApplication {
   }
 
 
-  launchHost(hostSettingsId) {
+  launchHost(hostSettingsId: HostSettingsId) {
     this.logger.info(`Launching host settings with id '${hostSettingsId}`);
 
     let existingWindow = this.hostWindows[hostSettingsId];
@@ -652,8 +660,8 @@ export class CoreApplication {
       let buffer = await fs.readFile(this.dataPath);
       this.data = JSON.parse(buffer.toString());
 
-      if (this.data.version !== this.constructor.version) {
-        this.logger.critical(`App version mismatch, found: ${this.data.version}, current: ${this.constructor.version}`)
+      if (this.data.version !== CoreApplication.version) {
+        this.logger.critical(`App version mismatch, found: ${this.data.version}, current: ${CoreApplication.version}`)
         dialog.showErrorBox('App data version mismatch', 'The app is outdated.');
         process.exit(1);
       }
@@ -671,7 +679,7 @@ export class CoreApplication {
     }
   }
 
-  async setData(data) {
+  async setData(data: Partial<AppData>) {
     this.data = { ...this.data, ...data };
     await fs.writeFile(this.dataPath, JSON.stringify(this.data));
   }
@@ -679,11 +687,11 @@ export class CoreApplication {
 
 async function main() {
   if (require('electron-squirrel-startup')) {
-    app.quit();
+    electron.app.quit();
     return;
   }
 
-  let core = new CoreApplication(app);
+  let core = new CoreApplication(electron.app);
   await core.initialize();
 }
 

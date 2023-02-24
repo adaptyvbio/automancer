@@ -1,11 +1,21 @@
+import type { FSWatcher } from 'chokidar';
 import type { HostSettings, HostSettingsId } from 'pr1';
 
 
+export type DraftEntryId = string;
+
 export interface DraftEntry {
-  id: string;
-  lastModified: number;
+  id: DraftEntryId;
+  lastOpened: number;
   name: string;
   path: string;
+}
+
+export interface DraftEntryState {
+  lastModified: number | null;
+  waiting: boolean;
+  watcher: FSWatcher | null;
+  writePromise: Promise<unknown>;
 }
 
 export interface PythonInstallation {
@@ -36,7 +46,7 @@ export interface LocalHostOptions {
 
 export interface AppData {
   defaultHostSettingsId: string | null;
-  drafts: DraftEntry[];
+  drafts: Record<DraftEntryId, DraftEntry>;
   embeddedPythonInstallation: null;
   hostSettings: Record<HostSettingsId, HostSettings>;
   preferences: {};

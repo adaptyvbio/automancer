@@ -172,7 +172,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           <button type="button" className="startup-editor-action-item" onClick={() => {
             props.setData({
               stepIndex: 4,
-              mode: 'development'
+              mode: 'advanced'
             });
           }}>Back</button>
         </div>

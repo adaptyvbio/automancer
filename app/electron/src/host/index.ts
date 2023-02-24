@@ -10,12 +10,13 @@ import { defer, Pool } from '../util';
 
 
 export class HostWindow {
-  private closed: Promise<void>;
-  private closing = false;
-  private localHost: LocalHost | null = null;
+  closed: Promise<void>;
+  closing = false;
+  localHost: LocalHost | null = null;
+  window: BrowserWindow | null = null;
+
   private logger = this.app.logger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
-  window: BrowserWindow | null = null;
 
   private closingDeferred = defer<void>();
 

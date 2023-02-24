@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import which from 'which';
 
-import { PythonInstallation } from './interfaces';
+import { PythonInstallation, PythonInstallationRecord } from './interfaces';
 
 
 export const isDarwin = (process.platform === 'darwin');
@@ -67,7 +67,7 @@ export async function findPythonInstallations() {
     possiblePythonLocations.map(async (possibleLocation) => await which(possibleLocation).catch(() => null))
   )).filter((possibleLocation): possibleLocation is string => possibleLocation !== null);
 
-  let installations: Record<PythonInstallation['id'], PythonInstallation> = {};
+  let installations: PythonInstallationRecord = {};
 
   for (let possibleLocation of possiblePythonLocations) {
     if (possibleLocation in installations) {

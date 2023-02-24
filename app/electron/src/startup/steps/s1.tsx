@@ -5,10 +5,16 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 const pool = new Pool();
 
 export interface Data extends HostCreatorStepData {
-  options: HostBackendOptions;
-  rawOptions: { address: string; port: string; };
-  rawPassword: string | null;
   stepIndex: 1;
+
+  options: {
+    hostname: string;
+    port: number;
+  };
+  rawOptions: {
+    hostname: string;
+    port: string;
+  };
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -20,15 +26,17 @@ export function Component(props: HostCreatorStepProps<Data>) {
       startBackend.current = false;
 
       pool.add(async () => {
-        let result = await WebsocketBackend.test(props.data.options as HostRemoteBackendOptions);
+        let result = await window.api.hostSettings.connectRemoteHost({
+          hostname: props.data.options.hostname,
+          port: props.data.options.port
+        });
 
         if (result.ok) {
           props.setData({
             stepIndex: 2,
 
-            id: result.identifier,
-            label: result.label,
-            options: props.data.options
+            hostSettingsId: result.hostSettingsId,
+            label: result.label
           });
         } else if (result.reason === 'unauthorized') {
           props.setData({
@@ -37,10 +45,10 @@ export function Component(props: HostCreatorStepProps<Data>) {
             rawOptions: props.data.rawOptions,
             rawPassword: ''
           });
-        } else if (result.reason === 'invalid_auth') {
-          setError({ message: result.message });
+        } else if (result.reason === 'refused') {
+          setError({ message: 'Connection refused' });
         } else if (result.reason === 'unknown') {
-          setError({ message: result.message });
+          setError({ message: 'Unknown error' });
         }
       });
     }

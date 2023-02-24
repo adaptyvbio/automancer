@@ -2,10 +2,8 @@ import { BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
 import assert from 'assert';
 
-import { HostSettings } from 'pr1';
-
 import { LocalHost } from '../local-host';
-import { CoreApplication } from '../main';
+import { CoreApplication } from '..';
 import { defer, Pool } from '../util';
 
 

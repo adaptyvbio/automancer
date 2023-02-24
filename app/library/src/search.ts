@@ -152,7 +152,7 @@ export async function searchForHostEnvironments() {
 
   let appData = await getDesktopAppData();
 
-  for (let hostSettings of Object.values(appData?.hostSettings ?? {})) {
+  for (let hostSettings of Object.values(appData?.hostSettingsRecord ?? {})) {
     if (hostSettings.options.type === 'local') {
       let identifier = hostSettings.options.identifier;
 

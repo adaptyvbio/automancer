@@ -7,6 +7,13 @@ export class SocketClientClosed extends Error {
 
 }
 
+export type SocketClientBackendOptions = {
+  host: string;
+  port: number;
+} | {
+  path: string;
+};
+
 export class SocketClientBackend {
   closed: Promise<boolean>;
   isClosed: boolean;
@@ -18,7 +25,7 @@ export class SocketClientBackend {
   private _recvDeferred: Deferred<void> | null;
   private _socket!: net.Socket;
 
-  constructor(options: any) {
+  constructor(options: SocketClientBackendOptions) {
     this.ready = new Promise((resolve, reject) => {
       this._socket = net.createConnection(options, () => {
         resolve();
@@ -164,20 +171,26 @@ export class SocketClient extends SocketClientBackend {
   }
 
 
-  static async test(options: any) {
+  static async test(options: SocketClientBackendOptions) {
     let client = new SocketClientBackend(options);
 
     try {
       await client.ready;
     } catch (err: any) {
       if (err.code === 'ECONNREFUSED') {
-        return false;
+        return {
+          ok: false as const,
+          reason: 'refused'
+        } as const;
       }
 
       throw err;
     }
 
     await client.close();
-    return true;
+
+    return {
+      ok: true
+    } as const;
   }
 }

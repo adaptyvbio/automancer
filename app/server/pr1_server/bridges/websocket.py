@@ -13,7 +13,7 @@ from OpenSSL import SSL, crypto
 
 from .. import logger as parent_logger
 from ..auth import agents as auth_agents
-from .protocol import BridgeAdvertisementInfo, BridgeProtocol, ClientClosed, ClientProtocol
+from .protocol import BridgeAdvertisementInfo, BridgeProtocol, ClientClosed, BaseClient
 
 if TYPE_CHECKING:
   from ..conf import ConfBridgeWebsocket
@@ -29,15 +29,12 @@ class AccessLogger(AbstractAccessLogger):
     self.logger.debug(f"{request.method} {request.path} -> {response.status}")
 
 
-class Client(ClientProtocol):
+class Client(BaseClient):
   privileged = False
 
   def __init__(self, conn):
     super().__init__()
     self.conn = conn
-
-  def close(self):
-    pass
 
   @property
   def id(self):

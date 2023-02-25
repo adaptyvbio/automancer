@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from asyncio import Task
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Protocol
@@ -6,18 +7,17 @@ from typing import Any, Callable, Coroutine, Protocol
 class ClientClosed(Exception):
   pass
 
-class ClientProtocol(Protocol):
+class BaseClient(ABC):
   def __init__(self):
     self.id: str
     self.privileged: bool
     self.remote: bool
 
-  def close(self):
-    ...
-
+  @abstractmethod
   async def recv(self) -> Any:
     ...
 
+  @abstractmethod
   async def send(self, message: object):
     ...
 
@@ -41,5 +41,5 @@ class BridgeProtocol(Protocol):
   async def initialize(self):
     ...
 
-  async def start(self, handle_client: Callable[[ClientProtocol], Coroutine]):
+  async def start(self, handle_client: Callable[[BaseClient], Coroutine]):
     ...

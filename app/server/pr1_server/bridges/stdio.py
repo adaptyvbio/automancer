@@ -4,19 +4,16 @@ import sys
 import threading
 from typing import Optional
 
-from .protocol import BridgeProtocol, ClientProtocol
+from .protocol import BridgeProtocol, BaseClient
 
 
-class Client(ClientProtocol):
+class Client(BaseClient):
   privileged = False
   remote = False
 
   def __init__(self):
     super().__init__()
     self.id = "0"
-
-  def close(self):
-    pass
 
   async def recv(self):
     loop = asyncio.get_event_loop()

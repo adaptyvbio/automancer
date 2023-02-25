@@ -1,20 +1,22 @@
+import 'source-map-support/register';
+
 import chokidar from 'chokidar';
 import { ok as assert } from 'assert';
 import crypto from 'crypto';
-import electron, { App, BrowserWindow, dialog, Menu, shell } from 'electron';
+import electron, { App, BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { searchForAdvertistedHosts, SocketClient, SocketClientBackend } from 'pr1-library';
-import 'source-map-support/register';
-import uol from 'uol';
+import * as uol from 'uol';
 
-import { MenuDef, MenuEntryId } from 'pr1';
+import { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
 import { HostWindow } from './host';
-import { AppData, DraftEntryState, HostSettingsId, IPC, IPC2d, PythonInstallationRecord } from './interfaces';
-import type { MainAPI } from './shared/preload';
+import { AppData, DraftEntryState, HostSettings, HostSettingsId, IPC, IPC2d as IPCServer2d, PythonInstallationRecord } from './interfaces';
+import type { IPCEndpoint } from './shared/preload';
 import { StartupWindow } from './startup';
 import * as util from './util';
+import { rootLogger } from './logger';
 
 
 const ProtocolFileFilters = [
@@ -23,9 +25,10 @@ const ProtocolFileFilters = [
 
 
 export class CoreApplication {
-  static version = 1;
+  static version = 2;
 
-  logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
+  private logger = rootLogger.getChild('application');
+  private pool = new util.Pool(this.logger);
 
   private electronApp: electron.App;
   private quitting: boolean;
@@ -40,8 +43,6 @@ export class CoreApplication {
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
   private startupWindow: StartupWindow | null = null;
-
-  private pool = new util.Pool();
 
   constructor(electronApp: electron.App) {
     this.electronApp = electronApp;
@@ -61,13 +62,18 @@ export class CoreApplication {
     });
 
     this.electronApp.on('will-quit', (event) => {
+      this.logger.debug('Trying to quit');
+
       if (!this.pool.empty) {
         event.preventDefault();
+        this.logger.debug(`Waiting for ${this.pool.size} tasks to settle`);
 
         this.pool.wait().then(() => {
           this.electronApp.quit();
         });
       }
+
+      this.logger.debug('Quitting');
     });
 
     this.electronApp.on('window-all-closed', () => {
@@ -122,6 +128,10 @@ export class CoreApplication {
     }
   }
 
+  get debug() {
+    return !this.electronApp.isPackaged;
+  }
+
   async createStartupWindow() {
     if (this.startupWindow) {
       this.startupWindow.focus();
@@ -164,25 +174,32 @@ export class CoreApplication {
     await this.electronApp.whenReady();
     await this.loadData();
 
-    this.logger.info('Ready');
+    if (!this.data) {
+      this.logger.debug('Aborting initialization');
+      this.electronApp.quit();
+
+      return;
+    }
+
+    this.logger.info('Initialized');
 
 
-    let ipcMain = electron.ipcMain as IPC2d<MainAPI>;
-    // let ipcMain = electron.ipcMain as IPC<MainAPI['hostSettings']>;
+    let ipcMain = electron.ipcMain as IPCServer2d<IPCEndpoint>;
+
 
     // Window management
 
-    ipcMain.on('ready', (event) => {
+    ipcMain.on('main.ready', (event) => {
       BrowserWindow.fromWebContents(event.sender)!.show();
     });
 
 
     // Context menu creation
 
-    ipcMain.handle('contextMenu.trigger', async (event, { menu, position }) => {
-      let deferred = util.defer();
+    ipcMain.handle('main.triggerContextMenu', async (event, menu, position) => {
+      let deferred = util.defer<MenuEntryId[] | null>();
 
-      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry) => {
+      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry): MenuItemConstructorOptions[] => {
         let path = [...ancestors, entry.id];
 
         switch (entry.type) {
@@ -218,7 +235,7 @@ export class CoreApplication {
 
     // Host settings management
 
-    ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
+/*     ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
       let hostSettingsId = crypto.randomUUID();
 
       await this.setData({
@@ -241,9 +258,11 @@ export class CoreApplication {
         ok: true,
         id: hostSettingsId
       };
-    });
+    }); */
 
-    ipcMain.handle('hostSettings.connectRemoteHost', async (_event, options) => {
+    ipcMain.handle('hostSettings.connectToRemoteHost', async (_event, options) => {
+      this.logger.debug(`Trying to connect to '${options.hostname}:${options.port}'`);
+
       let result = await SocketClient.test({
         host: options.hostname,
         port: options.port
@@ -252,7 +271,7 @@ export class CoreApplication {
       return result;
     });
 
-    ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
+/*     ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
       // TODO: Add error handling
 
       let pythonInstallation = options.customPythonInstallation ?? this.pythonInstallations[options.pythonInstallationSettings.id];
@@ -312,7 +331,7 @@ export class CoreApplication {
         ok: true,
         id: hostSettingsId
       };
-    });
+    }); */
 
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
       let { [hostSettingsId]: deletedHostSettings, ...hostSettingsRecord } = this.data.hostSettingsRecord;
@@ -323,7 +342,7 @@ export class CoreApplication {
       }
     });
 
-    ipcMain.handle('hostSettings.getCreatorContext', async (_event) => {
+    ipcMain.handle('hostSettings.getHostCreatorContext', async (_event) => {
       // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: Infinity }));
 
       return {
@@ -332,7 +351,7 @@ export class CoreApplication {
       };
     });
 
-    ipcMain.handle('hostSettings.query', async (_event) => {
+    ipcMain.handle('hostSettings.list', async (_event) => {
       return {
         defaultHostSettingsId: this.data.defaultHostSettingsId,
         hostSettingsRecord: this.data.hostSettingsRecord
@@ -403,7 +422,7 @@ export class CoreApplication {
 
     // Other
 
-    ipcMain.on('launchHost', async (_event, { hostSettingsId }) => {
+    ipcMain.on('hostSettings.launchHost', async (_event, { hostSettingsId }) => {
       this.launchHost(hostSettingsId);
     });
 
@@ -646,7 +665,7 @@ export class CoreApplication {
   }
 
 
-  launchHost(hostSettingsId: label) {
+  launchHost(hostSettingsId: HostSettingsId) {
     this.logger.info(`Launching host settings with id '${hostSettingsId}`);
 
     let existingWindow = this.hostWindows[hostSettingsId];
@@ -674,13 +693,16 @@ export class CoreApplication {
       this.logger.debug('Reading app data');
 
       let buffer = await fs.readFile(this.dataPath);
-      this.data = JSON.parse(buffer.toString());
+      let data = JSON.parse(buffer.toString());
 
-      if (this.data.version !== CoreApplication.version) {
-        this.logger.critical(`App version mismatch, found: ${this.data.version}, current: ${CoreApplication.version}`)
+      if (data.version !== CoreApplication.version) {
+        this.logger.critical(`App version mismatch, found: ${data.version}, current: ${CoreApplication.version}`)
         dialog.showErrorBox('App data version mismatch', 'The app is outdated.');
-        process.exit(1);
+
+        return;
       }
+
+      this.data = data;
     } else {
       this.logger.debug('Creating app data');
 

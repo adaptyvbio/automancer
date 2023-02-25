@@ -183,7 +183,7 @@ class Host:
   async def start(self):
     try:
       await asyncio.Future()
-    except asyncio.CancelledError:
+    finally:
       await self.destroy()
 
   async def destroy(self):

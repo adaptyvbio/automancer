@@ -1,6 +1,6 @@
-import { HostSettings, Pool, React } from 'pr1';
+import { Pool, React } from 'pr1';
 
-import type { HostSettingsId, LocalHostOptions, PythonInstallationRecord } from '../interfaces';
+import type { HostCreatorContext, HostSettingsId } from '../interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
@@ -11,11 +11,6 @@ import * as S5 from './steps/s5';
 import * as S6 from './steps/s6';
 import * as S7 from './steps/s7';
 
-
-export interface HostCreatorContext {
-  computerName: string;
-  pythonInstallations: PythonInstallationRecord;
-}
 
 export type HostCreatorData =
     S0.Data
@@ -54,7 +49,7 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
 
   override componentDidMount() {
     this.pool.add(async () => {
-      let context = await window.api.hostSettings.getCreatorContext();
+      let context = await window.api.hostSettings.getHostCreatorContext();
       this.setState({ context });
     });
   }

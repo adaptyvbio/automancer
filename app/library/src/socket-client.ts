@@ -15,15 +15,15 @@ export type SocketClientBackendOptions = {
 };
 
 export class SocketClientBackend {
-  closed: Promise<boolean>;
-  isClosed: boolean;
-  ready: Promise<void>;
-
-  private _buffer: Buffer | null;
-  private _closedDeferred: Deferred<boolean>;
-  private _closedUser: boolean;
-  private _recvDeferred: Deferred<void> | null;
+  private _buffer: Buffer | null = null;
+  private _closedDeferred: Deferred<boolean> = defer();
+  private _closedUser: boolean = false;
+  private _recvDeferred: Deferred<void> | null = null;
   private _socket!: net.Socket;
+
+  closed: Promise<boolean> = this._closedDeferred.promise;
+  isClosed: boolean = false;
+  ready: Promise<void>;
 
   constructor(options: SocketClientBackendOptions) {
     this.ready = new Promise((resolve, reject) => {
@@ -36,34 +36,26 @@ export class SocketClientBackend {
         // console.log('err', err);
         reject(err);
       });
-    });
 
-    this._socket.on('end', () => {
-      this._closedDeferred.resolve(this._closedUser);
-      this.isClosed = true;
+      this._socket.on('end', () => {
+        this._closedDeferred.resolve(this._closedUser);
+        this.isClosed = true;
 
-      if (this._recvDeferred) {
-        this._recvDeferred.reject(new SocketClientClosed());
-      }
-    });
+        if (this._recvDeferred) {
+          this._recvDeferred.reject(new SocketClientClosed());
+        }
+      });
 
-    this._recvDeferred = null;
-    this._buffer = null;
+      this._socket.on('data', (chunk) => {
+        this._buffer = this._buffer
+          ? Buffer.concat([this._buffer, chunk])
+          : chunk;
 
-    this._closedDeferred = defer();
-    this._closedUser = false;
-    this.closed = this._closedDeferred.promise;
-    this.isClosed = false;
-
-    this._socket.on('data', (chunk) => {
-      this._buffer = this._buffer
-        ? Buffer.concat([this._buffer, chunk])
-        : chunk;
-
-      if (this._recvDeferred) {
-        this._recvDeferred.resolve();
-        this._recvDeferred = null;
-      }
+        if (this._recvDeferred) {
+          this._recvDeferred.resolve();
+          this._recvDeferred = null;
+        }
+      });
     });
   }
 
@@ -177,17 +169,31 @@ export class SocketClient extends SocketClientBackend {
     try {
       await client.ready;
     } catch (err: any) {
-      if (err.code === 'ECONNREFUSED') {
-        return {
-          ok: false as const,
-          reason: 'refused'
-        } as const;
+      switch (err.code) {
+        case 'ECONNREFUSED':
+          return {
+            ok: false,
+            reason: 'refused'
+          } as const;
+        case 'ERR_SOCKET_BAD_PORT':
+          return {
+            ok: false,
+            reason: 'invalid'
+          } as const;
+        default:
+          throw err;
       }
-
-      throw err;
     }
 
+    console.log(await client.recv());
+
     await client.close();
+
+    // try {
+    //   await client.recv();
+    // } catch (e) {
+    //   console.log(e)
+    // }
 
     return {
       ok: true

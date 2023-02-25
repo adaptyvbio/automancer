@@ -6,6 +6,8 @@
   },
   "files": [
     "src/host/renderer.tsx",
-    "src/startup/renderer.tsx"
+    "src/startup/renderer.tsx",
+
+    "src/shared/renderer-types.d.ts"
   ]
 }

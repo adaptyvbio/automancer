@@ -12,7 +12,7 @@ export interface AppProps {
 
 export interface AppState {
   defaultHostSettingsId: HostSettingsId | null;
-  hostSettings: HostSettingsRecord | null;
+  hostSettingsRecord: HostSettingsRecord | null;
 }
 
 export class App extends React.Component<AppProps, AppState> {
@@ -23,28 +23,28 @@ export class App extends React.Component<AppProps, AppState> {
 
     this.state = {
       defaultHostSettingsId: null,
-      hostSettings: null
+      hostSettingsRecord: null
     };
   }
 
   override componentDidMount() {
     this.pool.add(async () => {
       await this.query();
-      await window.api.ready();
+      window.api.main.ready();
     });
   }
 
   async query() {
-    let { defaultHostSettingsId, hostSettings } = await window.api.hostSettings.query();
+    let { defaultHostSettingsId, hostSettingsRecord } = await window.api.hostSettings.list();
 
     this.setState({
       defaultHostSettingsId,
-      hostSettings
+      hostSettingsRecord
     });
   }
 
   override render() {
-    if (!this.state.hostSettings) {
+    if (!this.state.hostSettingsRecord) {
       return null;
     }
 
@@ -53,7 +53,7 @@ export class App extends React.Component<AppProps, AppState> {
         <Startup
           defaultHostInfoId={this.state.defaultHostSettingsId as string as HostInfoId}
           hostInfos={
-            Object.values(this.state.hostSettings)
+            Object.values(this.state.hostSettingsRecord)
               .map((hostSettings): HostInfo => ({
                 id: (hostSettings.id as string as HostInfoId),
                 description: '–',
@@ -68,12 +68,12 @@ export class App extends React.Component<AppProps, AppState> {
 
           deleteHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.delete({ hostSettingsId: hostInfoId });
+              await window.api.hostSettings.delete({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
               await this.query();
             });
           }}
           launchHostInfo={(hostInfoId) => {
-            window.api.launchHost({ hostSettingsId: hostInfoId });
+            window.api.hostSettings.launchHost({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
           renderHostCreator={({ close }) => (
             <HostCreator
@@ -81,14 +81,14 @@ export class App extends React.Component<AppProps, AppState> {
               update={async () => void await this.query()} />
           )}
           revealHostInfoLogsDirectory={(hostInfoId) => {
-            window.api.hostSettings.revealLogsDirectory({ hostSettingsId: hostInfoId });
+            window.api.hostSettings.revealLogsDirectory({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
           revealHostInfoSettingsDirectory={(hostInfoId) => {
-            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId: hostInfoId });
+            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
           setDefaultHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.setDefault({ hostSettingsId: hostInfoId });
+              await window.api.hostSettings.setDefault({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
               await this.query();
             });
           }} />
@@ -98,7 +98,7 @@ export class App extends React.Component<AppProps, AppState> {
 }
 
 
-if (!window.common.isDarwin) {
+if (!window.api.isDarwin) {
   let sheet = window.document.styleSheets[0];
 
   sheet.insertRule(`

@@ -4,7 +4,8 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "build:watch": "tsc --sourceMap --watch"
   },
   "dependencies": {
     "multicast-dns": "^7.2.5",

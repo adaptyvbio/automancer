@@ -4,28 +4,46 @@ import path from 'path';
 import which from 'which';
 
 import { PythonInstallation, PythonInstallationRecord } from './interfaces';
+import { Logger } from './logger';
 
 
 export const isDarwin = (process.platform === 'darwin');
 
 
 export class Pool {
+  #logger: Logger | null = null;
   #promises = new Set<Promise<unknown>>();
+
+  constructor(logger?: Logger) {
+    this.#logger = logger ?? null;
+  }
 
   add(generator: (() => Promise<unknown>) | Promise<unknown>) {
     let promise = typeof generator === 'function'
       ? generator()
       : generator;
 
-    promise.finally(() => {
-      this.#promises.delete(promise);
-    });
+    promise
+      .catch((err) => {
+        if (this.#logger) {
+          this.#logger.error(err.message);
+        } else {
+          console.error(err);
+        }
+      })
+      .finally(() => {
+        this.#promises.delete(promise);
+      });
 
     this.#promises.add(promise);
   }
 
   get empty() {
-    return (this.#promises.size < 1);
+    return this.size < 1;
+  }
+
+  get size() {
+    return this.#promises.size;
   }
 
   async wait() {

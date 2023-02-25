@@ -27,7 +27,7 @@ export class HostWindow {
     this.pool.add(() => this.start());
     this.closed = this.pool.wait();
 
-    this.logger.debug('Created');
+    this.logger.debug('Constructed');
   }
 
   private async start() {
@@ -77,7 +77,7 @@ export class HostWindow {
       show: false,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
-        preload: path.join(__dirname, '../preload/host/preload.js')
+        preload: path.join(__dirname, '../preload/index.js')
       }
     });
 

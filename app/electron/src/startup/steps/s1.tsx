@@ -1,8 +1,7 @@
-import { Form, Pool, React } from 'pr1';
+import { LargeIcon, Pool, React, util } from 'pr1';
+
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
-
-const pool = new Pool();
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 1;
@@ -18,6 +17,8 @@ export interface Data extends HostCreatorStepData {
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
+  let pool = util.usePool();
+
   let [error, setError] = React.useState<{ message: string | null; } | null>(null);
   let startBackend = React.useRef<boolean>(true);
 
@@ -26,7 +27,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
       startBackend.current = false;
 
       pool.add(async () => {
-        let result = await window.api.hostSettings.connectRemoteHost({
+        let result = await window.api.hostSettings.connectToRemoteHost({
           hostname: props.data.options.hostname,
           port: props.data.options.port
         });
@@ -45,9 +46,11 @@ export function Component(props: HostCreatorStepProps<Data>) {
             rawOptions: props.data.rawOptions,
             rawPassword: ''
           });
+        } else if (result.reason === 'invalid') {
+          setError({ message: 'Invalid parameters' });
         } else if (result.reason === 'refused') {
           setError({ message: 'Connection refused' });
-        } else if (result.reason === 'unknown') {
+        } else {
           setError({ message: 'Unknown error' });
         }
       });
@@ -65,7 +68,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           ? (
             <div className="startup-editor-status">
               <LargeIcon name="error" />
-              <p>Failed to connect{error.message && <><br />({error.message})</>}</p>
+              <p>{error.message}</p>
             </div>
           )
           : (

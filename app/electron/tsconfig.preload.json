@@ -2,7 +2,6 @@
   "extends": "./tsconfig.base.json",
 
   "files": [
-    "src/host/preload.ts",
-    "src/startup/preload.ts"
+    "src/shared/preload.ts"
   ]
 }

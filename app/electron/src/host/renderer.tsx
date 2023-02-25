@@ -130,8 +130,8 @@ class App extends React.Component<AppProps, AppState> {
 
   override componentDidMount() {
     this.pool.add(async () => {
-      let { hostSettings: hostSettingsCollection } = await window.api.hostSettings.query();
-      let hostSettings = hostSettingsCollection[this.hostSettingsId];
+      let { hostSettingsRecord } = await window.api.hostSettings.list();
+      let hostSettings = hostSettingsRecord[this.hostSettingsId];
 
       this.setState({ hostSettings });
       this.backend = new LocalHostBackend(hostSettings);

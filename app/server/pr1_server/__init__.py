@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Optional
 
 from pr1 import Host
+from pr1.util.misc import log_exception
+from pr1.util.pool import Pool
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
 logger = logging.getLogger("pr1.app")
 
-from .bridges.protocol import BridgeAdvertisementInfo, ClientClosed, ClientProtocol
+from .bridges.protocol import BridgeAdvertisementInfo, ClientClosed, BaseClient
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .conf import Conf
@@ -74,6 +76,7 @@ class App:
     self.data_dir = Path(args.data_dir).resolve()
     self.data_dir.mkdir(exist_ok=True, parents=True)
 
+    self.certs_dir = self.data_dir / "certificates"
     conf_path = self.data_dir / "conf.json"
 
     logger.debug(f"Storing data in '{self.data_dir}'")
@@ -128,7 +131,7 @@ class App:
 
     # Create host
 
-    self.clients = dict()
+    self.clients = dict[str, BaseClient]()
     self.host = Host(
       backend=Backend(self),
       update_callback=self.update
@@ -146,7 +149,9 @@ class App:
     self.updating = False
     self.zeroconf = None
     self.zeroconf_services = list()
-    self._main_task = None
+
+    self._pool: Optional[Pool] = None
+    self._stop_event: Optional[asyncio.Event] = None
 
 
   async def initialize(self):
@@ -192,7 +197,7 @@ class App:
       logger.debug("Unregistered zeroconf services")
 
 
-  async def handle_client(self, client: ClientProtocol):
+  async def handle_client(self, client: BaseClient):
     try:
       logger.debug(f"Added client '{client.id}'")
 
@@ -249,9 +254,7 @@ class App:
     except Exception:
       traceback.print_exc()
     finally:
-      client.close()
       del self.clients[client.id]
-
       logger.debug(f"Removed client '{client.id}'")
 
   async def broadcast(self, message):
@@ -326,37 +329,11 @@ class App:
       loop = asyncio.get_event_loop()
       loop.create_task(send_state())
 
-  def start(self):
+  async def start(self):
     logger.info("Starting app")
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(self.initialize())
-    loop.run_until_complete(self.host.initialize())
-
-    logger.debug(f"Initializing {len(self.bridges)} bridges")
-
-    for bridge in self.bridges:
-      loop.run_until_complete(bridge.initialize())
-
-    tasks = set()
-
-    for bridge in self.bridges:
-      async def handle_client(client):
-        await self.handle_client(client)
-
-      task = loop.create_task(bridge.start(handle_client))
-      tasks.add(task)
-
-    async def start():
-      try:
-        await asyncio.gather(*tasks)
-      except asyncio.CancelledError:
-        logger.debug(f"Canceled {len(tasks)} tasks")
-
-      await self.deinitialize()
-
-    tasks.add(asyncio.ensure_future(self.host.start()))
-    self._main_task = asyncio.ensure_future(start())
+    self._pool = Pool()
+    self._stop_event = asyncio.Event()
 
     def handle_sigint():
       print("\r", end="", file=sys.stderr)
@@ -364,22 +341,49 @@ class App:
 
       self.stop()
 
+    loop = asyncio.get_event_loop()
+
     try:
       loop.add_signal_handler(signal.SIGINT, handle_sigint)
     except NotImplementedError: # For Windows
       pass
 
+    logger.debug("Initializing")
+
+    await self.initialize()
+    await self.host.initialize()
+
+    logger.debug(f"Initializing {len(self.bridges)} bridges")
+
+    # TODO: Improve ordering such that items are deinitialized in the opposite order of initialization
+    for bridge in self.bridges:
+      await bridge.initialize()
+
+    for bridge in self.bridges:
+      self._pool.start_soon(bridge.start(self.handle_client))
+
+    self._pool.start_soon(self.host.start())
+
+    logger.debug("Running")
+
+    await self._stop_event.wait()
+    logger.debug("Stopping")
+
+    await self.deinitialize()
+
+    logger.debug(f"Canceling {len(self._pool)} tasks")
+
     try:
-      loop.run_until_complete(self._main_task)
-    finally:
-      loop.close()
-      self._main_task = None
+      await self._pool.wait()
+    except Exception:
+      logger.error("Deinitialization error")
+      log_exception(logger)
+
+    logger.info("Stopped")
 
   def stop(self):
-    logger.info("Stopping")
-
-    assert self._main_task
-    self._main_task.cancel()
+    assert self._stop_event
+    self._stop_event.set()
 
 
 def main():
@@ -391,5 +395,8 @@ def main():
 
   args = parser.parse_args()
 
+
   app = App(args)
-  app.start()
+
+  loop = asyncio.get_event_loop()
+  loop.run_until_complete(app.start())

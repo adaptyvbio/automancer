@@ -25,7 +25,6 @@ export interface StartupProps {
 
 export interface StartupState {
   fullDisplay: boolean;
-  hostCreatorIndex: number;
   hostCreatorOpen: boolean;
   hostCreatorVisible: boolean;
 }
@@ -38,10 +37,9 @@ export class Startup extends React.Component<StartupProps, StartupState> {
     super(props);
 
     this.state = {
-      fullDisplay: false,
-      hostCreatorIndex: 0,
-      hostCreatorOpen: false,
-      hostCreatorVisible: false
+      fullDisplay: true,
+      hostCreatorOpen: true,
+      hostCreatorVisible: true
     };
   }
 
@@ -74,7 +72,6 @@ export class Startup extends React.Component<StartupProps, StartupState> {
 
   resetHostCreator() {
     this.setState((state) => ({
-      hostCreatorIndex: (state.hostCreatorIndex + 1),
       hostCreatorOpen: false,
       hostCreatorVisible: false
     }));

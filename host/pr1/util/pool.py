@@ -27,12 +27,10 @@ from typing import Any, Coroutine, Optional, Sequence, TypeVar
 #     finally:
 #       self._nursery = None
 
-@dataclass
-class ExceptionGroup(BaseException):
-  exceptions: list[BaseException]
+# class PoolExceptionGroup(ExceptionGroup):
+#   pass
 
-class PoolExceptionGroup(ExceptionGroup):
-  pass
+PoolExceptionGroup = BaseExceptionGroup
 
 
 T = TypeVar('T')
@@ -42,6 +40,9 @@ class Pool:
     self._closed = False
     self._tasks = set[Task]()
 
+  def __len__(self):
+    return len(self._tasks)
+
   def start_soon(self, coro: Coroutine[Any, Any, T], /) -> Task[T]:
     assert not self._closed
 
@@ -50,32 +51,16 @@ class Pool:
 
     return task
 
-  async def wait1(self):
-    exceptions = list[BaseException]()
-
-    while (tasks := self._tasks):
-      self._tasks.clear()
-      await asyncio.wait(tasks)
-
-      for task in tasks:
-        if exc := task.exception():
-          exceptions.append(exc)
-
-    if exceptions:
-      raise ExceptionGroup(exceptions)
-
   async def wait(self):
     exceptions = list[BaseException]()
 
     while (tasks := self._tasks.copy()):
       self._tasks.clear()
-      _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
 
-      for task in pending:
+      for task in tasks:
         task.cancel()
 
-      if pending:
-        await asyncio.wait(pending)
+      await asyncio.wait(tasks)
 
       for task in tasks:
         try:
@@ -87,7 +72,7 @@ class Pool:
             exceptions.append(exc)
 
     if exceptions:
-      raise PoolExceptionGroup(exceptions)
+      raise PoolExceptionGroup("Pool error", exceptions)
 
   @classmethod
   @contextlib.asynccontextmanager
@@ -109,7 +94,7 @@ class Pool:
         exceptions.append(exc)
 
     if exceptions:
-      raise ExceptionGroup(exceptions) from None
+      raise PoolExceptionGroup("Pool error", exceptions) from None
 
 
 if __name__ == "__main__":

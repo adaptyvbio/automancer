@@ -1,12 +1,19 @@
-const { BrowserWindow } = require('electron');
-const path = require('path');
+import { BrowserWindow } from 'electron';
+import path from 'path';
 
-const util = require('../util');
+import { CoreApplication } from '..';
+import { rootLogger } from '../logger';
+import * as util from '../util';
 
 
-exports.StartupWindow = class StartupWindow {
-  constructor(coreApp) {
-    this.app = coreApp;
+export class StartupWindow {
+  closed: Promise<void>;
+  window: BrowserWindow;
+
+  private logger = rootLogger.getChild('startupWindow');
+
+  constructor(private app: CoreApplication) {
+    this.logger.debug('Constructed and created');
 
     this.window = new BrowserWindow({
       width: 800,
@@ -14,9 +21,9 @@ exports.StartupWindow = class StartupWindow {
       backgroundColor: '#000000',
       fullscreenable: false,
       resizable: false,
-      show: false,
+      show: this.app.debug,
       webPreferences: {
-        preload: path.join(__dirname, '../preload/startup/preload.js')
+        preload: path.join(__dirname, '../preload/index.js')
       },
       ...(util.isDarwin
         ? {
@@ -32,6 +39,7 @@ exports.StartupWindow = class StartupWindow {
 
     this.closed = new Promise((resolve) => {
       this.window.on('close', () => {
+        this.logger.debug('Closed');
         resolve();
       });
     });
@@ -46,4 +54,4 @@ exports.StartupWindow = class StartupWindow {
 
     this.window.focus();
   }
-};
+}

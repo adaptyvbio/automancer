@@ -73,7 +73,7 @@ class ConfBridgeSocket:
     match data["type"]:
       case "inet":
         return ConfBridgeSocketInet(
-          host=data["host"],
+          hostname=data["hostname"],
           port=data["port"]
         )
       case "unix":
@@ -85,18 +85,18 @@ class ConfBridgeSocket:
 
 @dataclass(kw_only=True)
 class ConfBridgeSocketInet(ConfBridge):
-  host: str
+  hostname: str
   port: int
 
   def create_bridge(self, *, app):
-    return SocketBridge.inet(self.host, self.port)
+    return SocketBridge.inet(self.hostname, self.port, app=app)
 
   def export(self):
     return {
       "type": "socket",
       "options": {
         "type": "inet",
-        "host": self.host,
+        "hostname": self.hostname,
         "port": self.port
       }
     }
@@ -106,7 +106,7 @@ class ConfBridgeSocketUnix(ConfBridge):
   path: str
 
   def create_bridge(self, *, app):
-    return SocketBridge.unix(self.path)
+    return SocketBridge.unix(self.path, app=app)
 
   def export(self):
     return {

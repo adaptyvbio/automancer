@@ -41,8 +41,13 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
     this.state = {
       context: null,
       data: {
-        stepIndex: 4,
-        mode: null
+        // stepIndex: 4,
+        // mode: null
+        stepIndex: 0,
+
+        hostname: 'localhost',
+        port: '3142',
+        secure: true
       }
     };
   }
@@ -80,7 +85,9 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
         data={this.state.data}
         setData={(data) => {
           this.setState({
-            data: ({ stepIndex: this.state.data.stepIndex, ...data } as HostCreatorData)
+            data: ('stepIndex' in data)
+              ? data
+              : { ...this.state.data, ...data }
           });
         }} />
     );
@@ -95,7 +102,7 @@ export interface HostCreatorStepData {
 export type HostCreatorStepProps<Data = HostCreatorData> = {
   context: HostCreatorContext;
   data: Data;
-  setData(data: HostCreatorData | Omit<Data, 'stepIndex'>): void;
+  setData(data: HostCreatorData | Partial<Omit<Data, 'stepIndex'>>): void;
 
   cancel(): void;
   launchHost(hostSettingsId: HostSettingsId): void;

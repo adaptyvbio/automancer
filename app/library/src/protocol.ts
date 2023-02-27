@@ -21,5 +21,12 @@ export namespace Server {
     data: unknown;
   }
 
-  export type Message = InitializationMessage | ResponseMessage;
+  export interface StateMessage {
+    type: 'state';
+    data: {
+      [key: string]: any;
+    };
+  }
+
+  export type Message = InitializationMessage | ResponseMessage | StateMessage;
 }

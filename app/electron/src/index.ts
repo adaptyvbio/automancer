@@ -260,13 +260,58 @@ export class CoreApplication {
       };
     }); */
 
-    ipcMain.handle('hostSettings.connectToRemoteHost', async (_event, options) => {
+    ipcMain.handle('hostSettings.displayCertificateOfRemoteHost', async (event, options) => {
+      let result = await SocketClient.test({
+        address: {
+          host: options.hostname,
+          port: options.port
+        },
+        tls: {
+          serverCertificateCheck: true,
+          serverCertificateFingerprint: options.fingerprint
+        }
+      });
+
+      if (result.ok || (result.reason === 'untrusted_server')) {
+        await electron.dialog.showCertificateTrustDialog(BrowserWindow.fromWebContents(event.sender)!, {
+          certificate: util.transformCertificate(result.tlsInfo!.certificate),
+          message: `Certificate of host with address ${options.hostname}:${options.port}`
+        });
+      } else {
+        this.logger.error('Failed to show remote host certificate');
+      }
+    });
+
+    ipcMain.handle('hostSettings.testRemoteHost', async (event, options) => {
       this.logger.debug(`Trying to connect to '${options.hostname}:${options.port}'`);
 
       let result = await SocketClient.test({
-        host: options.hostname,
-        port: options.port
+        address: {
+          host: options.hostname,
+          port: options.port
+        },
+        tls: options.secure
+          ? {
+            serverCertificateCheck: !options.trusted,
+            serverCertificateFingerprint: options.fingerprint
+          }
+          : null
       });
+
+      if (!result.ok && result.reason === 'untrusted_server') {
+        return {
+          ok: false,
+          reason: 'untrusted_server',
+          fingerprint: result.tlsInfo.fingerprint,
+          serialNumber: result.tlsInfo.certificate.serialNumber.padStart(20, '0')
+        };
+      }
+
+      //   await dialog.showCertificateTrustDialog(BrowserWindow.fromWebContents(event.sender)!, {
+      //     certificate: util.transformCertificate(result.tlsInfo.certificate),
+      //     message: 'Hello'
+      //   });
+      // }
 
       return result;
     });

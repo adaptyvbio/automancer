@@ -1,6 +1,8 @@
 import childProcess from 'child_process';
+import electron from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
+import tls from 'tls';
 import which from 'which';
 
 import { PythonInstallation, PythonInstallationRecord } from './interfaces';
@@ -257,4 +259,33 @@ export async function runCommand(rawCommand: string, options?: RunCommandOptions
       }
     });
   });
+}
+
+
+const transformCertificatePrincipal = (input: tls.Certificate): electron.CertificatePrincipal => ({
+  commonName: input.CN,
+  organizations: [input.O],
+  organizationUnits: [input.OU],
+  locality: input.L,
+  state: input.ST,
+  country: input.C,
+});
+
+const transformDate = (input: string) => Math.round(new Date(input).getTime() / 1000);
+
+export function transformCertificate(cert: tls.PeerCertificate): electron.Certificate {
+  return {
+    data: `-----BEGIN CERTIFICATE-----\n${cert.raw.toString('base64')}\n-----END CERTIFICATE-----`,
+    fingerprint: cert.fingerprint,
+    issuer: transformCertificatePrincipal(cert.issuer),
+    issuerName: cert.issuer.CN,
+    subject: transformCertificatePrincipal(cert.subject),
+    subjectName: cert.issuer.CN,
+    serialNumber: cert.serialNumber,
+    validStart: transformDate(cert.valid_from),
+    validExpiry: transformDate(cert.valid_to),
+
+    // @ts-expect-error
+    issuerCert: null
+  };
 }

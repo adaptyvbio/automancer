@@ -45,7 +45,8 @@ export function Component(props: HostCreatorStepProps<Data>) {
             stepIndex: 0,
 
             hostname: '',
-            port: ''
+            port: '',
+            secure: true
           });
 
           break;

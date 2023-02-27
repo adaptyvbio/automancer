@@ -1,78 +1,135 @@
-import { LargeIcon, Pool, React, util } from 'pr1';
+import { LargeIcon, React, util } from 'pr1';
+import type { CertificateFingerprint } from 'pr1-library';
 
-import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
+import { Depromisify } from '../../interfaces';
+import { HostCreatorData, HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 1;
 
   options: {
+    fingerprint: CertificateFingerprint | null;
     hostname: string;
+    password: string | null;
     port: number;
+    secure: boolean;
+    trusted: boolean;
   };
-  rawOptions: {
-    hostname: string;
-    port: string;
-  };
+  previousData: HostCreatorData;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
   let pool = util.usePool();
 
-  let [error, setError] = React.useState<{ message: string | null; } | null>(null);
-  let startBackend = React.useRef<boolean>(true);
+  let [attempt, setAttempt] = React.useState(0);
+  let [result, setResult] = React.useState<Depromisify<ReturnType<typeof window.api.hostSettings.testRemoteHost>> & { ok: false; } | null>(null);
 
   React.useEffect(() => {
-    if (startBackend.current) {
-      startBackend.current = false;
-
-      pool.add(async () => {
-        let result = await window.api.hostSettings.connectToRemoteHost({
-          hostname: props.data.options.hostname,
-          port: props.data.options.port
-        });
-
-        if (result.ok) {
-          props.setData({
-            stepIndex: 2,
-
-            hostSettingsId: result.hostSettingsId,
-            label: result.label
-          });
-        } else if (result.reason === 'unauthorized') {
-          props.setData({
-            stepIndex: 3,
-            options: props.data.options,
-            rawOptions: props.data.rawOptions,
-            rawPassword: ''
-          });
-        } else if (result.reason === 'invalid') {
-          setError({ message: 'Invalid parameters' });
-        } else if (result.reason === 'refused') {
-          setError({ message: 'Connection refused' });
-        } else {
-          setError({ message: 'Unknown error' });
-        }
+    pool.add(async () => {
+      let result = await window.api.hostSettings.testRemoteHost({
+        fingerprint: null,
+        hostname: props.data.options.hostname,
+        password: props.data.options.password,
+        port: props.data.options.port,
+        secure: props.data.options.secure,
+        trusted: props.data.options.trusted
       });
-    }
-  });
+
+      console.log(result);
+
+      if (result.ok) {
+
+      } else {
+        setResult(result);
+
+        if ('fingerprint' in result) {
+          props.setData({
+            options: {
+              ...props.data.options,
+              fingerprint: result.fingerprint
+            }
+          });
+        }
+      }
+
+      // if (result.ok) {
+      //   props.setData({
+      //     stepIndex: 2,
+
+      //     hostSettingsId: result.hostSettingsId,
+      //     label: result.label
+      //   });
+      // } else if (result.reason === 'unauthorized') {
+      //   props.setData({
+      //     stepIndex: 3,
+      //     options: props.data.options,
+      //     rawOptions: props.data.rawOptions,
+      //     rawPassword: ''
+      //   });
+      // } else if (result.reason === 'invalid') {
+      //   setError({ message: 'Invalid parameters' });
+      // } else if (result.reason === 'refused') {
+      //   setError({ message: 'Connection refused' });
+      // } else {
+      //   setError({ message: 'Unknown error' });
+      // }
+    });
+  }, [
+    attempt,
+    props.data.options.trusted
+  ]);
 
   return (
-    <div className="startup-editor-contents">
+    <form className="startup-editor-contents" onSubmit={(event) => {
+      event.preventDefault();
+
+      switch (result!.reason) {
+        case 'untrusted_server': {
+          setResult(null);
+          props.setData({
+            options: {
+              ...props.data.options,
+              trusted: true
+            }
+          });
+        }
+      }
+    }}>
       <div className="startup-editor-inner">
         <header className="startup-editor-header">
           <div className="startup-editor-subtitle">New setup</div>
           <h2>Set connection parameters</h2>
         </header>
-        {error
-          ? (
-            <div className="startup-editor-status">
-              <LargeIcon name="error" />
-              <p>{error.message}</p>
-            </div>
-          )
+        {result
+          ? (() => {
+            switch (result.reason) {
+              case 'invalid_parameters':
+                return (
+                  <div className="startup-editor-status">
+                    <LargeIcon name="error" />
+                    <p>Invalid parameters</p>
+                  </div>
+                );
+              case 'refused':
+                return (
+                  <div className="startup-editor-status">
+                    <LargeIcon name="error" />
+                    <p>Connection refused</p>
+                  </div>
+                );
+              case 'untrusted_server':
+                return (
+                  <div className="startup-editor-status">
+                    <LargeIcon name="question" />
+                    <p>Trust certificate with serial number {formatHex(result.serialNumber)}?</p>
+                  </div>
+                );
+            }
+          })()
           : (
             <div className="startup-editor-status">
+              {/* <LargeIcon name="pending" /> */}
               <p>Loading</p>
             </div>
           )}
@@ -80,30 +137,52 @@ export function Component(props: HostCreatorStepProps<Data>) {
       <div className="startup-editor-action-root">
         <div className="startup-editor-action-list">
           <button type="button" className="startup-editor-action-item" onClick={() => {
-            if (props.data.rawPassword !== null) {
-              props.setData({
-                stepIndex: 3,
-                options: props.data.options,
-                rawOptions: props.data.rawOptions,
-                rawPassword: props.data.rawPassword
-              });
-            } else {
-              props.setData({
-                stepIndex: 0,
-                ...props.data.rawOptions
-              });
-            }
-          }}>Previous</button>
+            props.setData(props.data.previousData);
+          }}>Back</button>
         </div>
         <div className="startup-editor-action-list">
-          {error && (
-            <button type="button" className="startup-editor-action-item" onClick={() => {
-              setError(null);
-              startBackend.current = true;
-            }}>Retry</button>
-          )}
+          {result && (() => {
+            switch (result.reason) {
+              case 'refused':
+                return (
+                  <button type="button" className="startup-editor-action-item" onClick={() => {
+                    setResult(null);
+                    setAttempt(attempt + 1);
+                  }}>Retry</button>
+                );
+              case 'untrusted_server':
+                return (
+                  <>
+                    <button type="button" className="startup-editor-action-item" onClick={() => {
+                      pool.add(async () => {
+                        let options = props.data.options;
+
+                        await window.api.hostSettings.displayCertificateOfRemoteHost({
+                          fingerprint: options.fingerprint!,
+                          hostname: options.hostname,
+                          port: options.port
+                        });
+                      });
+                    }}>Show certificate</button>
+                    <button type="submit" className="startup-editor-action-item">Trust</button>
+                  </>
+                );
+              default:
+                return null;
+            }
+          })()}
         </div>
       </div>
-    </div>
+    </form>
   );
+}
+
+
+function formatHex(input: string) {
+  let chars = input.toUpperCase().split('');
+
+  return new Array(chars.length / 2)
+    .fill(0)
+    .map((_, index) => chars[index * 2] + chars[(index * 2) + 1])
+    .join(':');
 }

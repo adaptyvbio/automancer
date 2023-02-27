@@ -15,3 +15,10 @@ export interface Deferred<T> {
   resolve(value: T): void;
   reject(err: any): void;
 }
+
+
+declare const brand: unique symbol;
+
+export type Brand<T, TBrand extends string> = T & {
+  [brand]: TBrand;
+};

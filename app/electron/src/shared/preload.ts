@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
-import { AdvertisedHostInfo } from 'pr1-library';
+import { AdvertisedHostInfo, CertificateFingerprint } from 'pr1-library';
 
 import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, PythonInstallation } from '../interfaces';
 
@@ -25,16 +25,50 @@ export type IPCEndpoint = {
   // };
 
   hostSettings: {
-    connectToRemoteHost(options: {
+    addRemoteHost(options: {
+      fingerprint: CertificateFingerprint;
       hostname: string;
+      password: string | null;
       port: number;
+      secure: boolean;
+      trusted: boolean;
     }): Promise<{
       ok: true;
       hostSettingsId: HostSettingsId;
+    }>;
+    displayCertificateOfRemoteHost(options: {
+      fingerprint: CertificateFingerprint;
+      hostname: string;
+      port: number;
+    }): Promise<void>;
+    testRemoteHost(options: {
+      fingerprint: CertificateFingerprint | null;
+      hostname: string;
+      password: string | null;
+      port: number;
+      secure: boolean;
+      trusted: boolean;
+    }): Promise<{
+      ok: true;
+      identifier: string;
       label: string;
     } | {
       ok: false;
-      reason: 'invalid' | 'refused' | 'unauthorized';
+      reason: 'fingerprint_mismatch';
+    } | {
+      ok: false;
+      reason: 'invalid_parameters';
+    } | {
+      ok: false;
+      reason: 'invalid_protocol';
+    } | {
+      ok: false;
+      reason: 'refused';
+    } | {
+      ok: false;
+      reason: 'untrusted_server';
+      fingerprint: CertificateFingerprint;
+      serialNumber: string;
     }>;
     delete(options: { hostSettingsId: HostSettingsId; }): Promise<void>;
     getHostCreatorContext(): Promise<HostCreatorContext>;
@@ -62,7 +96,9 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   hostSettings: {
-    connectToRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.connectToRemoteHost', options),
+    addRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.addRemoteHost', options),
+    displayCertificateOfRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.displayCertificateOfRemoteHost', options),
+    testRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.testRemoteHost', options),
     delete: async (options) => await ipcRenderer.invoke('hostSettings.delete', options),
     getHostCreatorContext: async () => await ipcRenderer.invoke('hostSettings.getHostCreatorContext'),
     launchHost: async (options) => ipcRenderer.invoke('hostSettings.launchHost', options),

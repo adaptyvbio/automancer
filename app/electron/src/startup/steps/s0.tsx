@@ -7,6 +7,7 @@ export interface Data extends HostCreatorStepData {
 
   hostname: string;
   port: string;
+  secure: boolean;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -24,13 +25,14 @@ export function Component(props: HostCreatorStepProps<Data>) {
         stepIndex: 1,
 
         options: {
+          fingerprint: null,
           hostname: props.data.hostname,
-          port: parseInt(props.data.port)
+          password: null,
+          port: parseInt(props.data.port),
+          secure: props.data.secure,
+          trusted: false
         },
-        rawOptions: {
-          hostname: props.data.hostname,
-          port: props.data.port
-        }
+        previousData: props.data
       });
     }}>
       <div className="startup-editor-inner">
@@ -41,11 +43,12 @@ export function Component(props: HostCreatorStepProps<Data>) {
         <Form.Form>
           <Form.Select
             label="Protocol"
-            onInput={(_id) => { }}
+            onInput={(protocol) => void props.setData({ ...props.data, secure: (protocol === 'secure-tcp') })}
             options={[
-              { id: 'tcp', label: 'TCP' }
+              { id: 'secure-tcp', label: 'TCP with TLS' },
+              { id: 'unsecure-tcp', label: 'TCP' }
             ]}
-            value="tcp"
+            value={props.data.secure ? 'secure-tcp' : 'unsecure-tcp'}
             targetRef={firstInputRef} />
           <Form.TextField
             label="Address"

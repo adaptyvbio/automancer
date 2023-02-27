@@ -1,5 +1,6 @@
 import type { FSWatcher } from 'chokidar';
 import type { IpcMainInvokeEvent } from 'electron';
+import type { CertificateFingerprint } from 'pr1-library';
 
 
 declare const brand: unique symbol;
@@ -9,15 +10,11 @@ export type Brand<T, TBrand extends string> = T & {
 };
 
 
+export type Depromisify<T> = T extends Promise<infer U> ? U : never;
 export type UnionToIntersection<T> = (T extends any ? ((k: T) => void) : never) extends ((k: infer S) => void) ? S : never;
 
 
-// export type IPC<T extends Record<string, ((...args: any[]) => any)>> = {
-//   handle<S extends keyof T>(channel: S, callback: (event: IpcMainInvokeEvent, ...args: Parameters<T[S]>) => ReturnType<T[S]>): void;
-// }
-
 export type IPC<T extends Record<string, ((...args: any[]) => any)>> = UnionToIntersection<{
-  // handle<S extends keyof T>(channel: S, callback: (T[S] extends ((...args: infer U) => infer V) ? ((event: IpcMainInvokeEvent, ...args: Parameters<T[S]>) => ReturnType<T[S]>): void;
   [S in keyof T]: T[S] extends ((...args: infer U) => Promise<infer V>)
     ? { handle(channel: S, callback: ((event: IpcMainInvokeEvent, ...args: U) => Promise<V>)): void; }
     : T[S] extends ((...args: infer U) => void)
@@ -30,13 +27,6 @@ export type IPC2d<T extends Record<string, unknown>> = UnionToIntersection<{
     ? IPC<{ [U in keyof T[S] as (`${S & string}.${U & string}`)]: T[S][U]; }>
     : never;
 }[keyof T]>;
-
-
-// export type IPC2d<T extends Record<string, unknown>> = {
-//   [S in keyof T]: T[S] extends Record<string, ((...args: any[]) => Promise<unknown>)>
-//     ? IPC<{ [U in keyof T[S] as (`${S & string}.${U & string}`)]: T[S][U]; }>
-//     : never;
-// }[keyof T];
 
 
 export type DraftEntryId = string;
@@ -108,9 +98,17 @@ export interface HostSettingsInternetSocket {
   type: 'socket.inet';
   label: string;
 
-  lastIdentifier: string | null;
+  options: RemoteHostOptions;
+}
+
+export interface RemoteHostOptions {
+  fingerprint: CertificateFingerprint;
   hostname: string;
+  identifier: string;
+  password: string | null;
   port: number;
+  secure: boolean;
+  trusted: boolean;
 }
 
 export type HostSettings = HostSettingsLocal | HostSettingsInternetSocket;

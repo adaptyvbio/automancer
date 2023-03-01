@@ -1,17 +1,21 @@
+//* Search for remote hosts
+
 import { Pool, React, Selector } from 'pr1';
 import type { AdvertisedHostInfo, HostIdentifier } from 'pr1-library';
+import { Depromisify } from '../../interfaces';
 
-import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
+import { HostCreatorData, HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 
 export interface Data extends HostCreatorStepData {
   stepIndex: 7;
 
+  previousStepData: HostCreatorData;
   selectedHostIdentifier: HostIdentifier | null;
 }
 
 export interface State {
-  remoteHostInfos: AdvertisedHostInfo[] | null;
+  remoteHostInfos: Depromisify<ReturnType<typeof window.api.hostSettings.queryRemoteHosts>> | null;
 }
 
 export class Component extends React.Component<HostCreatorStepProps<Data>, State> {
@@ -56,6 +60,16 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
     return (
       <form className="startup-editor-contents" onSubmit={(event) => {
         event.preventDefault();
+
+        this.props.setData({
+          stepIndex: 1,
+
+          options: this.state.remoteHostInfos?.find((hostInfo) => {
+            let bridge = hostInfo.bridges[0];
+            return bridge.options.identifier === this.props.data.selectedHostIdentifier;
+          })!.bridges[0].options,
+          previousStepData: this.props.data
+        })
       }}>
         <div className="startup-editor-inner">
           <header className="startup-editor-header">
@@ -72,8 +86,8 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
                     let description: string;
 
                     switch (bridge.type) {
-                      case 'socket':
-                        description = `${bridge.options.hostname}:${bridge.options.port}`;
+                      case 'tcp':
+                        description = `${bridge.options.hostname}:${bridge.options.port} (TCP with TLS)`;
                         break;
                       default:
                         description = 'Unknown';
@@ -104,12 +118,7 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
         <div className="startup-editor-action-root">
           <div className="startup-editor-action-list">
             <button type="button" className="startup-editor-action-item" onClick={() => {
-              this.props.setData({
-                stepIndex: 0,
-
-                hostname: '',
-                port: ''
-              });
+              this.props.setData(this.props.data.previousStepData);
             }}>Back</button>
           </div>
           <div className="startup-editor-action-list">

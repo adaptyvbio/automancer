@@ -7,7 +7,7 @@ import electron, { App, BrowserWindow, dialog, Menu, MenuItemConstructorOptions,
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { searchForAdvertistedHosts, SocketClient, SocketClientBackend } from 'pr1-library';
+import { BridgeTcp, searchForAdvertistedHosts, SocketClient, SocketClientBackend } from 'pr1-library';
 import * as uol from 'uol';
 
 import { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
@@ -235,30 +235,25 @@ export class CoreApplication {
 
     // Host settings management
 
-/*     ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
-      let hostSettingsId = crypto.randomUUID();
+    ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
+      let hostSettingsId = crypto.randomUUID() as HostSettingsId;
 
       await this.setData({
         hostSettingsRecord: {
           ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
+            type: 'tcp',
             label: options.label,
-            options: {
-              type: 'remote',
-              auth: options.auth,
-              address: options.address,
-              port: options.port
-            }
+            options: options.options
           }
         }
       });
 
       return {
-        ok: true,
-        id: hostSettingsId
+        hostSettingsId
       };
-    }); */
+    });
 
     ipcMain.handle('hostSettings.displayCertificateOfRemoteHost', async (event, options) => {
       let result = await SocketClient.test({
@@ -282,7 +277,7 @@ export class CoreApplication {
       }
     });
 
-    ipcMain.handle('hostSettings.testRemoteHost', async (event, options) => {
+    ipcMain.handle('hostSettings.testRemoteHost', async (_event, options) => {
       this.logger.debug(`Trying to connect to '${options.hostname}:${options.port}'`);
 
       let result = await SocketClient.test({
@@ -298,20 +293,14 @@ export class CoreApplication {
           : null
       });
 
-      if (!result.ok && result.reason === 'untrusted_server') {
+      if ('tlsInfo' in result) {
+        let { tlsInfo, ...rest } = result;
+
         return {
-          ok: false,
-          reason: 'untrusted_server',
-          fingerprint: result.tlsInfo.fingerprint,
-          serialNumber: result.tlsInfo.certificate.serialNumber.padStart(20, '0')
+          ...rest,
+          fingerprint: tlsInfo?.fingerprint ?? null
         };
       }
-
-      //   await dialog.showCertificateTrustDialog(BrowserWindow.fromWebContents(event.sender)!, {
-      //     certificate: util.transformCertificate(result.tlsInfo.certificate),
-      //     message: 'Hello'
-      //   });
-      // }
 
       return result;
     });
@@ -456,12 +445,17 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.queryRemoteHosts', async (_event) => {
-      return (await searchForAdvertistedHosts()).filter((info) =>
-        true
-        // !Object.values(this.data.hostSettings).some((hostSettings) =>
-        //   (hostSettings.options.type === 'local') && (hostSettings.options.identifier === info.identifier)
-        // )
-      );
+      return (await searchForAdvertistedHosts())
+        .map((info) => ({
+          ...info,
+          bridges: info.bridges.filter((bridge): bridge is BridgeTcp => (bridge.type === 'tcp'))
+        }))
+        .filter((info) => (info.bridges.length > 0))
+        .filter((info) =>
+          !Object.values(this.data.hostSettingsRecord).some((hostSettings) =>
+            (hostSettings.options.identifier === info.identifier)
+          )
+        );
     });
 
 

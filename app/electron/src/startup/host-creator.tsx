@@ -5,7 +5,6 @@ import type { HostCreatorContext, HostSettingsId } from '../interfaces';
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';
 import * as S2 from './steps/s2';
-import * as S3 from './steps/s3';
 import * as S4 from './steps/s4';
 import * as S5 from './steps/s5';
 import * as S6 from './steps/s6';
@@ -16,7 +15,6 @@ export type HostCreatorData =
     S0.Data
   | S1.Data
   | S2.Data
-  | S3.Data
   | S4.Data
   | S5.Data
   | S6.Data
@@ -41,13 +39,8 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
     this.state = {
       context: null,
       data: {
-        // stepIndex: 4,
-        // mode: null
-        stepIndex: 0,
-
-        hostname: 'localhost',
-        port: '3142',
-        secure: true
+        stepIndex: 4,
+        mode: null
       }
     };
   }
@@ -68,7 +61,7 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
       S0.Component,
       S1.Component,
       S2.Component,
-      S3.Component,
+      null,
       S4.Component,
       S5.Component,
       S6.Component,

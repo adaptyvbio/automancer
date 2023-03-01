@@ -1,3 +1,5 @@
+//* Create local host
+
 import { LargeIcon, React, util } from 'pr1';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
@@ -16,17 +18,19 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
   React.useEffect(() => {
     pool.add(async () => {
-      let result = await props.createLocalHost(props.data.options);
+      let result = await window.api.hostSettings.createLocalHost(props.data.options);
 
       if (result.ok) {
+        await props.queryHostSettings();
+
         props.setData({
           stepIndex: 2,
 
-          id: result.id,
+          hostSettingsId: result.hostSettingsId,
           label: props.data.options.label
         });
       } else {
-        setError({ message: 'Error' });
+        setError({ message: result.message });
       }
     });
   }, []);
@@ -42,7 +46,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           ? (
             <div className="startup-editor-status">
               <LargeIcon name="error" />
-              <p>Failed to connect{error.message && <><br />({error.message})</>}</p>
+              <p>{error.message}</p>
             </div>
           )
           : (
@@ -67,7 +71,6 @@ export function Component(props: HostCreatorStepProps<Data>) {
             });
           }}>Back</button>
         </div>
-        {/* <div className="startup-editor-action-list"> </div> */}
       </div>
     </div>
   );

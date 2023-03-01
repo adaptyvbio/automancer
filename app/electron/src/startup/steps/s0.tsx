@@ -1,3 +1,5 @@
+//* Enter remote host settings
+
 import { Form, React } from 'pr1';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
@@ -27,12 +29,13 @@ export function Component(props: HostCreatorStepProps<Data>) {
         options: {
           fingerprint: null,
           hostname: props.data.hostname,
+          identifier: null,
           password: null,
           port: parseInt(props.data.port),
           secure: props.data.secure,
           trusted: false
         },
-        previousData: props.data
+        previousStepData: props.data
       });
     }}>
       <div className="startup-editor-inner">
@@ -74,9 +77,10 @@ export function Component(props: HostCreatorStepProps<Data>) {
             props.setData({
               stepIndex: 7,
 
+              previousStepData: props.data,
               selectedHostIdentifier: null
             });
-          }}>Search on this network</button>
+          }}>Search for setups on this network</button>
           <button type="submit" className="startup-editor-action-item">Next</button>
         </div>
       </div>

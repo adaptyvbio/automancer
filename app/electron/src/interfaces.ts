@@ -1,6 +1,6 @@
 import type { FSWatcher } from 'chokidar';
 import type { IpcMainInvokeEvent } from 'electron';
-import type { CertificateFingerprint } from 'pr1-library';
+import type { HostIdentifier, TcpHostOptions } from 'pr1-library';
 
 
 declare const brand: unique symbol;
@@ -84,34 +84,24 @@ export interface HostSettingsLocal {
   id: HostSettingsId;
   type: 'local';
   label: string;
-
-  architecture: string | null;
-  conf: any;
-  corePackagesInstalled: boolean;
-  dirPath: string;
-  identifier: string;
-  pythonPath: string; // | null; // null -> use embedded
+  options: {
+    architecture: string | null;
+    conf: any;
+    corePackagesInstalled: boolean;
+    dirPath: string;
+    identifier: HostIdentifier;
+    pythonPath: string; // | null; // null -> use embedded
+  };
 }
 
-export interface HostSettingsInternetSocket {
+export interface HostSettingsTcp {
   id: HostSettingsId;
-  type: 'socket.inet';
+  type: 'tcp';
   label: string;
-
-  options: RemoteHostOptions;
+  options: TcpHostOptions;
 }
 
-export interface RemoteHostOptions {
-  fingerprint: CertificateFingerprint;
-  hostname: string;
-  identifier: string;
-  password: string | null;
-  port: number;
-  secure: boolean;
-  trusted: boolean;
-}
-
-export type HostSettings = HostSettingsLocal | HostSettingsInternetSocket;
+export type HostSettings = HostSettingsLocal | HostSettingsTcp;
 export type HostSettingsId = Brand<string, 'HostSettingsId'>;
 export type HostSettingsRecord = Record<HostSettingsId, HostSettings>;
 

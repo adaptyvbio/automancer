@@ -29,12 +29,12 @@ export class App extends React.Component<AppProps, AppState> {
 
   override componentDidMount() {
     this.pool.add(async () => {
-      await this.query();
+      await this.queryHostSettings();
       window.api.main.ready();
     });
   }
 
-  async query() {
+  async queryHostSettings() {
     let { defaultHostSettingsId, hostSettingsRecord } = await window.api.hostSettings.list();
 
     this.setState({
@@ -56,10 +56,12 @@ export class App extends React.Component<AppProps, AppState> {
             Object.values(this.state.hostSettingsRecord)
               .map((hostSettings): HostInfo => ({
                 id: (hostSettings.id as string as HostInfoId),
-                description: '–',
+                description: (hostSettings.type === 'tcp')
+                  ? `${hostSettings.options.hostname}:${hostSettings.options.port}`
+                  : 'Local',
                 imageUrl: null,
                 label: hostSettings.label,
-                local: (hostSettings.type !== 'local')
+                local: (hostSettings.type === 'local')
               }))
               .sort(seqOrd(function* (a, b, rules) {
                 yield rules.text(a.label, b.label);
@@ -69,7 +71,7 @@ export class App extends React.Component<AppProps, AppState> {
           deleteHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
               await window.api.hostSettings.delete({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
-              await this.query();
+              await this.queryHostSettings();
             });
           }}
           launchHostInfo={(hostInfoId) => {
@@ -78,7 +80,7 @@ export class App extends React.Component<AppProps, AppState> {
           renderHostCreator={({ close }) => (
             <HostCreator
               close={close}
-              update={async () => void await this.query()} />
+              queryHostSettings={async () => void await this.queryHostSettings()} />
           )}
           revealHostInfoLogsDirectory={(hostInfoId) => {
             window.api.hostSettings.revealLogsDirectory({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
@@ -89,7 +91,7 @@ export class App extends React.Component<AppProps, AppState> {
           setDefaultHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
               await window.api.hostSettings.setDefault({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
-              await this.query();
+              await this.queryHostSettings();
             });
           }} />
       </NativeContextMenuProvider>

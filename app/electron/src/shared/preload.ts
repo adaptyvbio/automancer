@@ -1,15 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
-import { AdvertisedHostInfo, CertificateFingerprint } from 'pr1-library';
+import { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, HostIdentifier, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
 
 import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, PythonInstallation } from '../interfaces';
-
-
-// export type IPCEndpointCommon = {
-// };
-
-// contextBridge.exposeInMainWorld('common', {
-// } satisfies IPCEndpointCommon);
 
 
 export type IPCEndpoint = {
@@ -20,20 +13,11 @@ export type IPCEndpoint = {
     triggerContextMenu(menu: MenuDef, position: { x: number; y: number; }): Promise<MenuEntryId[] | null>;
   };
 
-  // contextMenu: {
-  //   trigger(menu: MenuDef, position: { x: number; y: number; }): Promise<MenuEntryId[] | null>;
-  // };
-
   hostSettings: {
     addRemoteHost(options: {
-      fingerprint: CertificateFingerprint;
-      hostname: string;
-      password: string | null;
-      port: number;
-      secure: boolean;
-      trusted: boolean;
+      label: string;
+      options: TcpHostOptions;
     }): Promise<{
-      ok: true;
       hostSettingsId: HostSettingsId;
     }>;
     displayCertificateOfRemoteHost(options: {
@@ -41,17 +25,11 @@ export type IPCEndpoint = {
       hostname: string;
       port: number;
     }): Promise<void>;
-    testRemoteHost(options: {
-      fingerprint: CertificateFingerprint | null;
-      hostname: string;
-      password: string | null;
-      port: number;
-      secure: boolean;
-      trusted: boolean;
-    }): Promise<{
+    testRemoteHost(options: TcpHostOptionsCandidate): Promise<{
       ok: true;
-      identifier: string;
-      label: string;
+      fingerprint: CertificateFingerprint;
+      identifier: HostIdentifier;
+      name: string;
     } | {
       ok: false;
       reason: 'fingerprint_mismatch';
@@ -63,16 +41,22 @@ export type IPCEndpoint = {
       reason: 'invalid_protocol';
     } | {
       ok: false;
+      reason: 'missing_password';
+    } | {
+      ok: false;
       reason: 'refused';
+    } | {
+      ok: false;
+      reason: 'unauthorized';
+      message: string;
     } | {
       ok: false;
       reason: 'untrusted_server';
       fingerprint: CertificateFingerprint;
-      serialNumber: string;
     }>;
     delete(options: { hostSettingsId: HostSettingsId; }): Promise<void>;
     getHostCreatorContext(): Promise<HostCreatorContext>;
-    queryRemoteHosts(): Promise<AdvertisedHostInfo[]>;
+    queryRemoteHosts(): Promise<(AdvertisedHostInfo & { bridges: BridgeTcp[]; })[]>;
     launchHost(options: { hostSettingsId: HostSettingsId; }): void;
     list(): Promise<{
       defaultHostSettingsId: HostSettingsId | null;
@@ -91,7 +75,7 @@ contextBridge.exposeInMainWorld('api', {
   main: {
     ready: () => ipcRenderer.send('main.ready'),
     triggerContextMenu: async (menu, position) => {
-      return await ipcRenderer.invoke('contextMenu.trigger', menu, position);
+      return await ipcRenderer.invoke('main.triggerContextMenu', menu, position);
     }
   },
 

@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import type { HostSettings } from 'pr1';
-import type { AppData } from 'pr1-app';
+import type { AppData, HostSettings } from 'pr1-app';
 import { Scanner, type Service } from './scan';
 import { SocketClient } from './socket-client';
+import { HostIdentifier, TcpHostOptionsCandidate } from './types';
 
 
 export function getDesktopAppDataLocation(): string | null {
@@ -47,19 +47,14 @@ export async function getDesktopAppData() {
 }
 
 
-export interface BridgeSocketInet {
-  type: 'socket';
-  options: {
-    type: 'inet';
-    hostname: string;
-    port: number;
-  }
+export interface BridgeTcp {
+  type: 'tcp';
+  options: TcpHostOptionsCandidate;
 }
 
-export interface BridgeSocketUnix {
-  type: 'socket';
+export interface BridgeUnixSocket {
+  type: 'unix';
   options: {
-    type: 'unix';
     path: string;
   };
 }
@@ -77,11 +72,9 @@ export interface BridgeStdio {
   options: {};
 }
 
-export type Bridge = BridgeSocketInet | BridgeSocketUnix | BridgeStdio | BridgeWebsocket;
-export type BridgeRemote = BridgeSocketInet | BridgeWebsocket;
+export type Bridge = BridgeTcp | BridgeUnixSocket | BridgeStdio | BridgeWebsocket;
+export type BridgeRemote = BridgeTcp | BridgeWebsocket;
 
-
-export type HostIdentifier = string;
 
 export interface HostEnvironment {
   bridges: Bridge[];
@@ -102,7 +95,7 @@ export interface AdvertisedHostInfo {
 
 export const UnixSocketDirPath = '/tmp/pr1';
 
-export const SocketServiceType = '_prone._tcp.local';
+export const TcpServiceType = '_prone._tcp.local';
 export const WebsocketServiceType = '_prone._http._tcp.local';
 
 
@@ -111,13 +104,17 @@ export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHo
   let ipAddress = (service.address?.ipv4 || service.address?.ipv6);
 
   if (service.address && service.properties && ipAddress) {
-    if (service.types.includes(SocketServiceType)) {
+    if (service.types.includes(TcpServiceType)) {
       bridges.push({
-        type: 'socket',
+        type: 'tcp',
         options: {
-          type: 'inet',
           hostname: ipAddress,
-          port: service.address.port
+          fingerprint: null,
+          identifier: service.properties['identifier'],
+          password: null,
+          port: service.address.port,
+          secure: true,
+          trusted: false
         }
       });
     }
@@ -169,7 +166,7 @@ export async function searchForHostEnvironments() {
   // Search for hosts advertisted over mDNS
 
   let services = await Scanner.getServices([
-    SocketServiceType,
+    TcpServiceType,
     WebsocketServiceType
   ]);
 
@@ -232,9 +229,8 @@ export async function searchForHostEnvironments() {
     }
 
     environments[identifier].bridges.push({
-      type: 'socket',
+      type: 'unix',
       options: {
-        type: 'unix',
         path: socketFilePath
       }
     });
@@ -246,7 +242,7 @@ export async function searchForHostEnvironments() {
 
 export async function searchForAdvertistedHosts() {
   let services = await Scanner.getServices([
-    SocketServiceType,
+    TcpServiceType,
     WebsocketServiceType
   ]);
 

@@ -24,7 +24,7 @@ export type HostCreatorData =
 
 export interface HostCreatorProps {
   close(): void;
-  update(): Promise<void>;
+  queryHostSettings(): Promise<void>;
 }
 
 export interface HostCreatorState {
@@ -73,21 +73,32 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
       S5.Component,
       S6.Component,
       S7.Component
-    ][this.state.data.stepIndex] as HostCreatorStepComponent<unknown>;
+    ][this.state.data.stepIndex] as HostCreatorStepComponent<HostCreatorStepData>;
 
     return (
       <Step
         cancel={() => void this.props.close()}
         context={this.state.context}
+        queryHostSettings={() => this.props.queryHostSettings()}
         launchHost={(hostSettingsId) => {
 
         }}
         data={this.state.data}
-        setData={(data) => {
-          this.setState({
-            data: ('stepIndex' in data)
-              ? data
-              : { ...this.state.data, ...data }
+        setData={(update) => {
+          this.setState((state) => {
+            let data = typeof update === 'function'
+              ? update(state.data)
+              : update;
+
+            if (!data) {
+              return null;
+            }
+
+            return {
+              data: ('stepIndex' in data)
+                ? data
+                : { ...state.data, ...data }
+            };
           });
         }} />
     );
@@ -99,13 +110,16 @@ export interface HostCreatorStepData {
   stepIndex: number;
 }
 
-export type HostCreatorStepProps<Data = HostCreatorData> = {
+export type HostCreatorDataUpdate<Data extends HostCreatorStepData> = HostCreatorData | Partial<Omit<Data, 'stepIndex'>>;
+
+export type HostCreatorStepProps<Data extends HostCreatorStepData = HostCreatorData> = {
   context: HostCreatorContext;
   data: Data;
-  setData(data: HostCreatorData | Partial<Omit<Data, 'stepIndex'>>): void;
+  setData(update: ((data: Data) => HostCreatorDataUpdate<Data> | null) | HostCreatorDataUpdate<Data>): void;
 
   cancel(): void;
   launchHost(hostSettingsId: HostSettingsId): void;
+  queryHostSettings(): Promise<void>;
 }
 
-export type HostCreatorStepComponent<Data> = React.FunctionComponent<HostCreatorStepProps<Data>>;
+export type HostCreatorStepComponent<Data extends HostCreatorStepData> = React.FunctionComponent<HostCreatorStepProps<Data>>;

@@ -120,7 +120,7 @@ export function Select<T extends number | string | null>(props: {
     disabled?: unknown;
     label: string;
   }[];
-  targetRef?: React.RefObject<HTMLSelectElement>;
+  targetRef?: React.Ref<HTMLSelectElement>;
   value: T;
 }) {
   return (
@@ -150,7 +150,7 @@ export function TextArea(props: {
   onBlur?(): void;
   onInput(value: string): void;
   placeholder?: string;
-  targetRef?: React.RefObject<HTMLTextAreaElement>;
+  targetRef?: React.Ref<HTMLTextAreaElement>;
   value: string;
 }) {
   return (
@@ -172,7 +172,7 @@ export function TextField(props: {
   onBlur?(): void;
   onInput?(value: string): void;
   placeholder?: string;
-  targetRef?: React.RefObject<HTMLInputElement>;
+  targetRef?: React.Ref<HTMLInputElement>;
   value: string;
 }) {
   return (

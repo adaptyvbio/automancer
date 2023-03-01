@@ -4,10 +4,8 @@ import net from 'net';
 import tls from 'tls';
 
 import * as Protocol from './protocol';
-import { Brand, defer, Deferred } from './util';
-
-
-export type CertificateFingerprint = Brand<string, 'CertificateFingerprint'>;
+import { CertificateFingerprint } from './types';
+import { defer, Deferred } from './util';
 
 
 export class SocketClientClosed extends Error {
@@ -61,12 +59,6 @@ export class SocketClientBackend {
         let socket = tls.connect({
           ...options.address,
           rejectUnauthorized: false
-          // ca: `-----BEGIN CERTIFICATE-----\nMIIFAjCCAuqgAwIBAgIJRTN+9VMgfeulMA0GCSqGSIb3DQEBDQUAMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzAyMjYwMzMwMTJaFw0zMzAyMjMwMzMwMTJaMBQxEjAQBgNVBAMMCWxvY2FsaG9zdDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBALB5gO/HaQNT1MZB92Fk/65IvTEBQsTFXCWvFPwG6yvtPcCsxkjRyptVScOcaqviDY+TZt8IRb7hwQCDg/I0D6cGNyMF5CobQ++1xGd2bLMvCngdtKGjYz1xzWXzxO0i7waTLWkpJQsMM3YVpy4GOlXNbNYBfdLLU2pvXveE33ulU0suDJHqs+xg5ZeV0uvQGxdVTjYGn4cB9q2sDhwt+NtcSuoesjz7FC1W9eF6YGCQF95Oz0iLZJ3jLr7hbWh3Jtuo9HXHkC9+iaXmak7oqCpatVFVK3PHA37rdCoJ34UkhMI7Jqi+VPqvrMWmKH6dgNPlxfLlylEQPwXE1vlg6TVNGSj47J9t3iEHvziI9GaWfh7PZiwzY+j4DXwVrl8UdjsTCRpB24FTd0dJW357eeULxnYE2GdTJ5LRwKHaNhGDCOT0Imci9k/xd14LifMguaE6CqFkG0dpJH2sI6vi6HP67TQJfCZ7oROkvJ9Ywza2X33aYJ3Gh5zZeH3ntwDsPhecn2rhyXJZuMKyR9qUlHRHlK6la4ilI745GPMZQL55EhFuU6kIZhPeeT5OTgBbwLDgDIXgGyMbvJXmFTKq4mQM3KqmegUSrqegtM+ncsjHXa1dSOToHhEw74Mwq1AFpRjFp4ViuA+cDHGnKz7Egve0BrAcFtXKXellM8wG+NT7AgMBAAGjVzBVMBoGA1UdEQQTMBGCCWxvY2FsaG9zdIcEfwAAATAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIHgDAWBgNVHSUBAf8EDDAKBggrBgEFBQcDATANBgkqhkiG9w0BAQ0FAAOCAgEAFVJomC5tGE1GkPAKu7mVd/dFIi7WUF7xU2+QIC4v1GOcKVq9F7lRq64qOjHwl72WSuPt/mXNBdsVoFmwTgmVjLBPlCd1Vpd1GrRs0WQ4R0hG9GYZE3/DbsuDIfo/OW/grpPbr7Zq6G036d5sq92xvqdKfLSZy47ZxIYPv5m9S52259NIYOtgp3nTdn1r0Y9hVjhLOJiJk0cpClJ7r9/JI7i2g35cCIG2q/IH1oLamTSHUkio/Fo4AeMAWrWDzAPlaow4AmpWqhzxu96sYK7TgqpYnFZXHxPPW1Cef+kFxIc6PnHAV8RJwayH247Os39wg3QnXRFdVAC8T1sSWeUrcEn1RqG87EwEcmzGKqaEGklAzTVuMR6+joM94+bxHk0k2EkRx1Og/iTKXHe5SXqyKy8jFFTxYxD7omM3/Pw3U6adSiI4rNBGaYK7sLYd7ew7Q2BDEDrnlCryJ9+M8mkrkytU7yQKXx6H498CKET53VpA+ikH8v9BPMgWK7PNg2Oxr5NmX0BjKYxMDoa724Xvm7JdfRUD5jJdhC4tPgVwdkgVO4xqxeAVMxdM03pu8sj6XY9rZ4F0oHz+eoAFCHdkxg/icutYdqia2ASyJvSQ9PTI8VHQEj8+lbau0z9pY8MGVe+Y8hhYe0OZhKyBksJc/p1IygOUarZ7r5fFxnbWHwg=\n-----END CERTIFICATE-----`,
-          // servername: 'localhost',
-          // checkServerIdentity(servername, cert) {
-          //   console.log('CHECK', servername, cert)
-          //   return undefined;
-          // }
         }, () => {
           let certificate = socket.getPeerCertificate();
           let fingerprint = crypto

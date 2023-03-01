@@ -52,25 +52,12 @@ def use_certificate(certs_dir: Path, /, hostname: Optional[str] = None, *, logge
     cert.set_issuer(cert.get_subject())
     cert.set_pubkey(private_key)
     cert.set_version(2)
-    # cert.add_extensions([
-    #   crypto.X509Extension(
-    #     b"keyUsage", True,
-    #     b"Digital Signature, Non Repudiation, Key Encipherment"),
-    # crypto.X509Extension(
-    #     b"basicConstraints", True, b"CA:TRUE"),
-    # crypto.X509Extension(
-    #     b'extendedKeyUsage', True, b'serverAuth, clientAuth'),
-    #   crypto.X509Extension(b"subjectAltName", True, b", ".join([b"DNS:" + common_name.encode("utf-8")]))
-    # ])
     cert.add_extensions([
-                  crypto.X509Extension(b"subjectAltName", False, b"DNS:localhost, IP:127.0.0.1"),
-            crypto.X509Extension(b"basicConstraints", True, b"CA:true"),
-            crypto.X509Extension(
-                # b"keyUsage", True, b"nonRepudiation,digitalSignature,keyEncipherment"
-                b"keyUsage", True, b"digitalSignature"
-            ),
-            crypto.X509Extension(b"extendedKeyUsage", True, b"serverAuth"),
-  ])
+      *([crypto.X509Extension(b"subjectAltName", False, b"IP" + hostname.encode("utf-8"))] if hostname else list()),
+      crypto.X509Extension(b"basicConstraints", True, b"CA:true"),
+      crypto.X509Extension(b"keyUsage", True, b"digitalSignature"),
+      crypto.X509Extension(b"extendedKeyUsage", True, b"serverAuth"),
+    ])
 
     cert.sign(private_key, 'sha512')
 

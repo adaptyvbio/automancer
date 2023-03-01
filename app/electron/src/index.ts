@@ -305,12 +305,10 @@ export class CoreApplication {
       return result;
     });
 
-/*     ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
-      // TODO: Add error handling
-
+    ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
       let pythonInstallation = options.customPythonInstallation ?? this.pythonInstallations[options.pythonInstallationSettings.id];
 
-      let hostSettingsId = crypto.randomUUID();
+      let hostSettingsId = crypto.randomUUID() as HostSettingsId;
       let hostDirPath = path.join(this.hostsDirPath, hostSettingsId);
       let envPath = path.join(hostDirPath, 'env');
 
@@ -320,25 +318,37 @@ export class CoreApplication {
       this.logger.info(`Creating local host with settings id '${hostSettingsId}'`);
       this.logger.debug('Creating host directory');
 
-      await fs.mkdir(hostDirPath, { recursive: true });
+      let conf;
 
-      if (options.pythonInstallationSettings.virtualEnv) {
-        this.logger.debug('Creating virtual environment');
+      try {
+        await fs.mkdir(hostDirPath, { recursive: true });
 
-        await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
-        pythonPath = path.join(envPath, 'bin/python');
+        if (options.pythonInstallationSettings.virtualEnv) {
+          this.logger.debug('Creating virtual environment');
 
-        let corePackagesDirPath = util.getResourcePath('packages');
-        for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
-          this.logger.debug(`Installing core package '${corePackageRelPath}'`);
-          await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
+          await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
+          pythonPath = path.join(envPath, 'bin/python');
+
+          let corePackagesDirPath = util.getResourcePath('packages');
+          for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
+            this.logger.debug(`Installing core package '${corePackageRelPath}'`);
+            await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
+          }
         }
+
+        this.logger.debug('Initializing host configuration');
+
+        let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
+        conf = JSON.parse(confStdout);
+      } catch (err: any) {
+        util.logError(err, this.logger);
+
+        return {
+          ok: false,
+          reason: 'other',
+          message: err.message ?? 'Unknown error'
+        };
       }
-
-      this.logger.debug('Initializing host configuration');
-
-      let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
-      let conf = JSON.parse(confStdout);
 
       this.logger.info(`Created host with identifier '${conf.identifier}'`);
 
@@ -363,9 +373,9 @@ export class CoreApplication {
 
       return {
         ok: true,
-        id: hostSettingsId
+        hostSettingsId
       };
-    }); */
+    });
 
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
       let { [hostSettingsId]: deletedHostSettings, ...hostSettingsRecord } = this.data.hostSettingsRecord;
@@ -380,7 +390,7 @@ export class CoreApplication {
       // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: Infinity }));
 
       return {
-        computerName: os.hostname(),
+        computerName: util.getComputerName(),
         pythonInstallations: this.pythonInstallations
       };
     });

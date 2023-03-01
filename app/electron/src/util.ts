@@ -1,6 +1,7 @@
 import childProcess from 'child_process';
 import electron from 'electron';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import tls from 'tls';
 import which from 'which';
@@ -211,12 +212,28 @@ export async function getPythonInstallationInfo(location: string): Promise<Pytho
   };
 }
 
+export function getComputerName() {
+  let hostname = os.hostname();
+
+  return hostname.endsWith('.local')
+    ? hostname.slice(0, -'.local'.length)
+    : hostname;
+}
+
 export function getResourcePath(relativePath: string) {
   return path.join(__dirname, '../..', relativePath);
 
   // return app.isPackaged
   //   ? path.join(process.resourcesPath, 'app', relativePath)
   //   : path.join(__dirname, '..', relativePath);
+}
+
+export function logError(err: any, logger: Logger) {
+  logger.error(err.message);
+
+  for (let line of err.stack.split('\n')) {
+    logger.debug(line);
+  }
 }
 
 export function parsePythonVersion(input: string): [number, number, number] | null {

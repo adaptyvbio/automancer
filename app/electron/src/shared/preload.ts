@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
 import { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, HostIdentifier, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
 
-import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, PythonInstallation } from '../interfaces';
+import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation } from '../interfaces';
 
 
 export type IPCEndpoint = {
@@ -19,6 +19,14 @@ export type IPCEndpoint = {
       options: TcpHostOptions;
     }): Promise<{
       hostSettingsId: HostSettingsId;
+    }>;
+    createLocalHost(options: LocalHostOptions): Promise<{
+      ok: true;
+      hostSettingsId: HostSettingsId;
+    } | {
+      ok: false;
+      reason: 'other';
+      message: string;
     }>;
     displayCertificateOfRemoteHost(options: {
       fingerprint: CertificateFingerprint;
@@ -81,6 +89,7 @@ contextBridge.exposeInMainWorld('api', {
 
   hostSettings: {
     addRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.addRemoteHost', options),
+    createLocalHost: async (options) => await ipcRenderer.invoke('hostSettings.createLocalHost', options),
     displayCertificateOfRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.displayCertificateOfRemoteHost', options),
     testRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.testRemoteHost', options),
     delete: async (options) => await ipcRenderer.invoke('hostSettings.delete', options),

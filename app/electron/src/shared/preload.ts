@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
-import { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, HostIdentifier, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
+import type { MenuDef, MenuEntryId } from 'pr1';
+import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, ClientProtocol, HostIdentifier, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
 
 import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation } from '../interfaces';
 
@@ -75,6 +75,12 @@ export type IPCEndpoint = {
     selectPythonInstallation(): Promise<PythonInstallation | null>;
     setDefault(options: { hostSettingsId: HostSettingsId }): Promise<void>;
   };
+
+  localHost: {
+    onMessage(callback: (() => void)): void;
+    ready(hostSettingsId: HostSettingsId): Promise<void>;
+    sendMessage(hostSettingsId: HostSettingsId, message: ClientProtocol.Message): void;
+  };
 };
 
 contextBridge.exposeInMainWorld('api', {
@@ -94,7 +100,7 @@ contextBridge.exposeInMainWorld('api', {
     testRemoteHost: async (options) => await ipcRenderer.invoke('hostSettings.testRemoteHost', options),
     delete: async (options) => await ipcRenderer.invoke('hostSettings.delete', options),
     getHostCreatorContext: async () => await ipcRenderer.invoke('hostSettings.getHostCreatorContext'),
-    launchHost: async (options) => ipcRenderer.invoke('hostSettings.launchHost', options),
+    launchHost: async (options) => ipcRenderer.send('hostSettings.launchHost', options),
     list: async () => await ipcRenderer.invoke('hostSettings.list'),
     queryRemoteHosts: async () => await ipcRenderer.invoke('hostSettings.queryRemoteHosts'),
     revealLogsDirectory: async (options) => await ipcRenderer.invoke('hostSettings.revealLogsDirectory', options),
@@ -102,4 +108,18 @@ contextBridge.exposeInMainWorld('api', {
     selectPythonInstallation: async () => await ipcRenderer.invoke('hostSettings.selectPythonInstallation'),
     setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options),
   },
+
+  localHost: {
+    ready: async (hostSettingsId: HostSettingsId) => {
+      await ipcRenderer.invoke('localHost.ready', hostSettingsId);
+    },
+    onMessage: (callback) => {
+      ipcRenderer.on('localHost.message', (_event, message) => {
+        callback(message);
+      });
+    },
+    sendMessage: (hostSettingsId: HostSettingsId, message) => {
+      ipcRenderer.send('localHost.message', hostSettingsId, message);
+    }
+  }
 } satisfies IPCEndpoint);

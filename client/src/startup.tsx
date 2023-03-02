@@ -38,8 +38,8 @@ export class Startup extends React.Component<StartupProps, StartupState> {
 
     this.state = {
       fullDisplay: true,
-      hostCreatorOpen: true,
-      hostCreatorVisible: true
+      hostCreatorOpen: false,
+      hostCreatorVisible: false
     };
   }
 
@@ -104,7 +104,6 @@ export class Startup extends React.Component<StartupProps, StartupState> {
                 <div className="startup-left-header">
                   <img src={new URL(logoUrl, import.meta.url).href} width="330" height="300" className="startup-left-logo" />
                   <div className="startup-left-title">PR–1</div>
-                  {/* <div className="startup-left-title">Universal Lab Experience</div> */}
                 </div>
                 <div className="startup-left-bar">
                   <div>Version 3.0</div>

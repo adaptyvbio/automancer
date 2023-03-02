@@ -4,7 +4,10 @@ from collections import ChainMap
 from dataclasses import KW_ONLY, dataclass, field
 from pprint import pprint
 from types import EllipsisType, GenericAlias
-from typing import Any, Literal, Optional, TypeVar, cast
+from typing import Any, Literal, Mapping, Optional, Self, Sequence, TypeVar, cast
+
+from ..error import Error, ErrorDocumentReference, ErrorReference
+from ..reader import LocatedString, Source
 
 
 ## Type system
@@ -129,15 +132,80 @@ MethodType = ClassDef('method')
 NoneType = ClassDef('None')
 UnionType = ClassDef('Union')
 
-PreludeVariables = Variables({
+UnknownType = ClassDef('unknown')
+
+core_variables = Variables({
   'Generic': TypeClassRef(ClassRef(GenericType)),
   'NoneType': ClassRef(NoneType),
   'Union': ClassRef(UnionType),
 
-  # 'float': ClassDef('float'),
-  # 'int': ClassDef('int'),
   'type': ClassRef(TypeType)
 })
+
+
+## Errors
+
+@dataclass(kw_only=True)
+class StaticAnalysisContext:
+  input_value: LocatedString
+  prelude: Variables
+
+class StaticAnalysisError(Error):
+  def __init__(self, message: str, node: ast.expr, context: StaticAnalysisContext):
+    super().__init__(
+      message,
+      references=[ErrorDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
+    )
+
+  def analysis(self):
+    return StaticAnalysisAnalysis(errors=[self])
+
+T = TypeVar('T')
+S = TypeVar('S')
+
+@dataclass(kw_only=True)
+class StaticAnalysisAnalysis:
+  errors: list[StaticAnalysisError] = field(default_factory=list)
+
+  def add(self, other: tuple[Self, T], /) -> T:
+    other_analysis, other_value = other
+    self += other_analysis
+
+    return other_value
+
+  def add_sequence(self, other: Sequence[tuple[Self, T]], /) -> list[T]:
+    analysis, value = StaticAnalysisAnalysis.sequence(other)
+    self += analysis
+
+    return value
+
+  def add_mapping(self, other: Mapping[T, tuple[Self, S]], /) -> dict[T, S]:
+    output = dict[T, S]()
+
+    for key, (item_analysis, value) in other.items():
+      self += item_analysis
+      output[key] = value
+
+    return output
+
+  def __add__(self, other: Self):
+    return StaticAnalysisAnalysis(
+      errors=(self.errors + other.errors)
+    )
+
+  def __iadd__(self, other: Self, /):
+    self.errors += other.errors
+    return self
+
+  @classmethod
+  def sequence(cls, obj: Sequence[tuple[Self, T]], /) -> tuple[Self, list[T]]:
+    analysis = cls()
+    output = list[T]()
+
+    for item in obj:
+      output.append(analysis.add(item))
+
+    return analysis, output
 
 
 ## Utility functions
@@ -290,6 +358,9 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
 
         values[class_name] = TypeClassRef(ClassRef(cls))
 
+        init_func = FuncDef()
+        cls.instance_attrs['__init__'] = ClassRef(init_func)
+
         for class_statement in class_body:
           match class_statement:
             case ast.AnnAssign(target=ast.Name(id=attr_name, ctx=ast.Store()), annotation=attr_ann, value=None, simple=1):
@@ -329,6 +400,15 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
               print('Missing', ast.dump(class_statement, indent=2))
               raise Exception
 
+        if not init_func.overloads:
+          init_func.overloads.append(FuncOverloadDef(
+            args_both=list(),
+            args_kwonly=list(),
+            args_posonly=list(),
+            default_count=0,
+            return_type=ClassRef(NoneType)
+          ))
+
       case ast.FunctionDef(name=func_name):
         overload = parse_func(module_statement, variables | values)
 
@@ -361,13 +441,13 @@ def process_source(contents: str, /, variables):
 
 ## Evaluation checker
 
-def resolve_generics(input_type: ClassRef | TypeVarDef, /, generics: dict[TypeVarDef, ClassRef]):
+def resolve_generics(input_type: ClassRef | TypeVarDef, /, generics: dict[TypeVarDef, ClassRef]) -> tuple[StaticAnalysisAnalysis, ClassRef]:
   match input_type:
     case ClassRef(cls, arguments=args):
-      return ClassRef(cls, arguments=args, context=generics)
+      return StaticAnalysisAnalysis(), ClassRef(cls, arguments=args, context=generics)
 
     case TypeVarDef():
-      return generics[input_type]
+      return StaticAnalysisAnalysis(), generics[input_type]
 
     case _:
       raise Exception
@@ -390,27 +470,32 @@ BinOpMethodMap: dict[type[ast.operator], str] = {
   ast.BitXor: 'xor'
 }
 
-def evaluate(node: ast.expr, /, builtin_variables: Variables, variables: Variables, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None):
-  # print(ast.dump(node, indent=2))
-
+def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisContext, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None) -> tuple[StaticAnalysisAnalysis, ClassRef]:
   match node:
-    case ast.Attribute(value, attr=attr_name, ctx=ast.Load()):
-      value_type = evaluate(value, builtin_variables, variables)
+    case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
+      analysis, obj_type = evaluate(obj, variables, context)
 
-      if isinstance(value_type, TypeClassRef):
-        for class_ref in value_type.extract().mro():
+      if obj_type.cls is UnknownType:
+        return analysis, ClassRef(UnknownType)
+
+      if isinstance(obj_type, TypeClassRef):
+        obj_type = obj_type.extract()
+      else:
+        for class_ref in obj_type.mro():
           if attr := class_ref.cls.instance_attrs.get(attr_name):
-            return resolve_generics(attr, (class_ref.arguments or dict()))
+            attr_type = analysis.add(resolve_generics(attr, (class_ref.arguments or dict())))
+            return analysis, attr_type
 
-      for class_ref in value_type.mro():
-        if attr := class_ref.cls.instance_attrs.get(attr_name):
-          return resolve_generics(attr, (class_ref.arguments or dict()))
+      for class_ref in obj_type.mro():
+        if attr := class_ref.cls.class_attrs.get(attr_name):
+          attr_type = analysis.add(resolve_generics(attr, (class_ref.arguments or dict())))
+          return analysis, attr_type
 
-      raise Exception("Missing attribute")
+      return analysis + StaticAnalysisError("Invalid attribute", node, context).analysis(), ClassRef(UnknownType)
 
     case ast.BinOp(left=left, right=right, op=op):
-      left_type = evaluate(left, builtin_variables, variables)
-      right_type = evaluate(right, builtin_variables, variables)
+      left_type = evaluate(left, variables, context)
+      right_type = evaluate(right, variables, context)
 
       operator_name = BinOpMethodMap[op.__class__]
 
@@ -424,38 +509,49 @@ def evaluate(node: ast.expr, /, builtin_variables: Variables, variables: Variabl
 
       raise Exception("Invalid operation")
 
-    case ast.Call(func, args, keywords):
-      func_ref = evaluate(func, builtin_variables, variables)
+    case ast.Call(obj, args, keywords):
+      analysis, obj_ref = evaluate(obj, variables, context)
 
-      args = [evaluate(arg, builtin_variables, variables) for arg in args]
-      kwargs = { keyword.arg: evaluate(keyword.value, builtin_variables, variables) for keyword in keywords if keyword.arg }
+      if obj_ref.cls is UnknownType:
+        return analysis, ClassRef(UnknownType)
 
-      if func_ref.cls is TypeType:
-        target = func_ref.extract()
+      args = analysis.add_sequence([evaluate(arg, variables, context) for arg in args])
+      kwargs = analysis.add_mapping({ keyword.arg: evaluate(keyword.value, variables, context) for keyword in keywords if keyword.arg })
 
-        if '__init__' in target.cls.instance_attrs:
-          overload = find_overload(target.cls.instance_attrs['__init__'], args=args, kwargs=kwargs)
-          assert overload
+      if isinstance(obj_ref, TypeClassRef):
+        target = obj_ref.extract()
 
-        return target
+        overload = find_overload(target.cls.instance_attrs['__init__'], args=args, kwargs=kwargs)
+
+        if not overload:
+          analysis.errors.append(StaticAnalysisError("Invalid call", node, context))
+
+        return analysis, target
+
+      func_ref = obj_ref.cls.instance_attrs.get('__call__')
+
+      if not func_ref:
+        return analysis + StaticAnalysisError("Invalid object for call", node, context).analysis(), ClassRef(UnknownType)
 
       assert isinstance(func_ref.cls, FuncDef)
-
-      overload = find_overload(func_ref, args=args, kwargs=kwargs)
+      overload = find_overload(func_ref.cls, args=args, kwargs=kwargs)
 
       assert overload
-      return resolve_generics(overload.return_type, func_ref.context) if overload.return_type else None
+      return resolve_generics(overload.return_type, obj_ref.context) if overload.return_type else None
 
     case ast.Constant(builtins.float()):
-      assert isinstance(const_type := builtin_variables['float'], TypeClassRef)
-      return const_type.extract()
+      assert isinstance(const_type := context.prelude['float'], TypeClassRef)
+      return StaticAnalysisAnalysis(), const_type.extract()
 
     case ast.Constant(builtins.int()):
-      assert isinstance(const_type := builtin_variables['int'], TypeClassRef)
-      return const_type.extract()
+      assert isinstance(const_type := context.prelude['int'], TypeClassRef)
+      return StaticAnalysisAnalysis(), const_type.extract()
 
     case ast.Name(id=name, ctx=ast.Load()):
-      return variables[name]
+      if not (name in variables):
+        return StaticAnalysisAnalysis(errors=[StaticAnalysisError("Invalid variable", node, context)]), ClassRef(UnknownType)
+
+      return StaticAnalysisAnalysis(), variables[name]
 
     case _:
       raise Exception
@@ -544,7 +640,7 @@ if __name__ == "__main__":
     }
   ))
 
-  BuiltinVariables = process_source("""
+  prelude_variables = core_variables | process_source("""
 class int:
   def __add__(self, other: int, /) -> int: ...
   def __mul__(self, other: int, /) -> int: ...
@@ -556,9 +652,9 @@ class float:
   def __mul__(self, other: float, /) -> float: ...
   def __mul__(self, other: int, /) -> float: ...
   def __rmul__(self, other: int, /) -> float: ...
-""", PreludeVariables)
+""", core_variables)
 
-  AuxVariables = process_source("""
+  user_variables = process_source("""
 # U = TypeVar('U')
 
 # class list(Generic[U]):
@@ -573,10 +669,11 @@ class A:
   self.x: int
 
 class B(A):
-  pass
-""", PreludeVariables | BuiltinVariables)
+  def l(self) -> None:
+    pass
+""", prelude_variables)
 
-  AuxVariables['devices'] = devices
+  user_variables['devices'] = devices
 
   from pprint import pprint
 
@@ -584,4 +681,14 @@ class B(A):
   # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  pprint(evaluate(ast.parse("devices.Okolab.temperature", mode='eval').body, PreludeVariables | BuiltinVariables, AuxVariables))
+  from ..document import Document
+
+  document = Document.text("~~~B().l~~~")
+  context = StaticAnalysisContext(
+    input_value=document.source[3:-3],
+    prelude=prelude_variables
+  )
+
+  root = ast.parse(context.input_value, mode='eval')
+
+  pprint(evaluate(root.body, user_variables, context))

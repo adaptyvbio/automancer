@@ -1,9 +1,7 @@
-/// <reference path="preload.ts" />
-
-import { AppBackend, Application, DraftId, HostSettings, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+import { AppBackend, Application, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
 
 import { NativeContextMenuProvider } from '../shared/context-menu';
-import { DraftEntry } from '../interfaces';
+import { DraftEntry, HostSettings, HostSettingsId } from '../interfaces';
 
 
 class ElectronAppBackend implements AppBackend {
@@ -117,7 +115,7 @@ interface AppState {
 class App extends React.Component<AppProps, AppState> {
   appBackend = new ElectronAppBackend();
   backend: LocalHostBackend | null = null;
-  hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId')!;
+  hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId') as HostSettingsId;
   pool = new Pool();
 
   constructor(props: AppProps) {
@@ -149,12 +147,14 @@ class App extends React.Component<AppProps, AppState> {
           appBackend={this.appBackend}
           backend={this.backend!}
           hostInfo={{
+            id: (this.state.hostSettings.id as string as HostInfoId),
             imageUrl: null,
-            subtitle: 'Local',
-            description: this.state.hostSettings.label
+            description: this.state.hostSettings.label,
+            label: this.state.hostSettings.label,
+            local: true
           }}
           onHostStarted={() => {
-            window.api.ready();
+            window.api.main.ready();
           }} />
       </NativeContextMenuProvider>
     );

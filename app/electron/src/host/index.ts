@@ -5,6 +5,8 @@ import assert from 'assert';
 import { LocalHost } from '../local-host';
 import { CoreApplication } from '..';
 import { defer, Pool } from '../util';
+import { HostSettings } from '../interfaces';
+import { rootLogger } from '../logger';
 
 
 export class HostWindow {
@@ -13,7 +15,7 @@ export class HostWindow {
   localHost: LocalHost | null = null;
   window: BrowserWindow | null = null;
 
-  private logger = this.app.logger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
+  private logger = rootLogger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
 
   private closingDeferred = defer<void>();
@@ -33,7 +35,7 @@ export class HostWindow {
   private async start() {
     this.localHost = null;
 
-    if (this.hostSettings.options.type === 'local') {
+    if (this.hostSettings.type === 'local') {
       this.logger.debug('Starting the corresponding local host');
 
       this.localHost = new LocalHost(this.app, this, this.hostSettings);
@@ -74,7 +76,7 @@ export class HostWindow {
     this.logger.debug('Creating the Electron window');
 
     this.window = new BrowserWindow({
-      show: false,
+      show: !this.app.debug,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js')
@@ -82,7 +84,11 @@ export class HostWindow {
     });
 
     this.window.maximize();
-    this.window.hide();
+
+    if (!this.app.debug) {
+      this.window.hide();
+    }
+
     this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {

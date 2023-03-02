@@ -6,17 +6,17 @@ import { EOL } from 'os';
 import path from 'path';
 import readline from 'readline';
 
-import type { HostSettings } from 'pr1';
-
+import type { CoreApplication } from '.';
 import type { HostWindow } from './host';
-import type { CoreApplication } from './main';
+import { HostSettings } from './interfaces';
+import { rootLogger } from './logger';
 import * as util from './util';
 
 
 export class LocalHost {
   closed!: Promise<{ code: number; } | null>;
   private process!: ReturnType<typeof childProcess.spawn>;
-  private logger = this.app.logger.getChild(['localHost', this.hostSettings.options.identifier.slice(0, 8)]);
+  private logger = rootLogger.getChild(['localHost', this.hostSettings.options.identifier.slice(0, 8)]);
   private stateMessage: any | null = null;
   private windowReady: boolean = false;
 
@@ -31,8 +31,8 @@ export class LocalHost {
     this.logger.debug('Starting');
 
 
+    assert(this.hostSettings.type === 'local');
     let hostOptions = this.hostSettings.options;
-    assert(hostOptions.type === 'local');
 
     let logDirPath = path.join(this.app.logsDirPath, this.hostSettings.id);
     let logFilePath = path.join(logDirPath, Date.now().toString() + '.log');
@@ -68,10 +68,9 @@ export class LocalHost {
       executable = 'arch';
     }
 
-    this.logger.debug(`Using command "${executable} ${args.map((arg) => arg.replaceAll(' ', '\\ ')).join(' ')}"`)
+    this.logger.debug(`Using command "${executable.replaceAll(' ', '\\ ')} ${args.map((arg) => arg.replace(/[" {}]/g, '\\$&')).join(' ')}"`)
     this.logger.debug(`With environment variables: ${JSON.stringify(env)}`)
 
-    // TODO: Add architecture
     this.process = childProcess.spawn(executable, args, { env });
 
 
@@ -111,7 +110,7 @@ export class LocalHost {
               let [rawLevelName, rawNamespace, ...rest] = event.split('::');
 
               let levelName = rawLevelName.trim().toLowerCase();
-              let message = rest.join('::').trim();
+              let message = rest.join('::').substring(1);
               let namespace = rawNamespace.trim().split('.');
 
               this.logger.getChild(namespace).log(levelName as any, message);
@@ -129,8 +128,6 @@ export class LocalHost {
       });
     }
 
-
-    // TODO: Remove ansi escape codes
     this.process.stderr!.pipe(fs.createWriteStream(logFilePath));
 
 

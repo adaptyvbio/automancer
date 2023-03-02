@@ -1,4 +1,4 @@
-export namespace Client {
+export namespace ClientProtocol {
   export interface RequestMessage {
     type: 'request';
     id: number;
@@ -8,7 +8,7 @@ export namespace Client {
   export type Message = RequestMessage;
 }
 
-export namespace Server {
+export namespace ServerProtocol {
   export interface InitializationMessage {
     type: 'initialize';
     identifier: string;

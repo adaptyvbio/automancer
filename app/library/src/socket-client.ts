@@ -1,9 +1,8 @@
-import assert from 'assert';
 import crypto from 'crypto';
 import net from 'net';
 import tls from 'tls';
 
-import * as Protocol from './protocol';
+import { ServerProtocol } from './protocol';
 import { CertificateFingerprint } from './types';
 import { defer, Deferred } from './util';
 
@@ -175,7 +174,7 @@ export class MessageSocketClientBackend extends SocketClientBackend {
           let message;
 
           try {
-            message = JSON.parse(msg) as Protocol.Server.Message;
+            message = JSON.parse(msg) as ServerProtocol.Message;
           } catch (err) {
             if (err instanceof SyntaxError) {
               throw createErrorWithCode('Malformed message', 'APP_MALFORMED');

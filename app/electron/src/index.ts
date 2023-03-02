@@ -39,7 +39,7 @@ export class CoreApplication {
   private dataDirPath: string;
   private dataPath: string;
   private hostsDirPath: string;
-  private logsDirPath: string;
+  logsDirPath: string;
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
   private startupWindow: StartupWindow | null = null;
@@ -85,7 +85,7 @@ export class CoreApplication {
     });
 
 
-    this.logger
+    rootLogger
       .use(uol.format())
       .pipe(new uol.ConcatTransformer())
       .pipe(process.stderr);
@@ -358,8 +358,8 @@ export class CoreApplication {
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
+            type: 'local',
             options: {
-              type: 'local',
               architecture: options.pythonInstallationSettings.architecture,
               conf,
               corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,

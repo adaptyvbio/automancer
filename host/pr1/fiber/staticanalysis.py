@@ -6,6 +6,7 @@ from pprint import pprint
 from types import EllipsisType, GenericAlias
 from typing import Any, Literal, Mapping, Optional, Self, Sequence, TypeVar, cast
 
+from ..document import Document
 from ..error import Error, ErrorDocumentReference, ErrorReference
 from ..reader import LocatedString, Source
 
@@ -211,30 +212,32 @@ class StaticAnalysisAnalysis:
 ## Utility functions
 
 # TODO: Accept class generics here
-def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_types: bool = True):
+def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext, *, resolve_types: bool = True):
   match node:
     # case ast.BinOp(left=left, op=ast.BitOr(), right=right):
     #   return ClassRef(UnionType, arguments=[parse_type(left, variables), parse_type(right, variables)])
 
     case ast.Constant(None):
-      return ClassRef(NoneType)
+      return StaticAnalysisAnalysis(), ClassRef(NoneType)
 
     case ast.Name(id=name, ctx=ast.Load()):
-      value = variables[name]
+      value = variables.get(name)
 
       match value:
         case ClassDef() if (not resolve_types):
-          return ClassRef(value)
+          return StaticAnalysisAnalysis(), ClassRef(value)
         case ClassRef() if (not resolve_types):
-          return value
+          return StaticAnalysisAnalysis(), value
         case TypeClassRef() if resolve_types:
-          return value.extract()
+          return StaticAnalysisAnalysis(), value.extract()
         # case ClassRef(cls) if resolve_types and (cls is TypeType):
         #   print(value)
         #   assert value.arguments is not None
         #   return value.arguments[cls.generics[0]]
         case TypeVarDef():
-          return value
+          return StaticAnalysisAnalysis(), value
+        case None:
+          return StaticAnalysisError("Invalid reference to missing value", node, context).analysis(), ClassRef(UnknownType)
         case _:
           raise Exception
 
@@ -251,10 +254,11 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
         case _:
           expr_args = [subscript]
 
+      analysis = StaticAnalysisAnalysis()
       args = list[ClassRef | TypeVarDef]()
 
       for arg in expr_args:
-        arg_value = parse_type(arg, variables)
+        arg_value = analysis.add(parse_type(arg, variables, context))
         args.append(arg_value)
 
         if ref.cls is GenericType:
@@ -265,7 +269,7 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
       # TODO: Handle union types
 
       if ref.cls is GenericType:
-        return TypeClassRef(
+        return analysis, TypeClassRef(
           GenericClassRef(ClassGenericsDef(
             before_tuple=cast(list[TypeVarDef], args)
           ))
@@ -276,14 +280,18 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, *, resolve_type
         cls=ref.cls
       )
 
-      return new_ref if resolve_types else TypeClassRef(new_ref)
+      return analysis, (new_ref if resolve_types else TypeClassRef(new_ref))
 
     case _:
+      print("Missing", ast.dump(node, indent=2))
       raise Exception
 
 
-def parse_func(node: ast.FunctionDef, /, variables: VariableOrTypeDefs):
-  process_arg_type = lambda annotation: (annotation and parse_type(annotation, variables))
+def parse_func(node: ast.FunctionDef, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext):
+  analysis = StaticAnalysisAnalysis()
+
+  def process_arg_type(annotation):
+    return annotation and analysis.add(parse_type(annotation, variables, context))
 
   args_pos = [FuncArgDef(
     name=arg.arg,
@@ -301,25 +309,26 @@ def parse_func(node: ast.FunctionDef, /, variables: VariableOrTypeDefs):
     type=process_arg_type(arg.annotation)
   ) for arg, default in zip(node.args.kwonlyargs, node.args.kw_defaults)]
 
-  return FuncOverloadDef(
+  return analysis, FuncOverloadDef(
     args_posonly=args_pos,
     args_both=args_both,
     args_kwonly=args_kw,
     default_count=len(node.args.defaults),
-    return_type=(node.returns and parse_type(node.returns, variables))
+    return_type=(node.returns and analysis.add(parse_type(node.returns, variables, context)))
   )
 
 
 ## Process module
 
-def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Variables:
+def process_module(module: ast.Module, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext):
+  analysis = StaticAnalysisAnalysis()
   values = VariableOrTypeDefs()
 
   for module_statement in module.body:
     match module_statement:
       case ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()), annotation=attr_ann, value=None, simple=1):
         assert not (name in values)
-        result_type = parse_type(attr_ann, variables | values)
+        result_type = analysis.add(parse_type(attr_ann, variables | values, context))
 
         assert isinstance(result_type, ClassRef)
         values[name] = result_type
@@ -338,14 +347,14 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
         targets=[ast.Name(id=name, ctx=ast.Store())],
         value=value
       ):
-        values[name] = parse_type(value, variables | values, resolve_types=False)
+        values[name] = analysis.add(parse_type(value, variables | values, context, resolve_types=False))
 
       case ast.ClassDef(name=class_name, bases=class_bases, body=class_body):
         cls = ClassDef(class_name)
         generics_set = False
 
         for class_base in class_bases:
-          base_type_ref = parse_type(class_base, variables | values, resolve_types=False)
+          base_type_ref = analysis.add(parse_type(class_base, variables | values, context, resolve_types=False))
           assert isinstance(base_type_ref, TypeClassRef)
           base_ref = base_type_ref.extract()
 
@@ -367,16 +376,16 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
               if attr_name in cls.class_attrs:
                 raise Exception("Duplicate class attribute")
 
-              cls.class_attrs[attr_name] = parse_type(attr_ann, variables | values)
+              cls.class_attrs[attr_name] = analysis.add(parse_type(attr_ann, variables | values, context))
 
             case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
               if attr_name in cls.instance_attrs:
                 raise Exception("Duplicate instance attribute")
 
-              cls.instance_attrs[attr_name] = parse_type(attr_ann, variables | values)
+              cls.instance_attrs[attr_name] = analysis.add(parse_type(attr_ann, variables | values, context))
 
             case ast.FunctionDef(name=func_name):
-              overload = parse_func(class_statement, variables | values)
+              overload = analysis.add(parse_func(class_statement, variables | values, context))
               assert (overload.args_posonly + overload.args_both)[0].name == 'self'
 
               if overload.args_posonly:
@@ -410,7 +419,7 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
           ))
 
       case ast.FunctionDef(name=func_name):
-        overload = parse_func(module_statement, variables | values)
+        overload = analysis.add(parse_func(module_statement, variables | values, context))
 
         if not (func_name in values):
           func = FuncDef()
@@ -430,13 +439,25 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs) -> Vari
   # from pprint import pprint
   # pprint(declarations)
 
-  return { name: value for name, value in values.items() if not isinstance(value, TypeVarDef) }
+  return analysis, Variables({ name: value for name, value in values.items() if not isinstance(value, TypeVarDef) })
 
 def process_source(contents: str, /, variables):
   module = ast.parse(contents)
   # print(ast.dump(module, indent=2))
 
-  return process_module(module, variables)
+  document = Document.text(contents)
+  context = StaticAnalysisContext(
+    input_value=document.source,
+    prelude=Variables()
+  )
+
+  analysis, result_variables = process_module(module, variables, context)
+
+  for error in analysis.errors:
+    print("Error :", error)
+    print(error.references[0].area.format())
+
+  return result_variables
 
 
 ## Evaluation checker
@@ -491,11 +512,13 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
           attr_type = analysis.add(resolve_generics(attr, (class_ref.arguments or dict())))
           return analysis, attr_type
 
-      return analysis + StaticAnalysisError("Invalid attribute", node, context).analysis(), ClassRef(UnknownType)
+      return analysis + StaticAnalysisError("Invalid reference to missing attribute", node, context).analysis(), ClassRef(UnknownType)
 
     case ast.BinOp(left=left, right=right, op=op):
-      left_type = evaluate(left, variables, context)
-      right_type = evaluate(right, variables, context)
+      analysis = StaticAnalysisAnalysis()
+
+      left_type = analysis.add(evaluate(left, variables, context))
+      right_type = analysis.add(evaluate(right, variables, context))
 
       operator_name = BinOpMethodMap[op.__class__]
 
@@ -507,7 +530,10 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
         and (overload := find_overload(method, args=[left_type], kwargs=dict())):
         return overload.return_type
 
-      raise Exception("Invalid operation")
+      if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
+        return analysis, ClassRef(UnknownType)
+
+      return (analysis + StaticAnalysisError("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
 
     case ast.Call(obj, args, keywords):
       analysis, obj_ref = evaluate(obj, variables, context)
@@ -549,7 +575,7 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
 
     case ast.Name(id=name, ctx=ast.Load()):
       if not (name in variables):
-        return StaticAnalysisAnalysis(errors=[StaticAnalysisError("Invalid variable", node, context)]), ClassRef(UnknownType)
+        return StaticAnalysisAnalysis(errors=[StaticAnalysisError("Invalid reference to missing variable", node, context)]), ClassRef(UnknownType)
 
       return StaticAnalysisAnalysis(), variables[name]
 
@@ -664,6 +690,8 @@ class float:
 # x: int
 # y: list[int]
 
+z: int
+
 class A:
   p: int
   self.x: int
@@ -681,9 +709,7 @@ class B(A):
   # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  from ..document import Document
-
-  document = Document.text("~~~B().l~~~")
+  document = Document.text("~~~foo() * bar() + (6)()~~~")
   context = StaticAnalysisContext(
     input_value=document.source[3:-3],
     prelude=prelude_variables
@@ -691,4 +717,11 @@ class B(A):
 
   root = ast.parse(context.input_value, mode='eval')
 
-  pprint(evaluate(root.body, user_variables, context))
+  analysis, result = evaluate(root.body, user_variables, context)
+
+  for error in analysis.errors:
+    print("Error :", error)
+    print(error.references[0].area.format())
+
+  print()
+  pprint(result)

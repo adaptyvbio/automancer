@@ -4,7 +4,7 @@ from collections import ChainMap
 from dataclasses import KW_ONLY, dataclass, field
 from pprint import pprint
 from types import EllipsisType, GenericAlias
-from typing import Any, Literal, Mapping, Optional, Self, Sequence, TypeVar, cast
+from typing import Any, Generic, Literal, Mapping, Optional, Self, Sequence, TypeVar, cast
 
 from ..document import Document
 from ..error import Error, ErrorDocumentReference, ErrorReference
@@ -13,12 +13,20 @@ from ..reader import LocatedString, Source
 
 ## Type system
 
+TypeT = TypeVar('TypeT', 'ClassRef', 'TypeVarDef')
+
 @dataclass
 class TypeVarDef:
   name: str
 
+  def resolve(self, type_variables):
+    return type_variables[self]
+
   def __hash__(self):
     return id(self)
+
+  def __repr__(self):
+    return f"<{self.__class__.__name__} {self.name}>"
 
 @dataclass
 class TypeVarTupleDef:
@@ -28,21 +36,43 @@ class TypeVarTupleDef:
     return id(self)
 
 @dataclass(kw_only=True)
-class FuncArgDef:
+class FuncArgDef(Generic[TypeT]):
   name: str
-  type: 'Optional[ClassRef | TypeVarDef]'
+  type: TypeT
+
+  def resolve(self, type_variables):
+    return self.__class__(
+      name=self.name,
+      type=self.type.resolve(type_variables)
+    )
 
 @dataclass(kw_only=True)
-class FuncKwArgDef(FuncArgDef):
+class FuncKwArgDef(FuncArgDef[TypeT], Generic[TypeT]):
   has_default: bool
 
+  def resolve(self, type_variables):
+    return self.__class__(
+      has_default=self.has_default,
+      name=self.name,
+      type=self.type.resolve(type_variables)
+    )
+
 @dataclass(kw_only=True)
-class FuncOverloadDef:
-  args_posonly: list[FuncArgDef]
-  args_both: list[FuncArgDef]
-  args_kwonly: list[FuncKwArgDef]
+class FuncOverloadDef(Generic[TypeT]):
+  args_posonly: list[FuncArgDef[TypeT]]
+  args_both: list[FuncArgDef[TypeT]]
+  args_kwonly: list[FuncKwArgDef[TypeT]]
   default_count: int
-  return_type: 'Optional[ClassRef | TypeVarDef]'
+  return_type: TypeT
+
+  def resolve(self, type_variables):
+    return FuncOverloadDef(
+      args_posonly=[arg.resolve(type_variables) for arg in self.args_posonly],
+      args_both=[arg.resolve(type_variables) for arg in self.args_both],
+      args_kwonly=[arg.resolve(type_variables) for arg in self.args_kwonly],
+      default_count=self.default_count,
+      return_type=self.return_type.resolve(type_variables)
+    )
 
   def __repr__(self):
     args = [
@@ -53,7 +83,7 @@ class FuncOverloadDef:
       *[f"{arg.name}" for arg in self.args_kwonly]
     ]
 
-    return f"{self.__class__.__name__}({', '.join(args)})"
+    return f"<{self.__class__.__name__} ({', '.join(args)}) -> {self.return_type!r}>"
 
 @dataclass
 class ClassGenericsDef:
@@ -78,6 +108,14 @@ class ClassDef:
   class_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
   instance_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
 
+  # def resolve(self, type_variables):
+  #   return self.__class__(
+  #     name,
+  #     bases=[base.resolve(type_variables) for base in self.bases],
+  #     generics=self.generics,
+  #     class_attrs=
+  #   )
+
   def __repr__(self):
     generics = self.generics.format()
     return f"<{self.__class__.__name__} {self.name}" + (f"[{', '.join(generics)}]" if generics else str()) + ">"
@@ -90,18 +128,49 @@ class FuncDef(ClassDef):
   def __post_init__(self):
     self.instance_attrs={ '__call__': ClassRef(self) }
 
+  def __repr__(self):
+    overloads = [repr(overload) for overload in self.overloads]
+    return f"<{self.__class__.__name__} " + ", ".join(overloads) + ">"
+
 @dataclass
-class ClassRef:
+class ClassRef(Generic[TypeT]):
   cls: ClassDef
   _: KW_ONLY
-  arguments: 'Optional[dict[TypeVarDef, ClassRef]]' = None
-  context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
+  arguments: 'Optional[dict[TypeVarDef, TypeT]]' = None
+  # context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
 
   def mro(self):
     yield self
 
     for base_ref in self.cls.bases:
       yield base_ref
+
+  def resolve(self, type_variables):
+    return self.__class__(
+      self.cls,
+      arguments=(
+        { key: arg.resolve(type_variables) for key, arg in self.arguments.items() } if self.arguments is not None else dict()
+      )
+    )
+
+  def resolve_inner(self):
+    return self.__class__(
+      self.cls.resolve(self.arguments),
+      arguments=None
+    )
+
+  # def simplify(self):
+  #   if self.cls is UnionType:
+  #     assert self.arguments
+  #     arguments = [arg.simplify() for arg in self.arguments]
+
+  #     for first_index, first_item in enumerate(arguments):
+  #       for second_index, second_item in enumerate(arguments):
+  #         if (first_index != second_index):
+  #           if check_type(first_item, second_item):
+  #             pass
+  #   else:
+  #     return self
 
 
 GenericType = ClassDef('Generic')
@@ -214,8 +283,13 @@ class StaticAnalysisAnalysis:
 # TODO: Accept class generics here
 def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext, *, resolve_types: bool = True):
   match node:
-    # case ast.BinOp(left=left, op=ast.BitOr(), right=right):
-    #   return ClassRef(UnionType, arguments=[parse_type(left, variables), parse_type(right, variables)])
+    case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+      analysis = StaticAnalysisAnalysis()
+
+      left_type = analysis.add(parse_type(left, variables, context))
+      right_type = analysis.add(parse_type(right, variables, context))
+
+      return analysis, ClassRef(UnionType, arguments=[left_type, right_type])
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), ClassRef(NoneType)
@@ -264,7 +338,7 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
         if ref.cls is GenericType:
           assert isinstance(arg_value, TypeVarDef)
         else:
-          assert isinstance(arg_value, ClassRef)
+          assert isinstance(arg_value, (ClassRef, TypeVarDef))
 
       # TODO: Handle union types
 
@@ -394,7 +468,7 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs, context
                 overload.args_both = overload.args_both[1:]
 
               if not (func_name in cls.instance_attrs):
-                func = FuncDef()
+                func = FuncDef(generics=cls.generics)
                 cls.instance_attrs[func_name] = ClassRef(func)
               else:
                 assert isinstance(func_ref := cls.instance_attrs[func_name], ClassRef)
@@ -465,7 +539,7 @@ def process_source(contents: str, /, variables):
 def resolve_generics(input_type: ClassRef | TypeVarDef, /, generics: dict[TypeVarDef, ClassRef]) -> tuple[StaticAnalysisAnalysis, ClassRef]:
   match input_type:
     case ClassRef(cls, arguments=args):
-      return StaticAnalysisAnalysis(), ClassRef(cls, arguments=args, context=generics)
+      return StaticAnalysisAnalysis(), ClassRef(cls, arguments=args)
 
     case TypeVarDef():
       return StaticAnalysisAnalysis(), generics[input_type]
@@ -504,12 +578,12 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
       else:
         for class_ref in obj_type.mro():
           if attr := class_ref.cls.instance_attrs.get(attr_name):
-            attr_type = analysis.add(resolve_generics(attr, (class_ref.arguments or dict())))
+            attr_type = attr.resolve(class_ref.arguments or dict())
             return analysis, attr_type
 
       for class_ref in obj_type.mro():
         if attr := class_ref.cls.class_attrs.get(attr_name):
-          attr_type = analysis.add(resolve_generics(attr, (class_ref.arguments or dict())))
+          attr_type = attr.resolve(class_ref.arguments or dict())
           return analysis, attr_type
 
       return analysis + StaticAnalysisError("Invalid reference to missing attribute", node, context).analysis(), ClassRef(UnknownType)
@@ -524,11 +598,11 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
 
       if (method := left_type.cls.instance_attrs.get(f"__{operator_name}__"))\
         and (overload := find_overload(method, args=[right_type], kwargs=dict())):
-        return overload.return_type
+        return analysis, overload.return_type
 
       if (method := right_type.cls.instance_attrs.get(f"__r{operator_name}__"))\
         and (overload := find_overload(method, args=[left_type], kwargs=dict())):
-        return overload.return_type
+        return analysis, overload.return_type
 
       if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
         return analysis, ClassRef(UnknownType)
@@ -573,17 +647,54 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
       assert isinstance(const_type := context.prelude['int'], TypeClassRef)
       return StaticAnalysisAnalysis(), const_type.extract()
 
+    # case ast.List(items, ctx=ast.Load()):
+    #   analysis, item_types = StaticAnalysisAnalysis.sequence([evaluate(item, variables, context) for item in items])
+    #   return analysis, ClassRef(UnionType, arguments=item_types)
+
     case ast.Name(id=name, ctx=ast.Load()):
-      if not (name in variables):
+      all_variables = context.prelude | variables
+
+      if not (name in all_variables):
         return StaticAnalysisAnalysis(errors=[StaticAnalysisError("Invalid reference to missing variable", node, context)]), ClassRef(UnknownType)
 
-      return StaticAnalysisAnalysis(), variables[name]
+      return StaticAnalysisAnalysis(), all_variables[name]
+
+    case ast.Subscript(value, slice=subscript, ctx=ast.Load()):
+      analysis = StaticAnalysisAnalysis()
+      value_type = analysis.add(evaluate(value, variables, context))
+      subscript_type = analysis.add(evaluate(subscript, variables, context))
+
+      if isinstance(value_type, TypeClassRef) and isinstance(subscript_type, TypeClassRef):
+        value_type_inner = value_type.extract()
+
+        return analysis, TypeClassRef(ClassRef(
+          value_type_inner.cls,
+          arguments={ value_type_inner.cls.generics.before_tuple[0]: subscript_type.extract() }
+        ))
+      else:
+        return (analysis + StaticAnalysisError("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
 
     case _:
+      print("Missing", ast.dump(node, indent=2))
       raise Exception
 
-# Checks if lhs < rhs (lhs is a subtype of rhs)
+#
+# Checks if lhs >= rhs (lhs at least contains rhs)
+#
+# Examples
+#   class B(A) then B >= A
+#   var: A = B() then B >= A
+#   var: (X | Y) = X() then X >= (X | Y)
+#
 def check_type(lhs: ClassRef, rhs: ClassRef, /):
+  if lhs.cls is UnionType:
+    assert lhs.arguments
+    return all(check_type(variant, rhs) for variant in lhs.arguments.values())
+
+  if rhs.cls is UnionType:
+    assert lhs.arguments
+    return any(check_type(variant, rhs) for variant in lhs.arguments.values())
+
   for base in [lhs, *lhs.cls.bases]:
     if base.cls is rhs.cls:
       return True
@@ -678,27 +789,24 @@ class float:
   def __mul__(self, other: float, /) -> float: ...
   def __mul__(self, other: int, /) -> float: ...
   def __rmul__(self, other: int, /) -> float: ...
+
+T = TypeVar('T')
+
+class list(Generic[T]):
+  self.a: T
+  def b(self) -> T: ...
 """, core_variables)
 
   user_variables = process_source("""
-# U = TypeVar('U')
+T = TypeVar('T')
 
-# class list(Generic[U]):
-#   def a(self) -> U:
-#     ...
+class A(Generic[T]):
+  self.x: T
 
-# x: int
-# y: list[int]
+class B(Generic[T]):
+  self.y: A[T]
 
-z: int
-
-class A:
-  p: int
-  self.x: int
-
-class B(A):
-  def l(self) -> None:
-    pass
+  def foo(self) -> T: ...
 """, prelude_variables)
 
   user_variables['devices'] = devices
@@ -709,7 +817,7 @@ class B(A):
   # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  document = Document.text("~~~foo() * bar() + (6)()~~~")
+  document = Document.text("~~~B[int]().foo~~~")
   context = StaticAnalysisContext(
     input_value=document.source[3:-3],
     prelude=prelude_variables
@@ -717,6 +825,7 @@ class B(A):
 
   root = ast.parse(context.input_value, mode='eval')
 
+  # print(ast.dump(root, indent=2))
   analysis, result = evaluate(root.body, user_variables, context)
 
   for error in analysis.errors:

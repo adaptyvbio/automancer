@@ -1,10 +1,11 @@
 import ast
 import builtins
 from collections import ChainMap
+import copy
 from dataclasses import KW_ONLY, dataclass, field
 from pprint import pprint
 from types import EllipsisType, GenericAlias
-from typing import Any, Generic, Literal, Mapping, Optional, Self, Sequence, TypeVar, cast
+from typing import Any, Generic, Literal, Mapping, Optional, Protocol, Self, Sequence, TypeVar, cast
 
 from ..document import Document
 from ..error import Error, ErrorDocumentReference, ErrorReference
@@ -139,19 +140,21 @@ class ClassRef(Generic[TypeT]):
   arguments: 'Optional[dict[TypeVarDef, TypeT]]' = None
   # context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
 
+  def analyze_access(self):
+    return StaticAnalysisAnalysis()
+
   def mro(self):
     yield self
 
     for base_ref in self.cls.bases:
-      yield base_ref
+      for mro_ref in base_ref.mro():
+        yield mro_ref
 
   def resolve(self, type_variables):
-    return self.__class__(
-      self.cls,
-      arguments=(
-        { key: arg.resolve(type_variables) for key, arg in self.arguments.items() } if self.arguments is not None else dict()
-      )
-    )
+    result = copy.copy(self)
+    result.arguments = { key: arg.resolve(type_variables) for key, arg in self.arguments.items() } if self.arguments is not None else dict()
+
+    return result
 
   def resolve_inner(self):
     return self.__class__(
@@ -230,12 +233,27 @@ class StaticAnalysisError(Error):
   def analysis(self):
     return StaticAnalysisAnalysis(errors=[self])
 
+class StaticAnalysisMetadata(Protocol):
+  def __or__(self, other: Self):
+    ...
+
+  @staticmethod
+  def concat(a: 'Optional[StaticAnalysisAnalysis]', b: 'Optional[StaticAnalysisAnalysis]'):
+    match a, b:
+      case _, None:
+        return a
+      case None, _:
+        return b
+      case _, _:
+        return a | b # type: ignore
+
 T = TypeVar('T')
 S = TypeVar('S')
 
 @dataclass(kw_only=True)
 class StaticAnalysisAnalysis:
   errors: list[StaticAnalysisError] = field(default_factory=list)
+  metadata: dict[str, Any] = field(default_factory=dict)
 
   def add(self, other: tuple[Self, T], /) -> T:
     other_analysis, other_value = other
@@ -259,12 +277,19 @@ class StaticAnalysisAnalysis:
     return output
 
   def __add__(self, other: Self):
-    return StaticAnalysisAnalysis(
-      errors=(self.errors + other.errors)
-    )
+    # return StaticAnalysisAnalysis(
+    #   errors=(self.errors + other.errors),
+    #   metadata=({ key: StaticAnalysisMetadata.concat(self.metadata[key], other.metadata[key]) for key in {*self.metadata.keys(), *other.metadata.keys()} })
+    # )
+    return StaticAnalysisAnalysis().__iadd__(self).__iadd__(other)
 
   def __iadd__(self, other: Self, /):
     self.errors += other.errors
+    self.metadata = {
+      key: StaticAnalysisMetadata.concat(self.metadata.get(key), other.metadata.get(key))
+        for key in {*self.metadata.keys(), *other.metadata.keys()}
+    }
+
     return self
 
   @classmethod
@@ -579,6 +604,7 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
         for class_ref in obj_type.mro():
           if attr := class_ref.cls.instance_attrs.get(attr_name):
             attr_type = attr.resolve(class_ref.arguments or dict())
+            analysis += attr_type.analyze_access()
             return analysis, attr_type
 
       for class_ref in obj_type.mro():
@@ -596,13 +622,15 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
 
       operator_name = BinOpMethodMap[op.__class__]
 
-      if (method := left_type.cls.instance_attrs.get(f"__{operator_name}__"))\
-        and (overload := find_overload(method, args=[right_type], kwargs=dict())):
-        return analysis, overload.return_type
+      for left_ref in left_type.mro():
+        if (method := left_ref.cls.instance_attrs.get(f"__{operator_name}__"))\
+          and (overload := find_overload(method, args=[right_type], kwargs=dict())):
+          return analysis, overload.return_type
 
-      if (method := right_type.cls.instance_attrs.get(f"__r{operator_name}__"))\
-        and (overload := find_overload(method, args=[left_type], kwargs=dict())):
-        return analysis, overload.return_type
+      for right_ref in right_type.mro():
+        if (method := right_ref.cls.instance_attrs.get(f"__r{operator_name}__"))\
+          and (overload := find_overload(method, args=[left_type], kwargs=dict())):
+          return analysis, overload.return_type
 
       if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
         return analysis, ClassRef(UnknownType)
@@ -695,7 +723,7 @@ def check_type(lhs: ClassRef, rhs: ClassRef, /):
     assert lhs.arguments
     return any(check_type(variant, rhs) for variant in lhs.arguments.values())
 
-  for base in [lhs, *lhs.cls.bases]:
+  for base in lhs.mro():
     if base.cls is rhs.cls:
       return True
 
@@ -765,18 +793,6 @@ if __name__ == "__main__":
   #   'x': list[bool]
   # }
 
-  devices = ClassRef(ClassDef(
-    name='Devices',
-    instance_attrs={
-      'Okolab': ClassRef(ClassDef(
-        name='OkolabDevice',
-        instance_attrs={
-          'temperature': ClassRef(ClassDef('float'))
-        }
-      ))
-    }
-  ))
-
   prelude_variables = core_variables | process_source("""
 class int:
   def __add__(self, other: int, /) -> int: ...
@@ -809,17 +825,40 @@ class B(Generic[T]):
   def foo(self) -> T: ...
 """, prelude_variables)
 
-  user_variables['devices'] = devices
+  DeviceDependenciesMetadata = set[tuple[str, ...]]
 
-  from pprint import pprint
+  class TrackedClassRef(ClassRef):
+    def __init__(self, path: tuple[str, ...]):
+      super().__init__(prelude_variables['float'].extract().cls)
+      self.path = path
+
+    def analyze_access(self):
+      return StaticAnalysisAnalysis(metadata={
+        'devices': DeviceDependenciesMetadata({self.path})
+      })
+
+  devices = ClassRef(ClassDef(
+    name='Devices',
+    instance_attrs={
+      'Okolab': ClassRef(ClassDef(
+        name='OkolabDevice',
+        instance_attrs={
+          'pressure': TrackedClassRef(('Okolab', 'pressure')),
+          'temperature': TrackedClassRef(('Okolab', 'temperature'))
+        }
+      ))
+    }
+  ))
+
+  user_variables['devices'] = devices
 
   # print()
   # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  document = Document.text("~~~B[int]().foo~~~")
+  document = Document.text("~~~ devices.Okolab.temperature + devices.Okolab.pressure ~~~")
   context = StaticAnalysisContext(
-    input_value=document.source[3:-3],
+    input_value=document.source[4:-4],
     prelude=prelude_variables
   )
 
@@ -832,5 +871,8 @@ class B(Generic[T]):
     print("Error :", error)
     print(error.references[0].area.format())
 
-  print()
+  print('---')
   pprint(result)
+
+  print()
+  pprint(analysis)

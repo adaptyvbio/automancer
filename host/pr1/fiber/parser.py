@@ -89,6 +89,11 @@ class BlockState(dict[str, Optional[BlockUnitState]]):
     return { namespace: state and state.export() for namespace, state in self.items() if state }
 
 
+@dataclass(kw_only=True)
+class ProtocolUnitData:
+  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+
 @debug
 class BlockData:
   def __init__(
@@ -117,7 +122,7 @@ class BlockUnitData:
 class BlockUnitPreparationData:
   prep: Optional[Any] = None
   _: KW_ONLY
-  envs: list[EvalEnv] = field(default_factory=list)
+  envs: EvalEnvs = field(default_factory=EvalEnvs)
 
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 
@@ -204,8 +209,8 @@ class BaseParser(Protocol):
   def __init__(self, fiber: 'FiberParser'):
     pass
 
-  def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
-    return lang.Analysis()
+  def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, ProtocolUnitData]:
+    return lang.Analysis(), ProtocolUnitData()
 
   def leave_protocol(self):
     return lang.Analysis()
@@ -262,7 +267,7 @@ class FiberParser:
 
     self.draft = draft
     self.host = host
-    self.user_env = EvalEnv()
+    self.user_env = EvalEnv(name="User")
 
     self.analysis, protocol = self._parse()
     self.protocol = protocol if not isinstance(protocol, EllipsisType) else None
@@ -272,7 +277,7 @@ class FiberParser:
 
     analysis = lang.Analysis()
 
-    global_env = EvalEnv()
+    global_env = EvalEnv(name="Global")
     adoption_envs = [global_env]
     runtime_envs = [global_env, self.user_env]
 
@@ -325,7 +330,15 @@ class FiberParser:
       if isinstance(unit_attrs, EllipsisType):
         continue
 
-      analysis += parser.enter_protocol(unit_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs)
+      protocol_unit_data = analysis.add(parser.enter_protocol(unit_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
+
+      adoption_envs += protocol_unit_data.adoption_envs
+      runtime_envs += protocol_unit_data.runtime_envs
+
+      # TODO: Split BaseParser.enter_protocol() in two
+      #   (1) one method to create envs e.g. devices
+      #   (2) one method to consume envs e.g. shorthands
+      # Or sort parsers to create envs before consuming them
 
 
     # Root block type (2)
@@ -355,7 +368,7 @@ class FiberParser:
       }
     }
 
-    root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=[global_env]))
+    root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
     if isinstance(root_block_prep, EllipsisType):
       return analysis, Ellipsis

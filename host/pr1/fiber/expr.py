@@ -8,6 +8,7 @@ from pint import Quantity
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
+from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
@@ -233,7 +234,31 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     self._depth = depth
     self._envs = envs
     self._expr = expr
+    self._metadata = dict[str, StaticAnalysisMetadata]()
     self._type = type
+
+  def analyze(self):
+    from .langservice import Analysis
+
+    variables = EvalVariables()
+
+    for env in self._envs:
+      variables |= { name: value.type for name, value in env.values.items() }
+
+    try:
+      static_analysis, result_type = evaluate_expr_type(self._expr.tree.body, variables, StaticAnalysisContext(
+        input_value=self._expr.contents,
+        prelude=PreludeVariables
+      ))
+    except Exception:
+      return Analysis()
+
+    self._metadata = static_analysis.metadata
+
+    return Analysis(
+      errors=static_analysis.errors,
+      warnings=static_analysis.warnings
+    )
 
   def evaluate(self, context):
     from .langservice import Analysis

@@ -595,12 +595,12 @@ class SimpleDictAsPythonExpr(Evaluable):
     self._depth = depth
     self._value = value
 
-  def evaluate(self, stack):
+  def evaluate(self, context):
     analysis = Analysis()
     result = dict[str, Any]()
 
     for key, value in self._value.items():
-      item_result = analysis.add(value.evaluate(stack))
+      item_result = analysis.add(value.evaluate(context))
 
       # TODO: Same as lists
       if isinstance(item_result, EllipsisType):
@@ -790,12 +790,12 @@ class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
     self._depth = depth
     self._value = value
 
-  def evaluate(self, stack):
+  def evaluate(self, context):
     analysis = Analysis()
     result = list[Any]()
 
     for item in self._value:
-      item_result = analysis.add(item.evaluate(stack))
+      item_result = analysis.add(item.evaluate(context))
 
       if isinstance(item_result, EllipsisType):
         return analysis, Ellipsis # TODO: Improve that using a flag to disable during dynamic evaluation
@@ -876,28 +876,20 @@ class PotentialExprType(Type):
 
         match expr.kind:
           case PythonExprKind.Dynamic if self._dynamic:
-            return analysis, ValueAsPythonExpr.new(PythonExprObject(expr, self._type, depth=(eval_depth - 1), envs=context.envs_list[1].copy()), depth=1)
+            before_depth = 2
+            expr_object = PythonExprObject(expr, self._type, depth=(eval_depth - 1), envs=context.envs_list[1].copy())
           case PythonExprKind.Static if self._static:
-            return analysis, PythonExprObject(expr, self._type, depth=eval_depth, envs=context.envs_list[0].copy())
+            before_depth = 0
+            expr_object = PythonExprObject(expr, self._type, depth=eval_depth, envs=context.envs_list[0].copy())
           case _:
             analysis.errors.append(InvalidExprKind(obj))
             return analysis, Ellipsis
 
+        analysis += expr_object.analyze()
+        return analysis, ValueAsPythonExpr.new(expr_object, depth=before_depth)
+
     if self._literal:
       return self._type.analyze(obj, context.update(eval_depth=eval_depth))
-
-      # analysis, result = self._type.analyze(obj, context.update(eval_depth=eval_depth))
-
-      # if isinstance(result, EllipsisType):
-      #   return analysis, Ellipsis
-
-      # return analysis, ValueAsPythonExpr.new(result, depth=eval_depth)
-
-      # if self._dynamic and self._static:
-      #   value = LocatedValue.new(ValueAsPythonExpr(value), obj.area)
-
-      # return analysis, value
-      # return analysis, ValueAsPythonExpr(value) if not isinstance(value, EllipsisType) else Ellipsis
     else:
       return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
 

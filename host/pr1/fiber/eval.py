@@ -2,13 +2,22 @@ from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol
 
+from .staticanalysis import ClassRef
 from ..error import Error, ErrorDocumentReference
-from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
 
 
 @dataclass(kw_only=True)
+class EvalEnvValue:
+  deprecated: bool = False
+  description: Optional[str] = None
+  type: Optional[ClassRef] = None
+
+@dataclass
 class EvalEnv:
+  values: dict[str, EvalEnvValue] = field(default_factory=dict)
+  _: KW_ONLY
+  name: Optional[str] = None
   readonly: bool = False
 
   def __hash__(self):
@@ -22,7 +31,7 @@ EvalStack = dict[EvalEnv, Optional[EvalVariables]]
 class EvalContext:
   stack: EvalStack
   _: KW_ONLY
-  cwd_path: Optional[Path]
+  cwd_path: Optional[Path] = None
 
 @dataclass
 class EvalOptions:

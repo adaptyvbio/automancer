@@ -2,11 +2,26 @@ import functools
 from types import EllipsisType
 from typing import Optional
 
+from pr1.fiber.eval import EvalEnv, EvalEnvValue
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, PotentialExprType, PrimitiveType, QuantityType
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser
-from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarWritableNode
+from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, ProtocolUnitData
+from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarReadableNode, ScalarWritableNode
+from pr1.fiber.staticanalysis import ClassDef, ClassRef, CommonVariables, StaticAnalysisAnalysis
 from pr1.util.decorators import debug
+
+
+DeviceDependenciesMetadata = set[NodePath]
+
+class TrackedReadableNodeClassRef(ClassRef):
+  def __init__(self, path: NodePath):
+    super().__init__(CommonVariables['float'])
+    self.path = path
+
+  def analyze_access(self):
+    return StaticAnalysisAnalysis(metadata={
+      'devices': DeviceDependenciesMetadata({self.path})
+    })
 
 
 class DevicesParser(BaseParser):
@@ -56,6 +71,36 @@ class DevicesParser(BaseParser):
       type=PotentialExprType(get_type(node))
     ) for key, (node, path) in self.node_map.items() }
 
+  def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
+    def create_type(node: BaseNode, parent_path: NodePath = ()):
+      node_path = (*parent_path, node.id)
+
+      match node:
+        case CollectionNode():
+          return ClassRef(ClassDef(
+            name=node.id,
+            instance_attrs={
+              **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) },
+              'connected': ClassRef(CommonVariables['bool'])
+            }
+          ))
+        case ScalarReadableNode():
+          return TrackedReadableNodeClassRef(node_path)
+        case _:
+          return None
+
+    env = EvalEnv({
+      'devices': EvalEnvValue(
+        type=ClassRef(ClassDef(
+          name='Devices',
+          instance_attrs={
+            device_node.id: device_node_type for device_node in self._fiber.host.root_node.nodes.values() if (device_node_type := create_type(device_node))
+          }
+        ))
+      )
+    }, name="Devices", readonly=True)
+
+    return Analysis(), ProtocolUnitData(runtime_envs=[env])
 
   def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
     values = dict[NodePath, Evaluable]()

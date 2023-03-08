@@ -5,8 +5,9 @@ import copy
 from dataclasses import KW_ONLY, dataclass, field
 from pprint import pprint
 from types import EllipsisType, GenericAlias
-from typing import Any, Generic, Literal, Mapping, Optional, Protocol, Self, Sequence, TypeVar, cast
+from typing import Any, Generator, Generic, Literal, Mapping, Optional, Protocol, Self, Sequence, TypeVar, cast
 
+from ..analysis import DiagnosticAnalysis
 from ..document import Document
 from ..error import Error, ErrorDocumentReference, ErrorReference
 from ..reader import LocatedString, Source
@@ -14,13 +15,13 @@ from ..reader import LocatedString, Source
 
 ## Type system
 
-TypeT = TypeVar('TypeT', 'ClassRef', 'TypeVarDef')
+TypeT = TypeVar('TypeT')
 
 @dataclass
 class TypeVarDef:
   name: str
 
-  def resolve(self, type_variables):
+  def resolve(self, type_variables: 'TypeVariables'):
     return type_variables[self]
 
   def __hash__(self):
@@ -66,7 +67,7 @@ class FuncOverloadDef(Generic[TypeT]):
   default_count: int
   return_type: TypeT
 
-  def resolve(self, type_variables):
+  def resolve(self, type_variables: 'TypeVariables'):
     return FuncOverloadDef(
       args_posonly=[arg.resolve(type_variables) for arg in self.args_posonly],
       args_both=[arg.resolve(type_variables) for arg in self.args_both],
@@ -104,12 +105,13 @@ class ClassGenericsDef:
 class ClassDef:
   name: str
   _: KW_ONLY
-  bases: 'list[ClassRef]' = field(default_factory=list)
+  bases: 'list[OuterType]' = field(default_factory=list)
   generics: ClassGenericsDef = field(default_factory=ClassGenericsDef)
-  class_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
-  instance_attrs: 'dict[str, ClassRef | TypeVarDef]' = field(default_factory=dict)
+  class_attrs: 'dict[str, OuterType]' = field(default_factory=dict)
+  instance_attrs: 'dict[str, InnerType]' = field(default_factory=dict)
 
-  # def resolve(self, type_variables):
+  def resolve(self, type_variables: 'TypeVariables'):
+    return self
   #   return self.__class__(
   #     name,
   #     bases=[base.resolve(type_variables) for base in self.bases],
@@ -138,20 +140,19 @@ class ClassRef(Generic[TypeT]):
   cls: ClassDef
   _: KW_ONLY
   arguments: 'Optional[dict[TypeVarDef, TypeT]]' = None
-  # context: 'dict[TypeVarDef, ClassRef]' = field(default_factory=dict)
 
   def analyze_access(self):
     return StaticAnalysisAnalysis()
 
-  def mro(self):
-    yield self
+  def mro(self) -> 'Generator[OuterType, None, None]':
+    yield cast(OuterType, self)
 
     for base_ref in self.cls.bases:
       for mro_ref in base_ref.mro():
         yield mro_ref
 
-  def resolve(self, type_variables):
-    result = copy.copy(self)
+  def resolve(self, type_variables: 'TypeVariables'):
+    result = copy.copy(cast(OuterType, self))
     result.arguments = { key: arg.resolve(type_variables) for key, arg in self.arguments.items() } if self.arguments is not None else dict()
 
     return result
@@ -186,8 +187,8 @@ class GenericClassRef(ClassRef):
 
 TypeType = ClassDef('type', generics=ClassGenericsDef([TypeVarDef('TypeT')]))
 
-class TypeClassRef(ClassRef):
-  def __init__(self, ref: ClassRef, /):
+class TypeClassRef(ClassRef[TypeT], Generic[TypeT]):
+  def __init__(self, ref: TypeT, /):
     super().__init__(TypeType, arguments={ TypeType.generics.before_tuple[0]: ref })
 
   def extract(self):
@@ -195,10 +196,14 @@ class TypeClassRef(ClassRef):
     return self.arguments[TypeType.generics.before_tuple[0]]
 
 
-## Builtins types & Prelude
+## Builtins types & core variables
 
-Variables = dict[str, ClassRef]
-VariableOrTypeDefs = dict[str, ClassRef | TypeVarDef]
+InnerType = ClassRef['InnerType'] | TypeVarDef
+OuterType = ClassRef['InnerType']
+
+TypeVariables = dict[TypeVarDef, OuterType]
+Variables = dict[str, OuterType]
+VariableOrTypeDefs = dict[str, OuterType | TypeVarDef]
 
 FunctionType = ClassDef('function')
 MethodType = ClassDef('method')
@@ -207,7 +212,7 @@ UnionType = ClassDef('Union')
 
 UnknownType = ClassDef('unknown')
 
-core_variables = Variables({
+CoreVariables = Variables({
   'Generic': TypeClassRef(ClassRef(GenericType)),
   'NoneType': ClassRef(NoneType),
   'Union': ClassRef(UnionType),
@@ -224,9 +229,10 @@ class StaticAnalysisContext:
   prelude: Variables
 
 class StaticAnalysisError(Error):
-  def __init__(self, message: str, node: ast.expr, context: StaticAnalysisContext):
+  def __init__(self, message: str, node: ast.expr | ast.stmt, context: StaticAnalysisContext, *, name: str = 'unknown'):
     super().__init__(
       message,
+      name=('staticanalysis.' + name),
       references=[ErrorDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
     )
 
@@ -234,87 +240,43 @@ class StaticAnalysisError(Error):
     return StaticAnalysisAnalysis(errors=[self])
 
 class StaticAnalysisMetadata(Protocol):
-  def __or__(self, other: Self):
+  def __or__(self, other: Self, /) -> Self:
     ...
 
-  @staticmethod
-  def concat(a: 'Optional[StaticAnalysisAnalysis]', b: 'Optional[StaticAnalysisAnalysis]'):
-    match a, b:
-      case _, None:
-        return a
-      case None, _:
-        return b
-      case _, _:
-        return a | b # type: ignore
-
-T = TypeVar('T')
-S = TypeVar('S')
+def unite_metadata(a: 'Optional[StaticAnalysisMetadata]', b: 'Optional[StaticAnalysisMetadata]'):
+  match a, b:
+    case _, None:
+      return cast(StaticAnalysisMetadata, a)
+    case None, _:
+      return cast(StaticAnalysisMetadata, b)
+    case _, _:
+      return cast(StaticAnalysisMetadata, a | b) # type: ignore
 
 @dataclass(kw_only=True)
-class StaticAnalysisAnalysis:
-  errors: list[StaticAnalysisError] = field(default_factory=list)
-  metadata: dict[str, Any] = field(default_factory=dict)
-
-  def add(self, other: tuple[Self, T], /) -> T:
-    other_analysis, other_value = other
-    self += other_analysis
-
-    return other_value
-
-  def add_sequence(self, other: Sequence[tuple[Self, T]], /) -> list[T]:
-    analysis, value = StaticAnalysisAnalysis.sequence(other)
-    self += analysis
-
-    return value
-
-  def add_mapping(self, other: Mapping[T, tuple[Self, S]], /) -> dict[T, S]:
-    output = dict[T, S]()
-
-    for key, (item_analysis, value) in other.items():
-      self += item_analysis
-      output[key] = value
-
-    return output
-
-  def __add__(self, other: Self):
-    # return StaticAnalysisAnalysis(
-    #   errors=(self.errors + other.errors),
-    #   metadata=({ key: StaticAnalysisMetadata.concat(self.metadata[key], other.metadata[key]) for key in {*self.metadata.keys(), *other.metadata.keys()} })
-    # )
-    return StaticAnalysisAnalysis().__iadd__(self).__iadd__(other)
+class StaticAnalysisAnalysis(DiagnosticAnalysis):
+  metadata: dict[str, StaticAnalysisMetadata] = field(default_factory=dict)
 
   def __iadd__(self, other: Self, /):
-    self.errors += other.errors
     self.metadata = {
-      key: StaticAnalysisMetadata.concat(self.metadata.get(key), other.metadata.get(key))
+      key: unite_metadata(self.metadata.get(key), other.metadata.get(key))
         for key in {*self.metadata.keys(), *other.metadata.keys()}
     }
 
-    return self
-
-  @classmethod
-  def sequence(cls, obj: Sequence[tuple[Self, T]], /) -> tuple[Self, list[T]]:
-    analysis = cls()
-    output = list[T]()
-
-    for item in obj:
-      output.append(analysis.add(item))
-
-    return analysis, output
+    return super().__iadd__(other)
 
 
 ## Utility functions
 
 # TODO: Accept class generics here
-def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext, *, resolve_types: bool = True):
+def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: StaticAnalysisContext, *, instantiate_types: bool = True) -> tuple[StaticAnalysisAnalysis, InnerType]:
   match node:
-    case ast.BinOp(left=left, op=ast.BitOr(), right=right):
-      analysis = StaticAnalysisAnalysis()
+    # case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+    #   analysis = StaticAnalysisAnalysis()
 
-      left_type = analysis.add(parse_type(left, variables, context))
-      right_type = analysis.add(parse_type(right, variables, context))
+    #   left_type = analysis.add(parse_type(left, variables, context))
+    #   right_type = analysis.add(parse_type(right, variables, context))
 
-      return analysis, ClassRef(UnionType, arguments=[left_type, right_type])
+    #   return analysis, ClassRef(UnionType, arguments=[left_type, right_type])
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), ClassRef(NoneType)
@@ -323,11 +285,11 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
       value = variables.get(name)
 
       match value:
-        case ClassDef() if (not resolve_types):
+        case ClassDef() if (not instantiate_types):
           return StaticAnalysisAnalysis(), ClassRef(value)
-        case ClassRef() if (not resolve_types):
+        case ClassRef() if (not instantiate_types):
           return StaticAnalysisAnalysis(), value
-        case TypeClassRef() if resolve_types:
+        case TypeClassRef() if instantiate_types:
           return StaticAnalysisAnalysis(), value.extract()
         # case ClassRef(cls) if resolve_types and (cls is TypeType):
         #   print(value)
@@ -336,14 +298,17 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
         case TypeVarDef():
           return StaticAnalysisAnalysis(), value
         case None:
-          return StaticAnalysisError("Invalid reference to missing value", node, context).analysis(), ClassRef(UnknownType)
+          return StaticAnalysisError("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), ClassRef(UnknownType)
         case _:
           raise Exception
 
     case ast.Subscript(value=ast.Name(id=name, ctx=ast.Load()), slice=subscript, ctx=ast.Load()):
       type_ref = variables[name]
-      assert isinstance(type_ref, TypeClassRef)
-      ref = type_ref.extract()
+
+      if not isinstance(type_ref, TypeClassRef):
+        return StaticAnalysisError("Invalid subscript operation", node, context, name='invalid_subscript').analysis(), ClassRef(UnknownType)
+
+      ref = cast(TypeClassRef[OuterType], type_ref.extract())
 
       assert ref.arguments is None
 
@@ -354,7 +319,7 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
           expr_args = [subscript]
 
       analysis = StaticAnalysisAnalysis()
-      args = list[ClassRef | TypeVarDef]()
+      args = list[InnerType]()
 
       for arg in expr_args:
         arg_value = analysis.add(parse_type(arg, variables, context))
@@ -374,12 +339,12 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
           ))
         )
 
-      new_ref = ClassRef(
+      new_ref = ClassRef[InnerType](
         arguments={ typevar: arg for typevar, arg in zip(ref.cls.generics.before_tuple, cast(list[ClassRef], args)) },
         cls=ref.cls
       )
 
-      return analysis, (new_ref if resolve_types else TypeClassRef(new_ref))
+      return analysis, (new_ref if instantiate_types else TypeClassRef(new_ref))
 
     case _:
       print("Missing", ast.dump(node, indent=2))
@@ -446,16 +411,20 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs, context
         targets=[ast.Name(id=name, ctx=ast.Store())],
         value=value
       ):
-        values[name] = analysis.add(parse_type(value, variables | values, context, resolve_types=False))
+        values[name] = analysis.add(parse_type(value, variables | values, context, instantiate_types=False))
 
       case ast.ClassDef(name=class_name, bases=class_bases, body=class_body):
         cls = ClassDef(class_name)
         generics_set = False
 
         for class_base in class_bases:
-          base_type_ref = analysis.add(parse_type(class_base, variables | values, context, resolve_types=False))
-          assert isinstance(base_type_ref, TypeClassRef)
-          base_ref = base_type_ref.extract()
+          base_type_ref = analysis.add(parse_type(class_base, variables | values, context, instantiate_types=False))
+
+          if not isinstance(base_type_ref, TypeClassRef):
+            analysis.errors.append(StaticAnalysisError("Invalid base value", module_statement, context, name='invalid_base'))
+            continue
+
+          base_ref = cast(ClassRef[InnerType], base_type_ref.extract())
 
           if isinstance(base_ref, GenericClassRef):
             assert not generics_set
@@ -590,16 +559,16 @@ BinOpMethodMap: dict[type[ast.operator], str] = {
   ast.BitXor: 'xor'
 }
 
-def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisContext, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None) -> tuple[StaticAnalysisAnalysis, ClassRef]:
+def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticAnalysisContext, *, generics: Optional[dict[TypeVarDef, ClassRef]] = None) -> tuple[StaticAnalysisAnalysis, OuterType]:
   match node:
     case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
-      analysis, obj_type = evaluate(obj, variables, context)
+      analysis, obj_type = evaluate_expr_type(obj, variables, context)
 
       if obj_type.cls is UnknownType:
         return analysis, ClassRef(UnknownType)
 
       if isinstance(obj_type, TypeClassRef):
-        obj_type = obj_type.extract()
+        obj_type = cast(OuterType, obj_type.extract())
       else:
         for class_ref in obj_type.mro():
           if attr := class_ref.cls.instance_attrs.get(attr_name):
@@ -617,8 +586,8 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
     case ast.BinOp(left=left, right=right, op=op):
       analysis = StaticAnalysisAnalysis()
 
-      left_type = analysis.add(evaluate(left, variables, context))
-      right_type = analysis.add(evaluate(right, variables, context))
+      left_type = analysis.add(evaluate_expr_type(left, variables, context))
+      right_type = analysis.add(evaluate_expr_type(right, variables, context))
 
       operator_name = BinOpMethodMap[op.__class__]
 
@@ -638,13 +607,13 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
       return (analysis + StaticAnalysisError("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
 
     case ast.Call(obj, args, keywords):
-      analysis, obj_ref = evaluate(obj, variables, context)
+      analysis, obj_ref = evaluate_expr_type(obj, variables, context)
 
       if obj_ref.cls is UnknownType:
         return analysis, ClassRef(UnknownType)
 
-      args = analysis.add_sequence([evaluate(arg, variables, context) for arg in args])
-      kwargs = analysis.add_mapping({ keyword.arg: evaluate(keyword.value, variables, context) for keyword in keywords if keyword.arg })
+      args = analysis.add_sequence([evaluate_expr_type(arg, variables, context) for arg in args])
+      kwargs = analysis.add_mapping({ keyword.arg: evaluate_expr_type(keyword.value, variables, context) for keyword in keywords if keyword.arg })
 
       if isinstance(obj_ref, TypeClassRef):
         target = obj_ref.extract()
@@ -689,8 +658,8 @@ def evaluate(node: ast.expr, /, variables: Variables, context: StaticAnalysisCon
 
     case ast.Subscript(value, slice=subscript, ctx=ast.Load()):
       analysis = StaticAnalysisAnalysis()
-      value_type = analysis.add(evaluate(value, variables, context))
-      subscript_type = analysis.add(evaluate(subscript, variables, context))
+      value_type = analysis.add(evaluate_expr_type(value, variables, context))
+      subscript_type = analysis.add(evaluate_expr_type(subscript, variables, context))
 
       if isinstance(value_type, TypeClassRef) and isinstance(subscript_type, TypeClassRef):
         value_type_inner = value_type.extract()
@@ -784,16 +753,9 @@ def find_overload(func_ref: ClassRef, /, args: list[ClassRef], kwargs: dict[str,
   return None
 
 
-## Tests
+# Prelude
 
-if __name__ == "__main__":
-  # tree = ast.parse("((y := 1.0) if x[0+1] else (y := 5.0)) + y", mode='eval').body
-  # stack = {
-  #   'devices': dict[str, int],
-  #   'x': list[bool]
-  # }
-
-  prelude_variables = core_variables | process_source("""
+PreludeVariables = CoreVariables | process_source("""
 class int:
   def __add__(self, other: int, /) -> int: ...
   def __mul__(self, other: int, /) -> int: ...
@@ -806,12 +768,32 @@ class float:
   def __mul__(self, other: int, /) -> float: ...
   def __rmul__(self, other: int, /) -> float: ...
 
+class bool(int):
+  pass
+
 T = TypeVar('T')
 
-class list(Generic[T]):
-  self.a: T
-  def b(self) -> T: ...
-""", core_variables)
+# class list(Generic[T]):
+#   self.a: T
+#   def b(self) -> T: ...
+""", CoreVariables)
+
+CommonVariables = {
+  'bool': cast(TypeClassRef[OuterType], PreludeVariables['bool']).extract().cls,
+  'float': cast(TypeClassRef[OuterType], PreludeVariables['float']).extract().cls,
+  'int': cast(TypeClassRef[OuterType], PreludeVariables['int']).extract().cls,
+  'unknown': UnknownType
+}
+
+
+## Tests
+
+if __name__ == "__main__":
+  # tree = ast.parse("((y := 1.0) if x[0+1] else (y := 5.0)) + y", mode='eval').body
+  # stack = {
+  #   'devices': dict[str, int],
+  #   'x': list[bool]
+  # }
 
   user_variables = process_source("""
 T = TypeVar('T')
@@ -823,13 +805,13 @@ class B(Generic[T]):
   self.y: A[T]
 
   def foo(self) -> T: ...
-""", prelude_variables)
+""", PreludeVariables)
 
   DeviceDependenciesMetadata = set[tuple[str, ...]]
 
   class TrackedClassRef(ClassRef):
     def __init__(self, path: tuple[str, ...]):
-      super().__init__(prelude_variables['float'].extract().cls)
+      super().__init__(PreludeVariables['float'].extract().cls)
       self.path = path
 
     def analyze_access(self):
@@ -859,13 +841,13 @@ class B(Generic[T]):
   document = Document.text("~~~ devices.Okolab.temperature + devices.Okolab.pressure ~~~")
   context = StaticAnalysisContext(
     input_value=document.source[4:-4],
-    prelude=prelude_variables
+    prelude=PreludeVariables
   )
 
   root = ast.parse(context.input_value, mode='eval')
 
   # print(ast.dump(root, indent=2))
-  analysis, result = evaluate(root.body, user_variables, context)
+  analysis, result = evaluate_expr_type(root.body, user_variables, context)
 
   for error in analysis.errors:
     print("Error :", error)

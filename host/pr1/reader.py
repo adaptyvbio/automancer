@@ -404,7 +404,7 @@ class LocatedString(str, LocatedValue[str]):
   def compute_location(self, position: Position):
     return self._line_cumlengths[position.line] + position.column
 
-  def compute_ast_node_area(self, node: ast.expr):
+  def compute_ast_node_area(self, node: ast.expr | ast.stmt):
     assert self.absolute
     assert node.end_lineno is not None
     assert node.end_col_offset is not None

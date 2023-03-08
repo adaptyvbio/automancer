@@ -69,6 +69,7 @@ class Error(Exportable):
   _: KW_ONLY
   description: list[str] = field(default_factory=list)
   id: Optional[str] = None
+  name: str = 'unknown'
   references: list[ErrorReference] = field(default_factory=list)
   trace: Trace = field(default_factory=list)
 
@@ -78,6 +79,7 @@ class Error(Exportable):
     return MasterError(
       description=self.description,
       message=self.message,
+      name=self.name,
       id=(self.id or str(uuid.uuid4())),
       references=self.references,
       time=time
@@ -88,6 +90,7 @@ class Error(Exportable):
       "description": self.description,
       "id": self.id,
       "message": self.message,
+      "name": self.name,
       "references": [ref.export() for ref in self.references],
       "trace": [ref.export() for ref in self.references]
     }
@@ -98,6 +101,8 @@ class Error(Exportable):
       range for ref in self.references if isinstance(ref, ErrorDocumentReference) and ref.area for range in ref.area.ranges
     ])
 
+
+Diagnostic = Error
 
 class SomeRandomError(Error):
   def __init__(self, target: LocatedString, /):

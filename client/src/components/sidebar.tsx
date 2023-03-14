@@ -84,10 +84,10 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               label: 'Settings',
               icon: 'settings',
               route: '/settings' },
-            { id: 'design',
+/*             { id: 'design',
               label: 'Design',
               icon: 'design_services',
-              route: '/design' },
+              route: '/design' }, */
             ...(this.props.setStartup
                 ? [{
                   id: 'startup',

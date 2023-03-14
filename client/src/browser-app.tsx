@@ -53,8 +53,8 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
           appBackend={this.appBackend}
           backend={new WebsocketBackend(hostSettings.options)}
           hostInfo={{
-            imageUrl: null,
-            subtitle: 'localhost:4567',
+            imageUrl: 'http://localhost:9050/logo.png',
+            subtitle: '192.168.1.18:4235',
             title: hostSettings.label
           }}
           setStartup={() => void this.setState({ currentSettingsId: null })}

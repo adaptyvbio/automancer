@@ -139,7 +139,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
               ))}
             </div>
           </div>
-          {(route.id === 'section') && (
+          {(route.id === 'section' && false) && (
             <div className={styles.contentsOuter}>
               <div className={styles.contentsInner}>
                 {(() => {
@@ -174,22 +174,35 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
             </div>
           )}
 
-            {/* <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
-              <h2>OPC-UA</h2>
+          <div className={styles.contentsOuter}>
+            <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
+              <h2>AMF</h2>
 
               <h3>Devices</h3>
 
               <div className={descriptionStyles.itemlistRoot}>
-                {new Array(3).fill(0).map(() => (
-                  <button type="button" className={descriptionStyles.itemlistEntry}>
-                    <div className={descriptionStyles.itemlistDetails}>
-                      <div className={descriptionStyles.itemlistLabel}>USB ACM 2</div>
-                      <div className={descriptionStyles.itemlistDescription}>Not configured</div>
-                    </div>
-                    <Icon name="chevron_right" style="sharp" className={descriptionStyles.itemlistChevron} />
-                  </button>
-                ))}
-                {new Array(3).fill(0).map(() => (
+                <button type="button" className={descriptionStyles.itemlistEntry}>
+                  <div className={descriptionStyles.itemlistDetails}>
+                    <div className={descriptionStyles.itemlistLabel}>Rotary valve (E5:0D:94:9B)</div>
+                    <div className={descriptionStyles.itemlistDescription}>Configured</div>
+                  </div>
+                  <Icon name="chevron_right" style="sharp" className={descriptionStyles.itemlistChevron} />
+                </button>
+                <button type="button" className={descriptionStyles.itemlistEntry}>
+                  <div className={descriptionStyles.itemlistDetails}>
+                    <div className={descriptionStyles.itemlistLabel}>Rotary valve (CF:70:A8:16)</div>
+                    <div className={descriptionStyles.itemlistDescription}>Configured</div>
+                  </div>
+                  <Icon name="chevron_right" style="sharp" className={descriptionStyles.itemlistChevron} />
+                </button>
+                <div className={descriptionStyles.itemlistEntry}>
+                  <div className={descriptionStyles.itemlistDetails}>
+                    <div className={descriptionStyles.itemlistLabel}>Rotary valve (1D:A0:53:3E)</div>
+                    <div className={descriptionStyles.itemlistDescription}>Not configured</div>
+                  </div>
+                  <Button className={descriptionStyles.itemlistAction}>Configure</Button>
+                </div>
+                {/* {new Array(3).fill(0).map(() => (
                   <div className={descriptionStyles.itemlistEntry}>
                     <div className={descriptionStyles.itemlistDetails}>
                       <div className={descriptionStyles.itemlistLabel}>USB ACM 2</div>
@@ -197,19 +210,20 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
                     </div>
                     <Button className={descriptionStyles.itemlistAction}>Configure</Button>
                   </div>
-                ))}
+                ))} */}
               </div>
 
               <div className={descriptionStyles.rightactions}>
                 <Button>Other...</Button>
               </div>
 
-              {/*
-              {new Array(100).fill(0).map(() => (<label className={formStyles.checkRoot}>
+              {/* {new Array(100).fill(0).map(() => (<label className={formStyles.checkRoot}>
                 <input type="checkbox" />
                 <div className={formStyles.checkTitle}>Automatic save</div>
                 <p className={formStyles.checkDescription}>The editor's contents will be saved automatically at regular intervals.</p>
               </label>))} */}
+            </div>
+          </div>
           {this.state.reloadBannerVisible && (
             <div className={styles.reload}>
               <p>Reload the setup to apply changes.</p>

@@ -104,14 +104,18 @@
     &::before {
       content: "";
       display: inline-block;
-      margin-right: 0.6ch;
+      margin-right: 0.8ch;
 
       width: 1ch;
       aspect-ratio: 1;
 
-      background-color: $app-red;
+      background-color: $app-green;
       border-radius: 50%;
     }
+  }
+
+  &Entry:last-child &Description::before {
+    background-color: $app-red;
   }
 
   &Entry:not(:hover) &Action {

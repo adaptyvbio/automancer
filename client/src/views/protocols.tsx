@@ -1,5 +1,7 @@
 import * as React from 'react';
 
+import viewStyles from '../../styles/components/view.module.scss';
+
 import type { Application } from '../application';
 import type { Host } from '../host';
 import type { Draft, DraftId, DraftPrimitive } from '../draft';
@@ -14,7 +16,7 @@ import { ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { ViewDraft } from './draft';
 
-import viewStyles from '../../styles/components/view.module.scss';
+import { Button } from '../components/button';
 
 
 const rtf = new Intl.RelativeTimeFormat('en', {
@@ -42,7 +44,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
             <header className="header header--2">
               <h2>All protocols</h2>
               <div className="actions">
-                <button type="button" className="btn" onClick={() => {
+                <Button onClick={() => {
                   this.pool.add(async () => {
                     let draftId = await this.props.app.createDraft({ directory: false });
 
@@ -50,8 +52,8 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
                       ViewDraft.navigate(draftId);
                     }
                   });
-                }}>New file</button>
-                <button type="button" className="btn" onClick={() => {
+                }}>New file</Button>
+                <Button onClick={() => {
                   this.pool.add(async () => {
                     let draftId = await this.props.app.loadDraft({ directory: false });
 
@@ -59,7 +61,7 @@ export class ViewDrafts extends React.Component<ViewProps, {}> {
                       ViewDraft.navigate(draftId);
                     }
                   });
-                }}>Open file</button>
+                }}>Open file</Button>
               </div>
             </header>
 

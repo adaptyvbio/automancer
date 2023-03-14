@@ -57,7 +57,7 @@ export class BrowserAppBackend implements AppBackend {
       hosts: {
         'foo': {
           id: 'foo',
-          label: 'PC',
+          label: 'Setup 1',
           options: {
             type: 'remote' as const,
             auth: null,

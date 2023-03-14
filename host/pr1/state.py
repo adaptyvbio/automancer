@@ -277,9 +277,7 @@ class GlobalStateManager:
 
     for namespace, consumer in self._consumers.items():
       value = state[namespace]
-
-      def notify(event: StateEvent):
-        self._handle_event(item, namespace, event)
+      notify = (lambda event, namespace = namespace: self._handle_event(item, namespace, event))
 
       result = analysis.add(consumer.add(item, value, notify=notify, stack=stack))
       aborted = aborted or isinstance(result, EllipsisType)

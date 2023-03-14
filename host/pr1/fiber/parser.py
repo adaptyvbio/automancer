@@ -24,6 +24,7 @@ if TYPE_CHECKING:
   from .master2 import Master, ProgramHandle
   from .process import ProgramExecEvent
   from ..host import Host
+  from ..units.base import BaseRunner
 
 
 @debug
@@ -89,8 +90,17 @@ class BlockState(dict[str, Optional[BlockUnitState]]):
     return { namespace: state and state.export() for namespace, state in self.items() if state }
 
 
-@dataclass(kw_only=True)
+class ProtocolUnitDetails:
+  def create_adoption_stack(self):
+    return EvalStack()
+
+  def create_runtime_stack(self, runner: 'BaseRunner'):
+    return EvalStack()
+
+@dataclass
 class ProtocolUnitData:
+  details: Optional[ProtocolUnitDetails] = None
+  _: KW_ONLY
   adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
   runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
 
@@ -125,6 +135,7 @@ class BlockUnitPreparationData:
   envs: EvalEnvs = field(default_factory=EvalEnvs)
 
 BlockPreparationData = dict[str, BlockUnitPreparationData]
+ProtocolDetails = dict[str, ProtocolUnitDetails]
 
 class BlockProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
@@ -247,6 +258,7 @@ class AnalysisContext:
 
 @dataclass(kw_only=True)
 class FiberProtocol(Exportable):
+  details: ProtocolDetails
   draft: Draft
   global_env: EvalEnv
   name: Optional[str]
@@ -324,6 +336,8 @@ class FiberParser:
 
     # Root unit attributes
 
+    protocol_details = ProtocolDetails()
+
     for parser in self._parsers:
       unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, namespace=parser.namespace))
 
@@ -334,6 +348,9 @@ class FiberParser:
 
       adoption_envs += protocol_unit_data.adoption_envs
       runtime_envs += protocol_unit_data.runtime_envs
+
+      if protocol_unit_data.details:
+        protocol_details[parser.namespace] = protocol_unit_data.details
 
       # TODO: Split BaseParser.enter_protocol() in two
       #   (1) one method to create envs e.g. devices
@@ -368,6 +385,9 @@ class FiberParser:
       }
     }
 
+    for protocol_unit_details in protocol_details.values():
+      adoption_stack |= protocol_unit_details.create_adoption_stack()
+
     root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
     if isinstance(root_block_prep, EllipsisType):
@@ -396,6 +416,7 @@ class FiberParser:
     # Return
 
     return analysis, FiberProtocol(
+      details=protocol_details,
       draft=self.draft,
       global_env=global_env,
       name=root_result_native['name'],

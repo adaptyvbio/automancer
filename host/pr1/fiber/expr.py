@@ -234,8 +234,9 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     self._depth = depth
     self._envs = envs
     self._expr = expr
-    self._metadata = dict[str, StaticAnalysisMetadata]()
     self._type = type
+
+    self.metadata = dict[str, StaticAnalysisMetadata]()
 
   def analyze(self):
     from .langservice import Analysis
@@ -253,7 +254,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     except Exception:
       return Analysis()
 
-    self._metadata = static_analysis.metadata
+    self.metadata = static_analysis.metadata
 
     return Analysis(
       errors=static_analysis.errors,

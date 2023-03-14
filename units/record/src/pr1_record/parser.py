@@ -8,6 +8,8 @@ from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState
 from pr1.fiber.segment import SegmentTransform
 from pr1.reader import LocatedDict, LocatedString, LocatedValue, LocationArea
 
+from . import namespace
+
 
 OutputFormat = Literal['csv', 'npy', 'npz', 'xlsx']
 
@@ -17,7 +19,7 @@ class StateData(TypedDict):
   output: LocatedValue[lang.FileRef]
 
 class Parser(BaseParser):
-  namespace = "record"
+  namespace = namespace
   segment_attributes = {
     'record': lang.Attribute(
       lang.EvaluableContainerType(

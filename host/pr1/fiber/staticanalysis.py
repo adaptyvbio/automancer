@@ -9,7 +9,7 @@ from typing import Any, Generator, Generic, Literal, Mapping, Optional, Protocol
 
 from ..analysis import DiagnosticAnalysis
 from ..document import Document
-from ..error import Error, ErrorDocumentReference, ErrorReference
+from ..error import Diagnostic, Error, ErrorDocumentReference, ErrorReference
 from ..reader import LocatedString, Source
 
 
@@ -228,7 +228,7 @@ class StaticAnalysisContext:
   input_value: LocatedString
   prelude: Variables
 
-class StaticAnalysisError(Error):
+class StaticAnalysisDiagnostic(Diagnostic):
   def __init__(self, message: str, node: ast.expr | ast.stmt, context: StaticAnalysisContext, *, name: str = 'unknown'):
     super().__init__(
       message,
@@ -236,8 +236,8 @@ class StaticAnalysisError(Error):
       references=[ErrorDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
     )
 
-  def analysis(self):
-    return StaticAnalysisAnalysis(errors=[self])
+  def analysis(self, *, warning: bool = False):
+    return StaticAnalysisAnalysis(warnings=[self]) if warning else StaticAnalysisAnalysis(errors=[self])
 
 class StaticAnalysisMetadata(Protocol):
   def __or__(self, other: Self, /) -> Self:
@@ -298,7 +298,7 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
         case TypeVarDef():
           return StaticAnalysisAnalysis(), value
         case None:
-          return StaticAnalysisError("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), ClassRef(UnknownType)
+          return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), ClassRef(UnknownType)
         case _:
           raise Exception
 
@@ -306,7 +306,7 @@ def parse_type(node: ast.expr, /, variables: VariableOrTypeDefs, context: Static
       type_ref = variables[name]
 
       if not isinstance(type_ref, TypeClassRef):
-        return StaticAnalysisError("Invalid subscript operation", node, context, name='invalid_subscript').analysis(), ClassRef(UnknownType)
+        return StaticAnalysisDiagnostic("Invalid subscript operation", node, context, name='invalid_subscript').analysis(), ClassRef(UnknownType)
 
       ref = cast(TypeClassRef[OuterType], type_ref.extract())
 
@@ -421,7 +421,7 @@ def process_module(module: ast.Module, /, variables: VariableOrTypeDefs, context
           base_type_ref = analysis.add(parse_type(class_base, variables | values, context, instantiate_types=False))
 
           if not isinstance(base_type_ref, TypeClassRef):
-            analysis.errors.append(StaticAnalysisError("Invalid base value", module_statement, context, name='invalid_base'))
+            analysis.errors.append(StaticAnalysisDiagnostic("Invalid base value", module_statement, context, name='invalid_base'))
             continue
 
           base_ref = cast(ClassRef[InnerType], base_type_ref.extract())
@@ -581,7 +581,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
           attr_type = attr.resolve(class_ref.arguments or dict())
           return analysis, attr_type
 
-      return analysis + StaticAnalysisError("Invalid reference to missing attribute", node, context).analysis(), ClassRef(UnknownType)
+      return analysis + StaticAnalysisDiagnostic("Invalid reference to missing attribute", node, context).analysis(), ClassRef(UnknownType)
 
     case ast.BinOp(left=left, right=right, op=op):
       analysis = StaticAnalysisAnalysis()
@@ -604,7 +604,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
       if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
         return analysis, ClassRef(UnknownType)
 
-      return (analysis + StaticAnalysisError("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
+      return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
 
     case ast.Call(obj, args, keywords):
       analysis, obj_ref = evaluate_expr_type(obj, variables, context)
@@ -621,14 +621,14 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
         overload = find_overload(target.cls.instance_attrs['__init__'], args=args, kwargs=kwargs)
 
         if not overload:
-          analysis.errors.append(StaticAnalysisError("Invalid call", node, context))
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid call", node, context))
 
         return analysis, target
 
       func_ref = obj_ref.cls.instance_attrs.get('__call__')
 
       if not func_ref:
-        return analysis + StaticAnalysisError("Invalid object for call", node, context).analysis(), ClassRef(UnknownType)
+        return analysis + StaticAnalysisDiagnostic("Invalid object for call", node, context).analysis(), ClassRef(UnknownType)
 
       assert isinstance(func_ref.cls, FuncDef)
       overload = find_overload(func_ref.cls, args=args, kwargs=kwargs)
@@ -636,13 +636,20 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
       assert overload
       return resolve_generics(overload.return_type, obj_ref.context) if overload.return_type else None
 
+    case ast.Compare(left=left, ops=ops, comparators=comparators):
+      analysis = StaticAnalysisAnalysis()
+      left_type = analysis.add(evaluate_expr_type(left, variables, context))
+      comparators_type = analysis.add_sequence([evaluate_expr_type(comparator, variables, context) for comparator in comparators])
+
+      # TODO: Add implementation here
+
+      return analysis, cast(TypeClassRef[OuterType], context.prelude['bool']).extract()
+
     case ast.Constant(builtins.float()):
-      assert isinstance(const_type := context.prelude['float'], TypeClassRef)
-      return StaticAnalysisAnalysis(), const_type.extract()
+      return StaticAnalysisAnalysis(), cast(TypeClassRef[OuterType], context.prelude['float']).extract()
 
     case ast.Constant(builtins.int()):
-      assert isinstance(const_type := context.prelude['int'], TypeClassRef)
-      return StaticAnalysisAnalysis(), const_type.extract()
+      return StaticAnalysisAnalysis(), cast(TypeClassRef[OuterType], context.prelude['int']).extract()
 
     # case ast.List(items, ctx=ast.Load()):
     #   analysis, item_types = StaticAnalysisAnalysis.sequence([evaluate(item, variables, context) for item in items])
@@ -652,7 +659,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
       all_variables = context.prelude | variables
 
       if not (name in all_variables):
-        return StaticAnalysisAnalysis(errors=[StaticAnalysisError("Invalid reference to missing variable", node, context)]), ClassRef(UnknownType)
+        return StaticAnalysisAnalysis(errors=[StaticAnalysisDiagnostic("Invalid reference to missing variable", node, context)]), ClassRef(UnknownType)
 
       return StaticAnalysisAnalysis(), all_variables[name]
 
@@ -669,11 +676,11 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
           arguments={ value_type_inner.cls.generics.before_tuple[0]: subscript_type.extract() }
         ))
       else:
-        return (analysis + StaticAnalysisError("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
+        return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
 
     case _:
       print("Missing", ast.dump(node, indent=2))
-      raise Exception
+      return StaticAnalysisDiagnostic("Unimplemented operation", node, context, name='unimplemented_operation').analysis(warning=True), ClassRef(UnknownType)
 
 #
 # Checks if lhs >= rhs (lhs at least contains rhs)
@@ -838,7 +845,7 @@ class B(Generic[T]):
   # pprint(AuxVariables['A'].extract().cls.instance_attrs)
   # print()
 
-  document = Document.text("~~~ devices.Okolab.temperature + devices.Okolab.pressure ~~~")
+  document = Document.text("~~~ devices.Okolab.temperature > (3.0 * ureg.degC) ~~~")
   context = StaticAnalysisContext(
     input_value=document.source[4:-4],
     prelude=PreludeVariables

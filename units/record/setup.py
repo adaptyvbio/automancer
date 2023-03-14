@@ -17,7 +17,7 @@ setup(
   },
 
   install_requires=[
-    "numpy==1.22.3",
-    "pandas==1.5.3"
+    "numpy>=1.23.0",
+    "pandas>=1.5.0"
   ]
 )

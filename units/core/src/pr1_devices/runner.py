@@ -8,8 +8,10 @@ from typing import Any, Callable, Optional
 from pr1.devices.claim import Claim
 from pr1.devices.node import BaseWatchableNode, BaseWritableNode, NodePath
 from pr1.error import Error
+from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
 from pr1.host import Host
+from pr1.master.analysis import MasterAnalysis
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseRunner
 from pr1.util.asyncio import run_anonymous
@@ -140,6 +142,8 @@ class DevicesStateManager(UnitStateManager):
       node_info.claim.destroy()
 
   def add(self, item, state: DevicesState, *, notify, stack):
+    analysis = MasterAnalysis()
+
     item_info = DevicesStateItemInfo(item, notify=notify)
     self._item_infos[item] = item_info
 
@@ -148,13 +152,10 @@ class DevicesStateManager(UnitStateManager):
       assert isinstance(node, BaseWritableNode)
       item_info.nodes.add(node)
 
-      analysis, value = node_value.evaluate(stack)
+      value = analysis.add(node_value.evaluate(EvalContext(stack)))
 
       if isinstance(value, EllipsisType):
-        raise Exception
-
-      # TODO: Handle errors
-      # print(node, analysis, value)
+        return analysis, Ellipsis
 
       if node in self._node_infos:
         node_info = self._node_infos[node]
@@ -164,6 +165,8 @@ class DevicesStateManager(UnitStateManager):
 
       item_info.location.values[node_info.path] = NodeStateLocation(value)
       bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value), key=(lambda candidate: candidate.item_info.item))
+
+    return analysis, None
 
   async def remove(self, item):
     nodes = self._item_infos[item].nodes

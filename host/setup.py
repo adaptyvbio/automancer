@@ -7,7 +7,7 @@ setup(
   packages=find_packages(),
 
   install_requires=[
-    "numpy==1.22.3",
+    "numpy>=1.23.0",
     "pint==0.20.1",
     "regex==2022.8.17",
     "uncertainties==3.1.7"

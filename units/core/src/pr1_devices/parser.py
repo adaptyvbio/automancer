@@ -1,31 +1,81 @@
+from dataclasses import dataclass
 import functools
 from types import EllipsisType
-from typing import Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 from pr1.fiber.eval import EvalEnv, EvalEnvValue
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, PotentialExprType, PrimitiveType, QuantityType
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, ProtocolUnitData
-from pr1.devices.node import BaseNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, ScalarReadableNode, ScalarWritableNode
-from pr1.fiber.staticanalysis import ClassDef, ClassRef, CommonVariables, StaticAnalysisAnalysis
+from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, ProtocolDetails, ProtocolUnitData, ProtocolUnitDetails
+from pr1.devices.node import BaseNode, BaseReadableNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, QuantityReadableNode, ScalarWritableNode
+from pr1.fiber.staticanalysis import ClassDef, ClassRef, CommonVariables, OuterType, StaticAnalysisAnalysis
 from pr1.util.decorators import debug
 
+from . import namespace
 
-DeviceDependenciesMetadata = set[NodePath]
+if TYPE_CHECKING:
+  from .runner import DevicesRunner
+
+
+EXPR_DEPENDENCY_METADATA_NAME = f"{namespace}.dependencies"
+
+@dataclass(eq=True, frozen=True, kw_only=True)
+class NodeDependencyMetadata:
+  endpoint: Literal['connected', 'value']
+  path: NodePath
+
+NodeDependenciesMetadata = set[NodeDependencyMetadata]
 
 class TrackedReadableNodeClassRef(ClassRef):
-  def __init__(self, path: NodePath):
-    super().__init__(CommonVariables['float'])
-    self.path = path
+  def __init__(self, type_def: ClassDef, /, metadata: NodeDependencyMetadata):
+    super().__init__(type_def)
+    self.metadata = metadata
 
   def analyze_access(self):
     return StaticAnalysisAnalysis(metadata={
-      'devices': DeviceDependenciesMetadata({self.path})
+      EXPR_DEPENDENCY_METADATA_NAME: NodeDependenciesMetadata({self.metadata})
     })
 
 
+class CollectionNodeWrapper:
+  def __init__(self, node: CollectionNode, /):
+    for child_node in node.nodes.values():
+      if (wrapped_node := wrap_node(child_node)):
+        setattr(self, child_node.id, wrapped_node)
+
+class QuantityReadableNodeWrapper:
+  def __init__(self, node: QuantityReadableNode):
+    self._node = node
+
+  @property
+  def value(self):
+    return self._node.value
+
+
+def wrap_node(node: BaseNode, /):
+  match node:
+    case CollectionNode():
+      return CollectionNodeWrapper(node)
+    case QuantityReadableNode():
+      return QuantityReadableNodeWrapper(node)
+    case _:
+      return None
+
+
+@dataclass
+class DevicesProtocolDetails(ProtocolUnitDetails):
+  env: EvalEnv
+
+  def create_runtime_stack(self, runner: 'DevicesRunner'):
+    return {
+      self.env: {
+        'devices': wrap_node(runner._host.root_node)
+      }
+    }
+
+
 class DevicesParser(BaseParser):
-  namespace = "devices"
+  namespace = namespace
   priority = 1100
 
   root_attributes = dict()
@@ -74,18 +124,37 @@ class DevicesParser(BaseParser):
   def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
     def create_type(node: BaseNode, parent_path: NodePath = ()):
       node_path = (*parent_path, node.id)
+      connected_ref = TrackedReadableNodeClassRef(
+        CommonVariables['bool'],
+        NodeDependencyMetadata(
+          endpoint='connected',
+          path=node_path
+        )
+      )
 
       match node:
         case CollectionNode():
           return ClassRef(ClassDef(
             name=node.id,
             instance_attrs={
-              **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) },
-              'connected': ClassRef(CommonVariables['bool'])
+              'connected': connected_ref,
+              **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) }
             }
           ))
-        case ScalarReadableNode():
-          return TrackedReadableNodeClassRef(node_path)
+        case QuantityReadableNode():
+          return ClassRef(ClassDef(
+            name=node.id,
+            instance_attrs={
+              'connected': connected_ref,
+              'value': TrackedReadableNodeClassRef(
+                CommonVariables['unknown'],
+                NodeDependencyMetadata(
+                  endpoint='value',
+                  path=node_path
+                )
+              )
+            }
+          ))
         case _:
           return None
 
@@ -100,7 +169,7 @@ class DevicesParser(BaseParser):
       )
     }, name="Devices", readonly=True)
 
-    return Analysis(), ProtocolUnitData(runtime_envs=[env])
+    return Analysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
 
   def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
     values = dict[NodePath, Evaluable]()

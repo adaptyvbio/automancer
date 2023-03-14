@@ -99,6 +99,9 @@ class Master:
       self.protocol.user_env: dict()
     }
 
+    for namespace, protocol_unit_details in self.protocol.details.items():
+      runtime_stack |= protocol_unit_details.create_runtime_stack(self.chip.runners[namespace])
+
     self._update_callback = update_callback
 
     self._handle = ProgramHandle(self, id=0)

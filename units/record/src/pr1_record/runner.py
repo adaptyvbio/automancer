@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from pr1.devices.claim import ClaimSymbol
 from pr1.devices.node import (AsyncCancelable, NodePath, PolledReadableNode,
-                              ScalarReadableNode, SubscribableReadableNode)
+                              QuantityReadableNode, SubscribableReadableNode)
 from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.langservice import PathFileRef
@@ -141,7 +141,7 @@ class RecordStateInstance(UnitStateInstance):
         if not node:
           analysis.errors.append(MissingNodeError(field_data['value']))
           failure = True
-        elif not isinstance(node, (PolledReadableNode, SubscribableReadableNode)) or not isinstance(node, ScalarReadableNode):
+        elif not isinstance(node, (PolledReadableNode, SubscribableReadableNode)) or not isinstance(node, QuantityReadableNode):
           analysis.errors.append(InvalidNodeError(field_data['value']))
           failure = True
         elif dtype and (node.dtype.kind != dtype.kind):

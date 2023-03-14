@@ -4,19 +4,19 @@ from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceDisconnectedError, OkolabDeviceStatus
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, ScalarReadableNode, ScalarWritableNode, ConfigurableWritableNode
+from pr1.devices.node import DeviceNode, NodeUnavailableError, PolledReadableNode, QuantityReadableNode, ScalarWritableNode, ConfigurableWritableNode
 
 from . import logger, namespace
 
 
-class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
+class BoardTemperatureNode(PolledReadableNode, QuantityReadableNode):
   description = None
   id = "boardTemperature"
   label = "Board temperature"
 
   def __init__(self, *, master: 'MasterDevice'):
     PolledReadableNode.__init__(self, min_interval=0.2)
-    ScalarReadableNode.__init__(self)
+    QuantityReadableNode.__init__(self)
 
     self._master = master
 
@@ -27,14 +27,14 @@ class BoardTemperatureNode(PolledReadableNode[float], ScalarReadableNode):
       raise NodeUnavailableError() from e
 
 
-class TemperatureReadoutNode(ScalarReadableNode, PolledReadableNode[float]):
+class TemperatureReadoutNode(PolledReadableNode, QuantityReadableNode):
   description = None
   id = "readout"
   label = "Temperature readout"
 
   def __init__(self, *, worker: 'WorkerDevice'):
     PolledReadableNode.__init__(self, min_interval=0.2)
-    ScalarReadableNode.__init__(self)
+    QuantityReadableNode.__init__(self)
 
     self._worker = worker
 

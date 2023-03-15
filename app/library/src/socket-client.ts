@@ -1,27 +1,19 @@
 import crypto from 'crypto';
 import net from 'net';
 import tls from 'tls';
+import { Client, deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
 
-import { ServerProtocol } from './protocol';
+import { ClientProtocol, ServerProtocol } from './protocol';
 import { CertificateFingerprint } from './types';
-import { defer, Deferred } from './util';
+import { Deferred, createErrorWithCode, defer } from './util';
 
 
-export class SocketClientClosed extends Error {
+export class OrdinarySocketClientClosedError extends Error {
 
 }
 
-function createErrorWithCode(message: string, code: string) {
-  let err = new Error(message);
 
-  // @ts-expect-error
-  err.code = code;
-
-  return err;
-}
-
-
-export interface SocketClientBackendOptions {
+export interface OrdinarySocketClientOptions {
   address: {
     host: string;
     port: number;
@@ -34,7 +26,7 @@ export interface SocketClientBackendOptions {
   } | null;
 }
 
-export class SocketClientBackend {
+export class OrdinarySocketClient {
   private _buffer: Buffer | null = null;
   private _closedDeferred: Deferred<boolean> = defer();
   private _closedUser: boolean = false;
@@ -50,7 +42,7 @@ export class SocketClientBackend {
     trusted: boolean;
   } | null;
 
-  constructor(options: SocketClientBackendOptions) {
+  constructor(options: OrdinarySocketClientOptions) {
     this.ready = new Promise((resolve, reject) => {
       if (options.tls) {
         let tlsOptions = options.tls;
@@ -99,7 +91,7 @@ export class SocketClientBackend {
         this.isClosed = true;
 
         if (this._recvDeferred) {
-          this._recvDeferred.reject(new SocketClientClosed());
+          this._recvDeferred.reject(new OrdinarySocketClientClosedError());
         }
       });
 
@@ -147,7 +139,7 @@ export class SocketClientBackend {
       try {
         yield await this.recv();
       } catch (err) {
-        if (err instanceof SocketClientClosed) {
+        if (err instanceof OrdinarySocketClientClosedError) {
           return;
         }
 
@@ -158,56 +150,30 @@ export class SocketClientBackend {
 }
 
 
-export class MessageSocketClientBackend extends SocketClientBackend {
-  // @ts-expect-error
-  override async * [Symbol.asyncIterator]() {
-    let contents = '';
+export class SocketClientBackend {
+  private _options: OrdinarySocketClientOptions;
+  private _socket!: OrdinarySocketClient;
 
-    try {
-      for await (let chunk of super[Symbol.asyncIterator]()) {
-        contents += chunk.toString();
-
-        let msgs = contents.split('\n');
-        contents = msgs.at(-1)!;
-
-        for (let msg of msgs.slice(0, -1)) {
-          let message;
-
-          try {
-            message = JSON.parse(msg) as ServerProtocol.Message;
-          } catch (err) {
-            if (err instanceof SyntaxError) {
-              throw createErrorWithCode('Malformed message', 'APP_MALFORMED');
-            }
-
-            throw err;
-          }
-
-          yield message;
-        }
-      }
-    } catch (err) {
-      if (!(err instanceof SocketClientClosed)) {
-        throw err;
-      }
-    }
+  constructor(options: OrdinarySocketClientOptions) {
+    this._options = options;
   }
-}
 
-export class SocketClient extends MessageSocketClientBackend {
-  private _nextRequestId = 0;
-  private _requests = new Map<number, Deferred<unknown>>();
+  async close() {
+    await this._socket.close();
+  }
 
-  async initialize() {
+  async open() {
+    this._socket = new OrdinarySocketClient(this._options);
+
     try {
-      await this.ready;
+      await this._socket.ready;
     } catch (err: any) {
       switch (err.code) {
         case 'APP_UNTRUSTED_CERT':
           return {
             ok: false,
             reason: 'untrusted_server',
-            tlsInfo: this.tlsInfo!
+            tlsInfo: this._socket.tlsInfo!
           } as const;
         case 'ECONNREFUSED':
           return {
@@ -229,101 +195,34 @@ export class SocketClient extends MessageSocketClientBackend {
       }
     }
 
-    let initializationMessage;
-    let stateMessage;
+    let messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this._socket));
 
-    try {
-      let createProtocolError = () => createErrorWithCode('Invalid message', 'APP_PROTOCOL');
+    let client = new Client({
+      messages,
+      send: (message: ClientProtocol.Message) => void this._socket.send(serializeMessage(message))
+    });
 
-      let iterator = this[Symbol.asyncIterator]();
-      let item1 = await iterator.next();
+    let result = await client.initialize();
 
-      if (item1.done || item1.value.type !== 'initialize') {
-        throw createProtocolError();
-      }
-
-      initializationMessage = item1.value;
-
-      let item2 = await iterator.next();
-
-      if (item2.done || item2.value.type !== 'state') {
-        throw createProtocolError();
-      }
-
-      stateMessage = item2.value;
-    } catch (err: any) {
-      await this.close();
-
-      switch (err.code) {
-        case 'APP_PROTOCOL':
-          return {
-            ok: false,
-            reason: 'invalid_protocol',
-            tlsInfo: this.tlsInfo
-          } as const;
-        default:
-          throw err;
-      }
+    if (!result.ok) {
+      await this._socket.close();
     }
 
     return {
-      ok: true,
-      identifier: initializationMessage.identifier,
-      name: stateMessage.data['info'].name as string,
-      tlsInfo: this.tlsInfo,
-      version: initializationMessage.version
-    } as const;
+      ...result,
+      client,
+      tlsInfo: this._socket.tlsInfo
+    };
   }
 
-  async start() {
-    try {
-      for await (let message of this) {
-        switch (message.type) {
-          case 'response': {
-            let request = this._requests.get(message.id);
-
-            if (request) {
-              request.resolve(message.data);
-              this._requests.delete(message.id);
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      await this.close();
-      throw err;
-    } finally {
-      for (let request of this._requests.values()) {
-        request.reject(new SocketClientClosed());
-      }
-
-      this._requests.clear();
-    }
-  }
-
-  override async send(data: unknown) {
-    super.send(Buffer.from(JSON.stringify(data) + '\n'));
-  }
-
-  async request(data: unknown) {
-    let requestId = this._nextRequestId++;
-    let deferred = defer<any>();
-
-    this._requests.set(requestId, deferred);
-
-    this.send({
-      id: requestId,
-      type: 'request',
-      data
-    });
-
-    return await deferred.promise;
+  async send(message: ClientProtocol.Message) {
+    this._socket.send(serializeMessage(message));
   }
 
 
-  static async test(options: SocketClientBackendOptions) {
-    let client = new SocketClient(options);
-    let result = await client.initialize();
+  static async test(options: OrdinarySocketClientOptions) {
+    let client = new SocketClientBackend(options);
+    let result = await client.open();
 
     if (result.ok) {
       await client.close();

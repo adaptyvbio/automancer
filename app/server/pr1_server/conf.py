@@ -2,13 +2,10 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional, Protocol
 import uuid
 
-from .bridges.stdio import StdioBridge
-
-from .bridges.websocket import WebsocketBridge
-
-from .bridges.socket import SocketBridge
-
 from .bridges.protocol import BridgeProtocol
+from .bridges.socket import SocketBridge
+from .bridges.stdio import StdioBridge
+from .bridges.websocket import WebsocketBridge
 
 
 VERSION = 4

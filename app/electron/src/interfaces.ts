@@ -1,6 +1,6 @@
 import type { FSWatcher } from 'chokidar';
 import type { IpcMainInvokeEvent } from 'electron';
-import type { HostIdentifier, TcpHostOptions } from 'pr1-library';
+import type { HostIdentifier, ServerConfiguration, TcpHostOptions } from 'pr1-library';
 
 
 declare const brand: unique symbol;
@@ -86,11 +86,12 @@ export interface HostSettingsLocal {
   label: string;
   options: {
     architecture: string | null;
-    conf: any;
+    conf: ServerConfiguration;
     corePackagesInstalled: boolean;
     dirPath: string;
     identifier: HostIdentifier;
     pythonPath: string; // | null; // null -> use embedded
+    socketPath: string;
   };
 }
 

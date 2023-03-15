@@ -3,7 +3,7 @@ import path from 'path';
 
 import type { AppData, HostSettings } from 'pr1-app';
 import { Scanner, type Service } from './scan';
-import { SocketClient } from './socket-client';
+import { SocketClientBackend } from './socket-client';
 import { HostIdentifier, TcpHostOptionsCandidate } from './types';
 
 
@@ -150,7 +150,7 @@ export async function searchForHostEnvironments() {
   let appData = await getDesktopAppData();
 
   for (let hostSettings of Object.values(appData?.hostSettingsRecord ?? {})) {
-    if (hostSettings.options.type === 'local') {
+    if (hostSettings.type === 'local') {
       let identifier = hostSettings.options.identifier;
 
       environments[identifier] = {
@@ -213,9 +213,12 @@ export async function searchForHostEnvironments() {
     let identifier = match[1];
 
     let socketFilePath = path.join(UnixSocketDirPath, socketFileName);
-    let isOpen = await SocketClient.test(socketFilePath);
+    let result = await SocketClientBackend.test({
+      address: { path: socketFilePath },
+      tls: null
+    });
 
-    if (!isOpen) {
+    if (!result.ok) {
       continue;
     }
 

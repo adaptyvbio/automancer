@@ -1,3 +1,6 @@
+import type { HostState } from 'pr1';
+
+
 export namespace ClientProtocol {
   export interface RequestMessage {
     type: 'request';
@@ -23,9 +26,7 @@ export namespace ServerProtocol {
 
   export interface StateMessage {
     type: 'state';
-    data: {
-      [key: string]: any;
-    };
+    data: HostState;
   }
 
   export type Message = InitializationMessage | ResponseMessage | StateMessage;

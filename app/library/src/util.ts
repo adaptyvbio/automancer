@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+
+
 export function defer<T = void>(): Deferred<T> {
   let resolve!: Deferred<T>['resolve'];
   let reject!: Deferred<T>['reject'];
@@ -22,3 +25,24 @@ declare const brand: unique symbol;
 export type Brand<T, TBrand extends string> = T & {
   [brand]: TBrand;
 };
+
+
+/**
+ * Creates an `Error` instance with a `code` property.
+ *
+ * @param message The error's message.
+ * @param code The error's code, such as `APP_FINGERPRINT_MISMATCH`.
+ */
+export function createErrorWithCode(message: string, code: string) {
+  let err = new Error(message);
+
+  // @ts-expect-error
+  err.code = code;
+
+  return err;
+}
+
+
+export async function fsMkdir(dirPath: string) {
+  await fs.mkdir(dirPath, { recursive: true });
+}

@@ -61,7 +61,7 @@ export class Scanner {
           this._records[record.type as 'A'][record.name] = {
             data: (record as any).data,
             expires
-          }
+          };
         }
       }
 

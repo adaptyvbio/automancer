@@ -76,8 +76,8 @@ export type IPCEndpoint = {
     setDefault(options: { hostSettingsId: HostSettingsId }): Promise<void>;
   };
 
-  localHost: {
-    onMessage(callback: (() => void)): void;
+  host: {
+    onMessage(callback: ((message: any) => void)): void;
     ready(hostSettingsId: HostSettingsId): Promise<void>;
     sendMessage(hostSettingsId: HostSettingsId, message: ClientProtocol.Message): void;
   };
@@ -109,17 +109,17 @@ contextBridge.exposeInMainWorld('api', {
     setDefault: async (options) => await ipcRenderer.invoke('hostSettings.setDefault', options),
   },
 
-  localHost: {
-    ready: async (hostSettingsId: HostSettingsId) => {
-      await ipcRenderer.invoke('localHost.ready', hostSettingsId);
+  host: {
+    ready: async (hostSettingsId) => {
+      await ipcRenderer.invoke('host.ready', hostSettingsId);
     },
     onMessage: (callback) => {
-      ipcRenderer.on('localHost.message', (_event, message) => {
+      ipcRenderer.on('host.message', (_event, message) => {
         callback(message);
       });
     },
-    sendMessage: (hostSettingsId: HostSettingsId, message) => {
-      ipcRenderer.send('localHost.message', hostSettingsId, message);
+    sendMessage: (hostSettingsId, message) => {
+      ipcRenderer.send('host.sendMessage', hostSettingsId, message);
     }
   }
 } satisfies IPCEndpoint);

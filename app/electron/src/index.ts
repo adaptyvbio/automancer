@@ -7,7 +7,7 @@ import electron, { App, BrowserWindow, dialog, Menu, MenuItemConstructorOptions,
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { BridgeTcp, searchForAdvertistedHosts, SocketClient, SocketClientBackend } from 'pr1-library';
+import { BridgeTcp, searchForAdvertistedHosts, ServerConfiguration, SocketClient, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
 import * as uol from 'uol';
 
 import { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
@@ -339,7 +339,7 @@ export class CoreApplication {
         this.logger.debug('Initializing host configuration');
 
         let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
-        conf = JSON.parse(confStdout);
+        conf = JSON.parse(confStdout) as ServerConfiguration;
       } catch (err: any) {
         util.logError(err, this.logger);
 
@@ -365,9 +365,10 @@ export class CoreApplication {
               corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
               dirPath: hostDirPath,
               identifier: conf.identifier,
-              pythonPath
+              pythonPath,
+              socketPath: path.join(UnixSocketDirPath, conf.identifier)
             }
-          }
+          } satisfies HostSettings
         }
       });
 
@@ -382,7 +383,7 @@ export class CoreApplication {
       await this.setData({ hostSettingsRecord });
 
       if (deletedHostSettings.type === 'local') {
-        await shell.trashItem(deletedHostSettings.dirPath);
+        await shell.trashItem(deletedHostSettings.options.dirPath);
       }
     });
 
@@ -413,7 +414,7 @@ export class CoreApplication {
       let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
 
       assert(hostSettings.type === 'local');
-      shell.showItemInFolder(hostSettings.dirPath);
+      shell.showItemInFolder(hostSettings.options.dirPath);
     });
 
     ipcMain.handle('hostSettings.selectPythonInstallation', async (event) => {
@@ -697,11 +698,11 @@ export class CoreApplication {
 
     // Internal host
 
-    ipcMain.handle('localHost.ready', async (_event, hostSettingsId) => {
+    ipcMain.handle('host.ready', async (_event, hostSettingsId) => {
       await this.hostWindows[hostSettingsId].localHost!.ready();
     });
 
-    ipcMain.on('localHost.message', async (_event, hostSettingsId, message) => {
+    ipcMain.on('host.sendMessage', async (_event, hostSettingsId, message) => {
       this.hostWindows[hostSettingsId].localHost!.sendMessage(message);
     });
 

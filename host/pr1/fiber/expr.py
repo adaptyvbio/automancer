@@ -230,7 +230,19 @@ class Evaluable(Exportable, ABC, Generic[T]):
 
 
 class PythonExprObject(Evaluable[LocatedValue[Any]]):
+  """
+  A wrapper around `PythonExpr` which provides pre- and post-evaluation analysis.
+  """
+
   def __init__(self, expr: PythonExpr, /, type: 'Type', *, depth: int, envs: EvalEnvs):
+    """
+    Parameters
+      depth: The post-evaluation depth of the expression. A depth of 0 means that `evaluate()` will return the evaluation's result directly, otherwise it will a return a `ValueAsPythonExpr` instance.
+      envs: The evaluation environments of the expression, used for static analysis and evaluation.
+      expr: The `PythonExpr` instance to wrap.
+      type: The type of the expression, used after evaluation.
+    """
+
     self._depth = depth
     self._envs = envs
     self._expr = expr
@@ -279,7 +291,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
       return Analysis(errors=[e]), Ellipsis
     else:
       analysis, result = self._type.analyze(result, AnalysisContext(eval_context=context, symbolic=True))
-      return analysis, ValueAsPythonExpr.new(result, depth=(self._depth - 1))
+      return analysis, ValueAsPythonExpr.new(result, depth=self._depth)
 
   def export(self):
     return self._expr.export()

@@ -808,7 +808,7 @@ class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
     raise NotImplementedError
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({self._value!r})"
+    return f"{self.__class__.__name__}({self._value!r}, depth={self._depth})"
 
   @classmethod
   def new(cls, value: LocatedList, /, *, depth: int):
@@ -862,7 +862,7 @@ class PotentialExprType(Type):
     self._static = static or both
 
   def analyze(self, obj, /, context):
-    eval_depth = max(context.eval_depth, (1 if self._dynamic else 0) + (1 if self._static else 0)) if not context.symbolic else 0
+    eval_depth = max(context.eval_depth, (2 if self._dynamic else 0), (1 if self._static else 0)) if not context.symbolic else 0
 
     if isinstance(obj, str) and (not context.symbolic):
       assert isinstance(obj, LocatedString)
@@ -876,11 +876,11 @@ class PotentialExprType(Type):
 
         match expr.kind:
           case PythonExprKind.Dynamic if self._dynamic:
-            before_depth = 2
-            expr_object = PythonExprObject(expr, self._type, depth=(eval_depth - 1), envs=context.envs_list[1].copy())
+            before_depth = 1
+            expr_object = PythonExprObject(expr, self._type, depth=0, envs=context.envs_list[1].copy())
           case PythonExprKind.Static if self._static:
             before_depth = 0
-            expr_object = PythonExprObject(expr, self._type, depth=eval_depth, envs=context.envs_list[0].copy())
+            expr_object = PythonExprObject(expr, self._type, depth=1, envs=context.envs_list[0].copy())
           case _:
             analysis.errors.append(InvalidExprKind(obj))
             return analysis, Ellipsis

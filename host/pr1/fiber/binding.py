@@ -162,7 +162,7 @@ def parse_binding_expr(expr: ast.expr, *, envs: EvalEnvs, source: LocatedString,
             kind=PythonExprKind.Dynamic,
             tree=ast.Expression(target_expr)
           ),
-          depth=1,
+          depth=0,
           envs=envs,
           type=HasAttrType(attribute)
         )
@@ -185,7 +185,7 @@ def parse_binding_expr(expr: ast.expr, *, envs: EvalEnvs, source: LocatedString,
             kind=PythonExprKind.Static,
             tree=ast.Expression(slice_expr)
           ),
-          depth=1,
+          depth=0,
           envs=envs,
           type=AnyType()
         ),
@@ -195,7 +195,7 @@ def parse_binding_expr(expr: ast.expr, *, envs: EvalEnvs, source: LocatedString,
             kind=PythonExprKind.Dynamic,
             tree=ast.Expression(target_expr)
           ),
-          depth=1,
+          depth=0,
           envs=envs,
           type=HasAttrType('__setitem__')
         )

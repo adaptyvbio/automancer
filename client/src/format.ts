@@ -1,18 +1,38 @@
-export function formatDuration(input: number): string {
-  if (input < 1000) {
-    return `${input} ms`;
-  } else if (input < 60e3) {
-    return `${input / 1000} sec`;
-  } else if (input < 3600e3) {
-    let min = Math.floor(input / 60e3);
-    let sec = Math.round(Math.floor(input % 60e3) / 1000);
-    return `${min} min` + (sec > 0 ? ` ${sec} sec` : '');
-  } else {
-    let hour = Math.floor(input / 3600e3);
-    let min = Math.floor((input % 3600e3) / 60e3);
-    let sec = Math.round(Math.floor(input % 60e3) / 1000);
-    return `${hour} hr${hour > 1 ? 's' : ''}` + (min > 0 ? ` ${min} min` : '') + (sec > 0 ? ` ${sec} sec` : '');
+const TIME_UNITS = [
+  { factor: 1, narrow: 'ms', short: 'msec', long: 'millisecond' },
+  { factor: 1000, narrow: 's', short: 'sec', long: 'second' },
+  { factor: 60e3, narrow: 'm', short: 'min', long: 'minute' },
+  { factor: 3600e3, narrow: 'h', short: 'hr', long: 'hour' },
+  { factor: 3600e3 * 24, narrow: 'd', short: 'day', long: 'day' },
+  { factor: 3600e3 * 24 * 7, narrow: 'w', short: 'week', long: 'week' }
+];
+
+/**
+ * Formats a duration.
+ *
+ * To be replaced with [`Intl.DurationFormat`](https://github.com/tc39/proposal-intl-duration-format) once stable.
+ *
+ * @param input The duration, in milliseconds.
+ * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`) or `narrow` (`1h 40m`).
+ */
+export function formatDuration(input: number, options?: { style: ('long' | 'narrow' | 'short'); }) {
+  let style = options?.style ?? 'short';
+
+  let segments: string[] = [];
+  let rest = Math.round(input);
+
+  for (let unit of Array.from(TIME_UNITS).reverse()) {
+    let unitValue = Math.floor(rest / unit.factor);
+    rest = rest % unit.factor;
+
+    if (unitValue > 0) {
+      segments.push(unitValue.toFixed(0) + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitValue > 1)) ? 's' : ''));
+    }
   }
+
+  return new Intl.ListFormat('en', (style !== 'long')
+    ? { style: 'narrow', type: 'unit' }
+    : { style: 'long', type: 'conjunction' }).format(segments);
 }
 
 

@@ -1,6 +1,8 @@
 import * as React from 'react';
 
 import { Expression } from './components/expression';
+import { formatDuration } from './format';
+import * as util from './util';
 
 
 export type DynamicValue = {
@@ -16,6 +18,8 @@ export type DynamicValue = {
   value: number;
 } | {
   type: 'quantity';
+  magnitude: number;
+  dimensionality: Record<`[${string}]`, number>;
   formatted: string;
 } | {
   type: 'string';
@@ -36,7 +40,11 @@ export function formatDynamicValue(value: DynamicValue) {
     case 'number':
       return value.value.toString();
     case 'quantity':
-      return value.formatted;
+      if (util.deepEqual(value.dimensionality, { '[time]': 1 })) {
+        return formatDuration(value.magnitude);
+      }
+
+      return <span dangerouslySetInnerHTML={{ __html: value.formatted }} />;
     case 'string':
       return value.value;
     case 'unknown':

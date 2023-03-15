@@ -70,12 +70,12 @@ def export_value(value: Any, /):
       }
     case Exportable():
       return value.export()
-    case Quantity(magnitude=magnitude, units=unit):
+    case Quantity():
       return {
         "type": "quantity",
-        "formatted": f"{value:~.2fP}",
-        "magnitude": magnitude,
-        "unitFormatted": f"{unit:~P}"
+        "dimensionality": dict(value.units.dimensionality), # type: ignore
+        "formatted": f"{value:~#H}",
+        "magnitude": (value.to_base_units().magnitude * 1000) # type: ignore
       }
     case _:
       return {

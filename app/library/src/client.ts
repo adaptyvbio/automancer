@@ -1,7 +1,5 @@
 import { HostState } from 'pr1';
-
-import { ClientProtocol, ServerProtocol } from './protocol';
-import { createErrorWithCode, defer, Deferred } from './util';
+import { ClientProtocol, createErrorWithCode, defer, Deferred, ServerProtocol } from 'pr1-shared';
 
 
 export async function* splitMessagesOfIterator(iterable: AsyncIterable<Buffer>) {

@@ -1,8 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MenuDef, MenuEntryId } from 'pr1';
-import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, ClientProtocol, HostIdentifier, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
+import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
+import type { HostIdentifier, ClientProtocol } from 'pr1-shared';
 
-import type { HostCreatorContext, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation } from '../interfaces';
+import type { HostCreatorContext } from '../interfaces';
 
 
 export type IPCEndpoint = {

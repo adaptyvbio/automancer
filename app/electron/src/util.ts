@@ -3,14 +3,11 @@ import electron from 'electron';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { PythonInstallation, PythonInstallationRecord } from 'pr1-library';
 import tls from 'tls';
 import which from 'which';
 
-import { PythonInstallation, PythonInstallationRecord } from './interfaces';
 import { Logger } from './logger';
-
-
-export const isDarwin = (process.platform === 'darwin');
 
 
 export class Pool {
@@ -56,18 +53,6 @@ export class Pool {
   }
 }
 
-
-export function defer<T>() {
-  let resolve!: (value: PromiseLike<T> | T) => void;
-  let reject!: (err?: any) => void;
-
-  let promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-}
 
 export async function findPythonInstallations() {
   let possiblePythonLocations = [
@@ -148,26 +133,6 @@ export async function findPythonInstallations() {
   };
 
   return installations;
-}
-
-export async function fsExists(path: string) {
-  try {
-    await fs.stat(path)
-  } catch (err) {
-    if ((err as { code: string; }).code === 'ENOENT') {
-      return false;
-    }
-
-    throw err;
-  }
-
-  return true;
-}
-
-export async function fsMkdir(dirPath: string) {
-  if (!(await fsExists(dirPath))) {
-    await fs.mkdir(dirPath, { recursive: true });
-  }
 }
 
 export async function getPythonInstallationInfo(location: string): Promise<PythonInstallation['info'] | null> {
@@ -259,7 +224,7 @@ export interface RunCommandOptions {
 export async function runCommand(rawCommand: string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
 export async function runCommand(rawCommand: string, options?: RunCommandOptions): Promise<[string, string]>;
 export async function runCommand(rawCommand: string, options?: RunCommandOptions) {
-  let command = (options?.architecture && isDarwin)
+  let command = (options?.architecture && (process.platform === 'darwin'))
     ? `arch -arch "${options.architecture}" ${rawCommand}`
     : rawCommand;
 

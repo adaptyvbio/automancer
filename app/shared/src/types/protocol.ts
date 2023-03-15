@@ -1,4 +1,4 @@
-import type { HostState } from 'pr1';
+import { HostState } from './host';
 
 
 export namespace ClientProtocol {

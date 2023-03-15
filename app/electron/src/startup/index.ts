@@ -3,7 +3,6 @@ import path from 'path';
 
 import { CoreApplication } from '..';
 import { rootLogger } from '../logger';
-import * as util from '../util';
 
 
 export class StartupWindow {
@@ -25,7 +24,7 @@ export class StartupWindow {
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js')
       },
-      ...(util.isDarwin
+      ...((process.platform === 'darwin')
         ? {
           titleBarStyle: 'hiddenInset'
         }

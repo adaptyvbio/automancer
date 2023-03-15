@@ -1,6 +1,8 @@
 import { Set as ImSet, removeIn, setIn } from 'immutable';
 import * as React from 'react';
 
+import styles from '../styles/components/application.module.scss';
+
 import type { AppBackend, DraftItem } from './app-backends/base';
 import type { Chip, ChipId } from './backends/common';
 import { Sidebar } from './components/sidebar';
@@ -14,13 +16,12 @@ import { ViewExecution } from './views/execution';
 import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
 import { Pool } from './util';
-import { Unit, UnitNamespace } from './units';
+import { Unit } from './units';
 import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-
-import styles from '../styles/components/application.module.scss';
+import { UnitNamespace } from 'pr1-shared';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];

@@ -1,16 +1,17 @@
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { HostIdentifier } from 'pr1-shared';
 
-import type { AppData, HostSettings } from 'pr1-app';
 import { Scanner, type Service } from './scan';
 import { SocketClientBackend } from './socket-client';
-import { HostIdentifier, TcpHostOptionsCandidate } from './types';
+import { AppData, HostSettings, TcpHostOptionsCandidate } from './types/app-data';
 
 
 export function getDesktopAppDataLocation(): string | null {
   switch (process.platform) {
-    case 'darwin': return '/Users/simon/Library/Application Support/PR–1/App Data';
-    case 'win32': return '...';
+    case 'darwin': return path.resolve(os.homedir(), 'Application Support/PR–1/App Data');
+    case 'win32': return null; // TODO: Update
     default: return null;
   }
 }
@@ -87,7 +88,7 @@ export type HostEnvironments = Record<HostIdentifier, HostEnvironment>;
 
 export interface AdvertisedHostInfo {
   bridges: BridgeRemote[];
-  identifier: string;
+  identifier: HostIdentifier;
   ipAddress: string;
   description: string;
 }
@@ -110,7 +111,7 @@ export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHo
         options: {
           hostname: ipAddress,
           fingerprint: null,
-          identifier: service.properties['identifier'],
+          identifier: (service.properties['identifier'] as HostIdentifier),
           password: null,
           port: service.address.port,
           secure: true,
@@ -131,7 +132,7 @@ export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHo
 
     return {
       bridges,
-      identifier: service.properties['identifier'],
+      identifier: (service.properties['identifier'] as HostIdentifier),
       ipAddress,
       description: service.properties['description']
     };
@@ -210,7 +211,7 @@ export async function searchForHostEnvironments() {
       continue;
     }
 
-    let identifier = match[1];
+    let identifier = match[1] as HostIdentifier;
 
     let socketFilePath = path.join(UnixSocketDirPath, socketFileName);
     let result = await SocketClientBackend.test({

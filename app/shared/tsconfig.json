@@ -4,7 +4,6 @@
   "compilerOptions": {
     "composite": true,
     "declarationDir": "types",
-    "module": "CommonJS",
     "outDir": "lib",
     "rootDir": "src"
   },
@@ -13,8 +12,5 @@
   ],
   "include": [
     "src/**/*"
-  ],
-  "references": [
-    { "path": "../electron/tsconfig.types.json" }
   ]
 }

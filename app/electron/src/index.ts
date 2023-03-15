@@ -1,22 +1,22 @@
 import 'source-map-support/register';
 
-import chokidar from 'chokidar';
 import { ok as assert } from 'assert';
+import chokidar from 'chokidar';
 import crypto from 'crypto';
-import electron, { App, BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
+import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
-import { BridgeTcp, searchForAdvertistedHosts, ServerConfiguration, SocketClient, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import { AppData, BridgeTcp, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
 import * as uol from 'uol';
 
-import { MenuDef, MenuEntryId, MenuEntryPath } from 'pr1';
+import { MenuDef, MenuEntryId } from 'pr1';
+import { defer } from 'pr1-shared';
 import { HostWindow } from './host';
-import { AppData, DraftEntryState, HostSettings, HostSettingsId, IPC, IPC2d as IPCServer2d, PythonInstallationRecord } from './interfaces';
+import { DraftEntryState, IPC2d as IPCServer2d } from './interfaces';
+import { rootLogger } from './logger';
 import type { IPCEndpoint } from './shared/preload';
 import { StartupWindow } from './startup';
 import * as util from './util';
-import { rootLogger } from './logger';
 
 
 const ProtocolFileFilters = [
@@ -91,7 +91,7 @@ export class CoreApplication {
       .pipe(process.stderr);
 
 
-    if (util.isDarwin) {
+    if (process.platform === 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         { role: 'appMenu' },
         { role: 'editMenu' },
@@ -197,7 +197,7 @@ export class CoreApplication {
     // Context menu creation
 
     ipcMain.handle('main.triggerContextMenu', async (event, menu, position) => {
-      let deferred = util.defer<MenuEntryId[] | null>();
+      let deferred = defer<MenuEntryId[] | null>();
 
       let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry): MenuItemConstructorOptions[] => {
         let path = [...ancestors, entry.id];
@@ -256,7 +256,7 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.displayCertificateOfRemoteHost', async (event, options) => {
-      let result = await SocketClient.test({
+      let result = await SocketClientBackend.test({
         address: {
           host: options.hostname,
           port: options.port
@@ -280,7 +280,7 @@ export class CoreApplication {
     ipcMain.handle('hostSettings.testRemoteHost', async (_event, options) => {
       this.logger.debug(`Trying to connect to '${options.hostname}:${options.port}'`);
 
-      let result = await SocketClient.test({
+      let result = await SocketClientBackend.test({
         address: {
           host: options.hostname,
           port: options.port
@@ -405,7 +405,7 @@ export class CoreApplication {
 
     ipcMain.handle('hostSettings.revealLogsDirectory', async (_event, { hostSettingsId }) => {
       let logsDirPath = path.join(this.logsDirPath, hostSettingsId);
-      await util.fsMkdir(logsDirPath);
+      await fs.mkdir(logsDirPath, { recursive: true });
 
       shell.showItemInFolder(logsDirPath);
     });
@@ -739,7 +739,7 @@ export class CoreApplication {
 
     await fs.mkdir(this.dataDirPath, { recursive: true });
 
-    if (await util.fsExists(this.dataPath)) {
+    if (await fsExists(this.dataPath)) {
       this.logger.debug('Reading app data');
 
       let buffer = await fs.readFile(this.dataPath);

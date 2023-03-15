@@ -9,11 +9,6 @@ import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
 import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
-//> General
-
-export type UnitNamespace = string;
-
-
 //> Feature
 
 export interface Feature {

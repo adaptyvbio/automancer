@@ -4,11 +4,11 @@ import { shell } from 'electron';
 import fs from 'fs';
 import { EOL } from 'os';
 import path from 'path';
+import { HostSettings } from 'pr1-library';
 import readline from 'readline';
 
 import type { CoreApplication } from '.';
 import type { HostWindow } from './host';
-import { HostSettings } from './interfaces';
 import { rootLogger } from './logger';
 import * as util from './util';
 
@@ -39,7 +39,7 @@ export class LocalHost {
 
     this.logger.debug(`Using log directory at '${logDirPath}'`);
 
-    await util.fsMkdir(logDirPath);
+    await fs.mkdir(logDirPath, { recursive: true });
 
     let env = {};
 

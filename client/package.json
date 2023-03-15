@@ -22,7 +22,7 @@
     "material-symbols": "^0.2.8",
     "modern-websocket": "^0.1.0",
     "monaco-editor": "^0.34.0",
-    "pyodide": "^0.20.0",
+    "pr1-shared": "file:../app/shared",
     "react-merge-refs": "^1.1.0",
     "react-split-grid": "^1.0.4",
     "seq-ord": "^0.2.0",

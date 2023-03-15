@@ -104,36 +104,3 @@ export interface Unit<Code, Matrix> {
   getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
   providePreview?(options: { chip: Chip; host: Host; }): string | null;
 }
-
-
-//> UnitInfo
-
-export interface UnitInfo {
-  development: boolean;
-  enabled: boolean;
-  hasClient: boolean;
-  namespace: string;
-  version: number;
-
-  metadata: {
-    author: string | null;
-    description: string | null;
-    license: string | null;
-    title: string | null;
-    url: string | null;
-    version: string | null;
-
-    icon: {
-      kind: 'bitmap' | 'icon' | 'svg';
-      value: string;
-    } | null;
-  };
-}
-
-export type UnitNamespace = string;
-
-
-//> Units
-
-// TODO: deprecate
-export const Units = [];

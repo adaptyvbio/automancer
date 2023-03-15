@@ -1,13 +1,11 @@
-import assert from 'node:assert';
 import childProcess from 'node:child_process';
-import path from 'node:path';
 import fs from 'node:fs';
-import { HostSettings } from 'pr1-app';
+import path from 'node:path';
 
-import { HostEnvironment, UnixSocketDirPath } from './search';
-import { ServerConfiguration } from './types';
-import * as util from './util';
+import { HostEnvironment } from './search';
 import { SocketClientBackend } from './socket-client';
+import { HostSettings } from './types/app-data';
+import * as util from './util';
 
 
 export async function createClient(hostEnvironmentOrSettings: HostEnvironment | HostSettings, logger: any, options: { logsDirPath: string; }) {
@@ -181,7 +179,6 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
         host: hostSettings.options.hostname,
         port: hostSettings.options.port
       },
-      // @ts-expect-error
       tls: hostSettings.options.secure
         ? {
           serverCertificateCheck: false,

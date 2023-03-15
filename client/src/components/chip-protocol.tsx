@@ -6,7 +6,6 @@ import { GraphEditor } from './graph-editor';
 import { Host } from '../host';
 import { Chip, ChipId } from '../backends/common';
 import { formatAbsoluteTime } from '../format';
-import { Units } from '../units';
 import { Pool } from '../util';
 import { Icon } from './icon';
 import { ProgressBar } from './progress-bar';

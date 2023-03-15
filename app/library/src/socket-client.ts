@@ -1,11 +1,10 @@
-import crypto from 'crypto';
-import net from 'net';
-import tls from 'tls';
-import { Client, deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
+import crypto from 'node:crypto';
+import net from 'node:net';
+import tls from 'node:tls';
+import { Deferred, defer, createErrorWithCode, ClientProtocol } from 'pr1-shared';
 
-import { ClientProtocol, ServerProtocol } from './protocol';
-import { CertificateFingerprint } from './types';
-import { Deferred, createErrorWithCode, defer } from './util';
+import { CertificateFingerprint } from './types/app-data';
+import { Client, deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
 
 
 export class OrdinarySocketClientClosedError extends Error {
@@ -162,7 +161,7 @@ export class SocketClientBackend {
     await this._socket.close();
   }
 
-  async open() {
+  async open(): Promise<any> {
     this._socket = new OrdinarySocketClient(this._options);
 
     try {
@@ -221,11 +220,14 @@ export class SocketClientBackend {
 
 
   static async test(options: OrdinarySocketClientOptions) {
-    let client = new SocketClientBackend(options);
-    let result = await client.open();
+    let backend = new SocketClientBackend(options);
+    let result = await backend.open();
 
     if (result.ok) {
-      await client.close();
+      await backend.close();
+
+      let { client: _, ...partialResult } = result;
+      return partialResult;
     }
 
     return result;

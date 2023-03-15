@@ -1,7 +1,6 @@
 import { AppBackend, Application, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
 
 import { NativeContextMenuProvider } from '../shared/context-menu';
-import { DraftEntry, HostSettings, HostSettingsId } from '../interfaces';
 
 
 class ElectronAppBackend implements AppBackend {

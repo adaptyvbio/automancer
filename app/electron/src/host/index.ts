@@ -4,9 +4,10 @@ import assert from 'assert';
 
 import { LocalHost } from '../local-host';
 import { CoreApplication } from '..';
-import { defer, Pool } from '../util';
-import { HostSettings } from '../interfaces';
+import { Pool } from '../util';
 import { rootLogger } from '../logger';
+import { defer } from 'pr1-shared';
+import { HostSettings } from 'pr1-library';
 
 
 export class HostWindow {

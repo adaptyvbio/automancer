@@ -1,5 +1,5 @@
 {
-  "name": "pr1-library",
+  "name": "pr1-shared",
   "version": "0.0.0",
   "main": "lib/index.js",
   "types": "types/index.d.ts",
@@ -8,13 +8,9 @@
     "build:watch": "tsc --sourceMap --watch"
   },
   "dependencies": {
-    "multicast-dns": "^7.2.5",
-    "pr1": "file:../../client",
-    "pr1-shared": "file:../shared"
+    "multicast-dns": "^7.2.5"
   },
   "devDependencies": {
-    "@types/multicast-dns": "^7.2.1",
-    "@types/node": "^18.11.18",
-    "typescript": "^4.9.4"
+    "typescript": "^4.9.5"
   }
 }

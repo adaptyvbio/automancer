@@ -4,8 +4,8 @@ import { HostState } from './common';
 import { InboundMessage, MessageBackend } from './message';
 import type { Deferred } from '../util';
 import * as util from '../util';
-import { Unit, UnitInfo } from '../units';
-import { HostSettingsOptionsRemote } from '../interfaces/host';
+import { Unit } from '../units';
+import { UnitInfo } from 'pr1-shared';
 
 
 interface WebsocketBackendInfo {

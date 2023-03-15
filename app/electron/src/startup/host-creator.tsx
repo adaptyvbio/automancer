@@ -1,6 +1,7 @@
 import { Pool, React } from 'pr1';
+import { HostSettingsId } from 'pr1-library';
 
-import type { HostCreatorContext, HostSettingsId } from '../interfaces';
+import type { HostCreatorContext } from '../interfaces';
 
 import * as S0 from './steps/s0';
 import * as S1 from './steps/s1';

@@ -263,7 +263,9 @@ class App:
         match message["type"]:
           case "exit":
             logger.info("Exiting after receiving an exit message")
-            self.stop()
+
+            assert self._pool
+            self._pool.close()
           case "request":
             response_data = await self.process_request(client, message["data"])
 
@@ -355,50 +357,46 @@ class App:
       loop.create_task(send_state())
 
   async def start(self):
-    logger.info("Starting app")
-
-    self._pool = Pool()
-
-    def handle_sigint():
-      print("\r", end="", file=sys.stderr)
-      logger.info("Exiting after receiving a SIGINT signal")
-
-      self.stop()
-
-    loop = asyncio.get_event_loop()
-
     try:
-      loop.add_signal_handler(signal.SIGINT, handle_sigint)
-    except NotImplementedError: # For Windows
-      pass
+      logger.debug("Initializing")
+      await self.initialize()
 
-    logger.debug("Initializing")
+      try:
+        async with Pool.open() as pool:
+          self._pool = pool
 
-    await self.initialize()
+          def handle_sigint():
+            print("\r", end="", file=sys.stderr)
+            logger.info("Exiting after receiving a SIGINT signal")
 
-    for bridge in self.bridges:
-      self._pool.start_soon(bridge.start(self.handle_client))
+            pool.close()
 
-    if self.static_server:
-      self._pool.start_soon(self.static_server.start())
+          loop = asyncio.get_event_loop()
 
-    self._pool.start_soon(self.host.start())
+          try:
+            loop.add_signal_handler(signal.SIGINT, handle_sigint)
+          except NotImplementedError: # For Windows
+            pass
 
-    logger.debug("Running")
+          logger.debug("Starting")
 
-    try:
-      await self._pool.wait()
+          for bridge in self.bridges:
+            pool.start_soon(bridge.start(self.handle_client))
+
+          if self.static_server:
+            pool.start_soon(self.static_server.start())
+
+          pool.start_soon(self.host.start())
+
+          logger.debug("Running")
+      finally:
+        logger.debug("Deinitializing")
+        await self.deinitialize()
     except Exception:
       logger.error("Error")
       log_exception(logger)
 
-    await self.deinitialize()
-
-    logger.info("Stopped")
-
-  def stop(self):
-    assert self._pool
-    self._pool.close()
+    logger.debug("Stopped")
 
 
 def main():

@@ -104,43 +104,39 @@ class SocketBridge(BridgeProtocol):
     pass
 
   async def start(self, handle_client):
-    pool = Pool()
-
-    async def handle_connection(reader: StreamReader, writer: StreamWriter):
-      try:
-        await handle_client(Client(reader, writer, bridge=self))
-      finally:
-        writer.close()
-
-    def handle_connection_sync(reader: StreamReader, writer: StreamWriter):
-      pool.start_soon(handle_connection(reader, writer))
-
-    if self._cert_info:
-      ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-      ssl_context.load_cert_chain(self._cert_info.cert_path, self._cert_info.key_path)
-    else:
-      ssl_context = None
-
-    if self._family == socket.AF_UNIX:
-      server = await asyncio.start_unix_server(handle_connection_sync, self._address, ssl=ssl_context)
-      logger.debug(f"Listening on {self._address}")
-    else:
-      hostname, port = self._address
-      server = await asyncio.start_server(handle_connection_sync, hostname, port, family=self._family, ssl=ssl_context)
-      logger.debug(f"Listening on {hostname}:{port}")
-
-    logger.debug("Started")
+    server: Optional[asyncio.Server] = None
 
     try:
-      await Future()
-    except asyncio.CancelledError:
-      server.close()
+      async with Pool.open(forever=True) as pool:
+        async def handle_connection(reader: StreamReader, writer: StreamWriter):
+          try:
+            await handle_client(Client(reader, writer, bridge=self))
+          finally:
+            writer.close()
 
-      await pool.cancel()
-      await server.wait_closed()
+        def handle_connection_sync(reader: StreamReader, writer: StreamWriter):
+          pool.start_soon(handle_connection(reader, writer))
 
-      raise
+        if self._cert_info:
+          ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+          ssl_context.load_cert_chain(self._cert_info.cert_path, self._cert_info.key_path)
+        else:
+          ssl_context = None
+
+        if self._family == socket.AF_UNIX:
+          server = await asyncio.start_unix_server(handle_connection_sync, self._address, ssl=ssl_context)
+          logger.debug(f"Listening on {self._address}")
+        else:
+          hostname, port = self._address
+          server = await asyncio.start_server(handle_connection_sync, hostname, port, family=self._family, ssl=ssl_context)
+          logger.debug(f"Listening on {hostname}:{port}")
+
+        logger.debug("Started")
     finally:
+      if server:
+        server.close()
+        await server.wait_closed()
+
       logger.debug("Stopped")
 
   @classmethod

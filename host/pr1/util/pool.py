@@ -36,8 +36,11 @@ PoolExceptionGroup = BaseExceptionGroup
 T = TypeVar('T')
 
 class Pool:
+  """
+  An object used to manage tasks created in a common context.
+  """
+
   def __init__(self):
-    self._closed = False
     self._tasks = set[Task]()
 
   def __len__(self):
@@ -54,8 +57,65 @@ class Pool:
       if exc:
         self.close()
 
+  async def cancel(self):
+    """
+    Cancels all tasks currently in the pool and waits for all tasks to finish, including those that might be added during cancellation.
+    """
+
+    self.close()
+    await self.wait()
+
+  def close(self):
+    """
+    Cancels all tasks currently in the pool.
+
+    Calling this function multiple times will increment the cancellation counter of tasks already in the pool, and cancel newly-added tasks.
+    """
+
+    for task in self._tasks:
+      task.cancel()
+
+  async def wait(self):
+    """
+    Waits for all tasks in the pool to finish, including those that might be added later.
+
+    Cancelling this function will cancel all tasks in the pool.
+
+    Raises
+      asyncio.CancelledError
+      PoolExceptionGroup
+    """
+
+    cancelled = False
+    exceptions = list[BaseException]()
+
+    while (tasks := self._tasks.copy()):
+      try:
+        await asyncio.shield(asyncio.wait(tasks))
+      except asyncio.CancelledError:
+        cancelled = True
+        self.close()
+
+      for task in tasks:
+        if task.done():
+          try:
+            exc = task.exception()
+          except asyncio.CancelledError:
+            pass
+          else:
+            if exc:
+              exceptions.append(exc)
+
+    if exceptions:
+      raise PoolExceptionGroup("Pool error", exceptions)
+
+    if cancelled:
+      raise asyncio.CancelledError
+
   def start_soon(self, coro: Coroutine[Any, Any, T], /) -> Task[T]:
-    assert not self._closed
+    """
+    Adds a new task to the pool, created from a coroutine.
+    """
 
     task = asyncio.create_task(coro)
     task.add_done_callback(self._done_callback)
@@ -63,77 +123,55 @@ class Pool:
 
     return task
 
-  async def cancel(self):
-    exceptions = list[BaseException]()
-
-    while (tasks := self._tasks.copy()):
-      self._tasks.clear()
-
-      for task in tasks:
-        task.cancel()
-
-      await asyncio.wait(tasks)
-
-      for task in tasks:
-        try:
-          exc = task.exception()
-        except asyncio.CancelledError:
-          pass
-        else:
-          if exc:
-            exceptions.append(exc)
-
-    if exceptions:
-      raise PoolExceptionGroup("Pool error", exceptions)
-
-  def close(self):
-    for task in self._tasks:
-      task.cancel()
-
-  async def wait(self):
-    exceptions = list[BaseException]()
-
-    while (tasks := self._tasks.copy()):
-      await asyncio.wait(tasks)
-
-      for task in tasks:
-        try:
-          exc = task.exception()
-        except asyncio.CancelledError:
-          pass
-        else:
-          if exc:
-            exceptions.append(exc)
-
-    if exceptions:
-      raise PoolExceptionGroup("Pool error", exceptions)
-
   @classmethod
   @contextlib.asynccontextmanager
-  async def open(cls):
+  async def open(cls, *, forever: bool = False):
+    """
+    Creates an asynchronous context with a dedicated pool.
+
+    The context will not return until all tasks in the pool have finished.
+
+    Parameters
+      forever: Whether the pool should stay open once all tasks have finished.
+    """
+
     pool = cls()
-    exceptions = list[BaseException]()
+    exception: Optional[Exception] = None
+    wait_task = asyncio.create_task(pool.wait())
+
+    if forever:
+      async def wait_forever():
+        await asyncio.Future()
+
+      pool.start_soon(wait_forever())
 
     try:
       yield pool
+    except asyncio.CancelledError:
+      pool.close()
     except Exception as exc:
-      # TODO: Cancel pool here
-      exceptions.append(exc)
-    finally:
-      pool._closed = False
+      pool.close()
+      exception = exc
 
-      try:
-        await pool.cancel()
-      except PoolExceptionGroup as exc:
-        exceptions.append(exc)
+    try:
+      await wait_task
+    except Exception as exc:
+      if exception:
+        raise PoolExceptionGroup("Context manager error", [exc, exception]) from None
+      else:
+        raise
 
-    if exceptions:
-      raise PoolExceptionGroup("Pool error", exceptions) from None
+    if exception:
+      raise exception
 
 
 if __name__ == "__main__":
   async def sleep(delay: float):
-    await asyncio.sleep(delay)
+    try:
+      await asyncio.sleep(delay)
+    except asyncio.CancelledError:
+      pass
+
     raise Exception('I\'m first')
 
   async def five():
@@ -144,10 +182,10 @@ if __name__ == "__main__":
 
   async def main():
     async with Pool.open() as pool:
-      pool.start_soon(sleep(1.2))
+      # pool.start_soon(sleep(0.2))
       pool.start_soon(five())
-      # pool.start_soon(sleep(0.6))
-
-      raise Exception('Baz')
+      await asyncio.sleep(0.1)
+      raise Exception('aa')
+      # pool.start_soon(sleep(0.2))
 
   asyncio.run(main())

@@ -366,7 +366,7 @@ export class CoreApplication {
               dirPath: hostDirPath,
               identifier: conf.identifier,
               pythonPath,
-              socketPath: path.join(UnixSocketDirPath, conf.identifier)
+              socketPath: path.join(UnixSocketDirPath, conf.identifier + '.sock')
             }
           } satisfies HostSettings
         }

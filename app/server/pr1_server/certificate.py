@@ -53,7 +53,7 @@ def use_certificate(certs_dir: Path, /, hostname: Optional[str] = None, *, logge
     cert.set_pubkey(private_key)
     cert.set_version(2)
     cert.add_extensions([
-      *([crypto.X509Extension(b"subjectAltName", False, b"IP" + hostname.encode("utf-8"))] if hostname else list()),
+      *([crypto.X509Extension(b"subjectAltName", False, b"IP:" + hostname.encode("utf-8"))] if hostname else list()),
       crypto.X509Extension(b"basicConstraints", True, b"CA:true"),
       crypto.X509Extension(b"keyUsage", True, b"digitalSignature"),
       crypto.X509Extension(b"extendedKeyUsage", True, b"serverAuth"),

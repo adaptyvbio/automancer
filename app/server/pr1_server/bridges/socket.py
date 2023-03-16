@@ -136,7 +136,7 @@ class SocketBridge(BridgeProtocol):
     except asyncio.CancelledError:
       server.close()
 
-      await pool.wait()
+      await pool.cancel()
       await server.wait_closed()
 
       raise

@@ -25,6 +25,7 @@ from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .conf import Conf
 from .session import Session
+from .static import StaticServer
 from .trash import trash as trash_file
 
 
@@ -138,17 +139,19 @@ class App:
     )
 
 
-    # Create bridges
+    # Create bridges and static server
 
     self.bridges = {bridge_conf.create_bridge(app=self) for bridge_conf in self.conf.bridges}
     self.owner_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, StdioBridge)), None)
+
+    self.static_server = StaticServer(self, conf=self.conf.static) if self.conf.static else None
 
 
     # Misc
 
     self.updating = False
-    self.zeroconf = None
-    self.zeroconf_services = list()
+    self.zeroconf: Optional[AsyncZeroconf] = None
+    self.zeroconf_services = list[AsyncServiceInfo]()
 
     self._pool: Optional[Pool] = None
     self._stop_event: Optional[asyncio.Event] = None
@@ -183,6 +186,26 @@ class App:
 
       logger.debug("Registered zeroconf services")
 
+
+    # Initialize bridges
+
+    logger.debug(f"Initializing {len(self.bridges)} bridges")
+
+    # TODO: Improve ordering such that items are deinitialized in the opposite order of initialization
+    for bridge in self.bridges:
+      await bridge.initialize()
+
+
+    # Initialize host
+
+    await self.host.initialize()
+
+
+    # Initialize static server
+
+    if self.static_server:
+      await self.static_server.initialize()
+
   async def deinitialize(self):
     if self.zeroconf:
       logger.debug(f"Unregistering {len(self.zeroconf_services)} zeroconf services")
@@ -196,6 +219,9 @@ class App:
 
       logger.debug("Unregistered zeroconf services")
 
+    if self.static_server:
+      await self.static_server.deinitialize()
+
 
   async def handle_client(self, client: BaseClient):
     try:
@@ -203,16 +229,15 @@ class App:
 
       self.clients[client.id] = client
       requires_auth = self.auth_agents and client.remote
-      websocket_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, WebsocketBridge)), None)
 
       await client.send({
         "type": "initialize",
-        "authMethods": [
-          agent.export() for agent in self.auth_agents
-        ] if requires_auth else None,
-        "features": {},
+        # "authMethods": [
+        #   agent.export() for agent in self.auth_agents
+        # ] if requires_auth else None,
+        # "features": {},
         "identifier": self.conf.identifier,
-        "staticUrl": (websocket_bridge.static_url if websocket_bridge else None),
+        "staticUrl": (self.static_server.url if self.static_server else None),
         "version": self.conf.version
       })
 
@@ -333,7 +358,6 @@ class App:
     logger.info("Starting app")
 
     self._pool = Pool()
-    self._stop_event = asyncio.Event()
 
     def handle_sigint():
       print("\r", end="", file=sys.stderr)
@@ -351,39 +375,30 @@ class App:
     logger.debug("Initializing")
 
     await self.initialize()
-    await self.host.initialize()
-
-    logger.debug(f"Initializing {len(self.bridges)} bridges")
-
-    # TODO: Improve ordering such that items are deinitialized in the opposite order of initialization
-    for bridge in self.bridges:
-      await bridge.initialize()
 
     for bridge in self.bridges:
       self._pool.start_soon(bridge.start(self.handle_client))
+
+    if self.static_server:
+      self._pool.start_soon(self.static_server.start())
 
     self._pool.start_soon(self.host.start())
 
     logger.debug("Running")
 
-    await self._stop_event.wait()
-    logger.debug("Stopping")
-
-    await self.deinitialize()
-
-    logger.debug(f"Canceling {len(self._pool)} tasks")
-
     try:
       await self._pool.wait()
     except Exception:
-      logger.error("Deinitialization error")
+      logger.error("Error")
       log_exception(logger)
+
+    await self.deinitialize()
 
     logger.info("Stopped")
 
   def stop(self):
-    assert self._stop_event
-    self._stop_event.set()
+    assert self._pool
+    self._pool.close()
 
 
 def main():

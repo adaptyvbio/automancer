@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import Task
+from asyncio import Future, Task
 from contextlib import AbstractAsyncContextManager
 import contextlib
 from dataclasses import dataclass
@@ -43,15 +43,27 @@ class Pool:
   def __len__(self):
     return len(self._tasks)
 
+  def _done_callback(self, task: Task):
+    self._tasks.remove(task)
+
+    try:
+      exc = task.exception()
+    except asyncio.CancelledError:
+      pass
+    else:
+      if exc:
+        self.close()
+
   def start_soon(self, coro: Coroutine[Any, Any, T], /) -> Task[T]:
     assert not self._closed
 
     task = asyncio.create_task(coro)
+    task.add_done_callback(self._done_callback)
     self._tasks.add(task)
 
     return task
 
-  async def wait(self):
+  async def cancel(self):
     exceptions = list[BaseException]()
 
     while (tasks := self._tasks.copy()):
@@ -60,6 +72,28 @@ class Pool:
       for task in tasks:
         task.cancel()
 
+      await asyncio.wait(tasks)
+
+      for task in tasks:
+        try:
+          exc = task.exception()
+        except asyncio.CancelledError:
+          pass
+        else:
+          if exc:
+            exceptions.append(exc)
+
+    if exceptions:
+      raise PoolExceptionGroup("Pool error", exceptions)
+
+  def close(self):
+    for task in self._tasks:
+      task.cancel()
+
+  async def wait(self):
+    exceptions = list[BaseException]()
+
+    while (tasks := self._tasks.copy()):
       await asyncio.wait(tasks)
 
       for task in tasks:
@@ -89,7 +123,7 @@ class Pool:
       pool._closed = False
 
       try:
-        await pool.wait()
+        await pool.cancel()
       except PoolExceptionGroup as exc:
         exceptions.append(exc)
 

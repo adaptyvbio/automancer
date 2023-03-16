@@ -192,7 +192,7 @@ class RecordStateInstance(UnitStateInstance):
     self._pool.start_soon(wait_ready())
 
   async def close(self):
-    await self._pool.wait()
+    await self._pool.cancel()
 
     if self._data is not None:
       data = np.array(self._data, dtype=self._dtype)

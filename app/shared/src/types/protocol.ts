@@ -15,6 +15,7 @@ export namespace ServerProtocol {
   export interface InitializationMessage {
     type: 'initialize';
     identifier: HostIdentifier;
+    staticUrl: string | null;
     version: number;
   }
 

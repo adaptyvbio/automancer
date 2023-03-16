@@ -18,7 +18,7 @@ export class HostWindow {
   private logger = rootLogger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
 
-  constructor(private app: CoreApplication, private hostSettings: HostSettings) {
+  constructor(private app: CoreApplication, public hostSettings: HostSettings) {
     this.logger.debug('Constructed');
 
     this.pool.add(() => this.start());
@@ -136,6 +136,7 @@ export class HostWindow {
     this.window!.webContents.send('host.message', {
       type: 'initialize',
       identifier: this.client!.identifier!,
+      staticUrl: this.client!.staticUrl,
       version: this.client!.version!
     } satisfies ServerProtocol.InitializationMessage);
 

@@ -7,5 +7,6 @@ export interface Host {
   client: Client;
   id: HostId;
   state: HostState;
+  staticUrl: string | null;
   units: Units;
 }

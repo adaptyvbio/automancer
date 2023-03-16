@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
-import { AppData, BridgeTcp, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import { AppData, BridgeTcp, CertificateFingerprint, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
 import * as uol from 'uol';
 
 import { MenuDef, MenuEntryId } from 'pr1';
@@ -82,6 +82,30 @@ export class CoreApplication {
 
     this.electronApp.on('second-instance', () => {
       this.createStartupWindow();
+    });
+
+    this.electronApp.on('certificate-error', (event, webContents, url, error, certificate, callback, isMainFrame) => {
+      let browserWindow = BrowserWindow.fromWebContents(webContents)!;
+      let hostWindow = Object.values(this.hostWindows).find((hostWindow) => (hostWindow.window === browserWindow))!;
+
+      let hostSettings = hostWindow.hostSettings;
+
+      if ((error === 'net::ERR_CERT_AUTHORITY_INVALID') && (hostSettings.type === 'tcp') && hostSettings.options.secure) {
+        let prefix = 'sha256/';
+        let rawFingerprint = certificate.fingerprint;
+
+        if (rawFingerprint.startsWith(prefix)) {
+          let fingerprint = Buffer.from(rawFingerprint.slice(prefix.length), 'base64').toString('hex') as CertificateFingerprint;
+
+          if (fingerprint === hostSettings.options.fingerprint) {
+            event.preventDefault();
+            callback(true);
+            return;
+          }
+        }
+      }
+
+      callback(false);
     });
 
 

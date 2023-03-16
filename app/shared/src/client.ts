@@ -17,6 +17,7 @@ export class Client {
 
   identifier: HostIdentifier | null = null;
   state: HostState | null = null;
+  staticUrl: string | null = null;
   version: number | null = null;
 
   constructor(private backend: ClientBackend) {
@@ -68,12 +69,14 @@ export class Client {
 
     this.identifier = initializationMessage.identifier;
     this.state = stateMessage.data;
+    this.staticUrl = initializationMessage.staticUrl;
     this.version = initializationMessage.version;
 
     return {
       ok: true,
       identifier: initializationMessage.identifier,
       name: stateMessage.data.info.name,
+      staticUrl: initializationMessage.staticUrl,
       version: initializationMessage.version
     } as const;
   }

@@ -1,5 +1,5 @@
 import { AppBackend, Application, BrowserAppBackendDraftItem, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
-import { HostSettings, HostSettingsId } from 'pr1-library';
+import { DraftEntry, HostSettings, HostSettingsId } from 'pr1-library';
 import { Client, defer, Deferred, ServerProtocol } from 'pr1-shared';
 
 import { NativeContextMenuProvider } from '../shared/context-menu';

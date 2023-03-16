@@ -130,6 +130,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       client,
       id: client.state!.info.id,
       state: client.state!,
+      staticUrl: client.staticUrl,
       units: (null as unknown as Host['units'])
     };
 
@@ -152,8 +153,6 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
-    return;
-
     let targetUnitsInfo = Object.values(host.state.info.units)
       .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development));
 
@@ -169,12 +168,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let units: Record<UnitNamespace, Unit<unknown, unknown>> = Object.fromEntries(
       (await Promise.all(
         targetUnitsInfo
-          .filter((unitInfo) => unitInfo.hasClient)
+          .filter((unitInfo) => (unitInfo.hasClient && host.staticUrl))
           .map(async (unitInfo) => {
             console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
 
             try {
-              let unit = await host.backend.loadUnit(unitInfo);
+              let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, host.staticUrl!);
+              let imported = await import(url.href);
+
+              let unit = imported.default ?? imported;
+
               return [unitInfo.namespace, unit];
             } catch (err) {
               console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');

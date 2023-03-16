@@ -76,7 +76,7 @@ class SocketBridge(BridgeProtocol):
     self._tasks = dict[str, asyncio.Task]()
 
     if secure:
-      self._cert_info = use_certificate(app.certs_dir, logger=logger)
+      self._cert_info = use_certificate(app.certs_dir, hostname=(self._address[0] if family == socket.AF_INET else None), logger=logger)
 
       if not self._cert_info:
         logger.error("Failed to obtain a certificate")

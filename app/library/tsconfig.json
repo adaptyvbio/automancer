@@ -4,7 +4,8 @@
   "compilerOptions": {
     "composite": true,
     "declarationDir": "types",
-    "module": "CommonJS",
+    "module": "es2022",
+    "moduleResolution": "node",
     "outDir": "lib",
     "rootDir": "src"
   },

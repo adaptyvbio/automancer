@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MenuDef, MenuEntryId } from 'pr1';
 import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
-import type { HostIdentifier, ClientProtocol } from 'pr1-shared';
+import type { HostIdentifier, ClientProtocol, ServerProtocol } from 'pr1-shared';
 
 import type { HostCreatorContext } from '../interfaces';
 
@@ -78,7 +78,7 @@ export type IPCEndpoint = {
   };
 
   host: {
-    onMessage(callback: ((message: any) => void)): void;
+    onMessage(callback: ((message: ServerProtocol.Message) => void)): void;
     ready(hostSettingsId: HostSettingsId): Promise<void>;
     sendMessage(hostSettingsId: HostSettingsId, message: ClientProtocol.Message): void;
   };

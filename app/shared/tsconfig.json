@@ -4,6 +4,7 @@
   "compilerOptions": {
     "composite": true,
     "declarationDir": "types",
+    "lib": ["es2021"],
     "outDir": "lib",
     "rootDir": "src"
   },

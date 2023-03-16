@@ -1,4 +1,4 @@
-import { HostState } from './host';
+import { HostIdentifier, HostState } from './host';
 
 
 export namespace ClientProtocol {
@@ -14,7 +14,7 @@ export namespace ClientProtocol {
 export namespace ServerProtocol {
   export interface InitializationMessage {
     type: 'initialize';
-    identifier: string;
+    identifier: HostIdentifier;
     version: number;
   }
 

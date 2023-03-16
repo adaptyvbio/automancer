@@ -1,3 +1,4 @@
+export * from './client';
 export * from './defer';
 export * from './error';
 export * from './types/host';

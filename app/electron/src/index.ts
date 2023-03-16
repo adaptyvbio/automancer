@@ -699,11 +699,11 @@ export class CoreApplication {
     // Internal host
 
     ipcMain.handle('host.ready', async (_event, hostSettingsId) => {
-      await this.hostWindows[hostSettingsId].localHost!.ready();
+      this.hostWindows[hostSettingsId].ready();
     });
 
     ipcMain.on('host.sendMessage', async (_event, hostSettingsId, message) => {
-      this.hostWindows[hostSettingsId].localHost!.sendMessage(message);
+      this.hostWindows[hostSettingsId].sendMessage(message);
     });
 
 

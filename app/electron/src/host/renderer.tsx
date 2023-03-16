@@ -1,4 +1,6 @@
-import { AppBackend, Application, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+import { AppBackend, Application, BrowserAppBackendDraftItem, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+import { HostSettings, HostSettingsId } from 'pr1-library';
+import { Client, defer, Deferred, ServerProtocol } from 'pr1-shared';
 
 import { NativeContextMenuProvider } from '../shared/context-menu';
 
@@ -112,10 +114,10 @@ interface AppState {
 }
 
 class App extends React.Component<AppProps, AppState> {
-  appBackend = new ElectronAppBackend();
-  backend: LocalHostBackend | null = null;
-  hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId') as HostSettingsId;
-  pool = new Pool();
+  private appBackend = new ElectronAppBackend();
+  private client: Client | null = null;
+  private hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId') as HostSettingsId;
+  private pool = new Pool();
 
   constructor(props: AppProps) {
     super(props);
@@ -130,9 +132,9 @@ class App extends React.Component<AppProps, AppState> {
       let { hostSettingsRecord } = await window.api.hostSettings.list();
       let hostSettings = hostSettingsRecord[this.hostSettingsId];
 
+      this.client = await createLocalClient(hostSettings);
       this.setState({ hostSettings });
-      this.backend = new LocalHostBackend(hostSettings);
-    });
+    })
   }
 
   override render() {
@@ -144,7 +146,7 @@ class App extends React.Component<AppProps, AppState> {
       <NativeContextMenuProvider>
         <Application
           appBackend={this.appBackend}
-          backend={this.backend!}
+          client={this.client!}
           hostInfo={{
             id: (this.state.hostSettings.id as string as HostInfoId),
             imageUrl: null,
@@ -165,27 +167,68 @@ let root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);
 
 
-class LocalHostBackend extends MessageBackend {
-  closed = new Promise<void>(() => {});
+async function createLocalClient(hostSettings: HostSettings) {
+  let messageDeferred: Deferred<void> | null = null;
+  let messageQueue: ServerProtocol.Message[] = [];
 
-  constructor(private hostSettings: HostSettings) {
-    super();
+  let client = new Client({
+    close: () => {},
+    closed: new Promise(() => {}),
+    messages: (async function* () {
+      while (true) {
+        if (messageQueue.length < 1) {
+          messageDeferred = defer();
+          await messageDeferred.promise;
+        }
+
+        yield messageQueue.shift()!;
+      }
+    })(),
+    send: (message) => void window.api.host.sendMessage(hostSettings.id, message)
+  });
+
+  window.api.host.onMessage((message) => {
+    messageQueue.push(message);
+
+    if (messageDeferred) {
+      messageDeferred.resolve();
+      messageDeferred = null;
+    }
+  });
+
+  let initialization = client.initialize();
+
+  await window.api.host.ready(hostSettings.id);
+  let result = await initialization;
+
+  if (!result.ok) {
+    throw new Error('Failed to connect to local client');
   }
 
-  async _start(listener) {
-    window.api.localHost.onMessage((message) => {
-      listener(message);
-    });
-
-    await window.api.localHost.ready(this.hostSettings.id);
-  }
-
-  async _send(message) {
-    window.api.localHost.sendMessage(this.hostSettings.id, message);
-  }
-
-  async loadUnit(unitInfo) {
-    let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, 'http://localhost:4568');
-    return await import(url.href);
-  }
+  return client;
 }
+
+// class LocalHostBackend extends MessageBackend {
+//   closed = new Promise<void>(() => {});
+
+//   constructor(private hostSettings: HostSettings) {
+//     super();
+//   }
+
+//   async _start(listener) {
+//     window.api.localHost.onMessage((message) => {
+//       listener(message);
+//     });
+
+//     await window.api.localHost.ready(this.hostSettings.id);
+//   }
+
+//   async _send(message) {
+//     window.api.localHost.sendMessage(this.hostSettings.id, message);
+//   }
+
+//   async loadUnit(unitInfo) {
+//     let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, 'http://localhost:4568');
+//     return await import(url.href);
+//   }
+// }

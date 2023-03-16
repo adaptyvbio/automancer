@@ -1,4 +1,5 @@
 import { Set as ImSet, removeIn, setIn } from 'immutable';
+import { Client, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import styles from '../styles/components/application.module.scss';
@@ -21,7 +22,6 @@ import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-import { UnitNamespace } from 'pr1-shared';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
@@ -64,7 +64,7 @@ function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch
 
 export interface ApplicationProps {
   appBackend: AppBackend;
-  backend: BaseBackend;
+  client: Client;
   hostInfo: HostInfo;
 
   onHostStarted?(): void;
@@ -103,33 +103,33 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async initializeHost() {
-    let backend = this.props.backend;
+    let client = this.props.client;
+    // let result = await client.initialize();
 
-    try {
-      await backend.start();
-    } catch (err) {
-      console.error(`Backend of host failed to start with error: ${(err as Error).message}`);
-      console.error(err);
-      return;
-    }
+    // if (!result.ok) {
+    //   console.error(`Backend of host failed to start with error: ${result.reason}`);
+    //   return;
+    // }
 
-    console.log('Initial state ->', backend.state);
+    console.log('Initial state ->', client.state);
 
-    backend.onUpdate(() => {
-      console.log('New state ->', backend.state);
+    client.onMessage((message) => {
+      if (message.type === 'state') {
+        console.log('New state ->', client.state);
 
-      this.setState((state) => ({
-        host: {
-          ...state.host!,
-          state: backend.state
-        }
-      }));
-    }, { signal: this.controller.signal });
+        this.setState((state) => ({
+          host: {
+            ...state.host!,
+            state: client.state!
+          }
+        }));
+      }
+    });
 
     let host: Host = {
-      backend,
-      id: backend.state.info.id,
-      state: backend.state,
+      client,
+      id: client.state!.info.id,
+      state: client.state!,
       units: (null as unknown as Host['units'])
     };
 
@@ -139,7 +139,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.pool.add(async () => void await this.loadUnitClients(host));
 
-    backend.closed
+    client.closed
       .catch((err) => {
         console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
         console.error(err);
@@ -148,10 +148,12 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         this.setState({ host: null });
       });
 
-      return backend.state;
+    return client.state;
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
+    return;
+
     let targetUnitsInfo = Object.values(host.state.info.units)
       .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development));
 
@@ -227,7 +229,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
   componentDidMount() {
     window.addEventListener('beforeunload', () => {
-      this.state.host?.backend.close();
+      this.state.host?.client.close();
     }, { signal: this.controller.signal });
 
     document.addEventListener('keydown', (event) => {

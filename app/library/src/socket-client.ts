@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import net from 'node:net';
 import tls from 'node:tls';
-import { Deferred, defer, createErrorWithCode, ClientProtocol } from 'pr1-shared';
+import { Deferred, defer, createErrorWithCode, ClientProtocol, Client } from 'pr1-shared';
 
 import { CertificateFingerprint } from './types/app-data';
-import { Client, deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
+import { deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
 
 
 export class OrdinarySocketClientClosedError extends Error {
@@ -79,10 +79,9 @@ export class OrdinarySocketClient {
         });
       }
 
-      this._socket.on('error', (err) => {
+      this._socket.on('error', (err: any) => {
         // TODO: Handle errors after this.ready
-        // console.log('err', err);
-        reject(err);
+        reject(err)
       });
 
       this._socket.on('end', () => {
@@ -150,31 +149,32 @@ export class OrdinarySocketClient {
 
 
 export class SocketClientBackend {
-  private _options: OrdinarySocketClientOptions;
-  private _socket!: OrdinarySocketClient;
+  private options: OrdinarySocketClientOptions;
+  private socket!: OrdinarySocketClient;
 
   constructor(options: OrdinarySocketClientOptions) {
-    this._options = options;
+    this.options = options;
   }
 
   async close() {
-    await this._socket.close();
+    await this.socket.close();
   }
 
   async open(): Promise<any> {
-    this._socket = new OrdinarySocketClient(this._options);
+    this.socket = new OrdinarySocketClient(this.options);
 
     try {
-      await this._socket.ready;
+      await this.socket.ready;
     } catch (err: any) {
       switch (err.code) {
         case 'APP_UNTRUSTED_CERT':
           return {
             ok: false,
             reason: 'untrusted_server',
-            tlsInfo: this._socket.tlsInfo!
+            tlsInfo: this.socket.tlsInfo!
           } as const;
         case 'ECONNREFUSED':
+        case 'ENOENT':
           return {
             ok: false,
             reason: 'refused'
@@ -194,28 +194,30 @@ export class SocketClientBackend {
       }
     }
 
-    let messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this._socket));
+    let messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this.socket));
 
     let client = new Client({
+      close: () => void this.close(),
+      closed: this.socket.closed.then(() => {}),
       messages,
-      send: (message: ClientProtocol.Message) => void this._socket.send(serializeMessage(message))
+      send: (message: ClientProtocol.Message) => void this.socket.send(serializeMessage(message))
     });
 
     let result = await client.initialize();
 
     if (!result.ok) {
-      await this._socket.close();
+      await this.socket.close();
     }
 
     return {
       ...result,
       client,
-      tlsInfo: this._socket.tlsInfo
+      tlsInfo: this.socket.tlsInfo
     };
   }
 
   async send(message: ClientProtocol.Message) {
-    this._socket.send(serializeMessage(message));
+    this.socket.send(serializeMessage(message));
   }
 
 

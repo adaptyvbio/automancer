@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { HostEnvironment } from './search';
 import { SocketClientBackend } from './socket-client';
-import { HostSettings } from './types/app-data';
+import { HostSettings, ServerConfiguration } from './types/app-data';
 import * as util from './util';
 
 
@@ -32,7 +32,6 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
       // logger.debug(...);
     }
 
-    // @ts-expect-error
     let conf: ServerConfiguration = {
       ...hostOptions.conf,
       advertisement: {
@@ -137,39 +136,14 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
 
     let result = await backend.open();
 
-
-    // Listen to stdout
-
-/*       switch (message.type) {
-      case 'owner.open': {
-        await shell.openPath(message.path);
-        break;
-      }
-
-      case 'owner.reveal': {
-        shell.showItemInFolder(message.path);
-        break;
-      }
-
-      case 'owner.trash': {
-        await shell.trashItem(message.path);
-        break;
-      }
-
-      default: {
-        if (message.type === 'state') {
-          this.stateMessage = message;
-        }
-
-        if (this.windowReady) {
-          this.hostWindow.window!.webContents.send('localHost.message', message);
-        }
-      }
-    } */
+    if (!result.ok) {
+      return result;
+    }
 
     return {
       ok: true,
-      client: result.client
+      client: result.client,
+      closed: closed
     };
   }
 
@@ -195,7 +169,8 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
 
     return {
       ok: true,
-      client: result.client
+      client: result.client,
+      closed: result.client.closed
     };
   }
 

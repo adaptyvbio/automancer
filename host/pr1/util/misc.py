@@ -61,7 +61,7 @@ class IndexCounter:
         self._items.add(index)
         return index
 
-    raise UnreachableError()
+    raise UnreachableError
 
   def delete(self, item: int):
     self._items.remove(item)

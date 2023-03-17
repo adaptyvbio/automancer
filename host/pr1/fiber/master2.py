@@ -1,4 +1,5 @@
-from asyncio import Future, Task
+from asyncio import Future, Lock, Task
+from pprint import pprint
 from collections import deque
 from dataclasses import dataclass, field
 import functools
@@ -9,18 +10,15 @@ from typing import TYPE_CHECKING, Any, Optional
 import asyncio
 import traceback
 
-from ..util.asyncio import run_anonymous
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.types import SimpleCallbackFunction
-from ..util.misc import Exportable, IndexCounter, UnreachableError
+from ..util.misc import Exportable, IndexCounter
 from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
-from ..units.base import BaseRunner
 from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol, HeadProgram
 from ..chip import Chip
-from ..devices.claim import ClaimSymbol
 from ..ureg import ureg
 
 if TYPE_CHECKING:
@@ -45,8 +43,8 @@ class Master:
     self._location: Optional[ProgramHandleEventEntry] = None
     self._owner: ProgramOwner
     self._update_callback: Optional[SimpleCallbackFunction] = None
-    self._updating_soon = False
-    self._update_status = 0
+    self._update_lock_depth = 0
+    self._update_handle: Optional[asyncio.Handle] = None
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
 
@@ -102,6 +100,7 @@ class Master:
     for namespace, protocol_unit_details in self.protocol.details.items():
       runtime_stack |= protocol_unit_details.create_runtime_stack(self.chip.runners[namespace])
 
+    self._update_lock_depth = 0
     self._update_callback = update_callback
 
     self._handle = ProgramHandle(self, id=0)
@@ -114,7 +113,7 @@ class Master:
       try:
         self.update_soon()
         await self._owner.run(runtime_stack)
-        self.update()
+        self.update_now()
         await self.state_manager.clear()
       except Exception as e:
         if self._start_future:
@@ -158,7 +157,6 @@ class Master:
         for line in trace.format():
           print(line, end=str())
 
-    self._updating_soon = False
     self._update_traces.clear()
 
     analysis = MasterAnalysis()
@@ -244,12 +242,15 @@ class Master:
     # for change in changes:
     #   print(change.serialize())
 
-    print()
+    print('---')
     print(f"useful={useful}")
     print(update_entry.format())
     # print()
     # print(self._location and self._location.format())
     print(analysis)
+    # pprint(changes)
+    # data = comserde.dumps(changes, list[TreeChange])
+    # pprint(comserde.loads(data, list[TreeChange]))
     print('---')
 
   # def update_soon(self):
@@ -266,17 +267,25 @@ class Master:
 
     # self._update_status = 1
 
+  def update_now(self):
+    if self._update_handle:
+      self._update_handle.cancel()
+      self._update_handle = None
+
+    self.update()
+
   def update_soon(self):
+    if self._update_lock_depth > 0:
+      return
+
     self._update_traces.append(StackSummary(traceback.extract_stack()[:-2]))
 
-    if not self._updating_soon:
-      self._updating_soon = True
-
+    if not self._update_handle:
       def func():
-        if self._updating_soon:
-          self.update()
+        self._update_handle = None
+        self.update()
 
-      asyncio.get_event_loop().call_soon(func)
+      self._update_handle = asyncio.get_event_loop().call_soon(func)
 
 
 @dataclass(kw_only=True)
@@ -320,11 +329,15 @@ class ProgramHandle:
 
     self._consumed = False
     self._failed = False
+    self._locked = False
     self._updated = False
 
   @property
   def master(self) -> Master:
     return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
+
+  def collect_children(self):
+    self.master.update_now()
 
   def create_child(self, child_block: BaseBlock, *, id: int = 0):
     handle = ProgramHandle(self, id=id)
@@ -334,6 +347,14 @@ class ProgramHandle:
     self._children[handle._id] = handle
 
     return ProgramOwner(handle, handle._program)
+
+  def increment_lock(self):
+    self.master._update_lock_depth += 1
+
+    def release():
+      self.master._update_lock_depth -= 1
+
+    return release
 
   async def pause_children(self):
     for child_handle in self._children.values():
@@ -364,13 +385,30 @@ class ProgramHandle:
         await current_handle._program.resume(loose=True)
         break
 
-  def send(self, event: ProgramExecEvent, *, update: bool = True):
+  def send(self, event: ProgramExecEvent, *, lock: bool = False):
     self._analysis += event.analysis
     self._location = event.location or self._location
     self._updated = True
 
-    if update:
+    if (not self._locked) and lock:
+      self._locked = True
+      self.master._update_lock_depth += 1
+
+      if self.master._update_handle:
+        self.master._update_handle.cancel()
+        self.master._update_handle = None
+    else:
       self.master.update_soon()
+
+  def release_lock(self, *, sure: bool = False):
+    if self._locked:
+      self._locked = False
+      self.master._update_lock_depth -= 1
+
+      if self.master._update_lock_depth < 1:
+        self.master.update_soon()
+    elif sure:
+      raise ValueError("Not locked")
 
 class ProgramOwner:
   def __init__(self, handle: ProgramHandle, program: BlockProgram):

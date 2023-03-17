@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import Future
+from asyncio import Event, Future
 from dataclasses import dataclass
 from enum import IntEnum
 import time
@@ -117,8 +117,8 @@ class SegmentProgram(HeadProgram):
     self._process: Process
 
     self._bypass_future: Optional[Future]
-    self._pause_future: Optional[Future]
-    self._resume_future: Optional[Future]
+    self._pause_event: Optional[Event]
+    self._resume_event: Optional[Event]
 
   @property
   def _location(self):
@@ -177,10 +177,13 @@ class SegmentProgram(HeadProgram):
       return False
 
     self._mode = SegmentProgramMode.Pausing
-    self._pause_future = Future()
+    self._handle.send(ProgramExecEvent(location=self._location), lock=True)
+
+    self._pause_event = Event()
     self._process.pause()
 
-    await self._pause_future
+    await self._pause_event.wait()
+    self._handle.release_lock()
 
     return True
 
@@ -216,11 +219,11 @@ class SegmentProgram(HeadProgram):
           return
 
         self._mode = SegmentProgramMode.ResumingProcess
-        self._handle.send(ProgramExecEvent(location=self._location))
+        self._handle.send(ProgramExecEvent(location=self._location), lock=True)
 
         self._process.resume()
-        self._resume_future = Future()
-        await self._resume_future
+        self._resume_event = Event()
+        await self._resume_event.wait()
       case _:
         raise AssertionError
 
@@ -232,8 +235,8 @@ class SegmentProgram(HeadProgram):
     self._process_location: Optional[Exportable] = None
 
     self._bypass_future = None
-    self._pause_future = None
-    self._resume_future = None
+    self._pause_event = None
+    self._resume_event = None
 
     self._process_pausable: bool = False
     self._process_time: float = 0.0
@@ -269,6 +272,11 @@ class SegmentProgram(HeadProgram):
       event_time = None
       location_error: Optional[Any] = None
 
+      was_pausing = (self._mode == SegmentProgramMode.Pausing)
+
+      if self._mode == SegmentProgramMode.ResumingProcess:
+        self._handle.release_lock()
+
       try:
         if isinstance(event, ProcessError):
           raise event
@@ -287,9 +295,9 @@ class SegmentProgram(HeadProgram):
                 raise ProcessProtocolError(f"Process sent a {ProcessExecEvent.__name__} event with a falsy location while starting")
 
             if self._mode == SegmentProgramMode.ResumingProcess:
-              assert self._resume_future
-              self._resume_future.set_result(None)
-              self._resume_future = None
+              assert self._resume_event
+              self._resume_event.set()
+              self._resume_event = None
 
               self._mode = SegmentProgramMode.Normal
 
@@ -308,8 +316,8 @@ class SegmentProgram(HeadProgram):
 
             self._mode = SegmentProgramMode.Paused
 
-            if self._pause_future:
-              self._pause_future.set_result(None)
+            if self._pause_event:
+              self._pause_event.set()
 
           case ProcessTerminationEvent():
             self._mode = SegmentProgramMode.Terminated
@@ -343,6 +351,9 @@ class SegmentProgram(HeadProgram):
 
           event_analysis.errors.append(err)
           location_error = err
+
+      if was_pausing and (self._mode != SegmentProgramMode.Paused):
+        self._handle.release_lock()
 
       event_time = event_time or time.time()
       self._process_time = event_time

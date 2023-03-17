@@ -182,7 +182,7 @@ class SequenceProgram(BlockProgram):
       if self._halting or (next_index >= len(self._block._children)):
         return
 
-      self._handle.master.update()
+      self._handle.collect_children()
       self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
 
       await self._handle.resume_parent()

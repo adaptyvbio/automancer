@@ -651,6 +651,9 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
     case ast.Constant(builtins.int()):
       return StaticAnalysisAnalysis(), cast(TypeClassRef[OuterType], context.prelude['int']).extract()
 
+    case ast.Constant(builtins.str()):
+      return StaticAnalysisAnalysis(), cast(TypeClassRef[OuterType], context.prelude['str']).extract()
+
     # case ast.List(items, ctx=ast.Load()):
     #   analysis, item_types = StaticAnalysisAnalysis.sequence([evaluate(item, variables, context) for item in items])
     #   return analysis, ClassRef(UnionType, arguments=item_types)

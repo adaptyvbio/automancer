@@ -1,32 +1,8 @@
 import { Chip } from './backends/common';
 import { Host } from './host';
 import { ProtocolBlock, ProtocolBlockAggregate, ProtocolState } from './interfaces/protocol';
-import { FeatureGroupDef, UnknownBlockUnit, UnknownHeadUnit, UnknownProcessUnit, UnknownStateUnit, UnknownUnit } from './interfaces/unit';
+import { FeatureGroupDef, UnitContext, UnknownBlockUnit, UnknownHeadUnit, UnknownProcessUnit, UnknownStateUnit, UnknownUnit } from './interfaces/unit';
 
-
-/** @deprecated */
-export function getBlockExplicitLabel(block: ProtocolBlock, _host: Host): string | null {
-  return (block['state']?.['name'] as { value: string | null; } | undefined)?.value ?? null;
-}
-
-/** @deprecated */
-export function getBlockLabel(block: ProtocolBlock, location: unknown | null, host: Host) {
-  let unit = host.units[block.namespace];
-
-  let explicitLabel = getBlockExplicitLabel(block, host);
-
-  let value = explicitLabel
-    ?? unit.getBlockDefaultLabel?.(block, host)
-    ?? 'Block';
-
-  return {
-    explicit: !!explicitLabel,
-    suffix: location
-      ? unit.getBlockLocationLabelSuffix?.(block, location)
-      : null,
-    value
-  };
-}
 
 export function getBlockAggregates(blocks: ProtocolBlock[]) {
   let aggregates: ProtocolBlockAggregate[] = [];
@@ -81,6 +57,24 @@ export namespace UnitTools {
 
   export function isStateUnit(unit: UnknownUnit): unit is UnknownStateUnit {
     return 'createStateFeatures' in unit;
+  }
+
+  export function getBlockLabel(block: ProtocolBlock, location: unknown | null, host: Host) {
+    let context: UnitContext = { host };
+    let unit = asBlockUnit(host.units[block.namespace])!;
+    let name = getBlockStateName(block);
+
+    let value = name
+      ?? unit.getBlockLabel?.(block, location, context)
+      ?? 'Block';
+
+    return {
+      explicit: !!name,
+      suffix: location
+        ? unit.getBlockLabelSuffix?.(block, location, context)
+        : null,
+      value
+    };
   }
 
   export function getBlockState(block: ProtocolBlock) {

@@ -7,7 +7,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, getBlockLabel, UnitTools } from '../unit';
+import { getBlockAggregates, UnitTools } from '../unit';
 import { FeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
 import { Chip } from '../backends/common';
@@ -73,7 +73,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     }
 
     let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, context);
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, lineLocations, this.props.protocol.name, context);
 
     let pausedAggregateIndexRaw = aggregates.findIndex((aggregate) => {
       if (!aggregate.state) {
@@ -124,7 +124,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                         return (menu.length > 0)
                           ? [
-                            { id: [blockRelIndex, 'header'], name: unit.getBlockClassLabel?.(block) ?? block.namespace, type: 'header' },
+                            { id: [blockRelIndex, 'header'], name: unit.getBlockClassLabel?.(block, context) ?? block.namespace, type: 'header' },
                             ...menu
                           ]
                           : [];
@@ -159,7 +159,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             </div>
           )}
           <div className={spotlightStyles.header}>
-            <h2 className={spotlightStyles.title}>{renderLabel(getBlockLabel(lineBlocks.at(-1), lineLocations.at(-1), this.props.host))}</h2>
+            <h2 className={spotlightStyles.title}>{renderLabel(UnitTools.getBlockLabel(lineBlocks.at(-1), lineLocations.at(-1), this.props.host))}</h2>
             <div className={spotlightStyles.navigationRoot}>
               <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === 0}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />

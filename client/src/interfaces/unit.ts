@@ -131,9 +131,9 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
   createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
   getActiveChildLocation?(location: Location, id: number): unknown;
-  getBlockClassLabel?(block: Block): string | null;
-  getBlockDefaultLabel?(block: Block, host: Host): React.ReactNode | null;
-  getBlockLocationLabelSuffix?(block: Block, location: Location): string | null;
+  getBlockClassLabel?(block: Block, context: UnitContext): string | null;
+  getBlockLabel?(block: Block, location: Location | null, context: UnitContext): React.ReactNode | null;
+  getBlockLabelSuffix?(block: Block, location: Location, context: UnitContext): string | null;
   getChildBlock(block: Block, key: Key): ProtocolBlock;
   getChildrenExecutionRefs(block: Block, location: Location): { blockKey: Key; executionId: number; }[] | null;
   isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;

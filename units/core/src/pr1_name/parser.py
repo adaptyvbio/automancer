@@ -1,42 +1,32 @@
 from types import EllipsisType
-from typing import Optional
+from typing import Optional, Self, TypedDict
 
-from pr1.fiber.eval import EvalEnvs, EvalStack
-from pr1.fiber.langservice import Analysis, Attribute, LiteralOrExprType, PrimitiveType
-from pr1.fiber.expr import PythonExpr
-from pr1.fiber.parser import BaseParser, BlockAttrs, BlockData, BlockUnitData, BlockUnitState
-from pr1.util import schema as sc
-from pr1.util.decorators import debug
+from pr1.fiber.eval import EvalContext
+from pr1.fiber.expr import Evaluable
+from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
+                                   StrType)
+from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState
+from pr1.reader import LocatedString
 
+from . import namespace
+
+
+class Attributes(TypedDict, total=False):
+  name: Evaluable[LocatedString]
 
 class NameParser(BaseParser):
-  namespace = "name"
-  root_attributes = dict()
+  namespace = namespace
   segment_attributes = {
     'name': Attribute(
       description="Sets the block's name.",
-      optional=True,
-      type=LiteralOrExprType(PrimitiveType(str), static=True)
+      type=PotentialExprType(StrType(), static=True)
     )
   }
 
-  def __init__(self, fiber):
-    self._fiber = fiber
-
-  def parse_block(self, block_attrs: BlockAttrs, /, adoption_envs: EvalEnvs, adoption_stack: EvalStack, runtime_envs: EvalEnvs) -> tuple[Analysis, BlockUnitData | EllipsisType]:
-    attrs = block_attrs[self.namespace]
-
-    if ('name' in attrs) and not isinstance(name_raw := attrs['name'], EllipsisType):
-      if isinstance(name_raw.value, PythonExpr):
-        analysis, name = name_raw.value.augment(adoption_envs).evaluate(adoption_stack)
-
-        if isinstance(name, EllipsisType):
-          return analysis, BlockUnitData(state=NameState(None))
-      else:
-        analysis = Analysis()
-        name = name_raw
-
-      return analysis, BlockUnitData(state=NameState(name.value))
+  def parse_block(self, attrs: Attributes, /, adoption_stack, trace):
+    if (attr := attrs.get('name')):
+      analysis, result = attr.eval(EvalContext(adoption_stack), final=True)
+      return analysis, BlockUnitData(state=NameState(result.value if not isinstance(result, EllipsisType) else None))
     else:
       return Analysis(), BlockUnitData(state=NameState(None))
 
@@ -45,10 +35,10 @@ class NameState(BlockUnitState):
   def __init__(self, value: Optional[str], /):
     self.value = value
 
-  def __or__(self, other: 'NameState'):
+  def __or__(self, other: Self):
     return NameState(self.value or other.value)
 
-  def export(self) -> object:
+  def export(self):
     return {
       "value": self.value
     }

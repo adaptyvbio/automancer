@@ -6,7 +6,7 @@ import { Icon } from './icon';
 import * as util from '../util';
 import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, getBlockLabel, UnitTools } from '../unit';
+import { getBlockAggregates, UnitTools } from '../unit';
 import { SimpleFeatureList } from './features';
 import { UnitContext } from '../interfaces/unit';
 import { ErrorBoundary } from './error-boundary';
@@ -50,7 +50,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
     }
 
     let aggregates = getBlockAggregates(lineBlocks)
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, this.props.protocol.name, context);
+    let aggregateLabelItems = getAggregateLabelItems(aggregates, null, this.props.protocol.name, context);
 
     let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace]);
     let HeadComponent = headUnit?.HeadComponent;
@@ -110,7 +110,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 }
 
 
-export function renderLabel(label: ReturnType<typeof getBlockLabel>) {
+export function renderLabel(label: ReturnType<typeof UnitTools.getBlockLabel>) {
   return (
     <>
       {label.explicit
@@ -121,7 +121,7 @@ export function renderLabel(label: ReturnType<typeof getBlockLabel>) {
   );
 }
 
-export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], protocolName: string | null, context: UnitContext) {
+export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], locations: unknown[] | null, protocolName: string | null, context: UnitContext) {
   return aggregates.flatMap((aggregate, aggregateIndex) => {
     let label = aggregate.state && UnitTools.getBlockStateNameFromState(aggregate.state);
 
@@ -143,8 +143,9 @@ export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], pro
     } else {
       return aggregate.blocks.flatMap((block, blockIndex) => {
         let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
+        let location = locations?.[aggregate.offset + blockIndex];
 
-        if (!unit.getBlockDefaultLabel) {
+        if (!unit.getBlockLabel) {
           return [];
         }
 
@@ -153,11 +154,7 @@ export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], pro
           blocks: blockIndex === 1 // TODO: Improve this
             ? [aggregate.blocks[0], block]
             : [block],
-          label: {
-            explicit: false,
-            suffix: null,
-            value: unit.getBlockDefaultLabel(block, context.host) ?? 'Block'
-          },
+          label: UnitTools.getBlockLabel(block, location, context.host),
           offset: aggregate.offset + blockIndex
         }];
       });

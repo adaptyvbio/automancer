@@ -172,20 +172,12 @@ function getChildBlock(block: Block, key: number) {
   return block.children[key];
 }
 
-function getBlockDefaultLabel(block: Block, host: Host) {
-  return 'Sequence';
-}
-
 function getActiveChildLocation(location: Location, _key: number) {
   return location.children[0];
 }
 
 function getChildrenExecutionRefs(block: Block, location: Location) {
   return [{ blockKey: location.index, executionId: 0 }];
-}
-
-function getBlockClassLabel(_block: Block) {
-  return 'Sequence';
 }
 
 function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
@@ -230,18 +222,26 @@ function getBlockLocationLabelSuffix(block: Block, location: Location) {
 }
 
 
-export default {
+const unit = {
+  namespace,
+  graphRenderer,
+
+  getBlockClassLabel(block, context) {
+    return 'Sequence';
+  },
+  getBlockLabel(block, location, context) {
+    return 'Sequence';
+  },
+
   createActiveBlockMenu,
   createDefaultPoint,
   getChildBlock,
   getActiveChildLocation,
-  getBlockDefaultLabel,
-  getBlockClassLabel,
   getChildrenExecutionRefs,
-  graphRenderer,
   isBlockBusy,
   isBlockPaused,
-  namespace,
   onSelectBlockMenu,
-  getBlockLocationLabelSuffix
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key>
+  getBlockLabelSuffix: getBlockLocationLabelSuffix
+} satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
+
+export default unit;

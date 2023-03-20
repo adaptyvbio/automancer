@@ -187,19 +187,6 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
   }
 }
 
-function getBlockClassLabel(_block: Block) {
-  return 'Segment';
-}
-
-function getBlockDefaultLabel(block: Block, host: Host) {
-  let unit = host.units[block.process.namespace];
-  return unit.getProcessLabel?.(block.process.data) ?? null;
-}
-
-function getBlockLocationLabelSuffix(block: Block, location: Location) {
-  return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
-}
-
 
 export default {
   namespace: 'segment',
@@ -245,12 +232,19 @@ export default {
   getChildrenExecutionRefs(block, location) {
     return null;
   },
+  getBlockClassLabel(block, context) {
+    return 'Segment';
+  },
+  getBlockLabel(block, location, context) {
+    let unit = UnitTools.asProcessUnit(context.host.units[block.process.namespace])!;
+    return unit.getProcessLabel?.(block.process.data, context) ?? null;
+  },
+  getBlockLabelSuffix(block, location, context) {
+    return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
+  },
 
   createActiveBlockMenu,
   createDefaultPoint,
-  getBlockClassLabel,
-  getBlockDefaultLabel,
-  // getBlockLocationLabelSuffix,
   isBlockBusy,
   isBlockPaused,
   onSelectBlockMenu

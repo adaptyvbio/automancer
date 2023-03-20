@@ -15,7 +15,8 @@ export interface BlockMetrics extends GraphRendererDefaultMetrics {
 }
 
 export interface Location {
-  child: unknown;
+  children: { 0: unknown; };
+  count: number;
   iteration: number;
 }
 
@@ -26,24 +27,16 @@ export interface Point {
   iteration: number;
 }
 
-export interface State {
-  child: unknown;
-  index: number;
-}
-
 
 const namespace = 'repeat';
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, location, options, context) {
-    let childMetrics = options.computeMetrics(block.child, [...ancestors, block], location?.child);
+    let childMetrics = options.computeMetrics(block.child, [...ancestors, block], location?.children[0]);
 
     let parent = ancestors.at(-1);
     let label = (parent && UnitTools.getBlockStateName(parent))
-      ?? unit.getBlockDefaultLabel(block);
-    // let label = ancestors.at(-1)?.state['name'].value
-    //   ?? getBlockExplicitLabel(block, context.host)
-    //   ?? unit.getBlockDefaultLabel(block);
+      ?? unit.getBlockLabel(block, null, context);
 
     return {
       child: childMetrics,
@@ -76,7 +69,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
         {options.render(block.child, [...path, null], metrics.child, {
           x: position.x + 1,
           y: position.y + 2
-        }, location?.child ?? null, options)}
+        }, location?.children[0] ?? null, options)}
       </>
     );
   }
@@ -84,8 +77,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 
 
 const unit = {
-  namespace: 'repeat',
-
+  namespace,
   graphRenderer,
 
   createActiveBlockMenu(block, location, options) {
@@ -99,34 +91,38 @@ const unit = {
       iteration: 0
     };
   },
-  getBlockClassLabel(block) {
+  getBlockClassLabel(block, context) {
     return 'Repeat';
   },
-  getBlockDefaultLabel(block) {
-    if (block.count.type === 'number') {
+  getBlockLabel(block, location, context) {
+    let numericCount = location?.count ?? (
+      (block.count.type === 'number')
+        ? block.count.value
+        : null
+    );
+
+    if (numericCount !== null) {
       return 'Repeat ' + ({
         1: 'once',
         2: 'twice'
-      }[block.count.value] ?? `${block.count.value} times`);
+      }[numericCount] ?? `${numericCount} times`);
+    } else {
+      return (
+        <>Repeat {formatDynamicValue(block.count)} times</>
+      );
     }
-
-    let count = formatDynamicValue(block.count);
-
-    return (
-      <>Repeat {count} times</>
-    );
+  },
+  getBlockLabelSuffix(block, location, context) {
+    return `(${location.iteration + 1}/${location.count})`;
   },
   getActiveChildLocation(location, key: number) {
-    return location.child;
+    return location.children[0];
   },
   getChildBlock(block, key: never) {
     return block.child;
   },
   getChildrenExecutionRefs(block, location) {
-    return [location.iteration];
-  },
-  getBlockLocationLabelSuffix(block, location) {
-    return `(${location.iteration}/${block.count})`;
+    return [{ blockKey: 0, executionId: 0 }];
   },
   onSelectBlockMenu(block, location, path) {
     switch (path.first()) {
@@ -136,5 +132,4 @@ const unit = {
   }
 } satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
 
-
-export default unit
+export default unit;

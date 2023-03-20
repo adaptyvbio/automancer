@@ -646,7 +646,7 @@ class MissingUnitError(LangServiceError):
 class InvalidUnitError(Error):
   def __init__(self, target: LocatedValue, /, unit: Unit):
     super().__init__(
-      f"Invalid unit, expected {unit:~P}",
+      f"Invalid unit, expected {unit:P}",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
@@ -877,14 +877,13 @@ class PotentialExprType(Type):
         match expr.kind:
           case PythonExprKind.Dynamic if self._dynamic:
             before_depth = 1
-            expr_object = PythonExprObject(expr, self._type, depth=0, envs=context.envs_list[1].copy())
           case PythonExprKind.Static if self._static:
             before_depth = 0
-            expr_object = PythonExprObject(expr, self._type, depth=1, envs=context.envs_list[0].copy())
           case _:
             analysis.errors.append(InvalidExprKind(obj))
             return analysis, Ellipsis
 
+        expr_object = PythonExprObject(expr, self._type, depth=(eval_depth - before_depth - 1), envs=context.envs_list[before_depth].copy())
         analysis += expr_object.analyze()
         return analysis, ValueAsPythonExpr.new(expr_object, depth=before_depth)
 

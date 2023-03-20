@@ -1,77 +1,80 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
-from pr1.fiber.expr import Evaluable
-from pr1.fiber.process import ProgramExecEvent
-from pr1.devices.claim import ClaimSymbol
-from pr1.reader import LocationArea
 from pr1.fiber import langservice as lang
-from pr1.fiber.eval import EvalEnv, EvalEnvs, EvalStack
-from pr1.fiber.parser import BaseBlock, BaseParser, BaseTransform, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, Transforms
-from pr1.util import schema as sc
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalStack
+from pr1.fiber.expr import Evaluable
+from pr1.fiber.master2 import ProgramOwner
+from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform,
+                              BlockProgram, BlockUnitData,
+                              BlockUnitPreparationData)
+from pr1.fiber.process import ProgramExecEvent
+from pr1.master.analysis import MasterAnalysis
+from pr1.reader import LocatedValue
 from pr1.util.decorators import debug
 
 from . import namespace
 
 
+class Attributes(TypedDict, total=False):
+  repeat: Evaluable[LocatedValue[int]]
+
 class RepeatParser(BaseParser):
   namespace = namespace
   priority = 800
 
-  root_attributes = dict()
   segment_attributes = {
     'repeat': lang.Attribute(
-      lang.PotentialExprType(lang.PrimitiveType(int)),
-      decisive=True
+      description="Repeats a block a fixed number of times.",
+      type=lang.PotentialExprType(lang.PrimitiveType(int))
     )
   }
 
-  def __init__(self, fiber: FiberParser):
+  def __init__(self, fiber):
     self._fiber = fiber
 
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
+  def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
     if (attr := attrs.get('repeat')):
       env = EvalEnv(readonly=True)
       return lang.Analysis(), BlockUnitPreparationData((attr, env), envs=[env])
 
     return lang.Analysis(), BlockUnitPreparationData(None)
 
-  def parse_block(self, attrs, /, adoption_stack, trace):
+  def parse_block(self, attrs: tuple[Evaluable[LocatedValue[int]], EvalEnv], /, adoption_stack, trace):
     count, env = attrs
-    analysis, value = count.evaluate(adoption_stack)
+    analysis, value = count.eval(EvalContext(adoption_stack), final=False)
 
     if isinstance(value, EllipsisType):
       return analysis, Ellipsis
 
     return analysis, BlockUnitData(
-      transforms=[RepeatTransform(value, env=env, parser=self)]
+      transforms=[RepeatTransform(count=value, env=env, parser=self)]
     )
 
-@debug
+@dataclass(kw_only=True)
 class RepeatTransform(BaseTransform):
-  def __init__(self, count: Evaluable, *, env: EvalEnv, parser: RepeatParser):
-    self._count = count
-    self._env = env
-    self._parser = parser
+  count: Evaluable[LocatedValue[int]]
+  env: EvalEnv
+  parser: RepeatParser
 
-  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    analysis, block = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
+  def execute(self, state, transforms, *, origin_area):
+    analysis, block = self.parser._fiber.execute(state, transforms, origin_area=origin_area)
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, RepeatBlock(block, count=self._count, env=self._env)
+    return analysis, RepeatBlock(block, count=self.count, env=self.env)
 
 
 @dataclass(kw_only=True)
 class RepeatProgramLocation:
-  child: Any
+  count: int
   iteration: int
 
   def export(self):
     return {
-      "child": self.child.export(),
+      "count": self.count,
       "iteration": self.iteration
     }
 
@@ -83,57 +86,49 @@ class RepeatProgramPoint:
   @classmethod
   def import_value(cls, data: Any, /, block: 'RepeatBlock', *, master):
     return cls(
-      child=(block._block.Point.import_value(data["child"], block._block, master=master) if data["child"] is not None else None),
+      child=(block.block.Point.import_value(data["child"], block.block, master=master) if data["child"] is not None else None),
       iteration=data["iteration"]
     )
 
 @debug
 class RepeatProgram(BlockProgram):
-  def __init__(self, block: 'RepeatBlock', master, parent):
+  def __init__(self, block: 'RepeatBlock', handle):
     self._block = block
-    self._master = master
-    self._parent = parent
+    self._handle = handle
 
-    self._child_program: BlockProgram
+    self._child_program: ProgramOwner
     self._halting: bool
     self._iteration: int
-    self._point = Optional[RepeatProgramPoint]
-
-  @property
-  def busy(self):
-    return self._child_program.busy
-
-  def get_child(self, block_key: int, exec_key: None):
-    return self._child_program
-
-  def import_message(self, message: Any):
-    match message["type"]:
-      case "halt":
-        self.halt()
+    self._point: Optional[RepeatProgramPoint]
 
   def halt(self):
-    assert not self.busy
-
     self._child_program.halt()
     self._halting = True
 
-  def jump(self, point: RepeatProgramPoint):
-    if point.iteration != self._iteration:
-      self._point = point
-      self.halt()
-    elif point.child:
-      self._child_program.jump(point.child)
+  # def jump(self, point: RepeatProgramPoint):
+  #   if point.iteration != self._iteration:
+  #     self._point = point
+  #     self.halt()
+  #   elif point.child:
+  #     self._child_program.jump(point.child)
 
-  def pause(self):
-    assert not self.busy
-    self._child_program.pause()
+  async def run(self, stack):
+    analysis, result = self._block.count.eval(EvalContext(stack), final=True)
 
-  async def run(self, initial_point: Optional[RepeatProgramPoint], parent_state_program, stack: EvalStack, symbol: ClaimSymbol):
-    self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
-    child_block = self._block._block
+    if isinstance(result, EllipsisType):
+      return # TODO: Do something
+
+    iteration_count = result.value
+
+    self._handle.send(ProgramExecEvent(
+      analysis=MasterAnalysis.cast(analysis)
+    ))
+
+    # self._point = initial_point or RepeatProgramPoint(child=None, iteration=0)
+    self._point = RepeatProgramPoint(child=None, iteration=0)
 
     while True:
-      self._child_program = child_block.Program(child_block, self._master, self)
+      self._child_program = self._handle.create_child(self._block.block)
 
       point = self._point
 
@@ -141,47 +136,45 @@ class RepeatProgram(BlockProgram):
       self._iteration = point.iteration
       self._point = None
 
-      if self._iteration >= self._block._count:
+      if self._iteration >= iteration_count:
         break
 
-      child_stack = {
+      self._handle.send(ProgramExecEvent(location=RepeatProgramLocation(
+        count=iteration_count,
+        iteration=self._iteration
+      )))
+
+      child_stack: EvalStack = {
         **stack,
-        self._block._env: { 'index': self._iteration }
+        self._block.env: { 'index': self._iteration }
       }
 
-      async for event in self._child_program.run(point.child, parent_state_program, child_stack, symbol):
-        yield ProgramExecEvent(
-          location=RepeatProgramLocation(
-            child=event.location,
-            iteration=self._iteration
-          ),
-          stopped=event.stopped,
-          terminated=(event.terminated and (
-            ((self._point.iteration if self._point else (self._iteration + 1)) >= self._block._count) or self._halting
-          ))
-        )
+      await self._child_program.run(child_stack)
 
       if self._point:
         pass
-      elif self._halting:
+      elif self._halting or ((self._iteration + 1) >= iteration_count):
         break
-      else:
-        self._point = RepeatProgramPoint(child=None, iteration=(self._iteration + 1))
+
+      self._point = RepeatProgramPoint(child=None, iteration=(self._iteration + 1))
+      self._handle.collect_children()
+
+      await self._handle.resume_parent()
 
 
 @debug
-class RepeatBlock:
-  Point = RepeatProgramPoint
+class RepeatBlock(BaseBlock):
+  Point: type[RepeatProgramPoint] = RepeatProgramPoint
   Program = RepeatProgram
 
-  def __init__(self, block: BaseBlock, count: Evaluable, env: EvalEnv):
-    self._block = block
-    self._count = count
-    self._env = env
+  def __init__(self, block: BaseBlock, count: Evaluable[LocatedValue[int]], env: EvalEnv):
+    self.block = block
+    self.count = count
+    self.env = env
 
   def export(self):
     return {
       "namespace": namespace,
-      "count": self._count.export(),
-      "child": self._block.export()
+      "count": self.count.export(),
+      "child": self.block.export()
     }

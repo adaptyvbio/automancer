@@ -6,7 +6,7 @@ from types import EllipsisType
 from typing import Any, Optional
 
 from pr1.error import Error
-from pr1.fiber.eval import EvalStack
+from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.expr import export_value
 from pr1.fiber.process import Process as ProcessIntf, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent
 from pr1.master.analysis import MasterAnalysis
@@ -19,14 +19,16 @@ from .parser import TimerProcessData
 
 @dataclass(kw_only=True)
 class ProcessLocation:
-  duration: float # in seconds
+  duration: Optional[float] # in seconds, none = wait forever
   progress: float
   paused: bool = False
 
   def export(self):
     return {
-      "durationQuantity": export_value(self.duration * ureg.second),
-      "durationValue": self.duration * 1000,
+      "duration": {
+        "quantity": export_value(self.duration * ureg.second),
+        "value": self.duration * 1000,
+      } if self.duration is not None else None,
       "paused": self.paused,
       "progress": self.progress
     }
@@ -73,14 +75,14 @@ class Process(ProcessIntf):
     self._resume_future = None
 
   async def run(self, initial_point: Optional[ProcessPoint], *, stack: EvalStack):
-    eval_analysis, eval_result = self._data.value.evaluate(stack)
+    eval_analysis, eval_result = self._data.duration.eval(EvalContext(stack), final=True)
 
     if isinstance(eval_result, EllipsisType):
       yield ProcessFailureEvent(analysis=MasterAnalysis.cast(eval_analysis))
       return
 
-    total_duration: float = eval_result.value.m_as('sec')
-    self._progress = initial_point.progress if initial_point else 0.0
+    total_duration = eval_result.value.m_as('sec') if (eval_result.value != 'forever') else None
+    self._progress = (initial_point.progress if initial_point else 0.0)
 
     initial = True
 
@@ -88,7 +90,7 @@ class Process(ProcessIntf):
       progress = self._progress
       self._progress = None
 
-      remaining_duration = total_duration * (1.0 - progress)
+      remaining_duration = (total_duration * (1.0 - progress)) if (total_duration is not None) else None
       task_time = time.time()
 
       yield ProcessExecEvent(
@@ -100,7 +102,15 @@ class Process(ProcessIntf):
       )
 
       initial = False
-      self._task = asyncio.create_task(asyncio.sleep(remaining_duration))
+
+      async def wait_forever():
+        await Future()
+
+      self._task = asyncio.create_task(
+        asyncio.sleep(remaining_duration)
+          if (remaining_duration is not None)
+          else wait_forever()
+      )
 
       try:
         await self._task
@@ -111,8 +121,10 @@ class Process(ProcessIntf):
           current_time = time.time()
           elapsed_time = current_time - task_time
 
-          progress += elapsed_time / total_duration
-          remaining_duration = total_duration * (1.0 - progress)
+          if total_duration is not None:
+            progress += elapsed_time / total_duration
+            remaining_duration = total_duration * (1.0 - progress)
+
           self._progress = progress
 
           # yield ProcessExecEvent(location=ProcessLocation(self._progress, paused=True))

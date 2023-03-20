@@ -1,13 +1,15 @@
-import { React, UnknownUnit, formatDuration, Host, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
+import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
 
 
 export interface ProcessData {
-  value: DynamicValue;
+  duration: DynamicValue;
 }
 
 export interface ProcessLocation {
-  durationQuantity: DynamicValue;
-  durationValue: number;
+  duration: {
+    quantity: DynamicValue;
+    value: number;
+  } | null;
   paused: boolean;
   progress: number;
 }
@@ -17,10 +19,14 @@ export default {
   namespace: 'timer',
 
   ProcessComponent(props) {
+    if (!props.location.duration) {
+      return null;
+    }
+
     return (
       <div>
         <TimedProgressBar
-          duration={props.location.durationValue}
+          duration={props.location.duration.value}
           paused={props.location.paused}
           time={props.time}
           value={props.location.progress} />
@@ -31,9 +37,11 @@ export default {
   createProcessFeatures(processData, location, options) {
     return [{
       icon: 'hourglass_empty',
-      label: location
-        ? formatDynamicValue(location.durationQuantity)
-        : formatDynamicValue(processData.value)
+      label: (
+        location
+          ? (location.duration && formatDynamicValue(location.duration.quantity))
+          : (!((processData.duration.type === 'string') && (processData.duration.value === 'forever')) ? formatDynamicValue(processData.duration) : null)
+      ) ?? 'Foorever'
     }];
   },
   getProcessLabel(data, context) {

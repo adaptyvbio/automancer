@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Optional, Proto
 from ..error import Trace
 from ..util.misc import Exportable
 from . import langservice as lang
-from .eval import EvalContext, EvalEnv, EvalEnvs, EvalStack
+from .eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
 from .expr import PythonExpr, PythonExprAugmented
 from .. import reader
 from ..reader import LocatedValue, LocationArea
@@ -288,7 +288,12 @@ class FiberParser:
 
     analysis = lang.Analysis()
 
-    global_env = EvalEnv(name="Global")
+    global_env = EvalEnv({
+      'ExpPath': EvalEnvValue(),
+      'Path': EvalEnvValue(),
+      'unit': EvalEnvValue()
+    }, name="Global", readonly=True)
+
     adoption_envs = [global_env]
     runtime_envs = [global_env, self.user_env]
 

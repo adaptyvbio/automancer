@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Literal, TypedDict
 from types import EllipsisType
 
+from pint import Quantity
+from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.segment import SegmentTransform
 from pr1.fiber import langservice as lang
@@ -12,13 +14,13 @@ from pr1.util.misc import Exportable
 
 @dataclass
 class TimerProcessData(Exportable):
-  value: Evaluable[LocatedValue]
+  duration: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
   def export(self):
-    return { "value": self.value.export() }
+    return { "duration": self.duration.export() }
 
 class TimerAttributes(TypedDict, total=False):
-  wait: Evaluable
+  wait: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
 class TimerParser(BaseParser):
   namespace = "timer"
@@ -28,7 +30,10 @@ class TimerParser(BaseParser):
     'wait': lang.Attribute(
       decisive=True,
       description="Waits for a fixed delay.",
-      type=lang.PotentialExprType(lang.QuantityType('second'))
+      type=lang.PotentialExprType(lang.UnionType(
+        lang.EnumType('forever'),
+        lang.QuantityType('second')
+      ))
     )
   }
 
@@ -37,7 +42,7 @@ class TimerParser(BaseParser):
 
   def parse_block(self, attrs: TimerAttributes, /, adoption_stack, trace):
     if (attr := attrs.get('wait')):
-      analysis, duration = attr.evaluate(adoption_stack)
+      analysis, duration = attr.eval(EvalContext(adoption_stack), final=False)
 
       if isinstance(duration, EllipsisType):
         return analysis, Ellipsis

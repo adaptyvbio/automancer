@@ -10,4 +10,5 @@ T = TypeVar('T')
 
 class ValueNode(BaseNode, ABC):
   def __init__(self):
+    super().__init__()
     self._lock = Lock()

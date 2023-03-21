@@ -1,9 +1,11 @@
 import asyncio
 import traceback
+from asyncio import Event, Future
 from typing import Any, Optional, cast
 
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
+from asyncua.ua.uatypes import NodeId as UANodeId
 from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.numeric import NumericReadableNode, NumericWritableNode
@@ -29,8 +31,6 @@ variants_map = {
 
 
 class OPCUADeviceReadableNode(PollableReadableNode):
-  description = None
-
   def __init__(
     self,
     *,
@@ -38,7 +38,7 @@ class OPCUADeviceReadableNode(PollableReadableNode):
     device: 'OPCUADevice',
     id: NodeId,
     label: Optional[str],
-    node: UANode,
+    location: UANodeId,
     type: str
   ):
     super().__init__(min_interval=0.2)
@@ -49,36 +49,41 @@ class OPCUADeviceReadableNode(PollableReadableNode):
     self.label = label
 
     self._device = device
-    self._node = node
+    self._location = location
     self._type = type
     self._variant = variants_map[type]
 
   @property
   def _long_label(self):
-    return f"node {self._label}" + (f" with id '{self._node.nodeid.to_string()}'" if self._node.nodeid else str())
+    return f"node {self._label} with id '{self._location.to_string()}'"
 
   async def _read_value(self):
     try:
-      if (variant := await self._node.read_data_type_as_variant_type()) != self._variant:
+      return await self._device._read_worker.write(self)
+    except ConnectionError as e:
+      raise NodeUnavailableError from e
+
+  # TODO: Add _subscribe()
+
+  async def _configure(self):
+    await super()._configure()
+
+    assert self._device._client
+    node = self._device._client.get_node(self._location)
+
+    try:
+      if (variant := await node.read_data_type_as_variant_type()) != self._variant:
         found_type = next((key for key, test_variant in variants_map.items() if test_variant == variant), 'unknown')
         logger.error(f"Type mismatch of {self._long_label}, expected {self._type}, found {found_type}")
 
         raise NodeUnavailableError
-
-      return await self._node.read_value()
     except ConnectionError as e:
-      await self._device._lost()
       raise NodeUnavailableError from e
     except ua.uaerrors._auto.BadNodeIdUnknown as e: # type: ignore
       logger.error(f"Missing {self._long_label}")
       raise NodeUnavailableError from e
 
-  async def _configure(self):
-    await super()._configure()
-    self.connected = True
-
   async def _unconfigure(self):
-    self.connected = False
     await super()._unconfigure()
 
 
@@ -88,15 +93,21 @@ class OPCUADeviceWritableNode(OPCUADeviceReadableNode, WritableNode):
     OPCUADeviceReadableNode.__init__(self, **kwargs)
 
   async def _configure(self):
-    await WritableNode._configure(self)
+    # First check that the data type is correct
     await OPCUADeviceReadableNode._configure(self)
 
+    # Then read the current value
+    await WritableNode._configure(self)
+
   async def _unconfigure(self):
-    await WritableNode._unconfigure(self)
     await OPCUADeviceReadableNode._unconfigure(self)
+    await WritableNode._unconfigure(self)
 
   async def _write(self, value, /) -> None:
-    await self._device._write_worker.write((self, value))
+    try:
+      await self._device._write_worker.write((self, value))
+    except ConnectionError as e:
+      raise NodeUnavailableError from e
 
 # class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
 #   def __init__(self, *, description: Optional[str], device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
@@ -133,8 +144,6 @@ class OPCUADeviceNumericWritableNode(OPCUADeviceWritableNode, NumericReadableNod
       unit=(quantity.units if quantity is not None else None)
     )
 
-print(OPCUADeviceNumericWritableNode.mro())
-
 dtype_map: dict[str, str] = {
   'i16': 'i2',
   'i32': 'i4',
@@ -159,6 +168,17 @@ nodes_map: dict[str, tuple[type[OPCUADeviceReadableNode], type[OPCUADeviceWritab
 }
 
 
+class BaseUANodeSubHandler:
+  def datachange_notification(self, node: UANode, val, data):
+    pass
+
+  def event_notification(self, event: ua.EventNotificationList):
+    pass
+
+  def status_change_notification(self, status: ua.StatusChangeNotification):
+    pass
+
+
 class OPCUADevice(DeviceNode):
   description = None
   model = "Generic OPC-UA device"
@@ -179,81 +199,71 @@ class OPCUADevice(DeviceNode):
     self.label = label
 
     self._address = address
-    self._client = Client(address)
+    self._client: Optional[Client] = None
 
     self._connected = False
-    self._reconnect_task: Optional[asyncio.Task[None]] = None
+    self._task: Optional[asyncio.Task[None]] = None
 
     self._read_worker = BatchWorker[OPCUADeviceReadableNode | OPCUADeviceWritableNode, Any](self._commit_read)
     self._write_worker = BatchWorker[tuple[OPCUADeviceWritableNode, Any], None](self._commit_write)
 
-
-    def create_node(node_conf):
-      ReadableNode, WritableNode = nodes_map[node_conf['type']]
-
-      opts: dict[str, Any] = dict(
-        description=(node_conf['description'].value if 'description' in node_conf else None),
-        device=self,
-        id=node_conf['id'].value,
-        label=(node_conf['label'].value if 'label' in node_conf else None),
-        node=self._client.get_node(node_conf['location'].value),
-        type=node_conf['type'].value
-      )
-
-      dtype = dtype_map.get(node_conf['type'].value)
-      writable = (writable_conf := node_conf.get('writable')) and writable_conf.value
-
-      if dtype is not None:
-        opts |= dict(
-          dtype= dtype,
-          quantity=(node_conf['unit'].value if 'unit' in node_conf else None)
-        )
-
-        if writable:
-          opts |= dict(
-            max=None,
-            min=None
-          )
-
-      return WritableNode(**opts) if writable else ReadableNode(**opts)
-
-    # self._keepalive_node = OPCUADeviceReadableNode(
-    #   device=self,
-    #   id="keepalive",
-    #   label=None,
-    #   node=self._client.get_node("ns=0;i=2259")
-    # )
-
     self.nodes: dict[NodeId, OPCUADeviceReadableNode] = {
-      # node.id: node for node in {*{create_node(node_conf) for node_conf in nodes_conf}, self._keepalive_node}
-      node.id: node for node in {*{create_node(node_conf) for node_conf in nodes_conf}}
+      (node := self._create_node(node_conf)).id: node for node_conf in nodes_conf
     }
 
+  def _create_node(self, node_conf):
+    ReadableNode, WritableNode = nodes_map[node_conf['type']]
+
+    opts: dict[str, Any] = dict(
+      description=(node_conf['description'].value if 'description' in node_conf else None),
+      device=self,
+      id=node_conf['id'].value,
+      label=(node_conf['label'].value if 'label' in node_conf else None),
+      location=UANodeId.from_string(node_conf['location'].value),
+      type=node_conf['type'].value
+    )
+
+    dtype = dtype_map.get(node_conf['type'].value)
+    writable = (writable_conf := node_conf.get('writable')) and writable_conf.value
+
+    if dtype is not None:
+      opts |= dict(
+        dtype= dtype,
+        quantity=(node_conf['unit'].value if 'unit' in node_conf else None)
+      )
+
+      if writable:
+        opts |= dict(
+          max=None,
+          min=None
+        )
+
+    return WritableNode(**opts) if writable else ReadableNode(**opts)
+
   async def initialize(self):
-    await self._connect()
+    ready_event = Event()
+    self._task = asyncio.create_task(self._connect(ready_event))
+
+    await ready_event.wait()
 
     if not self.connected:
       logger.warning(f"Failed connecting to {self._label}")
-      self._reconnect()
 
-    # x = cast(OPCUADeviceReadableNode, self.nodes['S01'])
-    # reg = await x.watch_value(lambda _: print('change'))
+    # r = cast(OPCUADeviceNumericReadableNode, self.nodes[NodeId('S01')])
+    # w = cast(OPCUADeviceNumericWritableNode, self.nodes[NodeId('S02')])
 
-    # self._keepalive_reg = await self._keepalive_node.watch_value(lambda node: None)
+    # await asyncio.gather(
+    #   r.read(),
+    #   w.read()
+    # )
 
-    r = self.nodes[NodeId('S01')]
-    w = cast(OPCUADeviceNumericWritableNode, self.nodes[NodeId('S02')])
-
-    await asyncio.gather(
-      r.read(),
-      w.read()
-    )
+    # print(r.value, w.value)
 
     # def listener(node):
     #   print("Change", node.value)
 
-    # reg = await x.watch_value(listener)
-    # print('Ready', x.value)
+    # reg = await r.watch_value(listener)
+    # print('Ready', r.value)
 
     # await asyncio.sleep(2)
     # await reg.cancel()
@@ -261,83 +271,80 @@ class OPCUADevice(DeviceNode):
     # await x.write_quantity(2 * ureg.km)
 
   async def destroy(self):
-    # await self._keepalive_reg.cancel()
-    await self._disconnect()
-
-    logger.debug("An error might be printed below. It can be safely discarded.")
-    await self._client.disconnect()
-
-    if self._reconnect_task:
-      self._reconnect_task.cancel()
+    if self._task:
+      self._task.cancel()
 
       try:
-        await self._reconnect_task
+        await self._task
       except asyncio.CancelledError:
         pass
 
-  async def _connect(self):
+      self._task = None
+
+  async def _connect(self, ready_event: Event):
     logger.debug(f"Connecting to {self._label}")
 
+    keepalive_handler = BaseUANodeSubHandler()
+
     try:
-      await self._client.connect()
-    # An OSError will occur if the computer is not connected to a network.
-    except (ConnectionRefusedError, OSError, asyncio.TimeoutError):
-      return
+      while True:
+        self._client = Client(self._address)
 
-    logger.info(f"Configuring {self._label}")
-    self._connected = True
+        try:
+          async with self._client:
+            logger.info(f"Configuring {self._label}")
+            self._connected = True
 
-    for node in self.nodes.values():
-      await node._configure()
+            for node in self.nodes.values():
+              try:
+                await node._configure()
+              except NodeUnavailableError:
+                pass
 
-    self.connected = True
+              node.connected = True
 
-    logger.info(f"Connected to {self._label}")
+            self.connected = True
 
-  async def _disconnect(self):
-    self._connected = False
-    self.connected = False
+            logger.info(f"Connected to {self._label}")
+            ready_event.set()
 
-    for node in self.nodes.values():
-      await node._unconfigure()
+            subscription = await self._client.create_subscription(500, keepalive_handler)
+            node = (self._client.get_node(ua.ObjectIds.Server_ServerStatus_CurrentTime), )
 
-  async def _lost(self):
-    if self._connected:
-      logger.warn(f"Lost connection to {self._label}")
-      was_connected = self.connected
+            await subscription.subscribe_data_change(node)
 
-      await self._disconnect()
-
-      logger.debug("An error might be printed below. It can be safely discarded.")
-      await self._client.close_session()
-
-      if was_connected:
-        self._reconnect()
-
-  def _reconnect(self, interval = 1):
-    async def reconnect():
-      try:
-        while True:
-          await self._connect()
-
+            while True:
+              await asyncio.sleep(1)
+              await self._client.check_connection()
+        except (ConnectionError, ConnectionRefusedError, OSError, asyncio.TimeoutError):
           if self.connected:
-            break
+            logger.error(f"Lost connection to {self._label}")
+        finally:
+          ready_event.set()
+          self._client = None
 
-          await asyncio.sleep(interval)
-      except asyncio.CancelledError:
-        pass
-      except Exception:
-        traceback.print_exc()
-      finally:
-        self._reconnect_task = None
+          if self._connected:
+            self._connected = False
+            self.connected = False
 
-    self._reconnect_task = asyncio.create_task(reconnect())
+            for node in self.nodes.values():
+              node.connected = False
+              await node._unconfigure()
+
+        await asyncio.sleep(1.0)
+    except Exception:
+      traceback.print_exc()
+    finally:
+      self._task = None
 
   async def _commit_read(self, items: list[OPCUADeviceReadableNode | OPCUADeviceWritableNode], /):
-    return await self._client.read_values([node._node for node in items])
+    assert self._client
+    return await self._client.read_values([self._client.get_node(node._location) for node in items])
 
   async def _commit_write(self, items: list[tuple[OPCUADeviceWritableNode, Any]], /):
-    uanodes = [node._node for node, _ in items]
+    assert self._client
+
+    uanodes = [self._client.get_node(node._location) for node, _ in items]
     values: list[Any] = [None] * len(items)
 
     for index, (node, value) in enumerate(items):

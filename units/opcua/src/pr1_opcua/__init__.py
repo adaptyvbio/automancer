@@ -10,7 +10,7 @@ metadata = Metadata(
   description="OPC-UA communication.",
   icon=MetadataIcon(kind='icon', value="sensors"),
   title="OPC-UA",
-  version="3.0"
+  version="4.0"
 )
 
 client_path = files(__name__ + '.client')

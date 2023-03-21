@@ -43,7 +43,7 @@ class BatchWorker(Generic[K, R]):
     return result
 
   async def write(self, item: K, /):
-    self._logger.debug('Write request: {item}')
+    self._logger.debug(f"Write request: {item}")
 
     index = len(self._items)
     self._items.append(item)

@@ -430,6 +430,8 @@ class FiberParser:
 
 
   def prepare_block(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
+    runtime_envs = runtime_envs.copy()
+
     analysis = lang.Analysis()
     context = AnalysisContext(
       envs_list=[adoption_envs, runtime_envs]
@@ -441,9 +443,7 @@ class FiberParser:
       return analysis, Ellipsis
 
     prep = Attrs()
-
     failure = False
-    runtime_envs = runtime_envs.copy()
 
     for parser in self._parsers:
       unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, namespace=parser.namespace))

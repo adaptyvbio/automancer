@@ -1,11 +1,12 @@
 import asyncio
 import traceback
 
-from pr1.devices.node import BaseWritableNode, CollectionNode
+from pr1.devices.nodes.writable import WritableNode
 from pr1.fiber.langservice import DictType
-from pr1.host import Host
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc
+
+from pr1.host import Host
 
 from . import logger
 
@@ -31,7 +32,7 @@ class Executor(BaseExecutor):
       case "write":
         node = self._host.root_node.find(instruction["path"])
 
-        if isinstance(node, BaseWritableNode):
+        if isinstance(node, WritableNode):
           async def write():
             try:
               await node.write_import(instruction["value"])

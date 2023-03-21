@@ -2,18 +2,18 @@ import functools
 from typing import Callable, Optional
 
 from pr1.devices.adapter import GeneralDeviceAdapter, GeneralDeviceAdapterController
-from pr1.devices.node import ConfigurableWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, ScalarWritableNode
+from pr1.devices.node import ConfigurableWritableNode, BooleanWritableNode, DeviceNode, NodeUnavailableError, NumericWritableNode
 
 from .numato import NumatoRelayBoardDevice, NumatoRelayBoardDeviceDisconnectedError
 from .. import logger, namespace
 
 
-class RelayBoardGlobalNode(ScalarWritableNode, ConfigurableWritableNode):
+class RelayBoardGlobalNode(NumericWritableNode, ConfigurableWritableNode):
   id = "global"
   label = "Global"
 
   def __init__(self, *, device: 'RelayBoardDevice'):
-    ScalarWritableNode.__init__(self)
+    NumericWritableNode.__init__(self)
     ConfigurableWritableNode.__init__(self)
 
     self._device = device
@@ -24,7 +24,7 @@ class RelayBoardGlobalNode(ScalarWritableNode, ConfigurableWritableNode):
     except NumatoRelayBoardDeviceDisconnectedError as e:
       raise NodeUnavailableError() from e
 
-  async def _write(self, value: int):
+  async def write(self, value: int):
     try:
       await self._device._adapter.device.write(value)
     except NumatoRelayBoardDeviceDisconnectedError as e:

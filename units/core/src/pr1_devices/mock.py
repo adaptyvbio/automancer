@@ -1,5 +1,4 @@
-
-from pr1.devices.node import BooleanWritableNode, CollectionNode, DeviceNode
+from pr1.devices.nodes.collection import DeviceNode
 
 
 class MockDevice(DeviceNode):
@@ -14,20 +13,20 @@ class MockDevice(DeviceNode):
     self.connected = True
 
     self.nodes = {
-      'valueBool': MockBoolNode()
+      # 'valueBool': MockBoolNode()
     }
 
-class MockBoolNode(BooleanWritableNode):
-  id = "valueBool"
-  description = None
-  label = "Bool value"
+# class MockBoolNode(BooleanWritableNode):
+#   id = "valueBool"
+#   description = None
+#   label = "Bool value"
 
-  def __init__(self):
-    super().__init__()
-    self.connected = True
+#   def __init__(self):
+#     super().__init__()
+#     self.connected = True
 
-    self.current_value = False
-    self.target_value = False
+#     self.current_value = False
+#     self.target_value = False
 
-  async def write(self, value: bool):
-    print("MockBoolNode.write", value)
+#   async def write(self, value: bool):
+#     print("MockBoolNode.write", value)

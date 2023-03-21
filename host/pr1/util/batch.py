@@ -2,12 +2,17 @@
 
 from asyncio import Task
 import asyncio
+from logging import Logger
 from typing import Awaitable, Callable, Generic, Optional, TypeVar
+
+from .decorators import provide_logger
+from ..host import logger as parent_logger
 
 
 K = TypeVar('K')
 R = TypeVar('R')
 
+@provide_logger(parent_logger)
 class BatchWorker(Generic[K, R]):
   def __init__(self, commit: Callable[[list[K]], Awaitable[list[R]]]):
     self._commit = commit
@@ -16,13 +21,17 @@ class BatchWorker(Generic[K, R]):
     self._task: Optional[Task[list[R]]] = None
     self._task_items_count: Optional[int] = None
 
+    self._logger: Logger
+
   async def _run_commit(self):
+    self._logger.debug(f"Committing {len(self._items)} items")
+
     items = self._items.copy()
     self._items.clear()
     self._task_items_count = len(items)
 
     try:
-      return await self._commit(items)
+      result = await self._commit(items)
     finally:
       self._task = None
       self._task_items_count = None
@@ -30,7 +39,12 @@ class BatchWorker(Generic[K, R]):
       if self._items:
         self._task = asyncio.create_task(self._run_commit())
 
+    self._logger.debug('Committed')
+    return result
+
   async def write(self, item: K, /):
+    self._logger.debug('Write request: {item}')
+
     index = len(self._items)
     self._items.append(item)
 

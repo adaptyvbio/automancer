@@ -6,7 +6,8 @@ from types import EllipsisType
 from typing import Any, Callable, Optional
 
 from pr1.devices.claim import Claim
-from pr1.devices.node import BaseWatchableNode, BaseWritableNode, NodePath
+from pr1.devices.nodes.writable import WritableNode
+from pr1.devices.nodes.common import NodePath
 from pr1.error import Error
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
@@ -67,7 +68,7 @@ class DevicesStateItemLocation:
 class DevicesStateItemInfo:
   item: StateProgramItem
   location: DevicesStateItemLocation = field(default_factory=DevicesStateItemLocation, init=False)
-  nodes: set[BaseWritableNode] = field(default_factory=set, init=False)
+  nodes: set[WritableNode] = field(default_factory=set, init=False)
   notify: Callable[[StateEvent], None] = field(kw_only=True)
 
   def __hash__(self):
@@ -97,18 +98,18 @@ class DevicesStateNodeInfo:
 class DevicesStateManager(UnitStateManager):
   def __init__(self, runner: 'DevicesRunner'):
     self._item_infos = dict[StateProgramItem, DevicesStateItemInfo]()
-    self._node_infos = dict[BaseWritableNode, DevicesStateNodeInfo]()
+    self._node_infos = dict[WritableNode, DevicesStateNodeInfo]()
     self._runner = runner
-    self._updated_nodes = set[BaseWritableNode]()
+    self._updated_nodes = set[WritableNode]()
 
-  async def _node_lifecycle(self, node: BaseWritableNode, node_info: DevicesStateNodeInfo):
+  async def _node_lifecycle(self, node: WritableNode, node_info: DevicesStateNodeInfo):
     assert node_info.claim
     assert node_info.update_event
 
     def listener():
       pass
 
-    reg = node.watch(listener) if isinstance(node, BaseWatchableNode) else None
+    reg = node.watch_connection(listener)
 
     try:
       while True:
@@ -149,7 +150,7 @@ class DevicesStateManager(UnitStateManager):
 
     for node_path, node_value in state.values.items():
       node = self._runner._host.root_node.find(node_path)
-      assert isinstance(node, BaseWritableNode)
+      assert isinstance(node, WritableNode)
       item_info.nodes.add(node)
 
       value = analysis.add(node_value.evaluate(EvalContext(stack)))
@@ -181,7 +182,7 @@ class DevicesStateManager(UnitStateManager):
     del self._item_infos[item]
 
   async def apply(self, items):
-    obsolete_nodes = set[BaseWritableNode]()
+    obsolete_nodes = set[WritableNode]()
 
     for item in items:
       self._updated_nodes |= self._item_infos[item].nodes

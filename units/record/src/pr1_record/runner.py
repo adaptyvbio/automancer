@@ -8,9 +8,9 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from pr1.devices.claim import ClaimSymbol
-from pr1.devices.node import (AsyncCancelable, NodePath, PolledReadableNode,
-                              QuantityReadableNode, SubscribableReadableNode)
+from pr1.devices.nodes.common import NodePath
+from pr1.devices.nodes.numeric import NumericReadableNode
+from pr1.devices.nodes.readable import WatchableNode
 from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.langservice import PathFileRef
@@ -18,6 +18,7 @@ from pr1.master.analysis import MasterAnalysis, MasterError, SystemMasterError
 from pr1.reader import LocatedString, LocatedValue
 from pr1.state import StateEvent, UnitStateInstance
 from pr1.units.base import BaseProcessRunner
+from pr1.util.asyncio import AsyncCancelable
 from pr1.util.misc import Exportable
 from pr1.util.pool import Pool
 
@@ -60,7 +61,7 @@ EXTENSIONS: dict[str, OutputFormat] = {
 @dataclass(kw_only=True)
 class RecordField:
   dtype: np.dtype
-  node: PolledReadableNode | SubscribableReadableNode
+  node: WatchableNode
   reg: Optional[AsyncCancelable] = None
 
 @dataclass(kw_only=True)
@@ -141,7 +142,7 @@ class RecordStateInstance(UnitStateInstance):
         if not node:
           analysis.errors.append(MissingNodeError(field_data['value']))
           failure = True
-        elif not isinstance(node, (PolledReadableNode, SubscribableReadableNode)) or not isinstance(node, QuantityReadableNode):
+        elif not isinstance(node, WatchableNode) or not isinstance(node, NumericReadableNode):
           analysis.errors.append(InvalidNodeError(field_data['value']))
           failure = True
         elif dtype and (node.dtype.kind != dtype.kind):

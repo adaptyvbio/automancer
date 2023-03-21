@@ -1,13 +1,17 @@
 import asyncio
 import time
-from pint import Quantity
 from typing import Any
 
 import psutil
-from pr1.devices.node import BaseConfigurableNode, DeviceNode, PolledReadableNode, QuantityReadableNode, SubscribableReadableNode
-from pr1.host import Host
+from pint import Quantity
+from pr1.devices.nodes.collection import DeviceNode
+from pr1.devices.nodes.common import ConfigurableNode, NodeId
+from pr1.devices.nodes.numeric import NumericReadableNode
+from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
+
+from pr1.host import Host
 
 from . import namespace
 
@@ -15,7 +19,7 @@ from . import namespace
 class SystemNode(DeviceNode):
   connected = True
   description = None
-  id = "System"
+  id = NodeId("System")
   label = "System device"
   model = "System"
   owner = namespace
@@ -23,36 +27,36 @@ class SystemNode(DeviceNode):
   def __init__(self):
     super().__init__()
 
-    self.nodes: dict[str, BaseConfigurableNode] = {
+    self.nodes: dict[str, ConfigurableNode] = {
       node.id: node for node in {
         EpochNode(),
         ProcessMemoryUsageNode()
       }
     }
 
-class ProcessMemoryUsageNode(PolledReadableNode, QuantityReadableNode):
-  id = 'memory'
+class ProcessMemoryUsageNode(PollableReadableNode, NumericReadableNode):
+  id = NodeId('memory')
   label = "Process memory usage"
 
   def __init__(self):
-    PolledReadableNode.__init__(self, min_interval=0.3)
-    QuantityReadableNode.__init__(self, dtype='u4', unit=ureg.byte)
+    PollableReadableNode.__init__(self, min_interval=0.3)
+    NumericReadableNode.__init__(self, dtype='u4', unit=ureg.byte)
 
     self._process = psutil.Process()
 
-  async def _read_quantity(self):
+  async def _read_value(self):
     memory_info = self._process.memory_info()
     return memory_info.rss * ureg.byte
 
-class EpochNode(PolledReadableNode, QuantityReadableNode):
-  id = 'epoch'
+class EpochNode(PollableReadableNode, NumericReadableNode):
+  id = NodeId('epoch')
   label = "Unix epoch"
 
   def __init__(self):
-    PolledReadableNode.__init__(self, min_interval=0.3)
-    QuantityReadableNode.__init__(self, dtype='u8', unit=ureg.sec)
+    PollableReadableNode.__init__(self, min_interval=0.3)
+    NumericReadableNode.__init__(self, dtype='u8', unit=ureg.sec)
 
-  async def _read_quantity(self):
+  async def _read_value(self):
     return time.time() * ureg.sec
 
 

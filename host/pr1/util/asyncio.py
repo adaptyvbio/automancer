@@ -1,10 +1,16 @@
 import asyncio
 from asyncio import Future
+from dataclasses import dataclass
 from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Literal, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Optional, TypeVar
+
+
+@dataclass
+class AsyncCancelable:
+  cancel: Callable[[], Awaitable[None]]
 
 
 T = TypeVar('T')

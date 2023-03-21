@@ -1,14 +1,16 @@
 import logging
 from typing import Any
 
-from pr1.fiber.langservice import (Analysis, ArbitraryQuantityType, Attribute, DictType,
-                                   EnumType, IdentifierType, InvalidValueError, ListType, QuantityType, StrType)
-from pr1.host import Host
+from pr1.devices.nodes.numeric import NumericNode
+from pr1.fiber.langservice import (Analysis, ArbitraryQuantityType, Attribute,
+                                   BoolType, DictType, EnumType,
+                                   IdentifierType, InvalidValueError, ListType,
+                                   StrType)
 from pr1.units.base import BaseExecutor
-from pr1.util import schema as sc
-from pr1.util.parser import Identifier
+from pr1.host import Host
 
-from .device import OPCUADevice, OPCUADeviceScalarNode, nodes_map, variants_map
+from .device import OPCUADevice, nodes_map, variants_map
+
 
 logging.getLogger("asyncua").setLevel(logging.WARNING)
 
@@ -27,7 +29,8 @@ class Executor(BaseExecutor):
         'max': Attribute(ArbitraryQuantityType(), optional=True),
         'min': Attribute(ArbitraryQuantityType(), optional=True),
         'type': EnumType(*variants_map.keys()),
-        'unit': Attribute(ArbitraryQuantityType(), optional=True)
+        'unit': Attribute(ArbitraryQuantityType(), optional=True),
+        'writable': Attribute(BoolType(), optional=True)
       }))
     }))
   })
@@ -39,7 +42,7 @@ class Executor(BaseExecutor):
   def load(self, context):
     analysis = Analysis()
 
-    self._devices = dict()
+    self._devices = dict[str, OPCUADevice]()
 
     if self._conf:
       for device_conf in self._conf['devices']:
@@ -48,14 +51,13 @@ class Executor(BaseExecutor):
         if device_id in self._host.devices:
           raise device_id.error(f"Duplicate device id '{device_id}'")
 
-        for node_conf in device_conf['nodes']:
-          is_numeric = nodes_map[node_conf['type']] == OPCUADeviceScalarNode
+        # for node_conf in device_conf['nodes']:
+          # is_numeric = (nodes_map[node_conf['type']] == NumericNode)
 
-          if not is_numeric:
-            for key in ['unit', 'min', 'max']:
-              if key in node_conf:
-                # analysis.errors.append(InvalidValueError(node_conf.get_key(key)))
-                analysis.errors.append(InvalidValueError(node_conf[key]))
+          # if not is_numeric:
+          #   for key in ['unit', 'min', 'max']:
+          #     if key in node_conf:
+          #       analysis.errors.append(InvalidValueError(node_conf[key]))
 
           # unit = node_conf['unit'].value if 'unit' in node_conf else context.ureg.Quantity('1')
 

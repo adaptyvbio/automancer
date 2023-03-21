@@ -1,14 +1,23 @@
-from dataclasses import dataclass
 import functools
+from dataclasses import dataclass
 from types import EllipsisType
 from typing import TYPE_CHECKING, Literal, Optional
 
+from pr1.devices.nodes.collection import CollectionNode
+from pr1.devices.nodes.common import BaseNode, NodePath
+from pr1.devices.nodes.numeric import NumericReadableNode, NumericWritableNode
+from pr1.devices.nodes.writable import WritableNode
 from pr1.fiber.eval import EvalEnv, EvalEnvValue
-from pr1.fiber.langservice import Analysis, AnyType, Attribute, PotentialExprType, PrimitiveType, QuantityType
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState, FiberParser, ProtocolDetails, ProtocolUnitData, ProtocolUnitDetails
-from pr1.devices.node import BaseNode, BaseReadableNode, BaseWritableNode, BooleanWritableNode, CollectionNode, NodePath, QuantityReadableNode, ScalarWritableNode
-from pr1.fiber.staticanalysis import ClassDef, ClassRef, CommonVariables, OuterType, StaticAnalysisAnalysis
+from pr1.fiber.langservice import (Analysis, AnyType, Attribute,
+                                   PotentialExprType, PrimitiveType,
+                                   QuantityType)
+from pr1.fiber.parser import (BaseParser, BlockUnitData,
+                              BlockUnitPreparationData, BlockUnitState,
+                              FiberParser, ProtocolDetails, ProtocolUnitData,
+                              ProtocolUnitDetails)
+from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
+                                      OuterType, StaticAnalysisAnalysis)
 from pr1.util.decorators import debug
 
 from . import namespace
@@ -43,8 +52,8 @@ class CollectionNodeWrapper:
       if (wrapped_node := wrap_node(child_node)):
         setattr(self, child_node.id, wrapped_node)
 
-class QuantityReadableNodeWrapper:
-  def __init__(self, node: QuantityReadableNode):
+class NumericReadableNodeWrapper:
+  def __init__(self, node: NumericReadableNode):
     self._node = node
 
   @property
@@ -56,8 +65,8 @@ def wrap_node(node: BaseNode, /):
   match node:
     case CollectionNode():
       return CollectionNodeWrapper(node)
-    case QuantityReadableNode():
-      return QuantityReadableNodeWrapper(node)
+    case NumericReadableNode():
+      return NumericReadableNodeWrapper(node)
     case _:
       return None
 
@@ -93,7 +102,7 @@ class DevicesParser(BaseParser):
         for child in node.nodes.values():
           nodes.update(add_node(child, path))
 
-      if isinstance(node, BaseWritableNode):
+      if isinstance(node, WritableNode):
         nodes[".".join(path[1:])] = node, tuple(path[1:])
 
       return nodes
@@ -104,18 +113,18 @@ class DevicesParser(BaseParser):
   def segment_attributes(self):
     def get_type(node):
       match node:
-        case BooleanWritableNode():
-          return PrimitiveType(bool)
-        case ScalarWritableNode(unit=None):
+        # case BooleanWritableNode():
+        #   return PrimitiveType(bool)
+        case NumericWritableNode(unit=None):
           return PrimitiveType(float)
-        case ScalarWritableNode(deactivatable=deactivatable, unit=unit):
+        case NumericWritableNode(deactivatable=deactivatable, unit=unit):
           return QuantityType(unit, allow_nil=deactivatable)
         case _:
           return AnyType()
 
     return { key: Attribute(
       description=node.description,
-      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, ScalarWritableNode) and node.unit else None),
+      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericWritableNode) and node.unit else None),
       label=node.label,
       optional=True,
       type=PotentialExprType(get_type(node))
@@ -141,7 +150,7 @@ class DevicesParser(BaseParser):
               **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) }
             }
           ))
-        case QuantityReadableNode():
+        case NumericReadableNode():
           return ClassRef(ClassDef(
             name=node.id,
             instance_attrs={

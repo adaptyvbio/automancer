@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from asyncio import Event, Future, Handle, Lock, Task
+from asyncio import Event, Future, Handle, Lock, Semaphore, Task
 from dataclasses import dataclass
 from pint import Quantity, Measurement, Unit, UnitRegistry
-from typing import Any, AsyncIterator, Awaitable, Callable, ClassVar, Generic, NewType, Optional, Protocol, Sequence, TypeVar, cast
+from typing import Any, AsyncIterator, Awaitable, Callable, ClassVar, Coroutine, Generic, NewType, Optional, Protocol, Sequence, TypeVar, cast
 import asyncio
 import numpy as np
 import traceback
@@ -39,46 +39,47 @@ class BaseNode(ABC):
     self.id: str
     self.label: Optional[str] = None
 
+    self._connection_listeners = list[SimpleCallbackFunction]()
+
   # Called by the producer
 
   @property
   def _label(self):
     return f"'{self.label or self.id}'"
 
+  def _trigger_connection_listeners(self):
+    for listener in self._connection_listeners:
+      listener()
+
   # Called by the consumer
 
   def export(self):
     return {
       "id": self.id,
-      "icon": self.icon,
       "connected": self.connected,
       "description": self.description,
+      "icon": self.icon,
       "label": self.label
     }
 
   def format(self, *, prefix: str = str()):
     return (f"{self.label} ({self.id})" if self.label else self.id) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
-class BaseWatchableNode(BaseNode):
-  def __init__(self):
-    super().__init__()
+  def watch_connection(self, listener: SimpleCallbackFunction, /):
+    """
+    Watches the node's connection status for changes.
 
-    self._listeners = list[Callable]()
+    Parameters
+      listener: A callback called after the node's connection status changes, but not immediately after calling this function. The node's connection status is not provided by the callback but can be obtained using `connected`.
 
-  def _trigger_listeners(self):
-    for listener in self._listeners:
-      try:
-        listener()
-      except Exception:
-        traceback.print_exc()
+    Returns
+      An `AsyncCancelable` which can be used stop watching the node.
+    """
 
-  def watch(self, listener: Optional[Callable[[], None]] = None, /):
-    if listener:
-      self._listeners.append(listener)
+    self._connection_listeners.append(listener)
 
     async def cancel():
-      if listener:
-        self._listeners.remove(listener)
+      self._connection_listeners.remove(listener)
 
     return AsyncCancelable(cancel)
 
@@ -92,7 +93,7 @@ class BaseConfigurableNode(BaseNode):
     ...
 
 
-class CollectionNode(BaseWatchableNode):
+class CollectionNode(BaseNode):
   def __init__(self):
     super().__init__()
 
@@ -112,27 +113,27 @@ class CollectionNode(BaseWatchableNode):
       *[node.walk_async(callback) for node in self.nodes.values() if isinstance(node, CollectionNode)]
     ])
 
-  def watch(self, listener: Optional[Callable[[], None]] = None, /, interval: Optional[float] = None):
-    regs = set[AsyncCancelable]()
+  # def watch_connection(self, listener, /):
+  #   regs = set[AsyncCancelable]()
 
-    if not self._listening:
-      self._listening = True
+  #   if not self._listening:
+  #     self._listening = True
 
-      for node in self.nodes.values():
-        if isinstance(node, PolledReadableNode):
-          regs.add(node.watch(self._trigger_listeners, interval))
-        elif isinstance(node, BaseWatchableNode):
-          regs.add(node.watch(self._trigger_listeners))
+  #     for node in self.nodes.values():
+  #       if isinstance(node, PolledReadableNode):
+  #         regs.add(node.watch(self._trigger_listeners, interval))
+  #       elif isinstance(node, BaseWatchableNode):
+  #         regs.add(node.watch(self._trigger_listeners))
 
-    reg = super().watch(listener)
+  #   reg = super().watch(listener)
 
-    async def cancel():
-      nonlocal reg
+  #   async def cancel():
+  #     nonlocal reg
 
-      await reg.cancel()
-      await asyncio.wait([reg.cancel() for reg in regs])
+  #     await reg.cancel()
+  #     await asyncio.wait([reg.cancel() for reg in regs])
 
-    return AsyncCancelable(cancel)
+  #   return AsyncCancelable(cancel)
 
   def export(self):
     return {
@@ -366,138 +367,174 @@ class QuantityReadableNode(BaseReadableNode):
 
 # Writable value nodes
 
-class BaseWritableNode(BaseNode, Claimable, Generic[T]):
-  def __init__(self):
-    BaseNode.__init__(self)
-    Claimable.__init__(self)
+class BaseWritableNode(BaseNode, Claimable):
+  pass
 
-    self.current_value: Optional[T]
-    self.target_value: Optional[T]
+# class BaseWritableNode(BaseNode, Claimable, Generic[T]):
+#   def __init__(self):
+#     BaseNode.__init__(self)
+#     Claimable.__init__(self)
+
+#     self.current_value: Optional[T]
+#     self.target_value: Optional[T]
 
   # To be implemented
 
+  # @abstractmethod
+  # async def write(self, value: Optional[T], /):
+  #   raise NotImplementedError
+
+  # @abstractmethod
+  # async def write_import(self, value: Any, /):
+  #   raise NotImplementedError
+
+class BooleanWritableNode(BaseWritableNode):
   @abstractmethod
-  async def write(self, value: Optional[T], /):
-    raise NotImplementedError
+  async def write(self, value: bool, /):
+    ...
 
-  @abstractmethod
-  async def write_import(self, value: Any, /):
-    raise NotImplementedError
+  # async def write_import(self, value: bool):
+  #   await self.write(value)
 
-class BooleanWritableNode(BaseWritableNode[bool]):
-  async def write_import(self, value: bool):
-    await self.write(value)
+  # def export(self):
+  #   return {
+  #     **super().export(),
+  #     "data": {
+  #       "type": "writableBoolean",
+  #       "currentValue": self.current_value,
+  #       "targetValue": self.target_value
+  #     }
+  #   }
 
-  def export(self):
-    return {
-      **super().export(),
-      "data": {
-        "type": "writableBoolean",
-        "currentValue": self.current_value,
-        "targetValue": self.target_value
-      }
-    }
+# class EnumWritableNode(BaseWritableNode[int]):
+#   def __init__(self, *, options: list[EnumNodeOption]):
+#     super().__init__()
 
-class EnumWritableNode(BaseWritableNode[int]):
-  def __init__(self, *, options: list[EnumNodeOption]):
-    super().__init__()
+#     self.options = options
 
-    self.options = options
+#   async def write_import(self, value: int):
+#     await self.write(value)
 
-  async def write_import(self, value: int):
-    await self.write(value)
+#   def export(self):
+#     exported = super().export()
 
-  def export(self):
-    exported = super().export()
+#     return {
+#       **exported,
+#       "data": {
+#         "type": "writableEnum",
+#         "options": [{ 'label': option.label } for option in self.options],
+#         "currentValue": self.current_value,
+#         "targetValue": self.target_value
+#       }
+#     }
 
-    return {
-      **exported,
-      "data": {
-        "type": "writableEnum",
-        "options": [{ 'label': option.label } for option in self.options],
-        "currentValue": self.current_value,
-        "targetValue": self.target_value
-      }
-    }
-
-class ScalarWritableNode(BaseWritableNode[float]):
+class NumericWritableNode(BaseWritableNode):
   _ureg: UnitRegistry = ureg
 
   def __init__(
     self,
     *,
     deactivatable: bool = False,
-    dtype: str = '<f4',
+    dtype: str = 'f4',
     factor: float = 1.0,
     max: Optional[Quantity | float] = None,
     min: Optional[Quantity | float] = None,
     unit: Optional[Unit | str] = None
   ):
-    BaseWritableNode.__init__(self)
+    super().__init__()
 
     self.deactivatable = deactivatable
     self.dtype = dtype
     self.factor = factor
-    self.unit: Unit = self._ureg.Unit(unit or 'dimensionless') if isinstance(unit, str) else unit
+    self.unit: Unit = self._ureg.Unit(unit or 'dimensionless')
 
     self.max = (max * self.unit) if isinstance(max, float) else max
     self.min = (min * self.unit) if isinstance(min, float) else min
 
-  async def write(self, raw_value: Optional[Quantity | float], /):
+  # To be implemented
+
+  @abstractmethod
+  async def write(self, value: Optional[float], /):
+    ...
+
+  # Called by the consumer
+
+  async def write_quantity(self, raw_value: Optional[Quantity | float], /):
     if raw_value is not None:
       value: Quantity = (raw_value * self.unit) if isinstance(raw_value, float) else raw_value.to(self.unit)
-      assert value.check(self.unit)
 
-      if self.min is not None:
-        assert value >= self.min
-      if self.max is not None:
-        assert value <= self.max
+      if not value.check(self.unit):
+        raise ValueError("Invalid unit")
 
-      await super().write(value.magnitude / self.factor)
+      if (self.min is not None) and (value < self.min):
+        raise ValueError("Value too small")
+      if (self.max is not None) and (value > self.max):
+        raise ValueError("Value too large")
+
+      await self.write(value.magnitude / self.factor)
     else:
-      await super().write(None)
+      if not self.deactivatable:
+        raise ValueError("Value not deactivatable")
 
-  async def write_import(self, value: float):
-    await self.write(value)
+      await self.write(None)
 
-  def export(self):
-    exported = super().export()
+  # def export(self):
+  #   exported = super().export()
 
-    return {
-      **exported,
-      "data": {
-        "type": "writableScalar",
-        "unit": None, # self.unit,
-        "currentValue": self.current_value,
-        "targetValue": self.target_value
-      }
-    }
+  #   return {}
 
-class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
+    # return {
+    #   **exported,
+    #   "data": {
+    #     "type": "writableScalar",
+    #     "unit": None, # self.unit,
+    #     "currentValue": self.current_value,
+    #     "targetValue": self.target_value
+    #   }
+    # }
+
+class ConfigurableWritableNode(BaseConfigurableNode, Generic[T]):
+  """
+  A configurable writable node.
+
+  Attributes
+    current_value: The node's last known value. This is `None` (1) when `_read()` is not implemented and the node has never been written to and connected or (2) when the node has always been disconnected.
+    target_value: The node's target value. This is `None` when the target value is deactivation or when undefined (i.e. the user doesn't care about the node's value).
+  """
+
   def __init__(self):
-    BaseWatchableNode.__init__(self)
-    BaseWritableNode.__init__(self)
+    super().__init__()
 
     self.connected = False
 
-    # This is None when the value is unknown, which can happen in the following cases:
-    #   (1) the self._read() method is not implemented;
-    #   (2) the device has always been disconnected.
-    # When disconnected, self.current_value contains the last known value and will not always be None.
     self.current_value: Optional[T] = None
-
-    # This is None when the user doesn't care about the value, in which case no write shoud happen.
     self.target_value: Optional[T] = None
 
   # To be implemented
 
-  # This method may raise a NodeUnavailableError exception to indicate that the node is not available
-  # on the underlying device, e.g. because of a configuration or disconnection issue.
   async def _read(self) -> T:
+    """
+    Reads and returns the node's value.
+
+    This method is optional.
+
+    Raises
+      asyncio.CancelledError
+      NodeUnavailableError
+      NotImplementedError
+    """
+
     raise NotImplementedError
 
-  async def _write(self, value: T) -> None:
-    raise NotImplementedError
+  @abstractmethod
+  async def _write(self, value: T, /) -> None:
+    """
+    Writes the node's value.
+
+    Raises
+      asyncio.CancelledError
+      NodeUnavailableError
+    """
 
   # Called by the producer
 
@@ -512,15 +549,14 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
       self.current_value = current_value
 
     self.connected = True
+    self._trigger_connection_listeners()
 
     if current_value != self.target_value:
       await self.write(self.target_value)
 
-    self._trigger_listeners()
-
   async def _unconfigure(self):
     self.connected = False
-    self._trigger_listeners()
+    self._trigger_connection_listeners()
 
   # Called by the consumer
 
@@ -534,123 +570,6 @@ class ConfigurableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
         pass
       else:
         self.current_value = value
-
-    self._trigger_listeners()
-
-class BatchableWritableNode(BaseWritableNode, BaseWatchableNode, Generic[T]):
-  def __init__(self):
-    BaseWatchableNode.__init__(self)
-    BaseWritableNode.__init__(self)
-
-    self._group: 'BatchGroupNode'
-
-    self.connected = False
-
-    self.current_value: Optional[T] = None
-    self.target_value: Optional[T] = None
-
-  # To be implemented
-
-  async def _read(self) -> T:
-    raise NotImplementedError
-
-  # Called by the consumer
-
-  # @property
-  # def connected(self):
-  #   return self._group.connected
-
-  async def write(self, value: Optional[T], /):
-    self.target_value = value
-
-    if self.connected:
-      try:
-        await self._group._add(self)
-      except NodeUnavailableError:
-        pass
-      else:
-        self.current_value = value
-
-    self._trigger_listeners()
-
-S = TypeVar('S', bound=BatchableWritableNode)
-
-# @deprecated
-class BatchGroupNode(BaseNode, Generic[S]):
-  def __init__(self):
-    self._changed_nodes = set[S]()
-    self._future = Future[None]()
-    self._group_nodes: set[S]
-
-  # Internal
-
-  def _add(self, node: S, /):
-    assert node in self._group_nodes
-
-    self._changed_nodes.add(node)
-    return self._future
-
-  # To be implemented
-
-  async def _read(self, nodes: set[S], /) -> dict[S, Any]:
-    raise NotImplementedError
-
-  async def _write(self, nodes: set[S], /) -> None:
-    raise NotImplementedError
-
-  # Called by the producer
-
-  async def _configure(self):
-    try:
-      values = await self._read(self._group_nodes)
-    except NodeUnavailableError:
-      return
-    except NotImplementedError:
-      for node in self._group_nodes:
-        try:
-          node.current_value = await node._read()
-        except NodeUnavailableError:
-          continue
-        except NotImplementedError:
-          node.current_value = None
-        else:
-          node.connected = True
-    else:
-      for node, value in values.items():
-        node.current_value = value
-
-    self.connected = True
-
-    awaitables = set[Awaitable]()
-
-    for node in self._group_nodes:
-      if node.connected and (node.target_value is not None) and (node.current_value != node.target_value):
-        awaitables.add(node.write(node.target_value))
-
-    await asyncio.gather(*awaitables)
-
-    for node in self._group_nodes:
-      node._trigger_listeners()
-
-  async def _unconfigure(self):
-    self.connected = False
-
-    for node in self._group_nodes:
-      node.connected = False
-      node._trigger_listeners()
-
-  # Called by the consumer
-
-  async def commit(self):
-    if self.connected and self._changed_nodes:
-      try:
-        await self._write(self._changed_nodes)
-      except NodeUnavailableError as e:
-        self._future.set_exception(e)
-      else:
-        self._future.set_result(None)
-        self._future = Future[None]()
-        self._changed_nodes.clear()
 
 
 # Polled nodes
@@ -693,7 +612,7 @@ class SubscribableReadableNode(BaseReadableNode, BaseConfigurableNode):
               listener(self)
 
           ready_event.set()
-      except (asyncio.CancelledError, NodeUnavailableError):
+      except NodeUnavailableError:
         pass
       else:
         warnings.warn("Subscription ended unexpectedly")
@@ -730,14 +649,9 @@ class SubscribableReadableNode(BaseReadableNode, BaseConfigurableNode):
   # Called by the producer
 
   async def _configure(self):
-    # if self._value_listeners and (not self._watch_task):
-    #   future = Future[None]()
-    #   self._watch_task = asyncio.create_task(self._watch(future))
-
-    #   try:
-    #     await future
-    #   except NodeUnavailableError:
-    #     return
+    if self._value_listeners:
+      self._watch_init_task = asyncio.create_task(self._watch())
+      self._watch_task = await self._watch_init_task
 
     self.connected = True
 
@@ -746,21 +660,18 @@ class SubscribableReadableNode(BaseReadableNode, BaseConfigurableNode):
 
     if self._watch_task:
       self._watch_task.cancel()
-      await self._watch_task
+
+      try:
+        await self._watch_task
+      except asyncio.CancelledError:
+        pass
 
   # Called by the consumer
 
   async def watch_value(self, listener, /):
     self._value_listeners.add(listener)
 
-    if (not self._watch_init_task) and self._watch_task:
-      try:
-        # Wait for the previous watch to finish.
-        await asyncio.shield(self._watch_task)
-      except asyncio.CancelledError:
-        raise
-      except Exception:
-        pass
+    # TODO: Wait for the previous watch to finish.
 
     if (not self._watch_init_task) and self.connected:
       self._watch_init_task = asyncio.create_task(self._watch())
@@ -772,7 +683,11 @@ class SubscribableReadableNode(BaseReadableNode, BaseConfigurableNode):
       if (not self._value_listeners) and self._watch_task:
         self._watch_init_task = None
         self._watch_task.cancel()
-        await self._watch_task
+
+        try:
+          await self._watch_task
+        except asyncio.CancelledError:
+          pass
 
     return AsyncCancelable(cancel)
 

@@ -249,14 +249,14 @@ class GlobalStateManager:
     from .fiber.master2 import ProgramHandle
 
     current_handle = handle
+    parent_handle = handle
 
-    while isinstance(parent_handle := current_handle._parent, ProgramHandle):
-      current_handle = parent_handle
-
+    while isinstance(current_handle := current_handle._parent, ProgramHandle):
       if current_handle in self._items:
+        parent_handle = current_handle
         break
 
-    parent_item = (self._items[current_handle] if current_handle is not handle else None)
+    parent_item = (self._items[parent_handle] if parent_handle is not handle else None)
 
     item = StateProgramItem(
       depth=(parent_item.depth + 1 if parent_item else 0),
@@ -349,20 +349,22 @@ class GlobalStateManager:
 
   async def suspend(self, handle: 'ProgramHandle'):
     item = self._items[handle]
-    assert item.applied
 
-    item.applied = False
-    item._settle_event.clear()
+    # The state was not applied if it should have been applied by a downstream program which
+    # raised an error before calling apply().
+    if item.applied:
+      item.applied = False
+      item._settle_event.clear()
 
-    for entry in item.location.entries.values():
-      assert entry
-      entry.settled = False
+      for entry in item.location.entries.values():
+        assert entry
+        entry.settled = False
 
-    for (namespace, consumer) in self._consumers.items():
-      event = await consumer.suspend(item)
+      for (namespace, consumer) in self._consumers.items():
+        event = await consumer.suspend(item)
 
-      if event:
-        self._handle_event(item, namespace, event)
+        if event:
+          self._handle_event(item, namespace, event)
 
 
 

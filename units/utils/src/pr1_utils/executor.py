@@ -35,6 +35,7 @@ class SystemNode(DeviceNode):
     }
 
 class ProcessMemoryUsageNode(PollableReadableNode, NumericReadableNode):
+  connected = True
   id = NodeId('memory')
   label = "Process memory usage"
 
@@ -49,12 +50,13 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericReadableNode):
     return memory_info.rss * ureg.byte
 
 class EpochNode(PollableReadableNode, NumericReadableNode):
+  connected = True
   id = NodeId('epoch')
   label = "Unix epoch"
 
   def __init__(self):
     PollableReadableNode.__init__(self, min_interval=0.3)
-    NumericReadableNode.__init__(self, dtype='u8', unit=ureg.sec)
+    NumericReadableNode.__init__(self, dtype='u1', unit=ureg.sec)
 
   async def _read_value(self):
     return time.time() * ureg.sec

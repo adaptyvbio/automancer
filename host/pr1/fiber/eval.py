@@ -23,6 +23,9 @@ class EvalEnv:
   def __hash__(self):
     return id(self)
 
+  def __repr__(self):
+    return f"{self.__class__.__name__}(name={self.name!r})"
+
 EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]
 EvalStack = dict[EvalEnv, Optional[EvalVariables]]

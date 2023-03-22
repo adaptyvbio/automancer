@@ -1,15 +1,14 @@
 from abc import abstractmethod
 from typing import Generic, Optional, TypeVar
-from pint import Quantity, Unit, UnitRegistry
 
-from .value import ValueNode
-
+from ..claim import Claimable
 from .common import NodeUnavailableError
+from .value import ValueNode
 
 
 T = TypeVar('T')
 
-class WritableNode(ValueNode, Generic[T]):
+class WritableNode(ValueNode, Claimable, Generic[T]):
   """
   A configurable writable node.
 
@@ -20,6 +19,7 @@ class WritableNode(ValueNode, Generic[T]):
 
   def __init__(self):
     ValueNode.__init__(self)
+    Claimable.__init__(self)
 
     self._target_value: Optional[T] = None
 

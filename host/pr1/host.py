@@ -3,21 +3,18 @@ import platform
 import shutil
 import sys
 import time
-from types import EllipsisType
-from typing import Optional
 import uuid
 from graphlib import TopologicalSorter
-
-from pint import UnitRegistry
+from types import EllipsisType
+from typing import Optional
 
 from . import logger, reader
 from .chip import Chip, ChipCondition
-from .devices.node import BaseNode, CollectionNode, DeviceNode, NodePath
+from .devices.nodes.collection import CollectionNode, DeviceNode
+from .devices.nodes.common import BaseNode, NodeId, NodePath
 from .draft import Draft, DraftCompilation
 from .fiber.langservice import Analysis, print_analysis
 from .fiber.master2 import Master
-from .fiber.parser import AnalysisContext, FiberParser
-from .protocol import Protocol
 from .unit import UnitManager
 from .ureg import ureg
 from .util import schema as sc
@@ -29,7 +26,7 @@ class HostRootNode(CollectionNode):
 
     self.connected = True
     self.description = None
-    self.id = 'root'
+    self.id = NodeId('root')
     self.label = "Root"
     self.nodes = devices
 

@@ -22,7 +22,7 @@ class Attributes(TypedDict, total=False):
 
 class RepeatParser(BaseParser):
   namespace = namespace
-  priority = 800
+  priority = 1200
 
   segment_attributes = {
     'repeat': lang.Attribute(
@@ -36,7 +36,7 @@ class RepeatParser(BaseParser):
 
   def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
     if (attr := attrs.get('repeat')):
-      env = EvalEnv(readonly=True)
+      env = EvalEnv(name="Repeat", readonly=True)
       return lang.Analysis(), BlockUnitPreparationData((attr, env), envs=[env])
 
     return lang.Analysis(), BlockUnitPreparationData(None)

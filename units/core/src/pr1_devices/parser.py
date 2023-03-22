@@ -1,7 +1,7 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
@@ -123,7 +123,7 @@ class DevicesParser(BaseParser):
           return AnyType()
 
     return { key: Attribute(
-      description=node.description,
+      description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
       documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericWritableNode) and node.unit else None),
       label=node.label,
       optional=True,
@@ -188,7 +188,7 @@ class DevicesParser(BaseParser):
         continue
 
       # node, path = self.node_map[attr_key]
-      values[attr_key] = attr_value
+      values[cast(NodePath, attr_key)] = attr_value
 
     return Analysis(), BlockUnitPreparationData(values)
 

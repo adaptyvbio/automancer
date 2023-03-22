@@ -1,6 +1,7 @@
 from asyncio import Event
 from dataclasses import dataclass
 from enum import IntEnum
+from logging import Logger
 from types import EllipsisType
 from typing import Any, Optional
 
@@ -13,7 +14,7 @@ from pr1.fiber.process import ProgramExecEvent
 from pr1.reader import LocationArea
 from pr1.state import StateLocation, StateRecord
 from pr1.util.asyncio import DualEvent, run_anonymous
-from pr1.util.decorators import debug
+from pr1.util.decorators import debug, provide_logger
 
 from . import logger
 
@@ -109,14 +110,10 @@ class StateProgramPoint:
       child=(block.child.Point.import_value(data["child"], block.child, master=master) if data["child"] is not None else None)
     )
 
+@provide_logger(logger)
 class StateProgram(HeadProgram):
-  _next_index = 0
-
   def __init__(self, block: 'StateBlock', handle):
-    self._index = self._next_index
-    type(self)._next_index += 1
-
-    self._logger = logger.getChild(f"stateProgram{self._index}")
+    self._logger: Logger
 
     self._block = block
     self._handle = handle
@@ -139,7 +136,7 @@ class StateProgram(HeadProgram):
 
   @_mode.setter
   def _mode(self, value):
-    self._logger.debug(f"\x1b[33m[{self._index}] Mode: {self._mode.name if hasattr(self, '_mode_value') else '<none>'} → {value.name}\x1b[0m")
+    self._logger.debug(f"\x1b[33mMode: {self._mode.name if hasattr(self, '_mode_value') else '<none>'} → {value.name}\x1b[0m")
     self._mode_value = value
 
   # @property
@@ -147,7 +144,7 @@ class StateProgram(HeadProgram):
   #   return (self._mode not in (StateProgramMode.Normal, StateProgramMode.Paused)) or self._child_program.busy
 
   def receive(self, message: Any):
-    self._logger.debug(f"\x1b[33m[{self._index}] Received message: {message}\x1b[0m")
+    self._logger.debug(f"\x1b[33mReceived message: {message}\x1b[0m")
 
     match message["type"]:
       case _:
@@ -290,8 +287,8 @@ class StateProgram(HeadProgram):
         self._mode = StateProgramMode.Normal
         self._handle.send(ProgramExecEvent(location=self._location))
       else:
-        # The mode will be sent once the state has settled.
         self._mode = StateProgramMode.Normal
+        self._handle.send(ProgramExecEvent(location=self._location))
 
       self._child_program = self._handle.create_child(self._block.child)
 

@@ -6,6 +6,7 @@ from types import EllipsisType
 from typing import Any, Callable, Optional
 
 from pr1.devices.claim import Claim
+from pr1.devices.nodes.numeric import NumericWritableNode
 from pr1.devices.nodes.writable import WritableNode
 from pr1.devices.nodes.common import NodePath
 from pr1.error import Error
@@ -118,7 +119,11 @@ class DevicesStateManager(UnitStateManager):
 
         while True:
           if node_info.current_candidate:
-            await node.write(node_info.current_candidate.value)
+            match node:
+              case NumericWritableNode():
+                await node.write_quantity(node_info.current_candidate.value)
+              case _:
+                raise ValueError
 
             # TODO: node_info.current_candidate could have changed here
 
@@ -138,7 +143,7 @@ class DevicesStateManager(UnitStateManager):
       pass
     finally:
       if reg:
-        reg.cancel()
+        await reg.cancel()
 
       node_info.claim.destroy()
 
@@ -153,9 +158,9 @@ class DevicesStateManager(UnitStateManager):
       assert isinstance(node, WritableNode)
       item_info.nodes.add(node)
 
-      value = analysis.add(node_value.evaluate(EvalContext(stack)))
+      value_result = analysis.add(node_value.eval(EvalContext(stack), final=True))
 
-      if isinstance(value, EllipsisType):
+      if isinstance(value_result, EllipsisType):
         return analysis, Ellipsis
 
       if node in self._node_infos:
@@ -164,8 +169,8 @@ class DevicesStateManager(UnitStateManager):
         node_info = DevicesStateNodeInfo(path=node_path)
         self._node_infos[node] = node_info
 
-      item_info.location.values[node_info.path] = NodeStateLocation(value)
-      bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value), key=(lambda candidate: candidate.item_info.item))
+      item_info.location.values[node_info.path] = NodeStateLocation(value_result.value)
+      bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value_result.value), key=(lambda candidate: candidate.item_info.item))
 
     return analysis, None
 
@@ -173,11 +178,14 @@ class DevicesStateManager(UnitStateManager):
     nodes = self._item_infos[item].nodes
 
     for node in nodes:
-      node_info = self._node_infos[node]
-      node_info.candidates = [candidate for candidate in node_info.candidates if candidate.item_info.item is not item]
+      # Nodes that had an invalid value will be missing from self._node_infos.
+      node_info = self._node_infos.get(node)
 
-      if node_info.current_candidate and (node_info.current_candidate.item_info.item is item):
-        node_info.current_candidate = None
+      if node_info:
+        node_info.candidates = [candidate for candidate in node_info.candidates if candidate.item_info.item is not item]
+
+        if node_info.current_candidate and (node_info.current_candidate.item_info.item is item):
+          node_info.current_candidate = None
 
     del self._item_infos[item]
 

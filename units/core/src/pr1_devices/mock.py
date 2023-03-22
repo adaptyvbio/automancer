@@ -1,9 +1,10 @@
 from pr1.devices.nodes.collection import DeviceNode
+from pr1.devices.nodes.common import NodeId
 
 
 class MockDevice(DeviceNode):
   description = None
-  id = "Mock"
+  id = NodeId("Mock")
   label = "Mock device"
   model = "Mock device"
   owner = "devices"

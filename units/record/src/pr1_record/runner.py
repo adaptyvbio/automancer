@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from pr1.devices.nodes.common import NodePath
-from pr1.devices.nodes.numeric import NumericReadableNode
+from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import WatchableNode
 from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
@@ -142,7 +142,7 @@ class RecordStateInstance(UnitStateInstance):
         if not node:
           analysis.errors.append(MissingNodeError(field_data['value']))
           failure = True
-        elif not isinstance(node, WatchableNode) or not isinstance(node, NumericReadableNode):
+        elif not isinstance(node, WatchableNode) or not isinstance(node, NumericNode):
           analysis.errors.append(InvalidNodeError(field_data['value']))
           failure = True
         elif dtype and (node.dtype.kind != dtype.kind):

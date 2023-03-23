@@ -6,7 +6,7 @@ import psutil
 from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import ConfigurableNode, NodeId
-from pr1.devices.nodes.numeric import NumericReadableNode
+from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
@@ -34,14 +34,18 @@ class SystemNode(DeviceNode):
       }
     }
 
-class ProcessMemoryUsageNode(PollableReadableNode, NumericReadableNode):
+class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
   connected = True
   id = NodeId('memory')
   label = "Process memory usage"
 
   def __init__(self):
-    PollableReadableNode.__init__(self, min_interval=0.3)
-    NumericReadableNode.__init__(self, dtype='u4', unit=ureg.byte)
+    super().__init__(
+      readable=True,
+      dtype='u4',
+      min_interval=0.3,
+      unit=ureg.byte
+    )
 
     self._process = psutil.Process()
 
@@ -49,14 +53,18 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericReadableNode):
     memory_info = self._process.memory_info()
     return memory_info.rss * ureg.byte
 
-class EpochNode(PollableReadableNode, NumericReadableNode):
+class EpochNode(PollableReadableNode, NumericNode):
   connected = True
   id = NodeId('epoch')
   label = "Unix epoch"
 
   def __init__(self):
-    PollableReadableNode.__init__(self, min_interval=0.3)
-    NumericReadableNode.__init__(self, dtype='u1', unit=ureg.sec)
+    super().__init__(
+      readable=True,
+      dtype='u1',
+      min_interval=0.3,
+      unit=ureg.sec
+    )
 
   async def _read_value(self):
     return time.time() * ureg.sec

@@ -8,10 +8,9 @@ from asyncua.common import Node as UANode
 from asyncua.ua.uatypes import NodeId as UANodeId
 from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
-from pr1.devices.nodes.numeric import NumericReadableNode, NumericWritableNode
-from pr1.devices.nodes.writable import WritableNode
+from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
-from pr1.devices.nodes.readable import PollableReadableNode, ReadableNode
+from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.ureg import ureg
 from pr1.util.batch import BatchWorker
 
@@ -30,7 +29,7 @@ variants_map = {
 }
 
 
-class OPCUADeviceReadableNode(PollableReadableNode):
+class OPCUADeviceNode(PollableReadableNode):
   def __init__(
     self,
     *,
@@ -39,9 +38,10 @@ class OPCUADeviceReadableNode(PollableReadableNode):
     id: NodeId,
     label: Optional[str],
     location: UANodeId,
-    type: str
+    type: str,
+    **kwargs
   ):
-    super().__init__(min_interval=0.2)
+    super().__init__(min_interval=0.2, readable=True, **kwargs)
 
     self.connected = False
     self.description = description
@@ -86,63 +86,31 @@ class OPCUADeviceReadableNode(PollableReadableNode):
   async def _unconfigure(self):
     await super()._unconfigure()
 
-
-class OPCUADeviceWritableNode(OPCUADeviceReadableNode, WritableNode):
-  def __init__(self, **kwargs):
-    WritableNode.__init__(self)
-    OPCUADeviceReadableNode.__init__(self, **kwargs)
-
-  async def _configure(self):
-    # First check that the data type is correct
-    await OPCUADeviceReadableNode._configure(self)
-
-    # Then read the current value
-    await WritableNode._configure(self)
-
-  async def _unconfigure(self):
-    await OPCUADeviceReadableNode._unconfigure(self)
-    await WritableNode._unconfigure(self)
-
   async def _write(self, value, /) -> None:
     try:
       await self._device._write_worker.write((self, value))
     except ConnectionError as e:
       raise NodeUnavailableError from e
 
-# class OPCUADeviceBooleanNode(OPCUADeviceWritableNode, BooleanWritableNode):
-#   def __init__(self, *, description: Optional[str], device: 'OPCUADevice', id: str, label: Optional[str], node: UANode, type: str):
-#     OPCUADeviceWritableNode.__init__(self, description=description, device=device, id=id, label=label, node=node, type=type)
-#     BooleanWritableNode.__init__(self)
-
-class OPCUADeviceNumericReadableNode(OPCUADeviceReadableNode, NumericReadableNode):
-  def __init__(self, *, dtype: str, quantity: Optional[Quantity], **kwargs):
-    OPCUADeviceReadableNode.__init__(self, **kwargs)
-    NumericReadableNode.__init__(
-      self,
-      dtype=dtype,
-      factor=(quantity.magnitude if quantity is not None else 1.0),
-      unit=(quantity.units if quantity is not None else None)
-    )
-
-class OPCUADeviceNumericWritableNode(OPCUADeviceWritableNode, NumericReadableNode, NumericWritableNode):
+class OPCUADeviceNumericNode(OPCUADeviceNode, NumericNode):
   def __init__(
     self,
     *,
     dtype: str,
-    max: Optional[Quantity],
-    min: Optional[Quantity],
+    max: Optional[Quantity] = None,
+    min: Optional[Quantity] = None,
     quantity: Optional[Quantity],
     **kwargs
   ):
-    OPCUADeviceWritableNode.__init__(self, **kwargs)
-    NumericWritableNode.__init__(
-      self,
+    super().__init__(
       dtype=dtype,
       max=max,
       min=min,
       factor=(quantity.magnitude if quantity is not None else 1.0),
-      unit=(quantity.units if quantity is not None else None)
+      unit=(quantity.units if quantity is not None else None),
+      **kwargs
     )
+
 
 dtype_map: dict[str, str] = {
   'i16': 'i2',
@@ -155,16 +123,16 @@ dtype_map: dict[str, str] = {
   'f64': 'f8'
 }
 
-nodes_map: dict[str, tuple[type[OPCUADeviceReadableNode], type[OPCUADeviceWritableNode]]] = {
+nodes_map: dict[str, type[OPCUADeviceNode]] = {
   # 'bool': OPCUADeviceBooleanNode,
-  'i16': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'i32': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'i64': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'u16': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'u32': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'u64': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'f32': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode),
-  'f64': (OPCUADeviceNumericReadableNode, OPCUADeviceNumericWritableNode)
+  'i16': OPCUADeviceNumericNode,
+  'i32': OPCUADeviceNumericNode,
+  'i64': OPCUADeviceNumericNode,
+  'u16': OPCUADeviceNumericNode,
+  'u32': OPCUADeviceNumericNode,
+  'u64': OPCUADeviceNumericNode,
+  'f32': OPCUADeviceNumericNode,
+  'f64': OPCUADeviceNumericNode
 }
 
 
@@ -204,15 +172,15 @@ class OPCUADevice(DeviceNode):
     self._connected = False
     self._task: Optional[asyncio.Task[None]] = None
 
-    self._read_worker = BatchWorker[OPCUADeviceReadableNode | OPCUADeviceWritableNode, Any](self._commit_read)
-    self._write_worker = BatchWorker[tuple[OPCUADeviceWritableNode, Any], None](self._commit_write)
+    self._read_worker = BatchWorker[OPCUADeviceNode, Any](self._commit_read)
+    self._write_worker = BatchWorker[tuple[OPCUADeviceNode, Any], None](self._commit_write)
 
-    self.nodes: dict[NodeId, OPCUADeviceReadableNode] = {
+    self.nodes: dict[NodeId, OPCUADeviceNode] = {
       (node := self._create_node(node_conf)).id: node for node_conf in nodes_conf
     }
 
   def _create_node(self, node_conf):
-    ReadableNode, WritableNode = nodes_map[node_conf['type']]
+    Node = nodes_map[node_conf['type']]
 
     opts: dict[str, Any] = dict(
       description=(node_conf['description'].value if 'description' in node_conf else None),
@@ -228,17 +196,18 @@ class OPCUADevice(DeviceNode):
 
     if dtype is not None:
       opts |= dict(
-        dtype= dtype,
+        dtype=dtype,
         quantity=(node_conf['unit'].value if 'unit' in node_conf else None)
       )
 
       if writable:
         opts |= dict(
           max=None,
-          min=None
+          min=None,
+          writable=True
         )
 
-    return WritableNode(**opts) if writable else ReadableNode(**opts)
+    return Node(**opts)
 
   async def initialize(self):
     ready_event = Event()
@@ -337,11 +306,11 @@ class OPCUADevice(DeviceNode):
     finally:
       self._task = None
 
-  async def _commit_read(self, items: list[OPCUADeviceReadableNode | OPCUADeviceWritableNode], /):
+  async def _commit_read(self, items: list[OPCUADeviceNode], /):
     assert self._client
     return await self._client.read_values([self._client.get_node(node._location) for node in items])
 
-  async def _commit_write(self, items: list[tuple[OPCUADeviceWritableNode, Any]], /):
+  async def _commit_write(self, items: list[tuple[OPCUADeviceNode, Any]], /):
     assert self._client
 
     uanodes = [self._client.get_node(node._location) for node, _ in items]

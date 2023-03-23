@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
-from pr1.devices.nodes.numeric import NumericReadableNode, NumericWritableNode
-from pr1.devices.nodes.writable import WritableNode
+from pr1.devices.nodes.numeric import NumericNode
+from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, AnyType, Attribute,
@@ -53,7 +53,7 @@ class CollectionNodeWrapper:
         setattr(self, child_node.id, wrapped_node)
 
 class NumericReadableNodeWrapper:
-  def __init__(self, node: NumericReadableNode):
+  def __init__(self, node: NumericNode):
     self._node = node
 
   @property
@@ -65,7 +65,7 @@ def wrap_node(node: BaseNode, /):
   match node:
     case CollectionNode():
       return CollectionNodeWrapper(node)
-    case NumericReadableNode():
+    case NumericNode() if node.readable:
       return NumericReadableNodeWrapper(node)
     case _:
       return None
@@ -102,7 +102,7 @@ class DevicesParser(BaseParser):
         for child in node.nodes.values():
           nodes.update(add_node(child, path))
 
-      if isinstance(node, WritableNode):
+      if isinstance(node, ValueNode) and node.writable:
         nodes[".".join(path[1:])] = node, tuple(path[1:])
 
       return nodes
@@ -115,16 +115,16 @@ class DevicesParser(BaseParser):
       match node:
         # case BooleanWritableNode():
         #   return PrimitiveType(bool)
-        case NumericWritableNode(unit=None):
+        case NumericNode(unit=None):
           return PrimitiveType(float)
-        case NumericWritableNode(deactivatable=deactivatable, unit=unit):
-          return QuantityType(unit, allow_nil=deactivatable)
+        case NumericNode(nullable=nullable, unit=unit):
+          return QuantityType(unit, allow_nil=nullable)
         case _:
           return AnyType()
 
     return { key: Attribute(
       description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
-      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericWritableNode) and node.unit else None),
+      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
       label=node.label,
       optional=True,
       type=PotentialExprType(get_type(node))
@@ -150,7 +150,7 @@ class DevicesParser(BaseParser):
               **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) }
             }
           ))
-        case NumericReadableNode():
+        case NumericNode() if node.readable:
           return ClassRef(ClassDef(
             name=node.id,
             instance_attrs={

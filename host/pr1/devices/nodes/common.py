@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from asyncio import Protocol
+import contextlib
 from typing import NewType, Optional, Sequence
 
 from ...util.asyncio import AsyncCancelable
@@ -70,9 +71,45 @@ class BaseNode(ABC):
     return AsyncCancelable(cancel)
 
 
-class ConfigurableNode(BaseNode, Protocol):
-  async def _configure(self):
-    ...
+class ConfigurableNode(BaseNode, ABC):
+  def __init__(self):
+    super().__init__()
+    self.connected = False
 
-  async def _unconfigure(self):
-    ...
+  async def _configure(self) -> None:
+    pass
+
+  async def _unconfigure(self) -> None:
+    pass
+
+  async def __aenter__(self):
+    if isinstance(self, ConfigurableNode):
+      async with configure(self):
+        self.connected = True
+
+  async def __aexit__(self, exc_name, exc, exc_type):
+    self.connected = False
+
+    async with unconfigure(self):
+      pass
+
+
+@contextlib.asynccontextmanager
+async def configure(node: BaseNode, /):
+  if isinstance(node, ConfigurableNode):
+    try:
+      await node._configure()
+      yield
+    except:
+      await node._unconfigure()
+      raise
+  else:
+    yield
+
+@contextlib.asynccontextmanager
+async def unconfigure(node: BaseNode, /):
+  try:
+    yield
+  finally:
+    if isinstance(node, ConfigurableNode) and node.connected:
+      await node._unconfigure()

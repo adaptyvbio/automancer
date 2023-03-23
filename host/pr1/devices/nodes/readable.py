@@ -4,66 +4,15 @@ from abc import abstractmethod
 from asyncio import Event, Handle, Task
 from typing import AsyncIterator, Callable, NewType, Optional, Sequence
 
-from ...util.asyncio import AsyncCancelable
-from .common import NodeUnavailableError
-from .value import ValueNode
+from ...util.asyncio import AsyncCancelable, cancel_task
+from .common import ConfigurableNode, NodeUnavailableError, configure, unconfigure
+from .value import NodeRevision, ValueNode
 
 
-ReadableNodeRevision = NewType('ReadableNodeRevision', int)
 WatchableNodeListener = Callable[['WatchableNode'], None]
 
 
-class ReadableNode(ValueNode):
-  def __init__(self):
-    ValueNode.__init__(self)
-    self._revision = ReadableNodeRevision(0)
-
-  # To be implemented
-
-  @abstractmethod
-  async def _read(self) -> bool:
-    """
-    Updates the node's value.
-
-    There will never be two concurrent calls to this method nor any call when the node is disconnected. The node may however be disconnected during the call, in which it might be cancelled; if not, this method should raise a `NodeUnavailableError` upon reaching a disconnection error.
-
-    Returns
-      `True` if the node's value has changed, `False` otherwise.
-
-    Raises
-      asyncio.CancelledError
-      NodeUnavailableError: If the node is unavailable, for instance if it disconnects while its value is being fetched.
-    """
-
-  # Called by the consumer
-
-  async def read(self):
-    """
-    Updates the node's value.
-
-    Returns
-      A boolean indicating whether the node's value could be updated.
-
-    Raises
-      asyncio.CancelledError
-    """
-
-    async with self._lock:
-      if self.connected:
-        try:
-          changed = await self._read()
-        except NodeUnavailableError:
-          pass
-        else:
-          if changed:
-            self._revision = ReadableNodeRevision(self._revision + 1)
-
-          return True
-
-    return False
-
-
-class WatchableNode(ReadableNode):
+class WatchableNode(ValueNode):
   @abstractmethod
   async def watch_value(self, listener: WatchableNodeListener, /) -> AsyncCancelable:
     """
@@ -120,28 +69,28 @@ class WatchableNode(ReadableNode):
     return AsyncCancelable(cancel)
 
 
-class BooleanReadableNode(ReadableNode):
-  def __init__(self):
-    super().__init__()
-    self.value: Optional[bool] = None
+# class BooleanReadableNode(ReadableNode):
+#   def __init__(self):
+#     super().__init__()
+#     self.value: Optional[bool] = None
 
-  def export(self):
-    return {
-      **super().export(),
-      "readable": {
-        "type": "boolean",
-        "value": self.value
-      }
-    }
+#   def export(self):
+#     return {
+#       **super().export(),
+#       "readable": {
+#         "type": "boolean",
+#         "value": self.value
+#       }
+#     }
 
 
-class SubscribableReadableNode(WatchableNode):
+class SubscribableReadableNode(WatchableNode, ConfigurableNode):
   """
   A readable node whose changes can be reported by the node's implementation.
   """
 
-  def __init__(self):
-    super().__init__()
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
 
     self._value_listeners = set[WatchableNodeListener]()
 
@@ -203,23 +152,18 @@ class SubscribableReadableNode(WatchableNode):
       NodeUnavailableError
     """
 
-    raise NotImplementedError
-
   # Called by the producer
 
   async def _configure(self):
-    if self._value_listeners:
-      self._watch_init_task = asyncio.create_task(self._watch())
-      self._watch_task = await self._watch_init_task
+    async with configure(super()):
+      if self._value_listeners:
+        self._watch_init_task = asyncio.create_task(self._watch())
+        self._watch_task = await self._watch_init_task
 
   async def _unconfigure(self):
-    if self._watch_task:
-      self._watch_task.cancel()
-
-      try:
-        await self._watch_task
-      except asyncio.CancelledError:
-        pass
+    async with unconfigure(super()):
+      await cancel_task(self._watch_task)
+      self._watch_task = None
 
   # Called by the consumer
 
@@ -251,20 +195,19 @@ class PollableReadableNode(SubscribableReadableNode):
   A readable node which whose changes can only be detected by polling.
   """
 
-  def __init__(self, *, min_interval: float = 1.0):
+  def __init__(self, *, min_interval: float = 1.0, **kwargs):
     """
     Parameters
       min_interval: The minimal delay, in seconds, to wait between two calls to `_poll()`.
     """
 
-    super().__init__()
-
+    super().__init__(**kwargs)
     self._min_interval = min_interval
 
   # Internal
 
   async def _subscribe(self):
-    last_revision: Optional[ReadableNodeRevision] = None
+    last_revision: Optional[NodeRevision] = None
 
     while True:
       if not await self.read():

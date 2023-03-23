@@ -1,7 +1,6 @@
 import asyncio
 import traceback
 
-from pr1.devices.nodes.writable import WritableNode
 from pr1.fiber.langservice import DictType
 from pr1.units.base import BaseExecutor
 from pr1.util import schema as sc

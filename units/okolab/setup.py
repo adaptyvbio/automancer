@@ -14,6 +14,6 @@ setup(
   },
 
   install_requires=[
-    "okolab==0.1.0"
+    "okolab==0.2.0"
   ]
 )

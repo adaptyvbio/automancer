@@ -55,7 +55,7 @@ class NumericReadableNode(NumericNode, ReadableNode):
     return self.value != old_value
 
   @abstractmethod
-  async def _read_value(self) -> Measurement | Quantity:
+  async def _read_value(self) -> Measurement | Quantity | float | int:
     ...
 
   def export(self):
@@ -69,7 +69,7 @@ class NumericReadableNode(NumericNode, ReadableNode):
     }
 
 
-class NumericWritableNode(NumericNode, WritableNode):
+class NumericWritableNode(NumericNode, WritableNode[Optional[float]]):
   _ureg: UnitRegistry = ureg
 
   def __init__(

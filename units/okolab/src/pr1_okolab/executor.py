@@ -3,8 +3,6 @@ from typing import Any
 from pr1.fiber.langservice import Attribute, DictType, EnumType, IdentifierType, ListType, PrimitiveType, StrType
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
-from pr1.util import schema as sc
-from pr1.util.parser import Identifier
 
 from .device import MasterDevice, WorkerDevice
 
@@ -65,7 +63,10 @@ class Executor(BaseExecutor):
             type=worker_conf['type']
           )
 
-          master_device._workers.add(worker_device)
+          match index:
+            case 1: master_device._worker1 = worker_device
+            case 2: master_device._worker2 = worker_device
+
           self._host.devices[worker_id.value] = worker_device
 
         if 'device1' in device_conf:
@@ -81,7 +82,9 @@ class Executor(BaseExecutor):
     for device in self._devices.values():
       del self._host.devices[device.id]
 
-      for worker in device._workers:
-        del self._host.devices[worker.id]
+      if device._worker1:
+        del self._host.devices[device._worker1.id]
+      if device._worker2:
+        del self._host.devices[device._worker2.id]
 
       await device.destroy()

@@ -1,11 +1,11 @@
 import asyncio
-from asyncio import Future
+from asyncio import Event, Future, Task
 from dataclasses import dataclass
 from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Generic, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Optional, TypeVar
 
 
 @dataclass
@@ -117,6 +117,23 @@ class DualEvent:
     await self._unset_event.wait()
 
 
+async def cancel_task(task: Optional[Task], /):
+  """
+  Silently cancels the provided task, if any.
+
+  Parameters
+    task: The task to cancel, or `None`.
+  """
+
+  if task:
+    task.cancel()
+
+    try:
+      await task
+    except asyncio.CancelledError:
+      pass
+
+
 def run_anonymous(awaitable: Awaitable, /):
   call_trace = traceback.extract_stack()
 
@@ -132,3 +149,16 @@ def run_anonymous(awaitable: Awaitable, /):
       print(f"{exc.__class__.__name__}: {exc}", file=sys.stderr)
 
   return asyncio.create_task(func())
+
+
+async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]], /) -> Task[T]:
+  ready_event = Event()
+  task = asyncio.create_task(func(ready_event.set))
+
+  try:
+    await ready_event.wait()
+  except asyncio.CancelledError:
+    task.cancel()
+    await task
+
+  return task

@@ -17,12 +17,10 @@ metadata = Metadata(
   description="Advanced microfluidics",
   icon=MetadataIcon(kind='bitmap', value=logo.to_url()),
   title="AMF",
-  version="4.0"
+  version="5.0"
 )
 
 client_path = files(__name__ + '.client')
 logger = parent_logger.getChild(namespace)
 
 from .executor import Executor
-from .parser import Parser
-from .runner import Runner

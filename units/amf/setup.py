@@ -18,7 +18,6 @@ setup(
   },
 
   install_requires=[
-    "pyserial==3.5",
-    "pyserial-asyncio==0.5"
+    "amf-rotary-valve==0.1.0"
   ]
 )

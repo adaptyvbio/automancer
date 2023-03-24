@@ -3,7 +3,7 @@ from types import EllipsisType
 from typing import Any, Optional, TypedDict
 
 from pr1.fiber import langservice as lang
-from pr1.fiber.eval import EvalContext, EvalEnv, EvalStack
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform,
@@ -36,7 +36,9 @@ class RepeatParser(BaseParser):
 
   def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
     if (attr := attrs.get('repeat')):
-      env = EvalEnv(name="Repeat", readonly=True)
+      env = EvalEnv({
+        'index': EvalEnvValue()
+      }, name="Repeat", readonly=True)
       return lang.Analysis(), BlockUnitPreparationData((attr, env), envs=[env])
 
     return lang.Analysis(), BlockUnitPreparationData(None)

@@ -1,17 +1,18 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
-from pr1.devices.nodes.value import ValueNode
-from pr1.fiber.eval import EvalEnv, EvalEnvValue
+from pr1.devices.nodes.primitive import EnumNode
+from pr1.devices.nodes.value import Null, ValueNode
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, AnyType, Attribute,
+from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
                                    PotentialExprType, PrimitiveType,
-                                   QuantityType)
+                                   QuantityType, TransformType)
 from pr1.fiber.parser import (BaseParser, BlockUnitData,
                               BlockUnitPreparationData, BlockUnitState,
                               FiberParser, ProtocolDetails, ProtocolUnitData,
@@ -87,8 +88,6 @@ class DevicesParser(BaseParser):
   namespace = namespace
   priority = 1100
 
-  root_attributes = dict()
-
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
@@ -115,8 +114,8 @@ class DevicesParser(BaseParser):
       match node:
         # case BooleanWritableNode():
         #   return PrimitiveType(bool)
-        case NumericNode(unit=None):
-          return PrimitiveType(float)
+        case EnumNode(cases=cases):
+          return EnumType(*[case.id for case in cases])
         case NumericNode(nullable=nullable, unit=unit):
           return QuantityType(unit, allow_nil=nullable)
         case _:
@@ -198,7 +197,7 @@ class DevicesParser(BaseParser):
 
     for key, value in attrs.items():
       node, path = self.node_map[key]
-      value = analysis.add(value.evaluate(adoption_stack))
+      value = analysis.add(value.evaluate(EvalContext(adoption_stack)))
 
       if not isinstance(value, EllipsisType):
         values[path] = value

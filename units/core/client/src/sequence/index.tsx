@@ -15,14 +15,6 @@ export interface Location {
   children: { 0: unknown; };
   index: number;
   interrupting: boolean;
-  mode: LocationMode;
-}
-
-export enum LocationMode {
-  Halting = 0,
-  Normal = 1,
-  Pausing = 2,
-  Paused = 3
 }
 
 export type Key = number;
@@ -181,8 +173,6 @@ function getChildrenExecutionRefs(block: Block, location: Location) {
 }
 
 function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
-  let busy = isBlockBusy(block, location, options);
-
   return [
     { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: false },
     { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
@@ -196,18 +186,6 @@ function createDefaultPoint(block: Block, key: number, getChildPoint: (block: Pr
   };
 }
 
-function isBlockBusy(block: Block, location: Location, options: { host: Host; }) {
-  let childBlock = block.children[location.index];
-  let childUnit = options.host.units[childBlock.namespace];
-  let childBusy = childUnit.isBlockBusy?.(childBlock, location.child, options) ?? false;
-
-  return ![LocationMode.Normal, LocationMode.Paused].includes(location.mode) || childBusy;
-}
-
-function isBlockPaused(_block: Block, location: Location, options: { host: Host; }) {
-  return (location.mode === LocationMode.Paused);
-}
-
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
   switch (path.first()) {
     case 'halt':
@@ -215,10 +193,6 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
     case 'interrupt':
       return { type: 'setInterrupt', value: !location.interrupting }
   }
-}
-
-function getBlockLocationLabelSuffix(block: Block, location: Location) {
-  return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
 }
 
 
@@ -238,10 +212,7 @@ const unit = {
   getChildBlock,
   getActiveChildLocation,
   getChildrenExecutionRefs,
-  isBlockBusy,
-  isBlockPaused,
-  onSelectBlockMenu,
-  getBlockLabelSuffix: getBlockLocationLabelSuffix
+  onSelectBlockMenu
 } satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
 
 export default unit;

@@ -19,25 +19,27 @@ export interface DeviceNode extends CollectionNode {
   owner: string;
 }
 
-export interface DataNode extends BaseNode {
-  data: {
-    type: 'writableBoolean';
-    currentValue: boolean | null;
-    targetValue: boolean | null;
+export interface ValueNode extends BaseNode {
+  value: {
+    nullable: boolean;
+    readable: boolean;
+    writable: boolean;
+  } & ({
+    type: 'boolean';
+    value: boolean;
   } | {
-    type: 'writableEnum';
-    options: { label: string; }[];
-    currentValue: number | null;
-    targetValue: number | null;
+    type: 'enum';
+    cases: {
+      id: number | string;
+      label: string | null;
+    }[];
+    value: number | string;
   } | {
-    type: 'readableScalar';
-    value: number | null;
-  } | {
-    type: 'writableScalar';
-    currentValue: number | null;
-    targetValue: number | null;
-  };
+    type: 'numeric';
+    value: DynamicValue;
+  });
 }
+
 
 const findNode = (node: BaseNode, path: NodePath): BaseNode =>
   path.length > 0
@@ -79,8 +81,9 @@ export default {
   createStateFeatures(state, descendantStates, location, context) {
     let executor = context.host.state.executors[this.namespace] as ExecutorState;
 
-    return state.values.map(([path, value]) => {
-      let node = findNode(executor.root, path);
+    return state.values.map(([path, stateValue]) => {
+      let parentNode = findNode(executor.root, path.slice(0, -1));
+      let node = findNode(executor.root, path) as ValueNode;
       let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
 
       let errors: Feature['error'][] = [];
@@ -93,18 +96,43 @@ export default {
         errors.push({ kind: 'error', message: 'Expression evaluation error' });
       }
 
+      let label: JSX.Element | string;
+
+      let currentValue = nodeLocation
+        ? nodeLocation.value
+        : stateValue;
+
+      if (currentValue.type === 'expression') {
+        label = formatDynamicValue(currentValue);
+      } else if (currentValue.type === 'none') {
+        label = '[Disabled]';
+      } else {
+        switch (node.value.type) {
+          case 'enum': {
+            util.assert((currentValue.type === 'number') || (currentValue.type === 'string'));
+            let innerValue = currentValue.value;
+
+            let enumCase = node.value.cases.find((enumCase) => (enumCase.id === innerValue))!;
+            label = (enumCase.label ?? enumCase.id.toString());
+
+            break;
+          }
+
+          default:
+            util.assert(currentValue.type === 'quantity');
+            label = formatDynamicValue(currentValue);
+        }
+      }
+
       return {
         disabled: descendantStates?.some((descendantState) => {
           return descendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
         }),
-        description: node.label ?? node.id,
+        description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
         error: errors[0] ?? null,
         icon: node.icon ?? 'settings_input_hdmi',
-        label: nodeLocation
-          ? formatDynamicValue(nodeLocation.value)
-          : formatDynamicValue(value)
+        label
       };
     }) ?? [];
   }
-
 } satisfies StateUnit<State, Location>

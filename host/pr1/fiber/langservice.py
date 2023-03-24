@@ -903,7 +903,10 @@ class QuantityType(Type):
     self._unit: Unit = ureg.Unit(unit)
 
   def analyze(self, obj, /, context):
-    if self._allow_nil and ((obj == "nil") or (obj.value == None)):
+    if self._allow_nil and (
+      ((not context.symbolic) and (obj == "nil")) or
+      (context.symbolic and (obj.value == None))
+    ):
       result = LocatedValue.new(None, area=obj.area)
       return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
@@ -977,13 +980,13 @@ class IdentifierType(Type):
     return analysis, obj_new
 
 class EnumType:
-  def __init__(self, *variants: str):
+  def __init__(self, *variants: int | str):
     self._variants = variants
 
   def analyze(self, obj, context):
     analysis = Analysis()
 
-    if not obj in self._variants:
+    if not obj.value in self._variants:
       analysis.errors.append(InvalidEnumValueError(obj))
       return analysis, Ellipsis
 

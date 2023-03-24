@@ -7,7 +7,7 @@ from ...ureg import ureg
 from .value import Null, NullType, ValueNode
 
 
-class NumericNode(ValueNode[float], ABC):
+class NumericNode(ValueNode[Quantity], ABC):
   _ureg: UnitRegistry = ureg
 
   def __init__(
@@ -22,14 +22,14 @@ class NumericNode(ValueNode[float], ABC):
   ):
     super().__init__(**kwargs)
 
-    self._factor = factor
-
     self.dtype = dtype
+    self.error: Optional[Quantity] = None
     self.unit: Unit = self._ureg.Unit(unit or 'dimensionless')
-    self.value: Optional[Quantity] = None
 
     self.max = (max * self.unit) if isinstance(max, float) else max
     self.min = (min * self.unit) if isinstance(min, float) else min
+
+    self._factor = factor
 
   async def _read(self):
     old_value = self.value
@@ -52,9 +52,6 @@ class NumericNode(ValueNode[float], ABC):
   async def _read_value(self) -> Measurement | Quantity | float | int:
     raise NotImplementedError
 
-  def _target_reached(self):
-    return self.readable and (self.value is not None) and ((self.value.magnitude / self._factor) == self._target_value)
-
   async def write_quantity(self, raw_value: Quantity | NullType | float, /):
     if not isinstance(raw_value, NullType):
       value: Quantity = (raw_value * self.unit) if isinstance(raw_value, float) else raw_value.to(self.unit)
@@ -67,9 +64,20 @@ class NumericNode(ValueNode[float], ABC):
       if (self.max is not None) and (value > self.max):
         raise ValueError("Value too large")
 
-      await self.write(value.magnitude / self._factor)
+      await self.write(value)
     else:
       if not self.nullable:
         raise ValueError("Value not nullable")
 
       await self.write(Null)
+
+  def export(self):
+    exported = super().export()
+
+    return {
+      **exported,
+      "value": {
+        **exported["value"],
+        "type": "numeric"
+      }
+    }

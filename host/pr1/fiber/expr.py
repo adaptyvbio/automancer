@@ -5,7 +5,7 @@ import functools
 import re
 from enum import Enum
 from pint import Quantity
-from types import EllipsisType
+from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
 from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
@@ -67,6 +67,10 @@ def export_value(value: Any, /):
     case EllipsisType():
       return {
         "type": "ellipsis"
+      }
+    case NoneType():
+      return {
+        "type": "none"
       }
     case Exportable():
       return value.export()

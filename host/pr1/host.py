@@ -396,15 +396,17 @@ class Host:
 
         def done_callback(task):
           logger.info(f"Ran protocol on chip '{chip.id}'")
-          chip.master = None
           self.update_callback()
+
+        def done_callback_immediate():
+          chip.master = None
 
         def update_callback():
           self.update_callback()
 
         logger.info(f"Running protocol on chip '{chip.id}'")
 
-        chip.master = Master(compilation.protocol, chip, host=self)
+        chip.master = Master(compilation.protocol, chip, done_callback=done_callback_immediate, host=self)
         await chip.master.run(update_callback)
         asyncio.ensure_future(chip.master.done()).add_done_callback(done_callback)
 

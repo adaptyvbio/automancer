@@ -1,9 +1,11 @@
+import asyncio
 from abc import ABC, abstractmethod
 from asyncio import Lock
-from typing import Generic, NewType, Optional, TypeVar, final
+from typing import Generic, NewType, Optional, TypeVar, cast, final
 
-from .common import BaseNode, ConfigurableNode, NodeUnavailableError
+from ...fiber.expr import export_value
 from ..claim import Claimable
+from .common import BaseNode, ConfigurableNode, NodeUnavailableError
 
 
 @final
@@ -23,7 +25,9 @@ class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
 
     self._lock = Lock()
     self._revision = NodeRevision(0)
-    self._target_value: T | NullType = Null
+
+    self.target_value: Optional[T | NullType] = None
+    self.value: Optional[T | NullType] = None
 
     self.nullable = nullable
     self.readable = readable
@@ -75,8 +79,9 @@ class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
     except NotImplementedError:
       pass
 
-    if not self._target_reached():
-      await self.write(self._target_value)
+    while (self.target_value is not None) and (self.value != self.target_value):
+      async with self._lock:
+        await self._write(self.target_value)
 
   # Called by the consumer
 
@@ -116,12 +121,24 @@ class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
     return False
 
   async def write(self, value: T | NullType, /):
-    self._target_value = value
+    self.target_value = value
 
-    if value is not None:
-      async with self._lock:
-        if self.connected:
-          try:
-            await self._write(value)
-          except NodeUnavailableError:
-            pass
+    async with self._lock:
+      if self.connected:
+        try:
+          await self._write(value)
+        except NodeUnavailableError:
+          pass
+
+  def export(self):
+    return {
+      **super().export(),
+      "value": {
+        "nullable": self.nullable,
+        "readable": self.readable,
+        "writable": self.writable,
+
+        "value": export_value(self.value) if (self.value is not None) else None,
+        "targetValue": export_value(self.target_value) if (self.value is not None) else None
+      }
+    }

@@ -8,7 +8,8 @@ from typing import Any, Callable, Optional
 from pr1.devices.claim import Claim
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodePath
-from pr1.devices.nodes.value import ValueNode
+from pr1.devices.nodes.primitive import EnumNode
+from pr1.devices.nodes.value import Null, ValueNode
 from pr1.error import Error
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
@@ -119,9 +120,13 @@ class DevicesStateManager(UnitStateManager):
 
         while True:
           if node_info.current_candidate:
+            value = node_info.current_candidate.value
+
             match node:
-              case NumericNode() if node.writable:
-                await node.write_quantity(node_info.current_candidate.value)
+              case EnumNode():
+                await node.write(value if value is not None else Null)
+              case NumericNode():
+                await node.write(value if value is not None else Null)
               case _:
                 raise ValueError
 

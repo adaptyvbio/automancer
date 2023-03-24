@@ -78,7 +78,7 @@ class Claimable:
     else:
       self._current_claim_ref = None
 
-  def _finalize_claim(self, ref):
+  def _finalize_claim(self, ref: weakref.ref[Claim]):
     if self._current_claim_ref is ref:
       self._designate_owner()
       warnings.warn(f"Leak of owning claim to {self}")

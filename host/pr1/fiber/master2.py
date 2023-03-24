@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, host: 'Host'):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, done_callback: SimpleCallbackFunction, host: 'Host'):
     self.chip = chip
     self.host = host
     self.protocol = protocol
@@ -38,6 +38,7 @@ class Master:
     })
 
     self._analysis = MasterAnalysis()
+    self._done_callback = done_callback
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._location: Optional[ProgramHandleEventEntry] = None
@@ -111,9 +112,13 @@ class Master:
       assert self._done_future
 
       try:
-        self.update_soon()
-        await self._owner.run(runtime_stack)
-        self.update_now()
+        try:
+          self.update_soon()
+          await self._owner.run(runtime_stack)
+          self.update_now()
+        finally:
+          self._done_callback()
+
         await self.state_manager.clear()
       except Exception as e:
         if self._start_future:

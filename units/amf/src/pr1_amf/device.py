@@ -62,6 +62,8 @@ class RotaryValvePositionNode(EnumNode[int]):
     except AMFDeviceConnectionError as e:
       raise NodeUnavailableError from e
 
+    self.value = value
+
 
 class RotaryValveDevice(DeviceNode):
   model = "LSP rotary valve"

@@ -14,6 +14,8 @@ export type DynamicValue = {
   type: 'expression';
   contents: string;
 } | {
+  type: 'none';
+} | {
   type: 'number';
   value: number;
 } | {
@@ -34,6 +36,7 @@ export function formatDynamicValue(value: DynamicValue) {
     case 'boolean':
       return value.value ? 'On' : 'Off';
     case 'ellipsis':
+    case 'none':
       return '–';
     case 'expression':
       return <Expression contents={value.contents} />;

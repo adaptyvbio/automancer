@@ -54,13 +54,13 @@ class Executor(BaseExecutor):
             raise worker_id.error(f"Duplicate worker device id '{worker_id}'")
 
           worker_device = WorkerDevice(
-            description=(worker_conf['description'] if 'description' in worker_conf else None),
+            description=(worker_conf['description'].value if 'description' in worker_conf else None),
             id=worker_id.value,
             index=index,
             label=(worker_conf['label'].value if 'label' in worker_conf else None),
             master=master_device,
-            side=({ 'glass': 1, 'metal': 2 }.get(worker_conf.get('side'), 0)),
-            type=worker_conf['type']
+            side=({ 'glass': 1, 'metal': 2 }.get(worker_conf.get('side'))),
+            type=worker_conf['type'].value
           )
 
           match index:

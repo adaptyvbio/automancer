@@ -82,6 +82,28 @@ class ConfigurableNode(BaseNode, ABC):
   async def _unconfigure(self) -> None:
     pass
 
+  async def configure(self):
+    assert not self.connected
+
+    await self._configure()
+    self.connected = True
+
+  async def unconfigure(self):
+    assert self.connected
+
+    self.connected = False
+    await self._unconfigure()
+
+  @contextlib.asynccontextmanager
+  async def try_configure(self):
+    await self.configure()
+
+    try:
+      yield
+    except:
+      await self.unconfigure()
+      raise
+
   async def __aenter__(self):
     if isinstance(self, ConfigurableNode):
       async with configure(self):

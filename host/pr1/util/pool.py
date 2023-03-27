@@ -121,7 +121,13 @@ class Pool:
     task.add_done_callback(self._done_callback)
     self._tasks.add(task)
 
-    return task
+    async def ret():
+      try:
+        return await task
+      except Exception:
+        raise asyncio.CancelledError from None
+
+    return asyncio.create_task(ret())
 
   @classmethod
   @contextlib.asynccontextmanager
@@ -159,7 +165,7 @@ class Pool:
       if exception:
         raise PoolExceptionGroup("Context manager error", [exc, exception]) from None
       else:
-        raise
+        raise exc from None
 
     if exception:
       raise exception

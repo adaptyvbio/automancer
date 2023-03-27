@@ -267,9 +267,10 @@ export class CoreApplication {
           ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
-            type: 'tcp',
-            label: options.label,
-            options: options.options
+            options: {
+              type: 'tcp',
+              ...options.options
+            }
           }
         }
       });
@@ -382,15 +383,14 @@ export class CoreApplication {
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
-            type: 'local',
             options: {
+              type: 'local',
               architecture: options.pythonInstallationSettings.architecture,
               conf,
               corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
               dirPath: hostDirPath,
               identifier: conf.identifier,
-              pythonPath,
-              socketPath: path.join(UnixSocketDirPath, conf.identifier + '.sock')
+              pythonPath
             }
           } satisfies HostSettings
         }
@@ -406,7 +406,7 @@ export class CoreApplication {
       let { [hostSettingsId]: deletedHostSettings, ...hostSettingsRecord } = this.data.hostSettingsRecord;
       await this.setData({ hostSettingsRecord });
 
-      if (deletedHostSettings.type === 'local') {
+      if (deletedHostSettings.options.type === 'local') {
         await shell.trashItem(deletedHostSettings.options.dirPath);
       }
     });
@@ -437,7 +437,7 @@ export class CoreApplication {
     ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
       let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
 
-      assert(hostSettings.type === 'local');
+      assert(hostSettings.options.type === 'local');
       shell.showItemInFolder(hostSettings.options.dirPath);
     });
 

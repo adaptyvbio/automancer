@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import net from 'node:net';
 import tls from 'node:tls';
-import { Deferred, defer, createErrorWithCode, ClientProtocol, Client } from 'pr1-shared';
+import { Deferred, defer, createErrorWithCode, ClientProtocol, Client, ClientBackend, ServerProtocol } from 'pr1-shared';
 
 import { CertificateFingerprint } from './types/app-data';
 import { deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
@@ -152,6 +152,9 @@ export class SocketClientBackend {
   private options: OrdinarySocketClientOptions;
   private socket!: OrdinarySocketClient;
 
+  closed!: Promise<void>;
+  messages!: AsyncIterator<ServerProtocol.Message>;
+
   constructor(options: OrdinarySocketClientOptions) {
     this.options = options;
   }
@@ -194,24 +197,11 @@ export class SocketClientBackend {
       }
     }
 
-    let messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this.socket));
-
-    let client = new Client({
-      close: () => void this.close(),
-      closed: this.socket.closed.then(() => {}),
-      messages,
-      send: (message: ClientProtocol.Message) => void this.socket.send(serializeMessage(message))
-    });
-
-    let result = await client.initialize();
-
-    if (!result.ok) {
-      await this.socket.close();
-    }
+    this.closed = this.socket.closed.then(() => {});
+    this.messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this.socket));
 
     return {
-      ...result,
-      client,
+      ok: true,
       tlsInfo: this.socket.tlsInfo
     };
   }
@@ -223,15 +213,21 @@ export class SocketClientBackend {
 
   static async test(options: OrdinarySocketClientOptions) {
     let backend = new SocketClientBackend(options);
-    let result = await backend.open();
+    let openResult = await backend.open();
 
-    if (result.ok) {
-      await backend.close();
-
-      let { client: _, ...partialResult } = result;
-      return partialResult;
+    if (!openResult.ok) {
+      return openResult;
     }
 
-    return result;
+    let client = new Client(openResult.backend);
+    let initResult = await client.initialize();
+
+    if (!initResult.ok) {
+      await backend.close();
+      return initResult;
+    }
+
+    await backend.close();
+    return openResult;
   }
 }

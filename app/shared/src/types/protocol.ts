@@ -2,13 +2,17 @@ import { HostIdentifier, HostState } from './host';
 
 
 export namespace ClientProtocol {
+  export interface ExitMessage {
+    type: 'exit';
+  }
+
   export interface RequestMessage {
     type: 'request';
     id: number;
     data: unknown;
   }
 
-  export type Message = RequestMessage;
+  export type Message = ExitMessage | RequestMessage;
 }
 
 export namespace ServerProtocol {

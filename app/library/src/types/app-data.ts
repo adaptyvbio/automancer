@@ -45,29 +45,22 @@ export interface AppData {
   version: number;
 }
 
-export interface HostSettingsLocal {
+export interface HostSettings {
   id: HostSettingsId;
+  label: string;
+  options: HostSettingsOptionsLocal | HostSettingsOptionsTcp;
+};
+
+export interface HostSettingsOptionsLocal {
   type: 'local';
-  label: string;
-  options: {
-    architecture: string | null;
-    conf: ServerConfiguration;
-    corePackagesInstalled: boolean;
-    dirPath: string;
-    identifier: HostIdentifier;
-    pythonPath: string; // | null; // null -> use embedded
-    socketPath: string;
-  };
+  architecture: string | null;
+  conf: ServerConfiguration;
+  corePackagesInstalled: boolean;
+  dirPath: string;
+  identifier: HostIdentifier;
+  pythonPath: string; // | null; // null -> use embedded
 }
 
-export interface HostSettingsTcp {
-  id: HostSettingsId;
-  type: 'tcp';
-  label: string;
-  options: TcpHostOptions;
-}
-
-export type HostSettings = HostSettingsLocal | HostSettingsTcp;
 export type HostSettingsId = Brand<string, 'HostSettingsId'>;
 export type HostSettingsRecord = Record<HostSettingsId, HostSettings>;
 
@@ -83,6 +76,7 @@ export interface ServerConfiguration {
       type: 'inet';
       hostname: string;
       port: number;
+      secure: boolean;
     } | {
       type: 'unix';
       path: string;
@@ -131,6 +125,18 @@ export type TcpHostOptionsCandidate = {
   secure: true;
   trusted: boolean;
 });
+
+export type HostSettingsOptionsTcp = TcpHostOptions & {
+  type: 'tcp';
+}
+
+export interface HostSettingsOptionsUnix {
+  type: 'unix';
+  identifier: HostIdentifier | null;
+  path: string;
+  password: string | null;
+  secure: false;
+}
 
 
 export type CertificateFingerprint = Brand<string, 'CertificateFingerprint'>;

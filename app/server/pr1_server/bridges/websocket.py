@@ -1,9 +1,9 @@
-import asyncio
+from asyncio import Future, Server
 import json
 import random
 import ssl
 from collections import namedtuple
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import websockets
 import websockets.exceptions
@@ -52,7 +52,7 @@ class WebsocketBridge(BridgeProtocol):
   def __init__(self, app, *, conf: 'ConfBridgeWebsocket'):
     self._clients = set[Client]()
     self._conf = conf
-    self._server = None
+    server = None
 
     if conf.secure:
       self._cert_info = use_certificate(app.certs_dir, logger=logger)
@@ -71,11 +71,8 @@ class WebsocketBridge(BridgeProtocol):
       port=self._conf.port
     )]
 
-  async def initialize(self):
-    pass
-
-  async def start(self, handle_client):
-    # Data server
+  async def start(self, handle_client, ready):
+    server: Optional[Server] = None
 
     async def handler(conn):
       if self._conf.single_client:
@@ -90,22 +87,19 @@ class WebsocketBridge(BridgeProtocol):
       finally:
         self._clients.remove(client)
 
-    logger.debug(f"Listening on {self._conf.hostname}:{self._conf.port}")
+    try:
+      if self.cert_info:
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_context.load_cert_chain(self.cert_info.cert_path, self.cert_info.key_path)
+      else:
+        ssl_context = None
 
+      server = await websockets.serve(handler, host=self._conf.hostname, port=self._conf.port, max_size=(5 * (2 ** 20)), ssl=ssl_context) # type: ignore
+      logger.debug(f"Listening on {self._conf.hostname}:{self._conf.port}")
 
-    if self.cert_info:
-      ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-      ssl_context.load_cert_chain(self.cert_info.cert_path, self.cert_info.key_path)
-    else:
-      ssl_context = None
-
-    self._server = await websockets.serve(handler, host=self._conf.hostname, port=self._conf.port, max_size=(5 * (2 ** 20)), ssl=ssl_context) # type: ignore
-
-
-    await self._server.wait_closed()
-
-  async def deinitialize(self):
-    assert self._server
-
-    self._server.close()
-    await self._server.wait_closed()
+      ready()
+      await Future()
+    finally:
+      if server:
+        server.close()
+        await server.wait_closed()

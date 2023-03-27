@@ -12,6 +12,6 @@ export function defer<T = void>(): Deferred<T> {
 
 export interface Deferred<T> {
   promise: Promise<T>;
-  resolve(value: T): void;
+  resolve(value: PromiseLike<T> | T): void;
   reject(err: any): void;
 }

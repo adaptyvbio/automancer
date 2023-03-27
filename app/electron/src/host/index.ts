@@ -40,58 +40,27 @@ export class HostWindow {
 
     this.logger.debug('Created client');
 
-    this.client = result.client;
-    this.client?.onMessage((message) => {
+    this.client = result.client as Client;
+    this.client.onMessage((message) => {
       this.window!.webContents.send('localHost.message', message);
     });
 
     this.pool.add(this.client!.start());
 
-    result.closed.then(() => {
-      if (!this.closing) {
+    this.pool.add(async () => {
+      let failed = false;
+
+      try {
+        await this.client!.closed;
+      } catch (err) {
+        console.error(err);
+        failed = true;
+      }
+
+      if (!this.closing || failed) {
         dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly`, 'See the log file for details.');
       }
     });
-
-
-    // this.localHost = null;
-
-    // if (this.hostSettings.type === 'local') {
-    //   this.logger.debug('Starting the corresponding local host');
-
-    //   this.localHost = new LocalHost(this.app, this, this.hostSettings);
-
-    //   let waitClosed = async () => {
-    //     let err = await this.localHost!.closed;
-
-    //     this.localHost = null;
-
-    //     if (err) {
-    //       dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly with code ${err.code}`, 'See the log file for details.');
-    //       // let { response } = await dialog.showMessageBox(this.window, {
-    //       //   message: `Host "${this.hostSettings.label}" terminated unexpectedly`,
-    //       //   buttons: ['Ok', 'Open log file'],
-    //       //   title: 'Error',
-    //       //   defaultId: 0,
-    //       //   detail: err.code ? `Code: ${err.code}` : undefined
-    //       // });
-    //     }
-
-    //     if (!this.closing) {
-    //       this.closingDeferred.resolve();
-    //       this.window?.close();
-    //     }
-    //   };
-
-    //   if (!(await this.localHost.start())) {
-    //     this.logger.debug('Aborting window creation');
-    //     await waitClosed();
-
-    //     return;
-    //   }
-
-    //   this.pool.add(waitClosed);
-    // }
 
 
     this.logger.debug('Creating the Electron window');

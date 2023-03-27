@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import zeroconf
 from pr1 import Host
 from pr1.util.misc import log_exception
 from pr1.util.pool import Pool
@@ -78,7 +80,7 @@ class App:
     self.data_dir.mkdir(exist_ok=True, parents=True)
 
     self.certs_dir = self.data_dir / "certificates"
-    conf_path = self.data_dir / "conf.json"
+    conf_path = self.data_dir / "conf-branch.json"
 
     logger.debug(f"Storing data in '{self.data_dir}'")
 
@@ -166,7 +168,7 @@ class App:
       for bridge in self.bridges:
         infos += bridge.advertise()
 
-      self.zeroconf_services = [AsyncServiceInfo(
+      zeroconf_services = [AsyncServiceInfo(
         f"_prone.{info.type}",
         f"{self.conf.identifier}._prone." + info.type,
         addresses=[socket.inet_aton(info.address)],
@@ -182,29 +184,26 @@ class App:
       logger.debug(f"Registering {len(self.zeroconf_services)} zeroconf services")
 
       self.zeroconf = AsyncZeroconf(ip_version=IPVersion.V4Only)
-      await asyncio.gather(*[self.zeroconf.async_register_service(service) for service in self.zeroconf_services])
+
+      async def register_zeroconf_service(service: AsyncServiceInfo):
+        assert self.zeroconf
+
+        try:
+          await self.zeroconf.async_register_service(service)
+        except zeroconf._exceptions.NonUniqueNameException:
+          logger.error(f"Failed to register zeroconf service '{service.key}'")
+        else:
+          self.zeroconf_services.append(service)
+
+      await asyncio.gather(*[register_zeroconf_service(service) for service in zeroconf_services])
 
       logger.debug("Registered zeroconf services")
-
-
-    # Initialize bridges
-
-    logger.debug(f"Initializing {len(self.bridges)} bridges")
-
-    # TODO: Improve ordering such that items are deinitialized in the opposite order of initialization
-    for bridge in self.bridges:
-      await bridge.initialize()
 
 
     # Initialize host
 
     await self.host.initialize()
 
-
-    # Initialize static server
-
-    if self.static_server:
-      await self.static_server.initialize()
 
   async def deinitialize(self):
     if self.zeroconf:
@@ -218,9 +217,6 @@ class App:
       self.zeroconf_services.clear()
 
       logger.debug("Unregistered zeroconf services")
-
-    if self.static_server:
-      await self.static_server.deinitialize()
 
 
   async def handle_client(self, client: BaseClient):
@@ -292,51 +288,11 @@ class App:
         pass
 
   async def process_request(self, client, request):
-    if request["type"] == "app.session.create":
-      id = str(uuid.uuid4())
-      session = Session(size=(request["size"]["columns"], request["size"]["rows"]))
-
-      client.sessions[id] = session
-      logger.info(f"Created terminal session with id '{id}'")
-
-      async def start_session():
-        try:
-          async for chunk in session.start():
-            await client.send({
-              "type": "app.session.data",
-              "id": id,
-              "data": list(chunk)
-            })
-
-          del client.sessions[id]
-          logger.info(f"Closed terminal session with id '{id}'")
-
-          await client.send({
-            "type": "app.session.close",
-            "id": id,
-            "status": session.status
-          })
-        except ClientClosed:
-          pass
-
-      loop = asyncio.get_event_loop()
-      loop.create_task(start_session())
-
-      return {
-        "id": id
-      }
-
-    elif request["type"] == "app.session.data":
-      client.sessions[request["id"]].write(bytes(request["data"]))
-
-    elif request["type"] == "app.session.close":
-      client.sessions[request["id"]].close()
-
-    elif request["type"] == "app.session.resize":
-      client.sessions[request["id"]].resize((request["size"]["columns"], request["size"]["rows"]))
-
-    else:
-      return await self.host.process_request(request, client=client)
+    match request["type"]:
+      case "isBusy":
+        return (len(self.clients) >= 2) or self.host.busy()
+      case _:
+        return await self.host.process_request(request, client=client)
 
   def update(self):
     if not self.updating:
@@ -360,6 +316,7 @@ class App:
     try:
       logger.debug("Initializing")
       await self.initialize()
+      logger.debug("Initialized")
 
       try:
         async with Pool.open() as pool:
@@ -378,17 +335,33 @@ class App:
           except NotImplementedError: # For Windows
             pass
 
-          logger.debug("Starting")
+          ready_count = 0
+          ready_event = asyncio.Event()
+
+          def item_ready():
+            nonlocal ready_count
+            ready_count += 1
+
+            if ready_count == (len(self.bridges) + (1 if self.static_server else 0)):
+              ready_event.set()
+
 
           for bridge in self.bridges:
-            pool.start_soon(bridge.start(self.handle_client))
+            pool.start_soon(bridge.start(self.handle_client, item_ready))
 
           if self.static_server:
-            pool.start_soon(self.static_server.start())
+            pool.start_soon(self.static_server.start(item_ready))
 
           pool.start_soon(self.host.start())
 
-          logger.debug("Running")
+          logger.debug("Starting")
+          await pool.start_soon(ready_event.wait())
+
+          logger.debug("Started")
+
+          bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+          sys.stdout.write(json.dumps(bridge_infos) + "\n")
+          sys.stdout.flush()
       finally:
         logger.debug("Deinitializing")
         await self.deinitialize()

@@ -6,30 +6,38 @@ import { ServerProtocol, ClientProtocol, HostIdentifier, HostState } from './ind
 export interface ClientBackend {
   close(): void;
   closed: Promise<void>;
-  messages: AsyncIterable<ServerProtocol.Message>;
+  messages: AsyncIterator<ServerProtocol.Message>;
   send(message: ClientProtocol.Message): void;
 }
 
 export class Client {
+  private closedDeferred = defer<void>();
   private messageCallback: ((message: ServerProtocol.Message) => void) | null = null;
   private nextRequestId = 0x10000;
   private requests = new Map<number, Deferred<unknown>>();
+  private userClose: (() => Promise<void>) | null;
 
   identifier: HostIdentifier | null = null;
   state: HostState | null = null;
   staticUrl: string | null = null;
   version: number | null = null;
 
-  constructor(private backend: ClientBackend) {
-
+  constructor(private backend: ClientBackend, options?: {
+    close?(): Promise<void>;
+  }) {
+    this.userClose = (options?.close ?? null);
   }
 
   close() {
-    this.backend.close();
+    if (this.userClose) {
+      this.closedDeferred.resolve(this.userClose());
+    } else {
+      this.backend.close();
+    }
   }
 
   get closed() {
-    return this.backend.closed;
+    return this.closedDeferred?.promise ?? this.backend.closed;
   }
 
   async initialize() {
@@ -39,8 +47,8 @@ export class Client {
     try {
       let createProtocolError = () => createErrorWithCode('Invalid message', 'APP_PROTOCOL');
 
-      let iterator = this.backend.messages[Symbol.asyncIterator]();
-      let item1 = await iterator.next();
+      let messages = this.backend.messages;
+      let item1 = await messages.next();
 
       if (item1.done || (item1.value.type !== 'initialize')) {
         throw createProtocolError();
@@ -48,7 +56,7 @@ export class Client {
 
       initializationMessage = item1.value;
 
-      let item2 = await iterator.next();
+      let item2 = await messages.next();
 
       if (item2.done || (item2.value.type !== 'state')) {
         throw createProtocolError();
@@ -106,7 +114,7 @@ export class Client {
 
   async start() {
     try {
-      for await (let message of this.backend.messages) {
+      for await (let message of { [Symbol.asyncIterator]: () => this.backend.messages }) {
         switch (message.type) {
           case 'response': {
             let request = this.requests.get(message.id);

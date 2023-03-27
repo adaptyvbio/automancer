@@ -1,8 +1,10 @@
-import asyncio
+from asyncio import Future
 import ssl
 from typing import TYPE_CHECKING
 from aiohttp.abc import AbstractAccessLogger
 import aiohttp.web
+
+from pr1.util.types import SimpleCallbackFunction
 
 from . import logger as parent_logger
 from .certificate import use_certificate
@@ -33,7 +35,7 @@ class StaticServer:
     else:
       self._cert_info = None
 
-  async def initialize(self):
+  async def start(self, ready: SimpleCallbackFunction):
     @aiohttp.web.middleware
     async def middleware(request, handler):
       res = await handler(request)
@@ -44,8 +46,8 @@ class StaticServer:
     self._application = aiohttp.web.Application(middlewares=[middleware])
     self._application.add_routes([aiohttp.web.static(f"/{namespace}/{unit.version}", unit.client_path) for namespace, unit in self._app.host.units.items() if hasattr(unit, 'client_path')])
 
-    self._runner = aiohttp.web.AppRunner(self._application, access_log_class=AccessLogger)
-    await self._runner.setup()
+    runner = aiohttp.web.AppRunner(self._application, access_log_class=AccessLogger)
+    await runner.setup()
 
     if self._cert_info:
       ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -53,16 +55,16 @@ class StaticServer:
     else:
       ssl_context = None
 
-    self._site = aiohttp.web.TCPSite(self._runner, self._conf.hostname, port=0, ssl_context=ssl_context)
-    await self._site.start()
+    try:
+      self._site = aiohttp.web.TCPSite(runner, self._conf.hostname, port=0, ssl_context=ssl_context)
+      await self._site.start()
 
-    hostname, port = self._site._server.sockets[0].getsockname() # type: ignore
-    logger.debug(f"Listening on {hostname}:{port}")
+      hostname, port = self._site._server.sockets[0].getsockname() # type: ignore
+      logger.debug(f"Listening on {hostname}:{port}")
 
-    self.url = ("https" if self._cert_info else "http") + f"://{hostname}:{port}"
+      self.url = ("https" if self._cert_info else "http") + f"://{hostname}:{port}"
 
-  async def start(self):
-    await asyncio.Future()
-
-  async def deinitialize(self):
-    await self._runner.cleanup()
+      ready()
+      await Future()
+    finally:
+      await runner.cleanup()

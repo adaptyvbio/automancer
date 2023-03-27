@@ -8,16 +8,12 @@ from typing import Optional
 import uuid
 from graphlib import TopologicalSorter
 
-from pint import UnitRegistry
-
 from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.node import BaseNode, BatchGroupNode, CollectionNode, DeviceNode, NodePath
 from .draft import Draft, DraftCompilation
 from .fiber.langservice import Analysis, print_analysis
 from .fiber.master2 import Master
-from .fiber.parser import AnalysisContext, FiberParser
-from .protocol import Protocol
 from .unit import UnitManager
 from .ureg import ureg
 from .util import schema as sc
@@ -201,6 +197,8 @@ class Host:
 
     logger.debug("Destroyed executors")
 
+  def busy(self):
+    return any(chip.master for chip in self.chips.values())
 
   def create_chip(self):
     chip = Chip.create(

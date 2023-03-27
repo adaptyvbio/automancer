@@ -62,7 +62,7 @@ class ConfBridge(Protocol):
       case "websocket":
         return ConfBridgeWebsocket.load(data["options"])
       case _:
-        raise ValueError()
+        raise ValueError
 
 class ConfBridgeSocket:
   @staticmethod
@@ -71,22 +71,24 @@ class ConfBridgeSocket:
       case "inet":
         return ConfBridgeSocketInet(
           hostname=data["hostname"],
-          port=data["port"]
+          port=data["port"],
+          secure=data["secure"]
         )
       case "unix":
         return ConfBridgeSocketUnix(
           path=data["path"]
         )
       case _:
-        raise ValueError()
+        raise ValueError
 
 @dataclass(kw_only=True)
 class ConfBridgeSocketInet(ConfBridge):
   hostname: str
   port: int
+  secure: bool
 
   def create_bridge(self, *, app):
-    return SocketBridge.inet(self.hostname, self.port, app=app)
+    return SocketBridge.inet(self.hostname, self.port, app=app, secure=self.secure)
 
   def export(self):
     return {

@@ -1,12 +1,10 @@
-from asyncio import Future, StreamReader, StreamWriter
+from asyncio import Server, StreamReader, StreamWriter
 import asyncio
 from collections import deque
 import json
 from pathlib import Path
 import socket
 import ssl
-import sys
-import threading
 from typing import TYPE_CHECKING, Any, Optional
 import uuid
 
@@ -71,9 +69,11 @@ class Client(BaseClient):
 
 class SocketBridge(BridgeProtocol):
   def __init__(self, *, address: Any, app: 'App', family: int, secure: bool):
+    self.sockname: tuple[str, int] | str
+
     self._address = address
+    self._app = app
     self._family = family
-    self._tasks = dict[str, asyncio.Task]()
 
     if secure:
       self._cert_info = use_certificate(app.certs_dir, hostname=(self._address[0] if family == socket.AF_INET else None), logger=logger)
@@ -100,11 +100,8 @@ class SocketBridge(BridgeProtocol):
       port=port
     )]
 
-  async def initialize(self):
-    pass
-
-  async def start(self, handle_client):
-    server: Optional[asyncio.Server] = None
+  async def start(self, handle_client, ready):
+    server: Optional[Server] = None
 
     try:
       async with Pool.open(forever=True) as pool:
@@ -125,13 +122,19 @@ class SocketBridge(BridgeProtocol):
 
         if self._family == socket.AF_UNIX:
           server = await asyncio.start_unix_server(handle_connection_sync, self._address, ssl=ssl_context)
-          logger.debug(f"Listening on {self._address}")
         else:
           hostname, port = self._address
           server = await asyncio.start_server(handle_connection_sync, hostname, port, family=self._family, ssl=ssl_context)
-          logger.debug(f"Listening on {hostname}:{port}")
 
-        logger.debug("Started")
+        self.sockname = server.sockets[0].getsockname()
+
+        if isinstance(self.sockname, tuple):
+          hostname, port = self.sockname
+          logger.debug(f"Listening on {hostname}:{port}")
+        else:
+          logger.debug(f"Listening on {self.sockname}")
+
+        ready()
     finally:
       if server:
         server.close()
@@ -139,14 +142,35 @@ class SocketBridge(BridgeProtocol):
 
       logger.debug("Stopped")
 
+  def export_info(self):
+    if isinstance(self.sockname, tuple):
+      hostname, port = self.sockname
+
+      return [{
+        "type": "tcp",
+        "hostname": hostname,
+        "identifier": self._app.conf.identifier,
+        "password": None,
+        "port": port,
+        "secure": False
+      }]
+    else:
+      return [{
+        "type": "unix",
+        "identifier": self._app.conf.identifier,
+        "path": self.sockname,
+        "password": None,
+        "secure": False
+      }]
+
   @classmethod
-  def inet(cls, host: str, port: int, *, app: 'App'):
+  def inet(cls, host: str, port: int, *, app: 'App', secure: bool = False):
     return cls(
       app=app,
 
       address=(host, port),
       family=socket.AF_INET,
-      secure=True
+      secure=secure
     )
 
   @classmethod

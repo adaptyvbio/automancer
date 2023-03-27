@@ -1,17 +1,42 @@
-import childProcess from 'node:child_process';
+import assert from 'node:assert';
+import childProcess, { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Client, defer, Deferred } from 'pr1-shared';
 
 import { HostEnvironment } from './search';
 import { SocketClientBackend } from './socket-client';
-import { HostSettings, ServerConfiguration } from './types/app-data';
+import { HostSettings, HostSettingsOptionsTcp, HostSettingsOptionsUnix, ServerConfiguration } from './types/app-data';
 import * as util from './util';
+
+
+export type BridgeOptions = HostSettingsOptionsTcp | HostSettingsOptionsUnix;
 
 
 export async function createClient(hostEnvironmentOrSettings: HostEnvironment | HostSettings, logger: any, options: { logsDirPath: string; }) {
   let hostSettings = hostEnvironmentOrSettings as HostSettings;
 
-  if (hostSettings.type === 'local') {
+  let bridgeOptions: BridgeOptions;
+  let subprocess: ChildProcess | null = null;
+  let subprocessClosed: Promise<boolean> | null = null;
+
+  let waitForSubprocessExit = async () => {
+    let timeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      timeout = null;
+      subprocess!.kill(2);
+    }, 1000);
+
+    try {
+      return await subprocessClosed!;
+    } finally {
+      if (timeout !== null) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+    }
+  };
+
+  if (hostSettings.options.type === 'local') {
     // Start the executable
 
     logger.debug('Starting');
@@ -41,8 +66,10 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
         ...hostOptions.conf.bridges,
         { type: 'socket',
           options: {
-            type: 'unix',
-            path: hostOptions.socketPath
+            type: 'inet',
+            hostname: '127.0.0.1',
+            port: 0,
+            secure: false
           } }
       ]
     };
@@ -58,20 +85,20 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
     logger.debug(`Using command "${executable.replaceAll(' ', '\\ ')} ${args.map((arg) => arg.replace(/[" {}]/g, '\\$&')).join(' ')}"`)
     logger.debug(`With environment variables: ${JSON.stringify(env)}`)
 
-    let subprocess = childProcess.spawn(executable, args, {
+    subprocess = childProcess.spawn(executable, args, {
       env,
 
       // stdin: ignore (not used)
       // stdout: inherit (inherit informal logs)
       // stderr: pipe (inherit but reformat informal logs)
-      stdio: ['ignore', 'inherit', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
 
     // Wait for the process to close
 
-    let closed = new Promise((resolve) => {
-      subprocess.on('close', (code, _signal) => {
+    subprocessClosed = new Promise((resolve) => {
+      subprocess!.on('close', (code, _signal) => {
         let message = 'Process closed' + (code !== null ? ` with code ${code}` : '');
 
         if ((code ?? 0) > 0) {
@@ -80,7 +107,7 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
           logger.info(message);
         }
 
-        resolve((code !== null) && (code !== 0) ? { code } : null);
+        resolve((code !== null) && (code !== 0));
       });
     });
 
@@ -92,16 +119,16 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
       let remainingData = '';
 
       subprocess.stderr!.on('data', (chunk: Buffer) => {
-        let events = (remainingData + chunk.toString()).split('\n');
+        let lines = (remainingData + chunk.toString()).split('\n');
 
-        remainingData = events.at(-1)!;
+        remainingData = lines.at(-1)!;
 
-        for (let event of events) {
-          if (event.length > 0) {
-            let isLog = event.includes('::');
+        for (let line of lines.slice(0, -1)) {
+          if (line.length > 0) {
+            let isLog = line.includes('::');
 
             if (isLog) {
-              let [rawLevelName, rawNamespace, ...rest] = event.split('::');
+              let [rawLevelName, rawNamespace, ...rest] = line.split('::');
 
               let levelName = rawLevelName.trim().toLowerCase();
               let message = rest.join('::').substring(1);
@@ -110,9 +137,9 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
               logger.getChild(namespace).log(levelName as any, message);
             } else {
               if (isDebugData) {
-                logger.debug(event);
+                logger.debug(line);
               } else {
-                logger.error(event);
+                logger.error(line);
               }
             }
 
@@ -125,54 +152,99 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
     subprocess.stderr!.pipe(fs.createWriteStream(logFilePath));
 
 
-    // ...
+    // Listen for bridge list
 
-    let backend = new SocketClientBackend({
-      address: {
-        path: hostOptions.socketPath
-      },
-      tls: null
-    });
+    let bridgeDatasDeferred: Deferred<BridgeOptions[]> | null = defer();
 
-    let result = await backend.open();
+    {
+      let remainingData = '';
 
-    if (!result.ok) {
-      return result;
+      subprocess.stdout!.on('data', (chunk) => {
+        let lines = (remainingData + chunk.toString()).split('\n');
+        remainingData = lines.at(-1)!;
+
+        for (let line of lines.slice(0, 1)) {
+          if (bridgeDatasDeferred) {
+            let bridgeDatas: BridgeOptions[] | null = null;
+
+            try {
+              bridgeDatas = JSON.parse(line);
+            } catch (err) { }
+
+            if (bridgeDatas) {
+              bridgeDatasDeferred.resolve(bridgeDatas);
+              bridgeDatasDeferred = null;
+              return;
+            }
+          }
+
+          process.stdout.write(line + '\n');
+        }
+      });
     }
 
-    return {
-      ok: true,
-      client: result.client,
-      closed: closed
-    };
+    let bridgeDatas = await bridgeDatasDeferred.promise;
+    bridgeOptions = bridgeDatas.find((bridgeData) => (bridgeData.type === 'unix') || (bridgeData.hostname === '127.0.0.1'))!;
+  } else {
+    bridgeOptions = hostSettings.options;
   }
 
-  if (hostSettings.type === 'tcp') {
+  if (bridgeOptions.type === 'tcp') {
     let backend = new SocketClientBackend({
       address: {
-        host: hostSettings.options.hostname,
-        port: hostSettings.options.port
+        host: bridgeOptions.hostname,
+        port: bridgeOptions.port
       },
-      tls: hostSettings.options.secure
+      tls: bridgeOptions.secure
         ? {
           serverCertificateCheck: false,
-          serverCertificateFingerprint: hostSettings.options.fingerprint
+          serverCertificateFingerprint: bridgeOptions.fingerprint
         }
         : null
     });
 
-    let result = await backend.open();
+    let openResult = await backend.open();
 
-    if (!result.ok) {
-      return result;
+    if (!openResult.ok) {
+      return openResult;
     }
+
+    let client = new Client(backend, {
+      async close() {
+        let exitSubprocess = subprocess && !(await client.request<boolean>({ type: 'isBusy' }));
+
+        if (exitSubprocess) {
+          backend.send({ type: 'exit' });
+        }
+
+        backend.close();
+        await backend.closed;
+
+        if (exitSubprocess) {
+          await waitForSubprocessExit();
+        }
+      }
+    });
+
+    let initResult = await client.initialize();
+
+    if (!initResult.ok) {
+      return initResult;
+    }
+
+    // TODO: Move to Client
+    // if (result.identifier !== bridgeOptions.identifier) {
+    //   return {
+    //     ok: false,
+    //     reason: 'identifier_mismatch'
+    //   };
+    // }
 
     return {
       ok: true,
-      client: result.client,
-      closed: result.client.closed
+      client
     };
   }
 
-  throw new Error();
+  throw new Error('Not implemented');
 }

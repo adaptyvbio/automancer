@@ -17,7 +17,7 @@ from pr1.host import Host
 from pr1.master.analysis import MasterAnalysis
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseRunner
-from pr1.util.asyncio import run_anonymous
+from pr1.util.asyncio import cancel_task, run_anonymous
 from pr1.util.misc import race
 
 from . import logger, namespace
@@ -250,14 +250,10 @@ class DevicesStateManager(UnitStateManager):
       node_info = self._node_infos[node]
 
       assert node_info.task
+      await cancel_task(node_info.task)
       node_info.task.cancel()
-
-      try:
-        await node_info.task
-      except asyncio.CancelledError:
-        pass
-
       node_info.task = None
+
       del self._node_infos[node]
 
   async def clear(self, item):

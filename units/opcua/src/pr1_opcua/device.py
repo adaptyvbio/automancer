@@ -92,7 +92,9 @@ class OPCUADeviceNode(PollableReadableNode):
       raise NodeUnavailableError from e
 
 class OPCUADeviceBooleanNode(OPCUADeviceNode, BooleanNode):
-  pass
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    self.icon = "toggle_on"
 
 class OPCUADeviceNumericNode(OPCUADeviceNode, NumericNode):
   def __init__(
@@ -106,6 +108,8 @@ class OPCUADeviceNumericNode(OPCUADeviceNode, NumericNode):
       unit=(quantity.units if quantity is not None else None),
       **kwargs
     )
+
+    self.icon = "speed"
 
 
 dtype_map: dict[str, str] = {

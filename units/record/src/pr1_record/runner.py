@@ -11,6 +11,7 @@ import pandas as pd
 from pr1.devices.nodes.common import NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import WatchableNode
+from pr1.devices.nodes.value import NullType
 from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.langservice import PathFileRef
@@ -18,7 +19,7 @@ from pr1.master.analysis import MasterAnalysis, MasterError, SystemMasterError
 from pr1.reader import LocatedString, LocatedValue
 from pr1.state import StateEvent, UnitStateInstance
 from pr1.units.base import BaseProcessRunner
-from pr1.util.asyncio import AsyncCancelable
+from pr1.util.asyncio import AsyncCancelable, wait_all
 from pr1.util.misc import Exportable
 from pr1.util.pool import Pool
 
@@ -90,7 +91,7 @@ class RecordStateInstance(UnitStateInstance):
     for field in self._fields:
       value = field.node.value
 
-      if value is not None:
+      if (value is not None) and not isinstance(value, NullType):
         row.append(value.magnitude)
       else:
         match field.dtype.kind:
@@ -142,20 +143,23 @@ class RecordStateInstance(UnitStateInstance):
         if not node:
           analysis.errors.append(MissingNodeError(field_data['value']))
           failure = True
-        elif not isinstance(node, WatchableNode) or not isinstance(node, NumericNode):
+        elif (not isinstance(node, WatchableNode)) or (not isinstance(node, NumericNode)):
           analysis.errors.append(InvalidNodeError(field_data['value']))
           failure = True
-        elif dtype and (node.dtype.kind != dtype.kind):
-          analysis.errors.append(InvalidDataTypeError(field_data['dtype']))
-          failure = True
         else:
-          field = RecordField(
-            dtype=(dtype or node.dtype),
-            node=node
-          )
+          node_dtype = np.dtype(node.dtype)
 
-          dtype_items.append((name or str(), field.dtype))
-          self._fields.append(field)
+          if dtype and (node_dtype.kind != dtype.kind):
+            analysis.errors.append(InvalidDataTypeError(field_data['dtype']))
+            failure = True
+          else:
+            field = RecordField(
+              dtype=(dtype or node_dtype),
+              node=node
+            )
+
+            dtype_items.append((name or str(), field.dtype))
+            self._fields.append(field)
 
     if failure:
       return analysis, Ellipsis
@@ -168,24 +172,16 @@ class RecordStateInstance(UnitStateInstance):
   def apply(self):
     assert self._data is not None
 
-    events = list[Event]()
-
-    for field in self._fields:
+    async def create_reg(field: RecordField):
       assert not field.reg
-
-      match field.node:
-        case PolledReadableNode():
-          field.reg = field.node.watch(self._read, interval=1.0)
-        case SubscribableReadableNode():
-          field.reg, ready_event = field.node.watch(self._read)
-          events.append(ready_event)
+      field.reg = await field.node.watch_value(lambda node: self._read())
 
     self._notify(StateEvent(RecordStateLocation(rows=len(self._data))))
 
     async def wait_ready():
       assert self._data is not None
 
-      await asyncio.gather(*[event.wait() for event in events])
+      await wait_all([create_reg(field) for field in self._fields])
 
       self._read()
       self._notify(StateEvent(RecordStateLocation(rows=len(self._data)), settled=True))

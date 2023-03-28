@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from types import EllipsisType
 from typing import Literal, Optional, cast
 
-from pr1.devices.node import AsyncCancelable, BaseReadableNode
+from pr1.devices.nodes.readable import WatchableNode
 from pr1.error import Error
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable, PythonExprObject
@@ -12,6 +12,7 @@ from pr1.master.analysis import MasterAnalysis
 from pr1.reader import LocatedString
 from pr1.state import StateEvent, UnitStateInstance
 from pr1.units.base import BaseProcessRunner
+from pr1.util.asyncio import AsyncCancelable, cancel_task
 from pr1.util.misc import Exportable
 from pr1.util.pool import Pool
 
@@ -25,11 +26,12 @@ class ExpectError(Error):
 
 @dataclass(kw_only=True)
 class EntryInfo:
-  dependencies: set[tuple[BaseReadableNode, Literal['connected', 'value']]] = field(default_factory=set)
+  dependencies: set[tuple[WatchableNode, Literal['connected', 'value']]] = field(default_factory=set)
   expr_object: PythonExprObject
   initialization_task: Optional[Task] = None
   message: Optional[Evaluable[LocatedString]]
   registration: Optional[AsyncCancelable] = None
+  warning: bool
 
 @dataclass(kw_only=True)
 class StateLocation(Exportable):
@@ -51,7 +53,12 @@ class StateInstance(UnitStateInstance):
     for entry in state.entries:
       expr_object = entry['condition']
 
-      entry_info = EntryInfo(expr_object=expr_object, message=entry.get('message'))
+      entry_info = EntryInfo(
+        expr_object=expr_object,
+        message=entry.get('message'),
+        warning=(('effect' in entry) and (entry['effect'].value == 'warning'))
+      )
+
       self._entry_infos.append(entry_info)
 
       dependencies = cast(set, expr_object.metadata.get('devices.dependencies')) or set()
@@ -59,7 +66,7 @@ class StateInstance(UnitStateInstance):
       for dependency in dependencies:
         node = self._runner._host.root_node.find(dependency.path)
 
-        if isinstance(node, BaseReadableNode):
+        if isinstance(node, WatchableNode):
           entry_info.dependencies.add((node, dependency.endpoint))
 
     return analysis, None
@@ -74,8 +81,6 @@ class StateInstance(UnitStateInstance):
     if isinstance(result, EllipsisType):
       failure = True
     elif not result.value:
-      failure = True
-
       if entry_info.message:
         message_result = analysis.add(entry_info.message.eval(EvalContext(stack=self._stack), final=True))
 
@@ -86,14 +91,23 @@ class StateInstance(UnitStateInstance):
       else:
         message = "Expected true value"
 
-      analysis.errors.append(ExpectError(message))
+      if entry_info.warning:
+        analysis.warnings.append(ExpectError(message))
+        failure = False
+      else:
+        analysis.errors.append(ExpectError(message))
+        failure = True
     else:
       failure = False
 
-    self._notify(StateEvent(
-      analysis=MasterAnalysis.cast(analysis),
-      failure=failure
-    ))
+    analysis = MasterAnalysis.cast(analysis)
+
+    if (not analysis.empty) or failure:
+      self._notify(StateEvent(
+        analysis=analysis,
+        failure=failure,
+        settled=True
+      ))
 
   async def _initialize(self):
     for entry_info in self._entry_infos:
@@ -105,21 +119,14 @@ class StateInstance(UnitStateInstance):
 
   async def _initialize_entry(self, entry_info: EntryInfo):
     listener = lambda nodes: self._check_entry(entry_info)
-    entry_info.registration = await asyncio.create_task(BaseReadableNode.watch_values([node for node, endpoint in entry_info.dependencies], listener))
+    entry_info.registration = await asyncio.create_task(WatchableNode.watch_values([node for node, endpoint in entry_info.dependencies], listener))
 
     self._check_entry(entry_info)
 
   async def _deinitialize(self):
     for entry_info in self._entry_infos:
-      if entry_info.initialization_task:
-        entry_info.initialization_task.cancel()
-
-        try:
-          await entry_info.initialization_task
-        except asyncio.CancelledError:
-          pass
-
-        entry_info.initialization_task = None
+      await cancel_task(entry_info.initialization_task)
+      entry_info.initialization_task = None
 
       if entry_info.registration:
         await entry_info.registration.cancel()

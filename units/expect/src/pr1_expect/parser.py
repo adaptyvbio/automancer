@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable, PythonExprObject
 from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState
-from pr1.reader import LocatedList, LocatedString
+from pr1.reader import LocatedList, LocatedString, LocatedValue
 
 from . import namespace
 
@@ -16,6 +16,7 @@ class Attributes(TypedDict, total=False):
 
 class StateDataEntry(TypedDict):
   condition: PythonExprObject
+  effect: NotRequired[LocatedValue[Literal['error', 'warning']]]
   message: NotRequired[Evaluable[LocatedString]]
 
 @dataclass
@@ -41,7 +42,7 @@ class Parser(BaseParser):
               lang.PotentialExprType(lang.BoolType(), dynamic=True, literal=False),
               required=True
             ),
-            'effect': lang.PotentialExprType(lang.EnumType('error', 'warning')),
+            'effect': lang.PotentialExprType(lang.EnumType('error', 'warning'), static=True),
             'message': lang.PotentialExprType(lang.StrType())
           })
         ),

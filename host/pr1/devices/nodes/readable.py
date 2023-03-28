@@ -150,6 +150,12 @@ class SubscribableReadableNode(WatchableNode, ConfigurableNode):
       await cancel_task(self._watch_task)
       self._watch_task = None
 
+  def _trigger(self):
+    if self._watch_init_task and self._watch_task:
+      for listener in self._value_listeners:
+        listener(self)
+
+
   # Called by the consumer
 
   async def watch_value(self, listener, /):

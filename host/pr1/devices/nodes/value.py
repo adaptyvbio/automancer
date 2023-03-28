@@ -122,6 +122,8 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     return False
 
   async def write(self, value: T | NullType, /):
+    from .readable import SubscribableReadableNode
+
     self.target_value = value
 
     async with self._lock:
@@ -132,6 +134,9 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
           pass
         else:
           self.value = self.target_value
+
+          if isinstance(self, SubscribableReadableNode):
+            self._trigger()
 
   def export(self):
     return {

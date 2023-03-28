@@ -1,9 +1,8 @@
-import asyncio
+import random
 import time
 from typing import Any
 
 import psutil
-from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import ConfigurableNode, NodeId
 from pr1.devices.nodes.numeric import NumericNode
@@ -30,15 +29,12 @@ class SystemNode(DeviceNode):
     self.nodes: dict[str, ConfigurableNode] = {
       node.id: node for node in {
         EpochNode(),
-        ProcessMemoryUsageNode()
+        ProcessMemoryUsageNode(),
+        RandomNode()
       }
     }
 
 class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
-  connected = True
-  id = NodeId('memory')
-  label = "Process memory usage"
-
   def __init__(self):
     super().__init__(
       readable=True,
@@ -47,6 +43,10 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
       unit=ureg.byte
     )
 
+    self.connected = True
+    self.id = NodeId('memory')
+    self.label = "Process memory usage"
+
     self._process = psutil.Process()
 
   async def _read_value(self):
@@ -54,20 +54,35 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
     return memory_info.rss * ureg.byte
 
 class EpochNode(PollableReadableNode, NumericNode):
-  connected = True
-  id = NodeId('epoch')
-  label = "Unix epoch"
-
   def __init__(self):
     super().__init__(
       readable=True,
-      dtype='u1',
+      dtype='u8',
       min_interval=0.3,
       unit=ureg.sec
     )
 
+    self.connected = True
+    self.id = NodeId('epoch')
+    self.label = "Unix epoch"
+
   async def _read_value(self):
     return time.time() * ureg.sec
+
+class RandomNode(PollableReadableNode, NumericNode):
+  def __init__(self):
+    super().__init__(
+      readable=True,
+      dtype='f4',
+      min_interval=0.2
+    )
+
+    self.connected = True
+    self.id = NodeId('random')
+    self.label = "Random"
+
+  async def _read_value(self):
+    return random.random()
 
 
 class Executor(BaseExecutor):

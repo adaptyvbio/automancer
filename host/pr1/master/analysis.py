@@ -71,6 +71,10 @@ class MasterAnalysis(Exportable):
   errors: list[MasterError] = field(default_factory=list)
   warnings: list[MasterError] = field(default_factory=list)
 
+  @property
+  def empty(self):
+    return (not self.effects) and (not self.errors) and (not self.warnings)
+
   def __add__(self, other: 'MasterAnalysis'):
     return MasterAnalysis(
       effects=(self.effects + other.effects),

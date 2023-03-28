@@ -39,8 +39,8 @@ class StateParser(BaseParser):
   def parse_block(self, attrs, /, adoption_stack, trace):
     return Analysis(), BlockUnitData(transforms=[StateTransform(
       parser=self,
-      settle=(attrs['settle'].value if ('settle' in attrs) else False),
-      stable=(attrs['stable'].value if ('stable' in attrs) else False)
+      settle=(('settle' in attrs) and attrs['settle'].value),
+      stable=(('stable' in attrs) and attrs['stable'].value)
     )])
 
 @debug

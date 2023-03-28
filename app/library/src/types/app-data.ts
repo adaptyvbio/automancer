@@ -10,6 +10,8 @@ export interface DraftEntry {
   path: string;
 }
 
+export type PythonVersion = [number, number, number];
+
 export interface PythonInstallation {
   id: string;
   leaf: boolean;
@@ -18,7 +20,7 @@ export interface PythonInstallation {
     architectures: string[] | null;
     isVirtualEnv: boolean;
     supportsVirtualEnv: boolean;
-    version: [number, number, number];
+    version: PythonVersion;
   };
   symlink: boolean;
 }
@@ -96,6 +98,11 @@ export interface ServerConfiguration {
     };
   })[];
   identifier: HostIdentifier;
+  static: {
+    hostname: string;
+    port: number;
+    secure: boolean;
+  } | null;
   version: number;
 }
 

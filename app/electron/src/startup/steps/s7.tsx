@@ -1,8 +1,7 @@
 //* Search for remote hosts
 
 import { Pool, React, Selector } from 'pr1';
-import type { AdvertisedHostInfo, HostIdentifier } from 'pr1-library';
-import { Depromisify } from '../../interfaces';
+import { Depromisify, HostIdentifier } from 'pr1-shared';
 
 import { HostCreatorData, HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
@@ -64,7 +63,7 @@ export class Component extends React.Component<HostCreatorStepProps<Data>, State
         this.props.setData({
           stepIndex: 1,
 
-          options: this.state.remoteHostInfos?.find((hostInfo) => {
+          options: this.state.remoteHostInfos!.find((hostInfo) => {
             let bridge = hostInfo.bridges[0];
             return bridge.options.identifier === this.props.data.selectedHostIdentifier;
           })!.bridges[0].options,

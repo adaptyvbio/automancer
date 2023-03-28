@@ -1,9 +1,9 @@
 import { HostInfo, HostInfoId, Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostSettingsId, HostSettingsRecord } from 'pr1-library';
 import seqOrd from 'seq-ord';
 
 import { HostCreator } from './host-creator';
 import { NativeContextMenuProvider } from '../shared/context-menu';
-import { HostSettingsId, HostSettingsRecord } from '../interfaces';
 
 
 export interface AppProps {
@@ -56,12 +56,12 @@ export class App extends React.Component<AppProps, AppState> {
             Object.values(this.state.hostSettingsRecord)
               .map((hostSettings): HostInfo => ({
                 id: (hostSettings.id as string as HostInfoId),
-                description: (hostSettings.type === 'tcp')
+                description: (hostSettings.options.type === 'tcp')
                   ? `${hostSettings.options.hostname}:${hostSettings.options.port}`
                   : 'Local',
                 imageUrl: null,
                 label: hostSettings.label,
-                local: (hostSettings.type === 'local')
+                local: (hostSettings.options.type === 'local')
               }))
               .sort(seqOrd(function* (a, b, rules) {
                 yield rules.text(a.label, b.label);

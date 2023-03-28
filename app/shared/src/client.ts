@@ -1,6 +1,7 @@
 import { Deferred, defer } from './defer';
 import { createErrorWithCode } from './error';
-import { ServerProtocol, ClientProtocol, HostIdentifier, HostState } from './index';
+import { HostIdentifier, HostState } from './types/host';
+import { ClientProtocol, RequestFunc, ServerProtocol } from './types/protocol';
 
 
 export interface ClientBackend {
@@ -16,6 +17,7 @@ export class Client {
   private nextRequestId = 0x10000;
   private requests = new Map<number, Deferred<unknown>>();
   private userClose: (() => Promise<void>) | null;
+  private userClosing = false;
 
   identifier: HostIdentifier | null = null;
   state: HostState | null = null;
@@ -31,13 +33,23 @@ export class Client {
   close() {
     if (this.userClose) {
       this.closedDeferred.resolve(this.userClose());
+      this.userClosing = true;
     } else {
       this.backend.close();
     }
   }
 
   get closed() {
-    return this.closedDeferred?.promise ?? this.backend.closed;
+    return (async () => {
+      await Promise.race([
+        this.backend.closed,
+        this.closedDeferred.promise
+      ]);
+
+      if (this.userClosing) {
+        await this.closedDeferred.promise;
+      }
+    })();
   }
 
   async initialize() {
@@ -93,7 +105,7 @@ export class Client {
     this.messageCallback = callback;
   }
 
-  async request<T extends ServerProtocol.ResponseMessage['data']>(data: ClientProtocol.RequestMessage['data']): Promise<T> {
+  request: RequestFunc = async (data: unknown) => {
     let requestId = this.nextRequestId++;
     let deferred = defer<unknown>();
 
@@ -105,7 +117,7 @@ export class Client {
       data
     });
 
-    return (await deferred.promise) as T;
+    return (await deferred.promise) as any;
   }
 
   sendRawMessage(message: ClientProtocol.Message) {

@@ -176,6 +176,7 @@ export class SocketClientBackend {
             reason: 'untrusted_server',
             tlsInfo: this.socket.tlsInfo!
           } as const;
+        case 'EADDRNOTAVAIL':
         case 'ECONNREFUSED':
         case 'ENOENT':
           return {
@@ -219,7 +220,7 @@ export class SocketClientBackend {
       return openResult;
     }
 
-    let client = new Client(openResult.backend);
+    let client = new Client(backend);
     let initResult = await client.initialize();
 
     if (!initResult.ok) {
@@ -228,6 +229,10 @@ export class SocketClientBackend {
     }
 
     await backend.close();
-    return openResult;
+
+    return {
+      ...initResult,
+      ...openResult
+    };
   }
 }

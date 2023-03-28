@@ -90,7 +90,7 @@ export class CoreApplication {
 
       let hostSettings = hostWindow.hostSettings;
 
-      if ((error === 'net::ERR_CERT_AUTHORITY_INVALID') && (hostSettings.type === 'tcp') && hostSettings.options.secure) {
+      if ((error === 'net::ERR_CERT_AUTHORITY_INVALID') && (hostSettings.options.type === 'tcp') && hostSettings.options.secure) {
         let prefix = 'sha256/';
         let rawFingerprint = certificate.fingerprint;
 
@@ -267,11 +267,12 @@ export class CoreApplication {
           ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
+            label: options.label,
             options: {
               type: 'tcp',
               ...options.options
             }
-          }
+          } satisfies HostSettings
         }
       });
 
@@ -351,19 +352,19 @@ export class CoreApplication {
         if (options.pythonInstallationSettings.virtualEnv) {
           this.logger.debug('Creating virtual environment');
 
-          await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
+          await util.runCommand([pythonInstallation.path, '-m', 'venv', envPath], { architecture, timeout: 60e3 });
           pythonPath = path.join(envPath, 'bin/python');
 
           let corePackagesDirPath = util.getResourcePath('packages');
           for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
             this.logger.debug(`Installing core package '${corePackageRelPath}'`);
-            await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
+            await util.runCommand([pythonPath, '-m', 'pip', 'install', path.join(corePackagesDirPath, corePackageRelPath)], { architecture, timeout: 60e3 });
           }
         }
 
         this.logger.debug('Initializing host configuration');
 
-        let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
+        let [confStdout, _] = await util.runCommand([pythonPath, '-m', 'pr1_server', '--data-dir', hostDirPath, '--initialize'], { architecture, timeout: 60e3 });
         conf = JSON.parse(confStdout) as ServerConfiguration;
       } catch (err: any) {
         util.logError(err, this.logger);

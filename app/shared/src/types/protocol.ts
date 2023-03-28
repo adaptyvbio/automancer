@@ -1,4 +1,56 @@
-import { HostIdentifier, HostState } from './host';
+import { Chip, ChipId, HostIdentifier, HostState } from './host';
+import { UnionToIntersection } from './util';
+
+
+export type ReqResPairs = [
+  // Server requests
+  [
+    { type: 'isBusy', },
+    boolean
+  ],
+
+  // Host requests
+  [
+    { type: 'createChip'; },
+    { chipId: ChipId; }
+  ],
+  [
+    { type: 'createDraftSample'; },
+    string
+  ],
+  [
+    { type: 'deleteChip';
+      chipId: ChipId;
+      trash: boolean; },
+    void
+  ],
+  [
+    { type: 'duplicateChip';
+      chipId: ChipId;
+      template: boolean; },
+    void
+  ],
+  [
+    { type: 'reloadUnits'; },
+    void
+  ],
+  [
+    { type: 'revealChipDirectory';
+      chipId: ChipId; },
+    void
+  ],
+  [
+    { type: 'upgradeChip';
+      chipId: ChipId; },
+    void
+  ]
+];
+
+export type RequestFuncFromPair<T extends [unknown, unknown]> = (request: T[0]) => Promise<T[1]>;
+export type RequestFuncT<T extends [unknown, unknown][]> = UnionToIntersection<{
+  [S in keyof T]: RequestFuncFromPair<T[S]>;
+}[number]>;
+export type RequestFunc = RequestFuncT<ReqResPairs>;
 
 
 export namespace ClientProtocol {

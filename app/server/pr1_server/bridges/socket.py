@@ -92,7 +92,8 @@ class SocketBridge(BridgeProtocol):
     if self._family != socket.AF_INET:
       return list[BridgeAdvertisementInfo]()
 
-    hostname, port = self._address
+    assert isinstance(self.sockname, tuple)
+    hostname, port = self.sockname
 
     return [BridgeAdvertisementInfo(
       type="_tcp.local.",

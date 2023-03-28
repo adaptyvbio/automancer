@@ -3,7 +3,7 @@ import electron from 'electron';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { PythonInstallation, PythonInstallationRecord } from 'pr1-library';
+import { PythonInstallation, PythonInstallationRecord, PythonVersion } from 'pr1-library';
 import tls from 'tls';
 import which from 'which';
 
@@ -58,9 +58,13 @@ export async function findPythonInstallations() {
   let possiblePythonLocations = [
     'python3',
     'python',
-    '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
-    '/opt/homebrew/bin/python3',
-    '/usr/local/bin/python3'
+    ...((process.platform === 'darwin')
+      ? [
+        '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
+        '/opt/homebrew/bin/python3',
+        '/usr/local/bin/python3'
+      ]
+      : [])
   ];
 
   let condaList = await runCommand('conda env list --json', { ignoreErrors: true });
@@ -136,25 +140,30 @@ export async function findPythonInstallations() {
 }
 
 export async function getPythonInstallationInfo(location: string): Promise<PythonInstallation['info'] | null> {
-  let architectures, isVirtualEnv, supportsVirtualEnv, version;
+  let architectures: string[] | null;
+  let isVirtualEnv: boolean;
+  let supportsVirtualEnv: boolean;
+  let version: PythonVersion;
 
   {
-    let result = await runCommand(`"${location}" --version`, { ignoreErrors: true });
+    let result = await runCommand([location, '--version'], { ignoreErrors: true });
 
     if (!result) {
       return null;
     }
 
     let [stdout, stderr] = result;
-    version = parsePythonVersion(stdout || stderr);
+    let possibleVersion = parsePythonVersion(stdout || stderr);
 
-    if (!version) {
+    if (!possibleVersion) {
       return null;
     }
+
+    version = possibleVersion;
   }
 
   if (process.platform === 'darwin') {
-    let [stdout, _stderr] = await runCommand(`file "${location}"`);
+    let [stdout, _stderr] = await runCommand(['file', location]);
     let matches = Array.from(stdout.matchAll(/executable ([a-z0-9_]+)$/gm));
 
     architectures = matches.map((match) => match[1]);
@@ -163,11 +172,11 @@ export async function getPythonInstallationInfo(location: string): Promise<Pytho
   }
 
   {
-    let [stdout, _stderr] = await runCommand(`"${location}" -c "import sys; print('Yes' if sys.base_prefix != sys.prefix else 'No')"`)
-    isVirtualEnv = (stdout == "Yes\n")
+    let [stdout, _stderr] = await runCommand([location, '-c', `import sys; print('Yes' if sys.base_prefix != sys.prefix else 'No')`]);
+    isVirtualEnv = (stdout == "Yes\n");
   }
 
-  supportsVirtualEnv = (await runCommand(`"${location}" -m venv -h`, { ignoreErrors: true })) !== null;
+  supportsVirtualEnv = (await runCommand([location, '-m', 'venv', '-h'], { ignoreErrors: true })) !== null;
 
   return {
     architectures,
@@ -201,7 +210,7 @@ export function logError(err: any, logger: Logger) {
   }
 }
 
-export function parsePythonVersion(input: string): [number, number, number] | null {
+export function parsePythonVersion(input: string): PythonVersion | null {
   let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(input);
 
   if (match) {
@@ -221,15 +230,21 @@ export interface RunCommandOptions {
   timeout?: number;
 }
 
-export async function runCommand(rawCommand: string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
-export async function runCommand(rawCommand: string, options?: RunCommandOptions): Promise<[string, string]>;
-export async function runCommand(rawCommand: string, options?: RunCommandOptions) {
-  let command = (options?.architecture && (process.platform === 'darwin'))
-    ? `arch -arch "${options.architecture}" ${rawCommand}`
-    : rawCommand;
+export async function runCommand(args: string[] | string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
+export async function runCommand(args: string[] | string, options?: RunCommandOptions): Promise<[string, string]>;
+export async function runCommand(args: string[] | string, options?: RunCommandOptions) {
+  if (typeof args === 'string') {
+    args = args.split(' ');
+  }
+
+  if (options?.architecture && (process.platform === 'darwin')) {
+    args = ['arch', '-arch', options.architecture, ...args];
+  }
+
+  let [execPath, ...otherArgs] = args;
 
   return await new Promise<[string, string] | null>((resolve, reject) => {
-    childProcess.exec(command, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
+    childProcess.execFile(execPath, otherArgs, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
       if (err) {
         if (options?.ignoreErrors) {
           resolve(null);

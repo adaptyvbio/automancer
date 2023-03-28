@@ -69,6 +69,10 @@ class Backend:
 
 class App:
   def __init__(self, args: argparse.Namespace, /):
+    self.args = args
+
+    # Display information
+
     logger.info(f"Running process with id {os.getpid()}")
     logger.info(f"Running Python {sys.version}")
     logger.info(f"Running on platform {platform.platform()}")
@@ -152,16 +156,12 @@ class App:
     # Misc
 
     self.updating = False
-    self.zeroconf: Optional[AsyncZeroconf] = None
-    self.zeroconf_services = list[AsyncServiceInfo]()
 
     self._pool: Optional[Pool] = None
     self._stop_event: Optional[asyncio.Event] = None
 
 
-  async def initialize(self):
-    # Register advertisement
-
+  async def advertise(self):
     if self.conf.advertisement:
       infos = list[BridgeAdvertisementInfo]()
 
@@ -175,13 +175,12 @@ class App:
         port=info.port,
         properties={
           'description': self.conf.advertisement.description,
-          'identifier': self.conf.identifier,
-          'requires_auth': False
+          'identifier': self.conf.identifier
         },
         server=f"{self.conf.identifier}.local"
       ) for info in infos]
 
-      logger.debug(f"Registering {len(self.zeroconf_services)} zeroconf services")
+      logger.debug(f"Registering {len(zeroconf_services)} zeroconf services")
 
       self.zeroconf = AsyncZeroconf(ip_version=IPVersion.V4Only)
 
@@ -193,30 +192,25 @@ class App:
         except zeroconf._exceptions.NonUniqueNameException:
           logger.error(f"Failed to register zeroconf service '{service.key}'")
         else:
-          self.zeroconf_services.append(service)
+          zeroconf_services.append(service)
 
       await asyncio.gather(*[register_zeroconf_service(service) for service in zeroconf_services])
 
       logger.debug("Registered zeroconf services")
 
+      try:
+        await asyncio.Future()
+      finally:
+        logger.debug(f"Unregistering {len(zeroconf_services)} zeroconf services")
 
-    # Initialize host
+        background_tasks = await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in zeroconf_services])
+        await asyncio.gather(*background_tasks)
+        await self.zeroconf.async_close()
 
-    await self.host.initialize()
+        self.zeroconf = None
+        zeroconf_services.clear()
 
-
-  async def deinitialize(self):
-    if self.zeroconf:
-      logger.debug(f"Unregistering {len(self.zeroconf_services)} zeroconf services")
-
-      background_tasks = await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in self.zeroconf_services])
-      await asyncio.gather(*background_tasks)
-      await self.zeroconf.async_close()
-
-      self.zeroconf = None
-      self.zeroconf_services.clear()
-
-      logger.debug("Unregistered zeroconf services")
+        logger.debug("Unregistered zeroconf services")
 
 
   async def handle_client(self, client: BaseClient):
@@ -314,9 +308,7 @@ class App:
 
   async def start(self):
     try:
-      logger.debug("Initializing")
-      await self.initialize()
-      logger.debug("Initialized")
+      await self.host.initialize()
 
       try:
         async with Pool.open() as pool:
@@ -356,15 +348,17 @@ class App:
 
           logger.debug("Starting")
           await pool.start_soon(ready_event.wait())
+          pool.start_soon(self.advertise())
 
           logger.debug("Started")
 
           bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
-          sys.stdout.write(json.dumps(bridge_infos) + "\n")
-          sys.stdout.flush()
+
+          if self.args.local:
+            sys.stdout.write(json.dumps(bridge_infos) + "\n")
+            sys.stdout.flush()
       finally:
         logger.debug("Deinitializing")
-        await self.deinitialize()
     except Exception:
       logger.error("Error")
       log_exception(logger)
@@ -378,6 +372,7 @@ def main():
   parser.add_argument("--conf")
   parser.add_argument("--data-dir", required=True)
   parser.add_argument("--initialize", action='store_true')
+  parser.add_argument("--local", action='store_true')
 
   args = parser.parse_args()
 

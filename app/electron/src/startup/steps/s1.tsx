@@ -1,9 +1,9 @@
 //* Connect to remote host
 
 import { Form, LargeIcon, React, util } from 'pr1';
-import type { CertificateFingerprint, HostIdentifier, TcpHostOptions } from 'pr1-library';
+import type { CertificateFingerprint, TcpHostOptions } from 'pr1-library';
+import { Depromisify, HostIdentifier } from 'pr1-shared';
 
-import { Depromisify } from '../../interfaces';
 import { HostCreatorData, HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
 
@@ -95,9 +95,11 @@ export function Component(props: HostCreatorStepProps<Data>) {
         setResult(null);
 
         pool.add(async () => {
+          let trimmedLabel = label.trim();
+
           let result = await window.api.hostSettings.addRemoteHost({
             options: (props.data.options as TcpHostOptions),
-            label
+            label: trimmedLabel
           });
 
           await props.queryHostSettings();
@@ -106,7 +108,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
             stepIndex: 2,
 
             hostSettingsId: result.hostSettingsId,
-            label
+            label: trimmedLabel
           });
         });
 
@@ -225,7 +227,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
           {result && (() => {
             if (result.ok) {
               return (
-                <button type="submit" className="startup-editor-action-item">Finish</button>
+                <button type="submit" className="startup-editor-action-item" disabled={label.trim().length < 1}>Finish</button>
               );
             }
 

@@ -42,7 +42,7 @@ export class HostWindow {
 
     this.client = result.client as Client;
     this.client.onMessage((message) => {
-      this.window!.webContents.send('localHost.message', message);
+      this.window?.webContents.send('host.message', message);
     });
 
     this.pool.add(this.client!.start());
@@ -60,6 +60,9 @@ export class HostWindow {
       if (!this.closing || failed) {
         dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly`, 'See the log file for details.');
       }
+
+      this.closing = true;
+      this.window?.close();
     });
 
 
@@ -82,10 +85,13 @@ export class HostWindow {
     this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
-      this.closing = true;
+      if (!this.closing) {
+        this.closing = true;
+        this.window = null;
 
-      this.pool.add(this.client!.closed);
-      this.client!.close();
+        this.pool.add(this.client!.closed);
+        this.client!.close();
+      }
     });
   }
 

@@ -74,9 +74,6 @@ export class HostCreator extends React.Component<HostCreatorProps, HostCreatorSt
         cancel={() => void this.props.close()}
         context={this.state.context}
         queryHostSettings={() => this.props.queryHostSettings()}
-        launchHost={(hostSettingsId) => {
-
-        }}
         data={this.state.data}
         setData={(update) => {
           this.setState((state) => {
@@ -112,7 +109,6 @@ export type HostCreatorStepProps<Data extends HostCreatorStepData = HostCreatorD
   setData(update: ((data: Data) => HostCreatorDataUpdate<Data> | null) | HostCreatorDataUpdate<Data>): void;
 
   cancel(): void;
-  launchHost(hostSettingsId: HostSettingsId): void;
   queryHostSettings(): Promise<void>;
 }
 

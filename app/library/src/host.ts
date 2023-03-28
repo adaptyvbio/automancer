@@ -71,10 +71,15 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
             port: 0,
             secure: false
           } }
-      ]
+      ],
+      static: {
+        hostname: '127.0.0.1',
+        port: 0,
+        secure: false
+      }
     };
 
-    let args = ['-m', 'pr1_server', '--conf', JSON.stringify(conf), '--data-dir', hostOptions.dirPath];
+    let args = ['-m', 'pr1_server', '--conf', JSON.stringify(conf), '--data-dir', hostOptions.dirPath, '--local'];
     let executable = hostOptions.pythonPath;
 
     if (hostOptions.architecture && (process.platform === 'darwin')) {
@@ -211,7 +216,7 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
 
     let client = new Client(backend, {
       async close() {
-        let exitSubprocess = subprocess && !(await client.request<boolean>({ type: 'isBusy' }));
+        let exitSubprocess = subprocess && !(await client.request({ type: 'isBusy' }));
 
         if (exitSubprocess) {
           backend.send({ type: 'exit' });

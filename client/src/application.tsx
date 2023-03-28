@@ -113,6 +113,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     console.log('Initial state ->', client.state);
 
+    this.pool.add(() => client.start());
+
     client.onMessage((message) => {
       if (message.type === 'state') {
         console.log('New state ->', client.state);
@@ -241,7 +243,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
         this.pool.add(async () => {
           if (event.ctrlKey && this.state.host) {
-            await this.state.host.backend.reloadUnits();
+            await this.state.host.client.request({ type: 'reloadUnits' });
           }
 
           if (event.altKey) {
@@ -333,8 +335,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
 
   async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-    let sample = await this.state.host!.backend.createDraftSample();
-    let draftItem = await this.appBackend.createDraft({ directory: options.directory, source: sample });
+    let sample = await this.state.host!.client.request({ type: 'createDraftSample' });
+    let draftItem = await this.appBackend.createDraft({
+      directory: options.directory,
+      source: sample
+    });
 
     if (draftItem) {
       this.setState((state) => ({

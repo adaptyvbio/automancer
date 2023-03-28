@@ -1,9 +1,9 @@
 //* Create local host
 
 import { LargeIcon, React, util } from 'pr1';
+import { LocalHostOptions } from 'pr1-library';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
-import { LocalHostOptions } from '../../interfaces';
 
 
 export interface Data extends HostCreatorStepData {

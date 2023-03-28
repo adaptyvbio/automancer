@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
-import { AppData, BridgeTcp, CertificateFingerprint, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import { AppData, BridgeTcp, CertificateFingerprint, DraftEntry, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
 import * as uol from 'uol';
 
 import { MenuDef, MenuEntryId } from 'pr1';
@@ -153,7 +153,8 @@ export class CoreApplication {
   }
 
   get debug() {
-    return !this.electronApp.isPackaged;
+    let envValue = process.env['DEBUG'];
+    return (!this.electronApp.isPackaged && (envValue !== '0')) || (envValue === '1');
   }
 
   async createStartupWindow() {
@@ -515,7 +516,7 @@ export class CoreApplication {
       Object.values(this.data.drafts).map((draftEntry) => [draftEntry.id, createDraftEntryState()])
     );
 
-    let createClientDraftEntry = async (draftEntry) => {
+    let createClientDraftEntry = async (draftEntry: DraftEntry) => {
       let stats;
 
       try {
@@ -548,11 +549,11 @@ export class CoreApplication {
         return null;
       }
 
-      let draftEntry = {
+      let draftEntry: DraftEntry = {
         id: crypto.randomUUID(),
         lastOpened: Date.now(),
         name: path.basename(result.filePath!),
-        path: result.filePath
+        path: result.filePath!
       };
 
       await fs.writeFile(draftEntry.path!, source);
@@ -705,7 +706,7 @@ export class CoreApplication {
 
       if (primitive.source) {
         let promise = draftEntryState.writePromise.then(async () => {
-          await fs.writeFile(draftEntry.path, primitive.source);
+          await fs.writeFile(draftEntry.path, primitive.source!);
 
           let stats = await fs.stat(draftEntry.path);
 

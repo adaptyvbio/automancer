@@ -62,14 +62,17 @@ export class HostWindow {
       }
 
       this.closing = true;
-      this.window?.close();
+
+      if (!this.app.debug) {
+        this.window?.close();
+      }
     });
 
 
     this.logger.debug('Creating the Electron window');
 
     this.window = new BrowserWindow({
-      show: !this.app.debug,
+      show: this.app.debug,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js')
@@ -85,9 +88,10 @@ export class HostWindow {
     this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
+      this.window = null;
+
       if (!this.closing) {
         this.closing = true;
-        this.window = null;
 
         this.pool.add(this.client!.closed);
         this.client!.close();

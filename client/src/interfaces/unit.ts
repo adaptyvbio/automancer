@@ -1,3 +1,4 @@
+import { UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import type { Application } from '../application';

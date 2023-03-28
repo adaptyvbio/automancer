@@ -44,9 +44,6 @@ export class Startup extends React.Component<StartupProps, StartupState> {
   }
 
   componentDidMount() {
-    // debug
-    // this.props.launchHost('a067b394-4f75-426e-b92b-7a0aa65cbf71');
-
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Alt') {
         this.setState({ fullDisplay: true });

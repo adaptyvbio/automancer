@@ -1,8 +1,8 @@
+import { Chip, ChipId, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
-import { Chip, ChipId } from '../backends/common';
 import { BlockInspector } from '../components/block-inspector';
 import { ExecutionInspector } from '../components/execution-inspector';
 import { GraphEditor } from '../components/graph-editor';
@@ -80,9 +80,14 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
 
   jump(point: unknown) {
     this.pool.add(async () => {
-      await this.props.host.backend.sendMessageToActiveBlock(this.chip.id, [], {
-        type: 'jump',
-        point
+      await this.props.host.client.request({
+        type: 'sendMessageToActiveBlock',
+        chipId: this.chip.id,
+        path: [],
+        message: {
+          type: 'jump',
+          point
+        }
       });
     });
   }
@@ -106,7 +111,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
       return null;
     }
 
-    let metadataTools = this.props.host.units.metadata as unknown as MetadataTools;
+    let metadataTools = this.props.host.units['metadata' as UnitNamespace] as unknown as MetadataTools;
     let metadata = metadataTools.getChipMetadata(this.chip);
 
     // let block = this.master.protocol.root;

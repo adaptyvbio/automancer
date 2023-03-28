@@ -4,7 +4,6 @@ import * as React from 'react';
 import { GraphEditor } from './graph-editor';
 import type { Route } from '../application';
 import type { Draft, DraftCompilation } from '../draft';
-import { Chip, ChipCondition, ChipId, ProtocolLocation } from '../backends/common';
 import { Icon } from '../components/icon';
 import { ProtocolOverview } from '../components/protocol-overview';
 import { ProtocolTimeline } from '../components/protocol-timeline';
@@ -13,6 +12,7 @@ import { Host } from '../host';
 import { Codes } from '../units';
 import * as util from '../util';
 import { Pool } from '../util';
+import { Chip, ChipCondition, ChipId, ProtocolLocation } from 'pr1-shared';
 
 
 export interface Plan {
@@ -84,10 +84,11 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                 <h2>Start protocol</h2>
                 <div className="superimposed-root">
                   <select className="superimposed-target" onInput={(event) => {
-                    let chipId = event.currentTarget.value;
+                    let chipId = event.currentTarget.value as ChipId;
                     let _chip = this.props.host.state.chips[chipId] as Chip;
 
-                    this.props.host.backend.startDraft({
+                    this.props.host.client.request({
+                      type: 'startDraft',
                       chipId,
                       draftId: crypto.randomUUID(),
                       source: this.props.draft.item.source!,
@@ -125,7 +126,7 @@ export class DraftOverview extends React.Component<DraftOverviewProps, DraftOver
                 <p>Invalid source code</p>
                 <button type="button" className="btn" onClick={() => {
                   // TODO: With the navigation API, add { info: { revealError: true } }
-                  this.props.setRoute(['protocol', this.props.draft.id, 'text']);
+                  // this.props.setRoute(['protocol', this.props.draft.id, 'text']);
                 }}>Open code editor</button>
               </div>
             </div>

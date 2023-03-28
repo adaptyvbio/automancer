@@ -1,3 +1,4 @@
+import { Chip, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import formStyles from '../../styles/components/form.module.scss';
@@ -10,11 +11,10 @@ import { Host } from '../host';
 import { getBlockAggregates, getBlockLabel, UnitTools } from '../unit';
 import { FeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
-import { Chip } from '../backends/common';
 import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
-import { UnitContext, UnitNamespace } from '../interfaces/unit';
+import { UnitContext } from '../interfaces/unit';
 
 
 export interface ExecutionInspectorProps {
@@ -144,7 +144,11 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                         if (message) {
                           this.pool.add(async () => {
-                            await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, execPath, message);
+                            await this.props.host.client.request({
+                              type: 'sendMessageToActiveBlock',
+                              chipId: this.props.chip.id,
+                              path: execPath, message
+                            });
                           });
                         }
                       }}>
@@ -224,15 +228,30 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 if (aggregateIndex !== null) {
                   if ((pausedAggregateIndex !== null) && (pausedAggregateIndex < aggregateIndex)) {
                     let prevAggregate = aggregates[aggregateIndex - 1];
-                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath.slice(0, prevAggregate.offset), { type: 'resume' });
+                    await this.props.host.client.request({
+                      type: 'sendMessageToActiveBlock',
+                      chipId: this.props.chip.id,
+                      path: activeExecPath.slice(0, prevAggregate.offset),
+                      message: { type: 'resume' }
+                    });
                   } else {
                     let aggregate = aggregates[aggregateIndex];
                     let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
 
-                    await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath.slice(0, blockIndex), { type: 'pause' });
+                    await this.props.host.client.request({
+                      type: 'sendMessageToActiveBlock',
+                      chipId: this.props.chip.id,
+                      path: activeExecPath.slice(0, blockIndex),
+                      message: { type: 'pause' }
+                    });
                   }
                 } else {
-                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath, { type: 'resume' });
+                  await this.props.host.client.request({
+                    type: 'sendMessageToActiveBlock',
+                    chipId: this.props.chip.id,
+                    path: activeExecPath,
+                    message: { type: 'resume' }
+                  });
                 }
               });
             }} />
@@ -242,15 +261,30 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             <Button onClick={() => {
               this.pool.add(async () => {
                 if (pausedAggregateIndex !== null) {
-                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath, { type: 'resume' });
+                  await this.props.host.client.request({
+                    type: 'sendMessageToActiveBlock',
+                    chipId: this.props.chip.id,
+                    path: activeExecPath,
+                    message: { type: 'resume' }
+                  });
                 } else {
-                  await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath.slice(0, aggregates.at(-1).offset), { type: 'pause' });
+                  await this.props.host.client.request({
+                    type: 'sendMessageToActiveBlock',
+                    chipId: this.props.chip.id,
+                    path: activeExecPath.slice(0, aggregates.at(-1).offset),
+                    message: { type: 'pause' }
+                  });
                 }
               });
             }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>
             <Button onClick={() => {
               this.pool.add(async () => {
-                await this.props.host.backend.sendMessageToActiveBlock(this.props.chip.id, activeExecPath, { type: 'halt' });
+                await this.props.host.client.request({
+                  type: 'sendMessageToActiveBlock',
+                  chipId: this.props.chip.id,
+                  path: activeExecPath,
+                  message: { type: 'halt' }
+                });
               });
             }}>Skip</Button>
           </div>

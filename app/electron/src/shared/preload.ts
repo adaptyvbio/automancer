@@ -90,7 +90,9 @@ export type IPCEndpoint = {
     load(): Promise<DraftEntry | null>;
     openFile(draftId: DraftId, filePath: string): Promise<void>;
     revealFile(draftId: DraftId, filePath: string): Promise<void>;
-    write(draftId: DraftId, primitive: DraftPrimitive): Promise<number>;
+    watch(draftId: DraftId, callback: ((change: { lastModified: number; source: string; }) => void), onSignalAbort: ((callback: (() => void)) => void)): Promise<{ lastModified: number; source: string; }>;
+    watchStop(draftId: DraftId): Promise<void>;
+    write(draftId: DraftId, primitive: DraftPrimitive): Promise<number | null>;
   };
 };
 
@@ -145,19 +147,38 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   drafts: {
-    create: async (source: string) =>
+    create: async (source) =>
       await ipcRenderer.invoke('drafts.create', source),
-    delete: async (draftId: DraftId) =>
+    delete: async (draftId) =>
       await ipcRenderer.invoke('drafts.delete', draftId),
     list: async () =>
       await ipcRenderer.invoke('drafts.list'),
     load: async () =>
       await ipcRenderer.invoke('drafts.load'),
-    openFile: async (draftId: DraftId, filePath: string) =>
+    openFile: async (draftId, filePath) =>
       await ipcRenderer.invoke('drafts.openFile', draftId, filePath),
-    revealFile: async (draftId: DraftId, filePath: string) =>
+    revealFile: async (draftId, filePath) =>
       await ipcRenderer.invoke('drafts.revealFile', draftId, filePath),
-    write: async (draftId: DraftId, primitive) =>
+
+    // @ts-expect-error
+    watch: async (draftId, callback, onSignalAbort) => {
+      let changeListener = (event: any, { change, draftId: changeDraftId }: any) => {
+        if (changeDraftId === draftId) {
+          callback(change);
+        }
+      };
+
+      ipcRenderer.on('drafts.change', changeListener);
+
+      let change = await ipcRenderer.invoke('drafts.watch', draftId);
+      callback(change);
+
+      onSignalAbort(() => {
+        ipcRenderer.invoke('drafts.watchStop', draftId);
+        ipcRenderer.off('drafts.change', changeListener);
+      });
+    },
+    write: async (draftId, primitive) =>
       await ipcRenderer.invoke('drafts.write', draftId, primitive)
   },
 } satisfies IPCEndpoint);

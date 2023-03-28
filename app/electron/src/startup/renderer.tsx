@@ -30,6 +30,11 @@ export class App extends React.Component<AppProps, AppState> {
   override componentDidMount() {
     this.pool.add(async () => {
       await this.queryHostSettings();
+
+      await document.fonts.load('12px Material Symbols Rounded');
+      await document.fonts.load('12px Material Symbols Sharp');
+      await document.fonts.load('12px Space Mono');
+
       window.api.main.ready();
     });
   }

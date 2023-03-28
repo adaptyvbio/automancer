@@ -1,3 +1,4 @@
+import { Chip, ChipId, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 import Split from 'react-split-grid';
 
@@ -25,7 +26,6 @@ import { BlockInspector } from '../components/block-inspector';
 import * as format from '../format';
 import { ProtocolBlockPath } from '../interfaces/protocol';
 import { StartProtocolModal } from '../components/modals/start-protocol';
-import { Chip, ChipId } from '../backends/common';
 import { BaseUrl } from '../constants';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { ViewDrafts } from './protocols';
@@ -162,7 +162,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
     this.setState((state) => !state.compiling ? { compiling: true } : null);
 
-    let promise = this.props.host.backend.compileDraft({
+    let promise = this.props.host.client.request({
+      type: 'compileDraft',
       draft: {
         id: this.props.draft.id,
         documents: [
@@ -283,13 +284,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               onCancel={() => void this.setState({ startModalOpen: false })}
               onSubmit={(data) => {
                 this.pool.add(async () => {
-                  let backend = this.props.host.backend;
-                  let chipId = data.chipId ?? (await backend.createChip()).chipId;
+                  let client = this.props.host.client;
+                  let chipId = data.chipId ?? (await client.request({ type: 'createChip' })).chipId;
 
                   if (data.newChipTitle) {
-                    await backend.command({
+                    await client.request({
+                      type: 'command',
                       chipId,
-                      namespace: 'metadata',
+                      namespace: ('metadata' as UnitNamespace),
                       command: {
                         type: 'set',
                         archived: false,
@@ -302,7 +304,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                   this.chipIdAwaitingRedirection = chipId;
 
                   try {
-                    await backend.startDraft({
+                    await client.request({
+                      type: 'startDraft',
                       chipId,
                       draft: {
                         id: this.props.draft.id,

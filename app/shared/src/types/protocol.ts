@@ -1,15 +1,30 @@
 import { Chip, ChipId, HostIdentifier, HostState } from './host';
+import { ProtocolBlockPath } from './master';
+import { UnitNamespace } from './unit';
 import { UnionToIntersection } from './util';
 
 
 export type ReqResPairs = [
   // Server requests
   [
-    { type: 'isBusy', },
+    { type: 'isBusy'; },
     boolean
   ],
 
   // Host requests
+  [
+    { type: 'command';
+      chipId: ChipId;
+      command: unknown;
+      namespace: UnitNamespace; },
+    void
+  ],
+  [
+    { type: 'compileDraft';
+      draft: any;
+      options: any; },
+    any
+  ],
   [
     { type: 'createChip'; },
     { chipId: ChipId; }
@@ -37,6 +52,20 @@ export type ReqResPairs = [
   [
     { type: 'revealChipDirectory';
       chipId: ChipId; },
+    void
+  ],
+  [
+    { type: 'sendMessageToActiveBlock';
+      chipId: ChipId;
+      path: ProtocolBlockPath;
+      message: unknown; },
+    void
+  ],
+  [
+    { type: 'startDraft';
+      chipId: ChipId;
+      draftId: any;
+      source: string; },
     void
   ],
   [

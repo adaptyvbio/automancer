@@ -4,21 +4,29 @@ from typing import Generic, Optional, TypeVar
 from .value import ValueNode
 
 
-# class BooleanNode(ValueNode[bool]):
-#   def __init__(self, **kwargs):
-#     super().__init__(**kwargs)
+class BooleanNode(ValueNode[bool]):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
 
-#   async def _read(self):
-#     old_value = self.value
-#     self.value = await self._read_value()
+  async def _read(self):
+    old_value = self.value
+    self.value = await self._read_value()
 
-#     return self.value != old_value
+    return self.value != old_value
 
-#   async def _read_value(self) -> bool:
-#     raise NotImplementedError
+  async def _read_value(self) -> bool:
+    raise NotImplementedError
 
-#   def _target_reached(self):
-#     return self.value == self.target_value
+  def export(self):
+    exported = super().export()
+
+    return {
+      **exported,
+      "value": {
+        **exported["value"],
+        "type": "boolean"
+      }
+    }
 
 
 T = TypeVar('T', int, str)

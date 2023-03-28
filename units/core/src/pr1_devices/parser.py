@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
-from pr1.devices.nodes.primitive import EnumNode
+from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import Null, ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
@@ -112,12 +112,12 @@ class DevicesParser(BaseParser):
   def segment_attributes(self):
     def get_type(node):
       match node:
-        # case BooleanWritableNode():
-        #   return PrimitiveType(bool)
-        case EnumNode(cases=cases):
-          return EnumType(*[case.id for case in cases])
-        case NumericNode(nullable=nullable, unit=unit):
-          return QuantityType(unit, allow_nil=nullable)
+        case BooleanNode():
+          return PrimitiveType(bool)
+        case EnumNode():
+          return EnumType(*[case.id for case in node.cases])
+        case NumericNode():
+          return QuantityType(node.unit, allow_nil=node.nullable, min=node.min, max=node.max)
         case _:
           return AnyType()
 

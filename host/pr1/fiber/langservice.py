@@ -683,6 +683,13 @@ class PathOutsideDirError(Error):
     delta = os.path.relpath(target.value, dir_path)
     super().__init__(f"Path '{str(delta)}' is outside target directory", references=[ErrorDocumentReference.from_value(target)])
 
+class OutOfBoundsQuantityError(Error):
+  def __init__(self, target: LocatedValue, /, min: Optional[Quantity], max: Optional[Quantity]):
+    super().__init__(
+      "Out of bounds value",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
 
 class AnyType(Type):
   def __init__(self):
@@ -897,9 +904,19 @@ class ExprType(LiteralOrExprType):
     super().__init__(obj_type, dynamic=dynamic, expr_type=expr_type, field=field, static=static, _force_expr=True)
 
 class QuantityType(Type):
-  def __init__(self, unit: Optional[Unit | str], *, allow_inverse: bool = False, allow_nil: bool = False):
+  def __init__(
+    self,
+    unit: Optional[Unit | str],
+    *,
+    allow_inverse: bool = False,
+    allow_nil: bool = False,
+    min: Optional[Quantity] = None,
+    max: Optional[Quantity] = None
+  ):
     self._allow_inverse = allow_inverse # TODO: Add implementation
     self._allow_nil = allow_nil
+    self._max = max
+    self._min = min
     self._unit: Unit = ureg.Unit(unit)
 
   def analyze(self, obj, /, context):
@@ -925,10 +942,19 @@ class QuantityType(Type):
       value = obj.value
 
     analysis, result = self.check(value, self._unit, target=obj)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    if ((self._min is not None) and (result.value < self._min)) or \
+      ((self._max is not None) and (result.value > self._max)):
+      analysis.errors.append(OutOfBoundsQuantityError(result, self._min, self._max))
+      return analysis, Ellipsis
+
     return analysis, ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
   @staticmethod
-  def check(value: ureg.Quantity, unit: Unit, *, target: LocatedValue):
+  def check(value: Quantity, unit: Unit, *, target: LocatedValue):
     match value:
       case Quantity() if value.check(unit):
         return Analysis(), LocatedValue.new(value.to(unit), area=target.area)

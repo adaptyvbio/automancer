@@ -69,21 +69,6 @@ class WatchableNode(ValueNode):
     return AsyncCancelable(cancel)
 
 
-# class BooleanReadableNode(ReadableNode):
-#   def __init__(self):
-#     super().__init__()
-#     self.value: Optional[bool] = None
-
-#   def export(self):
-#     return {
-#       **super().export(),
-#       "readable": {
-#         "type": "boolean",
-#         "value": self.value
-#       }
-#     }
-
-
 class SubscribableReadableNode(WatchableNode, ConfigurableNode):
   """
   A readable node whose changes can be reported by the node's implementation.

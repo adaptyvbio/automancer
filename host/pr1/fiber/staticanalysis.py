@@ -604,7 +604,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
       if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
         return analysis, ClassRef(UnknownType)
 
-      return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
+      return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(warning=True)), ClassRef(UnknownType)
 
     case ast.Call(obj, args, keywords):
       analysis, obj_ref = evaluate_expr_type(obj, variables, context)
@@ -679,7 +679,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
           arguments={ value_type_inner.cls.generics.before_tuple[0]: subscript_type.extract() }
         ))
       else:
-        return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis()), ClassRef(UnknownType)
+        return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(warning=True)), ClassRef(UnknownType)
 
     case _:
       print("Missing", ast.dump(node, indent=2))

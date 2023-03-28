@@ -108,19 +108,28 @@ export default {
         label = '[Disabled]';
       } else {
         switch (node.value.type) {
+          case 'boolean': {
+            label = formatDynamicValue(currentValue);
+            break;
+          }
+
           case 'enum': {
             util.assert((currentValue.type === 'number') || (currentValue.type === 'string'));
             let innerValue = currentValue.value;
-
             let enumCase = node.value.cases.find((enumCase) => (enumCase.id === innerValue))!;
             label = (enumCase.label ?? enumCase.id.toString());
 
             break;
           }
 
-          default:
+          case 'numeric': {
             util.assert(currentValue.type === 'quantity');
             label = formatDynamicValue(currentValue);
+            break;
+          }
+
+          default:
+            throw new Error();
         }
       }
 

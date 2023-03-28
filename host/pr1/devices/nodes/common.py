@@ -32,7 +32,7 @@ class BaseNode(ABC):
 
   @property
   def _label(self):
-    return f"‘{self.label or self.id}’"
+    return f"'{self.label or self.id}'"
 
   def _trigger_connection_listeners(self):
     for listener in self._connection_listeners:
@@ -105,22 +105,21 @@ class ConfigurableNode(BaseNode, ABC):
       raise
 
   async def __aenter__(self):
-    if isinstance(self, ConfigurableNode):
-      async with configure(self):
-        self.connected = True
+    async with configure(self):
+      self.connected = True
 
   async def __aexit__(self, exc_name, exc, exc_type):
-    self.connected = False
-
-    async with unconfigure(self):
-      pass
+    if self.connected:
+      self.connected = False
+      await self._unconfigure()
 
 
 @contextlib.asynccontextmanager
 async def configure(node: BaseNode, /):
   if hasattr(node, '_configure'):
+    await node._configure() # type: ignore
+
     try:
-      await node._configure() # type: ignore
       yield
     except:
       await node._unconfigure() # type: ignore
@@ -133,5 +132,5 @@ async def unconfigure(node: BaseNode, /):
   try:
     yield
   finally:
-    if isinstance(node, ConfigurableNode) and node.connected:
-      await node._unconfigure()
+    if hasattr(node, '_unconfigure'):
+      await node._unconfigure() # type: ignore

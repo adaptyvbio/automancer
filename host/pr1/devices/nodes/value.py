@@ -1,11 +1,10 @@
-import asyncio
-from abc import ABC, abstractmethod
+from abc import ABC
 from asyncio import Lock
-from typing import Generic, NewType, Optional, TypeVar, cast, final
+from typing import Generic, NewType, Optional, TypeVar, final
 
 from ...fiber.expr import export_value
 from ..claim import Claimable
-from .common import BaseNode, ConfigurableNode, NodeUnavailableError
+from .common import ConfigurableNode, NodeUnavailableError, configure
 
 
 @final
@@ -19,7 +18,7 @@ T = TypeVar('T')
 
 NodeRevision = NewType('NodeRevision', int)
 
-class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
+class ValueNode(ConfigurableNode, ABC, Generic[T]):
   def __init__(self, *, nullable: bool = False, readable: bool = False, writable: bool = False):
     super().__init__()
 
@@ -74,14 +73,16 @@ class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
   # Called by the producer
 
   async def _configure(self):
-    try:
-      await self._read()
-    except NotImplementedError:
-      pass
+    async with configure(super()):
+      try:
+        await self._read()
+      except NotImplementedError:
+        pass
 
-    while (self.target_value is not None) and (self.value != self.target_value):
-      async with self._lock:
-        await self._write(self.target_value)
+      while (self.target_value is not None) and (self.value != self.target_value):
+        async with self._lock:
+          await self._write(self.target_value)
+          self.value = self.target_value
 
   # Called by the consumer
 
@@ -129,6 +130,8 @@ class ValueNode(ConfigurableNode, BaseNode, ABC, Generic[T]):
           await self._write(value)
         except NodeUnavailableError:
           pass
+        else:
+          self.value = self.target_value
 
   def export(self):
     return {

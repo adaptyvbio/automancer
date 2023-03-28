@@ -5,7 +5,7 @@ from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, TypeVar
 
 
 @dataclass
@@ -162,3 +162,15 @@ async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]
     await task
 
   return task
+
+
+async def wait_all(items: Iterable[Coroutine[Any, Any, Any]], /):
+  tasks = [asyncio.create_task(item) for item in items]
+  await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
+
+  exceptions = [exc for task in tasks if (exc := task.exception())]
+
+  if len(exceptions) >= 2:
+    raise BaseExceptionGroup("ExceptionGroup", exceptions)
+  elif exceptions:
+    raise exceptions[0]

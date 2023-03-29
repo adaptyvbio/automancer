@@ -3,7 +3,9 @@
 
   "compilerOptions": {
     "composite": true,
-    "module": "CommonJS",
+    "declarationDir": "types",
+    "module": "es2022",
+    "moduleResolution": "node",
     "outDir": "lib",
     "rootDir": "src"
   },
@@ -11,7 +13,7 @@
     "src/index.ts"
   ],
   "include": [
-    "src"
+    "src/**/*"
   ],
   "references": [
     { "path": "../electron/tsconfig.types.json" }

@@ -1,23 +1,12 @@
-import type { BaseBackend } from './backends/base';
-import type { HostId, HostState } from './backends/common';
-import type { HostSettings } from './interfaces/host';
+import type { Client, HostId, HostState } from 'pr1-shared';
+
 import type { Units } from './interfaces/unit';
 
 
 export interface Host {
-  backend: BaseBackend;
+  client: Client;
   id: HostId;
   state: HostState;
+  staticUrl: string | null;
   units: Units;
-}
-
-/**
- * @deprecated
- */
-export function formatHostSettings(hostSettings: HostSettings): string | null {
-  switch (hostSettings.options.type) {
-    case 'local': return 'Local';
-    case 'remote': return `${hostSettings.options.address}:${hostSettings.options.port}`;
-    default: return null;
-  }
 }

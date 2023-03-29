@@ -173,7 +173,7 @@ class Host:
   async def start(self):
     try:
       await asyncio.Future()
-    except asyncio.CancelledError:
+    finally:
       await self.destroy()
 
   async def destroy(self):
@@ -191,6 +191,8 @@ class Host:
 
     logger.debug("Destroyed executors")
 
+  def busy(self):
+    return any(chip.master for chip in self.chips.values())
 
   def create_chip(self):
     chip = Chip.create(

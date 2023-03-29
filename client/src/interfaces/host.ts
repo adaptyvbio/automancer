@@ -1,12 +1,18 @@
+import type { Brand } from './util';
+
+
 export interface HostInfo {
-  // id: number;
+  id: HostInfoId;
+  description: string;
   imageUrl: string | null;
-  subtitle: string;
-  title: string;
+  label: string;
+  local: boolean;
 }
 
+export type HostInfoId = Brand<string, "HostInfoId">;
 
-export type HostSettingsId = string;
+
+/* export type HostSettingsId = string;
 
 export interface HostSettings {
   id: HostSettingsId;
@@ -40,3 +46,4 @@ export interface HostSettingsData {
   defaultHostSettingsId: HostSettingsId | null;
   hosts: HostSettingsCollection;
 }
+ */

@@ -1,5 +1,7 @@
 @use "sass:math";
+
 @use "./constants" as *;
+@use "./mixins" as *;
 
 
 $color-left: #000;
@@ -170,6 +172,7 @@ $drag-region-height: 3rem;
       }
 
       &-title {
+        @include text-ellipsis();
         font-weight: 500;
 
         &:only-child {
@@ -252,6 +255,7 @@ $drag-region-height: 3rem;
         max-width: 400px;
 
         font-weight: 500;
+        overflow-wrap: break-word;
         text-align: center;
       }
     }

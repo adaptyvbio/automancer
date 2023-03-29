@@ -1,7 +1,7 @@
 {
   "name": "pr1-app",
   "version": "3.0.0",
-  "main": "lib/app/main.js",
+  "main": "lib/app/index.js",
   "types": "lib/types/types.d.ts",
   "productName": "PR–1",
   "scripts": {
@@ -10,7 +10,7 @@
     "build:app:watch": "npm run build:app -- --sourcemap=inline --watch",
     "build:client": "python3 -c \"__import__('shutil').copytree('node_modules/pr1/dist', 'lib/client', dirs_exist_ok=True)\"",
     "build:host": "./scripts/build.sh",
-    "build:preload": "esbuild src/host/preload.ts src/startup/preload.js --bundle --external:electron --outdir=lib/preload",
+    "build:preload": "esbuild src/shared/preload.ts --bundle --external:electron --outfile=lib/preload/index.js",
     "build:renderer": "esbuild src/host/renderer.tsx src/startup/renderer.tsx --bundle --external:electron --external:fs/promises --external:path --external:pr1 --external:vm --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --outdir=lib/renderer",
     "build:static": "python3 -c \"for f in __import__('pathlib').Path('src').glob('*/index.html'): d = 'lib/static' / f.relative_to('src'); d.parent.mkdir(exist_ok=True, parents=True); __import__('shutil').copy(f, d)\"",
     "build:types": "tsc --project tsconfig.types.json",
@@ -27,6 +27,8 @@
     "electron-squirrel-startup": "^1.0.0",
     "pr1": "file:../../client",
     "pr1-library": "file:../library",
+    "pr1-shared": "file:../shared",
+    "seq-ord": "^0.2.0",
     "source-map-support": "^0.5.21",
     "uol": "^0.2.0",
     "which": "^2.0.2"

@@ -1,5 +1,6 @@
+import type { UnitNamespace } from 'pr1-shared';
+
 import type { DraftRange } from '../draft';
-import type { UnitNamespace } from './unit';
 
 
 export interface Protocol {

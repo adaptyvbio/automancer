@@ -1,8 +1,10 @@
+import type { Brand } from 'pr1-shared';
+
 import { DraftItem } from './app-backends/base';
 import { Protocol } from './interfaces/protocol';
 
 
-export type DraftId = string;
+export type DraftId = Brand<string, 'DraftId'>;
 
 export type DraftLocation = DraftRange[];
 export type DraftRange = [number, number];

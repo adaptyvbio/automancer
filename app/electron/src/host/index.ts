@@ -2,97 +2,99 @@ import { BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
 import assert from 'assert';
 
-import { HostSettings } from 'pr1';
-
-import { LocalHost } from '../local-host';
-import { CoreApplication } from '../main';
-import { defer, Pool } from '../util';
+import { CoreApplication } from '..';
+import { Pool } from '../util';
+import { rootLogger } from '../logger';
+import { Client, ClientProtocol, ServerProtocol } from 'pr1-shared';
+import { createClient, HostSettings } from 'pr1-library';
 
 
 export class HostWindow {
+  client: Client | null = null;
   closed: Promise<void>;
   closing = false;
-  localHost: LocalHost | null = null;
   window: BrowserWindow | null = null;
 
-  private logger = this.app.logger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
+  private logger = rootLogger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
 
-  private closingDeferred = defer<void>();
-
-  constructor(private app: CoreApplication, private hostSettings: HostSettings) {
-    this.pool.add(async () => {
-      await this.closingDeferred.promise;
-      this.closing = true;
-    });
+  constructor(private app: CoreApplication, public hostSettings: HostSettings) {
+    this.logger.debug('Constructed');
 
     this.pool.add(() => this.start());
     this.closed = this.pool.wait();
-
-    this.logger.debug('Created');
   }
 
   private async start() {
-    this.localHost = null;
+    this.logger.debug('Creating client');
 
-    if (this.hostSettings.options.type === 'local') {
-      this.logger.debug('Starting the corresponding local host');
+    let result = await createClient(this.hostSettings, this.logger.getChild('host'), {
+      logsDirPath: this.app.logsDirPath
+    });
 
-      this.localHost = new LocalHost(this.app, this, this.hostSettings);
+    if (!result.ok) {
+      this.logger.error('Failed to create client');
+      dialog.showErrorBox('Failed to connect to setup', `Reason: ${result.reason}`);
+      return;
+    }
 
-      let waitClosed = async () => {
-        let err = await this.localHost!.closed;
+    this.logger.debug('Created client');
 
-        this.localHost = null;
+    this.client = result.client as Client;
+    this.client.onMessage((message) => {
+      this.window?.webContents.send('host.message', message);
+    });
 
-        if (err) {
-          dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly with code ${err.code}`, 'See the log file for details.');
-          // let { response } = await dialog.showMessageBox(this.window, {
-          //   message: `Host "${this.hostSettings.label}" terminated unexpectedly`,
-          //   buttons: ['Ok', 'Open log file'],
-          //   title: 'Error',
-          //   defaultId: 0,
-          //   detail: err.code ? `Code: ${err.code}` : undefined
-          // });
-        }
+    this.pool.add(this.client!.start());
 
-        if (!this.closing) {
-          this.closingDeferred.resolve();
-          this.window?.close();
-        }
-      };
+    this.pool.add(async () => {
+      let failed = false;
 
-      if (!(await this.localHost.start())) {
-        this.logger.debug('Aborting window creation');
-        await waitClosed();
-
-        return;
+      try {
+        await this.client!.closed;
+      } catch (err) {
+        console.error(err);
+        failed = true;
       }
 
-      this.pool.add(waitClosed);
-    }
+      if (!this.closing || failed) {
+        dialog.showErrorBox(`Host "${this.hostSettings.label}" terminated unexpectedly`, 'See the log file for details.');
+      }
+
+      this.closing = true;
+
+      if (!this.app.debug) {
+        this.window?.close();
+      }
+    });
 
 
     this.logger.debug('Creating the Electron window');
 
     this.window = new BrowserWindow({
-      show: false,
+      show: this.app.debug,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
-        preload: path.join(__dirname, '../preload/host/preload.js')
+        preload: path.join(__dirname, '../preload/index.js')
       }
     });
 
     this.window.maximize();
-    this.window.hide();
+
+    if (!this.app.debug) {
+      this.window.hide();
+    }
+
     this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
     this.window.on('close', () => {
-      this.closingDeferred.resolve();
+      this.window = null;
 
-      if (this.localHost) {
-        this.pool.add(this.localHost.closed);
-        this.localHost.close();
+      if (!this.closing) {
+        this.closing = true;
+
+        this.pool.add(this.client!.closed);
+        this.client!.close();
       }
     });
   }
@@ -105,5 +107,25 @@ export class HostWindow {
     }
 
     this.window.focus();
+  }
+
+  ready() {
+    this.logger.debug('Sending initialization and initial state messages');
+
+    this.window!.webContents.send('host.message', {
+      type: 'initialize',
+      identifier: this.client!.identifier!,
+      staticUrl: this.client!.staticUrl,
+      version: this.client!.version!
+    } satisfies ServerProtocol.InitializationMessage);
+
+    this.window!.webContents.send('host.message', {
+      type: 'state',
+      data: this.client!.state!
+    } satisfies ServerProtocol.StateMessage);
+  }
+
+  sendMessage(message: ClientProtocol.Message) {
+    this.client!.sendRawMessage(message);
   }
 }

@@ -1,62 +1,107 @@
-import * as net from 'net';
+import crypto from 'node:crypto';
+import net from 'node:net';
+import tls from 'node:tls';
+import { Deferred, defer, createErrorWithCode, ClientProtocol, Client, ServerProtocol, deserializeMessagesOfIterator, splitMessagesOfIterator, serializeMessage } from 'pr1-shared';
 
-import { Deferred, defer } from './util';
+import { CertificateFingerprint } from './types/app-data';
 
 
-export class SocketClientClosed extends Error {
+export class OrdinarySocketClientClosedError extends Error {
 
 }
 
-export class SocketClientBackend {
-  closed: Promise<boolean>;
-  isClosed: boolean;
-  ready: Promise<void>;
 
-  private _buffer: Buffer | null;
-  private _closedDeferred: Deferred<boolean>;
-  private _closedUser: boolean;
-  private _recvDeferred: Deferred<void> | null;
+export interface OrdinarySocketClientOptions {
+  address: {
+    host: string;
+    port: number;
+  } | {
+    path: string;
+  };
+  tls: {
+    serverCertificateCheck: boolean;
+    serverCertificateFingerprint: CertificateFingerprint | null;
+  } | null;
+}
+
+export class OrdinarySocketClient {
+  private _buffer: Buffer | null = null;
+  private _closedDeferred: Deferred<boolean> = defer();
+  private _closedUser: boolean = false;
+  private _recvDeferred: Deferred<void> | null = null;
   private _socket!: net.Socket;
 
-  constructor(options: any) {
+  closed: Promise<boolean> = this._closedDeferred.promise;
+  isClosed: boolean = false;
+  ready: Promise<void>;
+  tlsInfo!: {
+    certificate: tls.PeerCertificate;
+    fingerprint: CertificateFingerprint;
+    trusted: boolean;
+  } | null;
+
+  constructor(options: OrdinarySocketClientOptions) {
     this.ready = new Promise((resolve, reject) => {
-      this._socket = net.createConnection(options, () => {
-        resolve();
-      });
+      if (options.tls) {
+        let tlsOptions = options.tls;
 
-      this._socket.on('error', (err) => {
+        let socket = tls.connect({
+          ...options.address,
+          rejectUnauthorized: false
+        }, () => {
+          let certificate = socket.getPeerCertificate();
+          let fingerprint = crypto
+            .createHash('sha256')
+            .update(certificate.raw)
+            .digest('hex') as CertificateFingerprint;
+
+          this.tlsInfo = {
+            certificate,
+            fingerprint,
+            trusted: socket.authorized
+          };
+
+          if (tlsOptions.serverCertificateCheck && !socket.authorized) {
+            resolve(this.close().then(() => { throw createErrorWithCode('Invalid fingerprint', 'APP_UNTRUSTED_CERT'); }));
+          } else if (tlsOptions.serverCertificateFingerprint && (fingerprint !== tlsOptions.serverCertificateFingerprint)) {
+            resolve(this.close().then(() => { throw createErrorWithCode('Invalid fingerprint', 'APP_FINGERPRINT_MISMATCH'); }));
+          } else {
+            resolve();
+          }
+        });
+
+        this._socket = socket;
+      } else {
+        this._socket = net.createConnection(options.address, () => {
+          this.tlsInfo = null;
+          resolve();
+        });
+      }
+
+      this._socket.on('error', (err: any) => {
         // TODO: Handle errors after this.ready
-        // console.log('err', err);
-        reject(err);
+        reject(err)
       });
-    });
 
-    this._socket.on('end', () => {
-      this._closedDeferred.resolve(this._closedUser);
-      this.isClosed = true;
+      this._socket.on('end', () => {
+        this._closedDeferred.resolve(this._closedUser);
+        this.isClosed = true;
 
-      if (this._recvDeferred) {
-        this._recvDeferred.reject(new SocketClientClosed());
-      }
-    });
+        if (this._recvDeferred) {
+          this._recvDeferred.reject(new OrdinarySocketClientClosedError());
+        }
+      });
 
-    this._recvDeferred = null;
-    this._buffer = null;
+      this._socket.on('data', (chunk) => {
+        this._buffer = this._buffer
+          ? Buffer.concat([this._buffer, chunk])
+          : chunk;
 
-    this._closedDeferred = defer();
-    this._closedUser = false;
-    this.closed = this._closedDeferred.promise;
-    this.isClosed = false;
-
-    this._socket.on('data', (chunk) => {
-      this._buffer = this._buffer
-        ? Buffer.concat([this._buffer, chunk])
-        : chunk;
-
-      if (this._recvDeferred) {
-        this._recvDeferred.resolve();
-        this._recvDeferred = null;
-      }
+        if (this._recvDeferred) {
+          this._recvDeferred.resolve();
+          this._recvDeferred = null;
+        }
+      });
     });
   }
 
@@ -91,7 +136,7 @@ export class SocketClientBackend {
       try {
         yield await this.recv();
       } catch (err) {
-        if (err instanceof SocketClientClosed) {
+        if (err instanceof OrdinarySocketClientClosedError) {
           return;
         }
 
@@ -102,82 +147,91 @@ export class SocketClientBackend {
 }
 
 
-export class SocketClient extends SocketClientBackend {
-  private _nextRequestId = 0;
-  private _requests = new Map<number, Deferred<unknown>>();
+export class SocketClientBackend {
+  private options: OrdinarySocketClientOptions;
+  private socket!: OrdinarySocketClient;
 
-  async start() {
-    let contents = '';
+  closed!: Promise<void>;
+  messages!: AsyncIterator<ServerProtocol.Message>;
+
+  constructor(options: OrdinarySocketClientOptions) {
+    this.options = options;
+  }
+
+  async close() {
+    await this.socket.close();
+  }
+
+  async open(): Promise<any> {
+    this.socket = new OrdinarySocketClient(this.options);
 
     try {
-      for await (let chunk of this) {
-        contents += chunk.toString();
-
-        let msgs = contents.split('\n');
-        contents = msgs.at(-1)!;
-
-        for (let msg of msgs.slice(0, -1)) {
-          let message = JSON.parse(msg);
-
-          switch (message.type) {
-            case 'response': {
-              let request = this._requests.get(message.id);
-
-              if (request) {
-                request.resolve(message.data);
-                this._requests.delete(message.id);
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      if (err instanceof SocketClientClosed) {
-        for (let request of this._requests.values()) {
-          request.reject(err);
-        }
-
-        this._requests.clear();
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  override async send(data: unknown) {
-    super.send(Buffer.from(JSON.stringify(data) + '\n'));
-  }
-
-  async request(data: unknown) {
-    let requestId = this._nextRequestId++;
-    let deferred = defer<any>();
-
-    this._requests.set(requestId, deferred);
-
-    this.send({
-      id: requestId,
-      type: 'request',
-      data
-    });
-
-    return await deferred.promise;
-  }
-
-
-  static async test(options: any) {
-    let client = new SocketClientBackend(options);
-
-    try {
-      await client.ready;
+      await this.socket.ready;
     } catch (err: any) {
-      if (err.code === 'ECONNREFUSED') {
-        return false;
+      switch (err.code) {
+        case 'APP_UNTRUSTED_CERT':
+          return {
+            ok: false,
+            reason: 'untrusted_server',
+            tlsInfo: this.socket.tlsInfo!
+          } as const;
+        case 'EADDRNOTAVAIL':
+        case 'ECONNREFUSED':
+        case 'ENOENT':
+          return {
+            ok: false,
+            reason: 'refused'
+          } as const;
+        case 'ERR_SOCKET_BAD_PORT':
+          return {
+            ok: false,
+            reason: 'invalid_parameters'
+          } as const;
+        case 'APP_FINGERPRINT_MISMATCH':
+          return {
+            ok: false,
+            reason: 'fingerprint_mismatch'
+          } as const;
+        default:
+          throw err;
       }
-
-      throw err;
     }
 
-    await client.close();
-    return true;
+    this.closed = this.socket.closed.then(() => {});
+    this.messages = deserializeMessagesOfIterator(splitMessagesOfIterator(this.socket));
+
+    return {
+      ok: true,
+      tlsInfo: this.socket.tlsInfo
+    };
+  }
+
+  async send(message: ClientProtocol.Message) {
+    this.socket.send(Buffer.from(serializeMessage(message)));
+  }
+
+
+  static async test(options: OrdinarySocketClientOptions) {
+    let backend = new SocketClientBackend(options);
+    let openResult = await backend.open();
+
+    if (!openResult.ok) {
+      return openResult;
+    }
+
+    let client = new Client(backend);
+    let initResult = await client.initialize();
+
+    if (!initResult.ok) {
+      await backend.close();
+      return initResult;
+    }
+
+    await backend.close();
+
+    return {
+      ...initResult,
+      ...openResult
+    };
   }
 }

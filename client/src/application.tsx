@@ -1,5 +1,8 @@
 import { Set as ImSet, removeIn, setIn } from 'immutable';
+import { Client, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
+
+import styles from '../styles/components/application.module.scss';
 
 import type { AppBackend, DraftItem } from './app-backends/base';
 import type { Chip, ChipId } from './backends/common';
@@ -14,13 +17,10 @@ import { ViewExecution } from './views/execution';
 import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
 import { Pool } from './util';
-import { Unit, UnitNamespace } from './units';
-import { BaseBackend } from './backends/base';
+import { Unit } from './units';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-
-import styles from '../styles/components/application.module.scss';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
@@ -63,7 +63,7 @@ function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch
 
 export interface ApplicationProps {
   appBackend: AppBackend;
-  backend: BaseBackend;
+  client: Client;
   hostInfo: HostInfo;
 
   onHostStarted?(): void;
@@ -102,33 +102,36 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
   async initializeHost() {
-    let backend = this.props.backend;
+    let client = this.props.client;
+    // let result = await client.initialize();
 
-    try {
-      await backend.start();
-    } catch (err) {
-      console.error(`Backend of host failed to start with error: ${(err as Error).message}`);
-      console.error(err);
-      return;
-    }
+    // if (!result.ok) {
+    //   console.error(`Backend of host failed to start with error: ${result.reason}`);
+    //   return;
+    // }
 
-    console.log('Initial state ->', backend.state);
+    console.log('Initial state ->', client.state);
 
-    backend.onUpdate(() => {
-      console.log('New state ->', backend.state);
+    this.pool.add(() => client.start());
 
-      this.setState((state) => ({
-        host: {
-          ...state.host!,
-          state: backend.state
-        }
-      }));
-    }, { signal: this.controller.signal });
+    client.onMessage((message) => {
+      if (message.type === 'state') {
+        console.log('New state ->', client.state);
+
+        this.setState((state) => ({
+          host: {
+            ...state.host!,
+            state: client.state!
+          }
+        }));
+      }
+    });
 
     let host: Host = {
-      backend,
-      id: backend.state.info.id,
-      state: backend.state,
+      client,
+      id: client.state!.info.id,
+      state: client.state!,
+      staticUrl: client.staticUrl,
       units: (null as unknown as Host['units'])
     };
 
@@ -138,7 +141,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     this.pool.add(async () => void await this.loadUnitClients(host));
 
-    backend.closed
+    client.closed
       .catch((err) => {
         console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
         console.error(err);
@@ -147,7 +150,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         this.setState({ host: null });
       });
 
-      return backend.state;
+    return client.state;
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
@@ -166,12 +169,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let units: Record<UnitNamespace, Unit<unknown, unknown>> = Object.fromEntries(
       (await Promise.all(
         targetUnitsInfo
-          .filter((unitInfo) => unitInfo.hasClient)
+          .filter((unitInfo) => (unitInfo.hasClient && host.staticUrl))
           .map(async (unitInfo) => {
             console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
 
             try {
-              let unit = await host.backend.loadUnit(unitInfo);
+              let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, host.staticUrl!);
+              let imported = await import(url.href);
+
+              let unit = imported.default ?? imported;
+
               return [unitInfo.namespace, unit];
             } catch (err) {
               console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
@@ -226,7 +233,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
   componentDidMount() {
     window.addEventListener('beforeunload', () => {
-      this.state.host?.backend.close();
+      this.state.host?.client.close();
     }, { signal: this.controller.signal });
 
     document.addEventListener('keydown', (event) => {
@@ -235,7 +242,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
         this.pool.add(async () => {
           if (event.ctrlKey && this.state.host) {
-            await this.state.host.backend.reloadUnits();
+            await this.state.host.client.request({ type: 'reloadUnits' });
           }
 
           if (event.altKey) {
@@ -327,8 +334,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
 
   async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-    let sample = await this.state.host!.backend.createDraftSample();
-    let draftItem = await this.appBackend.createDraft({ directory: options.directory, source: sample });
+    let sample = await this.state.host!.client.request({ type: 'createDraftSample' });
+    let draftItem = await this.appBackend.createDraft({
+      directory: options.directory,
+      source: sample
+    });
 
     if (draftItem) {
       this.setState((state) => ({

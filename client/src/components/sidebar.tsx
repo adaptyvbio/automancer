@@ -134,8 +134,8 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
             )} */}
             <div className={styles.headerValueRoot}>
               <img src={this.props.hostInfo.imageUrl!} className={styles.headerValueIcon} />
-              <div className={styles.headerValueTitle}>{this.props.hostInfo.title}</div>
-              <div className={styles.headerValueSubtitle}>{this.props.hostInfo.subtitle}</div>
+              <div className={styles.headerValueTitle}>{this.props.hostInfo.label}</div>
+              <div className={styles.headerValueSubtitle}>{this.props.hostInfo.description}</div>
               <div className={styles.headerValueExpand}>
                 <span className="material-symbols-sharp">unfold_more</span>
               </div>

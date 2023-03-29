@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -12,17 +13,21 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import zeroconf
 from pr1 import Host
+from pr1.util.misc import log_exception
+from pr1.util.pool import Pool
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
 logger = logging.getLogger("pr1.app")
 
-from .bridges.protocol import BridgeAdvertisementInfo, ClientClosed, ClientProtocol
+from .bridges.protocol import BridgeAdvertisementInfo, ClientClosed, BaseClient
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 from .conf import Conf
 from .session import Session
+from .static import StaticServer
 from .trash import trash as trash_file
 
 
@@ -64,6 +69,10 @@ class Backend:
 
 class App:
   def __init__(self, args: argparse.Namespace, /):
+    self.args = args
+
+    # Display information
+
     logger.info(f"Running process with id {os.getpid()}")
     logger.info(f"Running Python {sys.version}")
     logger.info(f"Running on platform {platform.platform()}")
@@ -74,6 +83,7 @@ class App:
     self.data_dir = Path(args.data_dir).resolve()
     self.data_dir.mkdir(exist_ok=True, parents=True)
 
+    self.certs_dir = self.data_dir / "certificates"
     conf_path = self.data_dir / "conf.json"
 
     logger.debug(f"Storing data in '{self.data_dir}'")
@@ -128,86 +138,96 @@ class App:
 
     # Create host
 
-    self.clients = dict()
+    self.clients = dict[str, BaseClient]()
     self.host = Host(
       backend=Backend(self),
       update_callback=self.update
     )
 
 
-    # Create bridges
+    # Create bridges and static server
 
     self.bridges = {bridge_conf.create_bridge(app=self) for bridge_conf in self.conf.bridges}
     self.owner_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, StdioBridge)), None)
+
+    self.static_server = StaticServer(self, conf=self.conf.static) if self.conf.static else None
 
 
     # Misc
 
     self.updating = False
-    self.zeroconf = None
-    self.zeroconf_services = list()
-    self._main_task = None
+
+    self._pool: Optional[Pool] = None
+    self._stop_event: Optional[asyncio.Event] = None
 
 
-  async def initialize(self):
-    # Register advertisement
-
+  async def advertise(self):
     if self.conf.advertisement:
       infos = list[BridgeAdvertisementInfo]()
 
       for bridge in self.bridges:
         infos += bridge.advertise()
 
-      self.zeroconf_services = [AsyncServiceInfo(
+      zeroconf_services = [AsyncServiceInfo(
         f"_prone.{info.type}",
         f"{self.conf.identifier}._prone." + info.type,
         addresses=[socket.inet_aton(info.address)],
         port=info.port,
         properties={
           'description': self.conf.advertisement.description,
-          'identifier': self.conf.identifier,
-          'requires_auth': False
+          'identifier': self.conf.identifier
         },
         server=f"{self.conf.identifier}.local"
       ) for info in infos]
 
-      logger.debug(f"Registering {len(self.zeroconf_services)} zeroconf services")
+      logger.debug(f"Registering {len(zeroconf_services)} zeroconf services")
 
       self.zeroconf = AsyncZeroconf(ip_version=IPVersion.V4Only)
-      await asyncio.gather(*[self.zeroconf.async_register_service(service) for service in self.zeroconf_services])
+
+      async def register_zeroconf_service(service: AsyncServiceInfo):
+        assert self.zeroconf
+
+        try:
+          await self.zeroconf.async_register_service(service)
+        except zeroconf._exceptions.NonUniqueNameException:
+          logger.error(f"Failed to register zeroconf service '{service.key}'")
+        else:
+          zeroconf_services.append(service)
+
+      await asyncio.gather(*[register_zeroconf_service(service) for service in zeroconf_services])
 
       logger.debug("Registered zeroconf services")
 
-  async def deinitialize(self):
-    if self.zeroconf:
-      logger.debug(f"Unregistering {len(self.zeroconf_services)} zeroconf services")
+      try:
+        await asyncio.Future()
+      finally:
+        logger.debug(f"Unregistering {len(zeroconf_services)} zeroconf services")
 
-      background_tasks = await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in self.zeroconf_services])
-      await asyncio.gather(*background_tasks)
-      await self.zeroconf.async_close()
+        background_tasks = await asyncio.gather(*[self.zeroconf.async_unregister_service(service) for service in zeroconf_services])
+        await asyncio.gather(*background_tasks)
+        await self.zeroconf.async_close()
 
-      self.zeroconf = None
-      self.zeroconf_services.clear()
+        self.zeroconf = None
+        zeroconf_services.clear()
 
-      logger.debug("Unregistered zeroconf services")
+        logger.debug("Unregistered zeroconf services")
 
 
-  async def handle_client(self, client: ClientProtocol):
+  async def handle_client(self, client: BaseClient):
     try:
       logger.debug(f"Added client '{client.id}'")
 
       self.clients[client.id] = client
       requires_auth = self.auth_agents and client.remote
-      websocket_bridge = next((bridge for bridge in self.bridges if isinstance(bridge, WebsocketBridge)), None)
 
       await client.send({
         "type": "initialize",
-        "authMethods": [
-          agent.export() for agent in self.auth_agents
-        ] if requires_auth else None,
-        "features": {},
+        # "authMethods": [
+        #   agent.export() for agent in self.auth_agents
+        # ] if requires_auth else None,
+        # "features": {},
         "identifier": self.conf.identifier,
-        "staticUrl": (websocket_bridge.static_url if websocket_bridge else None),
+        "staticUrl": (self.static_server.url if self.static_server else None),
         "version": self.conf.version
       })
 
@@ -233,7 +253,9 @@ class App:
         match message["type"]:
           case "exit":
             logger.info("Exiting after receiving an exit message")
-            self.stop()
+
+            assert self._pool
+            self._pool.close()
           case "request":
             response_data = await self.process_request(client, message["data"])
 
@@ -249,9 +271,7 @@ class App:
     except Exception:
       traceback.print_exc()
     finally:
-      client.close()
       del self.clients[client.id]
-
       logger.debug(f"Removed client '{client.id}'")
 
   async def broadcast(self, message):
@@ -262,51 +282,11 @@ class App:
         pass
 
   async def process_request(self, client, request):
-    if request["type"] == "app.session.create":
-      id = str(uuid.uuid4())
-      session = Session(size=(request["size"]["columns"], request["size"]["rows"]))
-
-      client.sessions[id] = session
-      logger.info(f"Created terminal session with id '{id}'")
-
-      async def start_session():
-        try:
-          async for chunk in session.start():
-            await client.send({
-              "type": "app.session.data",
-              "id": id,
-              "data": list(chunk)
-            })
-
-          del client.sessions[id]
-          logger.info(f"Closed terminal session with id '{id}'")
-
-          await client.send({
-            "type": "app.session.close",
-            "id": id,
-            "status": session.status
-          })
-        except ClientClosed:
-          pass
-
-      loop = asyncio.get_event_loop()
-      loop.create_task(start_session())
-
-      return {
-        "id": id
-      }
-
-    elif request["type"] == "app.session.data":
-      client.sessions[request["id"]].write(bytes(request["data"]))
-
-    elif request["type"] == "app.session.close":
-      client.sessions[request["id"]].close()
-
-    elif request["type"] == "app.session.resize":
-      client.sessions[request["id"]].resize((request["size"]["columns"], request["size"]["rows"]))
-
-    else:
-      return await self.host.process_request(request, client=client)
+    match request["type"]:
+      case "isBusy":
+        return (len(self.clients) >= 2) or self.host.busy()
+      case _:
+        return await self.host.process_request(request, client=client)
 
   def update(self):
     if not self.updating:
@@ -326,60 +306,64 @@ class App:
       loop = asyncio.get_event_loop()
       loop.create_task(send_state())
 
-  def start(self):
-    logger.info("Starting app")
+  async def start(self):
+    try:
+      await self.host.initialize()
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(self.initialize())
-    loop.run_until_complete(self.host.initialize())
-
-    logger.debug(f"Initializing {len(self.bridges)} bridges")
-
-    for bridge in self.bridges:
-      loop.run_until_complete(bridge.initialize())
-
-    tasks = set()
-
-    for bridge in self.bridges:
-      async def handle_client(client):
-        await self.handle_client(client)
-
-      task = loop.create_task(bridge.start(handle_client))
-      tasks.add(task)
-
-    async def start():
       try:
-        await asyncio.gather(*tasks)
-      except asyncio.CancelledError:
-        logger.debug(f"Canceled {len(tasks)} tasks")
+        async with Pool.open() as pool:
+          self._pool = pool
 
-      await self.deinitialize()
+          def handle_sigint():
+            print("\r", end="", file=sys.stderr)
+            logger.info("Exiting after receiving a SIGINT signal")
 
-    tasks.add(asyncio.ensure_future(self.host.start()))
-    self._main_task = asyncio.ensure_future(start())
+            pool.close()
 
-    def handle_sigint():
-      print("\r", end="", file=sys.stderr)
-      logger.info("Exiting after receiving a SIGINT signal")
+          loop = asyncio.get_event_loop()
 
-      self.stop()
+          try:
+            loop.add_signal_handler(signal.SIGINT, handle_sigint)
+          except NotImplementedError: # For Windows
+            pass
 
-    try:
-      loop.add_signal_handler(signal.SIGINT, handle_sigint)
-    except NotImplementedError: # For Windows
-      pass
+          ready_count = 0
+          ready_event = asyncio.Event()
 
-    try:
-      loop.run_until_complete(self._main_task)
-    finally:
-      loop.close()
-      self._main_task = None
+          def item_ready():
+            nonlocal ready_count
+            ready_count += 1
 
-  def stop(self):
-    logger.info("Stopping")
+            if ready_count == (len(self.bridges) + (1 if self.static_server else 0)):
+              ready_event.set()
 
-    assert self._main_task
-    self._main_task.cancel()
+
+          for bridge in self.bridges:
+            pool.start_soon(bridge.start(self.handle_client, item_ready))
+
+          if self.static_server:
+            pool.start_soon(self.static_server.start(item_ready))
+
+          pool.start_soon(self.host.start())
+
+          logger.debug("Starting")
+          await pool.start_soon(ready_event.wait())
+          pool.start_soon(self.advertise())
+
+          logger.debug("Started")
+
+          bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+
+          if self.args.local:
+            sys.stdout.write(json.dumps(bridge_infos) + "\n")
+            sys.stdout.flush()
+      finally:
+        logger.debug("Deinitializing")
+    except Exception:
+      logger.error("Error")
+      log_exception(logger)
+
+    logger.debug("Stopped")
 
 
 def main():
@@ -388,8 +372,12 @@ def main():
   parser.add_argument("--conf")
   parser.add_argument("--data-dir", required=True)
   parser.add_argument("--initialize", action='store_true')
+  parser.add_argument("--local", action='store_true')
 
   args = parser.parse_args()
 
+
   app = App(args)
-  app.start()
+
+  loop = asyncio.get_event_loop()
+  loop.run_until_complete(app.start())

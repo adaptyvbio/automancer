@@ -1,31 +1,49 @@
 import childProcess from 'child_process';
+import electron from 'electron';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
+import { PythonInstallation, PythonInstallationRecord, PythonVersion } from 'pr1-library';
+import tls from 'tls';
 import which from 'which';
 
-import { PythonInstallation, PythonInstallationRecord } from './interfaces';
-
-
-export const isDarwin = (process.platform === 'darwin');
+import { Logger } from './logger';
 
 
 export class Pool {
+  #logger: Logger | null = null;
   #promises = new Set<Promise<unknown>>();
+
+  constructor(logger?: Logger) {
+    this.#logger = logger ?? null;
+  }
 
   add(generator: (() => Promise<unknown>) | Promise<unknown>) {
     let promise = typeof generator === 'function'
       ? generator()
       : generator;
 
-    promise.finally(() => {
-      this.#promises.delete(promise);
-    });
+    promise
+      .catch((err) => {
+        if (this.#logger) {
+          this.#logger.error(err.message);
+        } else {
+          console.error(err);
+        }
+      })
+      .finally(() => {
+        this.#promises.delete(promise);
+      });
 
     this.#promises.add(promise);
   }
 
   get empty() {
-    return (this.#promises.size < 1);
+    return this.size < 1;
+  }
+
+  get size() {
+    return this.#promises.size;
   }
 
   async wait() {
@@ -36,25 +54,17 @@ export class Pool {
 }
 
 
-export function defer<T>() {
-  let resolve!: (value: PromiseLike<T> | T) => void;
-  let reject!: (err?: any) => void;
-
-  let promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-}
-
 export async function findPythonInstallations() {
   let possiblePythonLocations = [
     'python3',
     'python',
-    '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
-    '/opt/homebrew/bin/python3',
-    '/usr/local/bin/python3'
+    ...((process.platform === 'darwin')
+      ? [
+        '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
+        '/opt/homebrew/bin/python3',
+        '/usr/local/bin/python3'
+      ]
+      : [])
   ];
 
   let condaList = await runCommand('conda env list --json', { ignoreErrors: true });
@@ -129,46 +139,31 @@ export async function findPythonInstallations() {
   return installations;
 }
 
-export async function fsExists(path: string) {
-  try {
-    await fs.stat(path)
-  } catch (err) {
-    if ((err as { code: string; }).code === 'ENOENT') {
-      return false;
-    }
-
-    throw err;
-  }
-
-  return true;
-}
-
-export async function fsMkdir(dirPath: string) {
-  if (!(await fsExists(dirPath))) {
-    await fs.mkdir(dirPath, { recursive: true });
-  }
-}
-
 export async function getPythonInstallationInfo(location: string): Promise<PythonInstallation['info'] | null> {
-  let architectures, isVirtualEnv, supportsVirtualEnv, version;
+  let architectures: string[] | null;
+  let isVirtualEnv: boolean;
+  let supportsVirtualEnv: boolean;
+  let version: PythonVersion;
 
   {
-    let result = await runCommand(`"${location}" --version`, { ignoreErrors: true });
+    let result = await runCommand([location, '--version'], { ignoreErrors: true });
 
     if (!result) {
       return null;
     }
 
     let [stdout, stderr] = result;
-    version = parsePythonVersion(stdout || stderr);
+    let possibleVersion = parsePythonVersion(stdout || stderr);
 
-    if (!version) {
+    if (!possibleVersion) {
       return null;
     }
+
+    version = possibleVersion;
   }
 
   if (process.platform === 'darwin') {
-    let [stdout, _stderr] = await runCommand(`file "${location}"`);
+    let [stdout, _stderr] = await runCommand(['file', location]);
     let matches = Array.from(stdout.matchAll(/executable ([a-z0-9_]+)$/gm));
 
     architectures = matches.map((match) => match[1]);
@@ -177,11 +172,11 @@ export async function getPythonInstallationInfo(location: string): Promise<Pytho
   }
 
   {
-    let [stdout, _stderr] = await runCommand(`"${location}" -c "import sys; print('Yes' if sys.base_prefix != sys.prefix else 'No')"`)
-    isVirtualEnv = (stdout == "Yes\n")
+    let [stdout, _stderr] = await runCommand([location, '-c', `import sys; print('Yes' if sys.base_prefix != sys.prefix else 'No')`]);
+    isVirtualEnv = (stdout == "Yes\n");
   }
 
-  supportsVirtualEnv = (await runCommand(`"${location}" -m venv -h`, { ignoreErrors: true })) !== null;
+  supportsVirtualEnv = (await runCommand([location, '-m', 'venv', '-h'], { ignoreErrors: true })) !== null;
 
   return {
     architectures,
@@ -189,6 +184,14 @@ export async function getPythonInstallationInfo(location: string): Promise<Pytho
     supportsVirtualEnv,
     version
   };
+}
+
+export function getComputerName() {
+  let hostname = os.hostname();
+
+  return hostname.endsWith('.local')
+    ? hostname.slice(0, -'.local'.length)
+    : hostname;
 }
 
 export function getResourcePath(relativePath: string) {
@@ -199,7 +202,15 @@ export function getResourcePath(relativePath: string) {
   //   : path.join(__dirname, '..', relativePath);
 }
 
-export function parsePythonVersion(input: string): [number, number, number] | null {
+export function logError(err: any, logger: Logger) {
+  logger.error(err.message);
+
+  for (let line of err.stack.split('\n')) {
+    logger.debug(line);
+  }
+}
+
+export function parsePythonVersion(input: string): PythonVersion | null {
   let match = /^Python (\d+)\.(\d+)\.(\d+)\r?\n$/.exec(input);
 
   if (match) {
@@ -219,15 +230,21 @@ export interface RunCommandOptions {
   timeout?: number;
 }
 
-export async function runCommand(rawCommand: string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
-export async function runCommand(rawCommand: string, options?: RunCommandOptions): Promise<[string, string]>;
-export async function runCommand(rawCommand: string, options?: RunCommandOptions) {
-  let command = (options?.architecture && isDarwin)
-    ? `arch -arch "${options.architecture}" ${rawCommand}`
-    : rawCommand;
+export async function runCommand(args: string[] | string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
+export async function runCommand(args: string[] | string, options?: RunCommandOptions): Promise<[string, string]>;
+export async function runCommand(args: string[] | string, options?: RunCommandOptions) {
+  if (typeof args === 'string') {
+    args = args.split(' ');
+  }
+
+  if (options?.architecture && (process.platform === 'darwin')) {
+    args = ['arch', '-arch', options.architecture, ...args];
+  }
+
+  let [execPath, ...otherArgs] = args;
 
   return await new Promise<[string, string] | null>((resolve, reject) => {
-    childProcess.exec(command, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
+    childProcess.execFile(execPath, otherArgs, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
       if (err) {
         if (options?.ignoreErrors) {
           resolve(null);
@@ -239,4 +256,33 @@ export async function runCommand(rawCommand: string, options?: RunCommandOptions
       }
     });
   });
+}
+
+
+const transformCertificatePrincipal = (input: tls.Certificate): electron.CertificatePrincipal => ({
+  commonName: input.CN,
+  organizations: [input.O],
+  organizationUnits: [input.OU],
+  locality: input.L,
+  state: input.ST,
+  country: input.C,
+});
+
+const transformDate = (input: string) => Math.round(new Date(input).getTime() / 1000);
+
+export function transformCertificate(cert: tls.PeerCertificate): electron.Certificate {
+  return {
+    data: `-----BEGIN CERTIFICATE-----\n${cert.raw.toString('base64')}\n-----END CERTIFICATE-----`,
+    fingerprint: cert.fingerprint,
+    issuer: transformCertificatePrincipal(cert.issuer),
+    issuerName: cert.issuer.CN,
+    subject: transformCertificatePrincipal(cert.subject),
+    subjectName: cert.issuer.CN,
+    serialNumber: cert.serialNumber,
+    validStart: transformDate(cert.valid_from),
+    validExpiry: transformDate(cert.valid_to),
+
+    // @ts-expect-error
+    issuerCert: null
+  };
 }

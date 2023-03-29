@@ -1,9 +1,10 @@
 import * as React from 'react';
 import seqOrd from 'seq-ord';
 
+import viewStyles from '../../styles/components/view.module.scss';
+
 import { DraftEntry } from './protocols';
 import type { Host } from '../host';
-import { Chip, ChipCondition, ChipId } from '../backends/common';
 import { MenuEntry } from '../components/context-menu';
 import { ContextMenuArea } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
@@ -15,8 +16,7 @@ import { MetadataTools } from '../unit';
 import { ViewProps } from '../interfaces/view';
 import { ViewChip } from './chip';
 import { BaseUrl } from '../constants';
-
-import viewStyles from '../../styles/components/view.module.scss';
+import { Chip, ChipCondition, ChipId } from 'pr1-shared';
 
 
 export class ViewChips extends React.Component<ViewProps> {
@@ -63,7 +63,7 @@ export class ViewChips extends React.Component<ViewProps> {
             <h2>Active experiments</h2>
             <button type="button" className="btn" onClick={() => {
               this.pool.add(async () => {
-                let result = await this.props.host.backend.createChip();
+                let result = await this.props.host.client.request({ type: 'createChip' });
                 this.chipIdAwaitingRedirect = result.chipId;
               });
             }}>
@@ -119,20 +119,44 @@ export class ViewChips extends React.Component<ViewProps> {
 
                         switch (command) {
                           case 'archive':
-                            this.pool.add(async () => void await metadataTools.archiveChip!(this.props.host, chip, true));
+                            this.pool.add(async () =>
+                              void await metadataTools.archiveChip!(this.props.host, chip, true)
+                            );
                             break;
                           case 'delete':
-                            this.pool.add(async () => void await this.props.host.backend.deleteChip(chip.id, { trash: true }));
+                            this.pool.add(async () =>
+                              void await this.props.host.client.request({
+                                type: 'deleteChip',
+                                chipId: chip.id,
+                                trash: true
+                              })
+                            );
                             break;
                           case 'duplicate_template':
                           case 'duplicate_upgrade':
-                            this.pool.add(async () => void await this.props.host.backend.duplicateChip(chip.id, { template: (command === 'duplicate_template') }));
+                            this.pool.add(async () =>
+                              void await this.props.host.client.request({
+                                type: 'duplicateChip',
+                                chipId: chip.id,
+                                template: (command === 'duplicate_template')
+                              })
+                            );
                             break;
                           case 'reveal':
-                            this.pool.add(async () => void await this.props.host.backend.revealChipDirectory(chip.id));
+                            this.pool.add(async () =>
+                              void await this.props.host.client.request({
+                                type: 'revealChipDirectory',
+                                chipId: chip.id
+                              })
+                            );
                             break;
                           case 'upgrade':
-                            this.pool.add(async () => void await this.props.host.backend.upgradeChip(chip.id));
+                            this.pool.add(async () =>
+                              void await this.props.host.client.request({
+                                type: 'upgradeChip',
+                                chipId: chip.id
+                              })
+                            );
                             break;
                         }
                       }}
@@ -203,13 +227,30 @@ export class ViewChips extends React.Component<ViewProps> {
                                 this.pool.add(async () => void await metadataTools.archiveChip!(this.props.host, chip as Chip, false));
                                 break;
                               case 'delete':
-                                this.pool.add(async () => void await this.props.host.backend.deleteChip(chip.id, { trash: true }));
+                                this.pool.add(async () =>
+                                  void await this.props.host.client.request({
+                                    type: 'deleteChip',
+                                    chipId: chip.id,
+                                    trash: true
+                                  })
+                                );
                                 break;
                               case 'duplicate':
-                                this.pool.add(async () => void await this.props.host.backend.duplicateChip(chip.id, { template: true }));
+                                this.pool.add(async () =>
+                                  void await this.props.host.client.request({
+                                    type: 'duplicateChip',
+                                    chipId: chip.id,
+                                    template: true
+                                  })
+                                );
                                 break;
                               case 'reveal':
-                                this.pool.add(async () => void await this.props.host.backend.revealChipDirectory(chip.id));
+                                this.pool.add(async () =>
+                                  void await this.props.host.client.request({
+                                    type: 'revealChipDirectory',
+                                    chipId: chip.id
+                                  })
+                                );
                                 break;
                             }
                           }}

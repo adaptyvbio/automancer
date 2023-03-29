@@ -7,14 +7,16 @@ import { createRoot } from 'react-dom/client';
 
 import { BrowserApp } from './browser-app';
 
+import 'material-symbols/rounded.css';
+import 'material-symbols/sharp.css';
+
 import '../styles/main.scss';
-import 'material-symbols';
+
 
 export { Application } from './application';
 export * from './app-backends/base';
 export * from './app-backends/browser';
 export * from './backends/common';
-export { MessageBackend } from './backends/message';
 export * from './contexts';
 export * from './draft';
 export * from './format';

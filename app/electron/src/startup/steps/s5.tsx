@@ -1,5 +1,7 @@
+//* Enter local host settings
+
 import { Form, React } from 'pr1';
-import type { LocalHostOptions, PythonInstallation, PythonInstallationId } from '../../interfaces';
+import { LocalHostOptions, PythonInstallation, PythonInstallationId } from 'pr1-library';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 

@@ -1,4 +1,4 @@
-import { Chip, Form, Host, MatrixEditorProps } from 'pr1';
+import { Chip, Form, Host } from 'pr1';
 import { React } from 'pr1';
 
 
@@ -25,7 +25,8 @@ export function MatrixEditor(props: MatrixEditorProps) {
   let [title, setTitle] = React.useState(runner.title);
 
   let synchronize = ({ description, title }: { description: string; title: string; }) => {
-    props.host.backend.command({
+    props.host.client.request({
+      type: 'command',
       chipId: props.chip.id,
       namespace,
       command: {
@@ -78,7 +79,8 @@ export function MatrixEditor(props: MatrixEditorProps) {
 export async function archiveChip(host: Host, chip: Chip, value: boolean) {
   let runner = chip.runners[namespace] as Runner;
 
-  await host.backend.command({
+  await host.client.request({
+    type: 'command',
     chipId: chip.id,
     namespace,
     command: {

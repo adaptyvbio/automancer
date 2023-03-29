@@ -1,17 +1,17 @@
 import * as React from 'react';
 
+import descriptionStyles from '../../../styles/components/description.module.scss';
+import formStyles from '../../../styles/components/form.module.scss';
+
 import { Modal } from '../modal';
 import * as Form from '../standard-form';
 import { Icon } from '../icon';
 import { Host } from '../../host';
-import { Chip, ChipCondition, ChipId } from '../../backends/common';
 import { MetadataTools } from '../../unit';
-
-import descriptionStyles from '../../../styles/components/description.module.scss';
-import formStyles from '../../../styles/components/form.module.scss';
+import { Chip, ChipCondition, ChipId, UnitNamespace } from 'pr1-shared';
 
 
-const NewChipOptionId = '_new';
+const NewChipOptionId = ('_new' as ChipId);
 
 export function StartProtocolModal(props: {
   host: Host;
@@ -24,7 +24,7 @@ export function StartProtocolModal(props: {
     newChipTitle: string | null;
   }): void;
 }) {
-  let metadataTools = props.host.units.metadata as unknown as MetadataTools;
+  let metadataTools = props.host.units['metadata' as UnitNamespace] as unknown as MetadataTools;
   let chips = (Object.values(props.host.state.chips)
     .filter((chip) => chip.condition === ChipCondition.Ok) as Chip[])
     .map((chip) => ({ chip, metadata: metadataTools.getChipMetadata(chip) }));
@@ -66,13 +66,13 @@ export function StartProtocolModal(props: {
             }
           }}
           options={[
-            { id: '_header1', label: 'Existing experiments', disabled: true },
+            { id: ('_header1' as ChipId), label: 'Existing experiments', disabled: true },
             ...chips.map(({ chip, metadata }) => ({
               id: chip.id,
               label: metadata.title,
               disabled: metadata.archived || chip.master
             })),
-            { id: '_header2', label: 'New experiment', disabled: true },
+            { id: ('_header2' as ChipId), label: 'New experiment', disabled: true },
             { id: NewChipOptionId, label: 'New experiment' }
           ]}
           value={chipId} />

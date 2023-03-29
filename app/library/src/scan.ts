@@ -61,7 +61,7 @@ export class Scanner {
           this._records[record.type as 'A'][record.name] = {
             data: (record as any).data,
             expires
-          }
+          };
         }
       }
 
@@ -180,7 +180,7 @@ export class Scanner {
   }
 
   async getServices(types: string[], options?: { queryDelay?: number; }) {
-    let queryDelay = (options?.queryDelay ?? 400);
+    let queryDelay = (options?.queryDelay ?? 800);
 
     if (queryDelay > 0) {
       await this.queryServices(types);

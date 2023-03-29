@@ -27,6 +27,7 @@ ch.setFormatter(ColoredFormatter() if sys.stderr.isatty() else DefaultFormatter(
 
 logging.getLogger().addHandler(ch)
 logging.getLogger().setLevel(logging.INFO)
+logging.getLogger("aiohttp.access").setLevel(logging.DEBUG)
 logging.getLogger("pr1").setLevel(logging.DEBUG)
 
 

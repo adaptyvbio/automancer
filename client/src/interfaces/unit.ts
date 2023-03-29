@@ -1,3 +1,4 @@
+import { UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import type { Application } from '../application';
@@ -7,11 +8,6 @@ import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
 import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
 import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
-
-
-//> General
-
-export type UnitNamespace = string;
 
 
 //> Feature

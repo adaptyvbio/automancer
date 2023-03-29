@@ -1,19 +1,22 @@
+import 'source-map-support/register';
+
+import { ok as assert } from 'assert';
 import chokidar from 'chokidar';
 import crypto from 'crypto';
-import { BrowserWindow, Menu, dialog, ipcMain, shell, App } from 'electron';
-import electron from 'electron';
+import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
-import { searchForAdvertistedHosts } from 'pr1-library';
-import 'source-map-support/register';
-import uol from 'uol';
+import { AppData, BridgeTcp, CertificateFingerprint, DraftEntry, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import * as uol from 'uol';
 
+import { MenuDef, MenuEntryId } from 'pr1';
+import { defer } from 'pr1-shared';
 import { HostWindow } from './host';
+import { DraftEntryState, IPC2d as IPCServer2d } from './interfaces';
+import { rootLogger } from './logger';
+import type { IPCEndpoint } from './shared/preload';
 import { StartupWindow } from './startup';
 import * as util from './util';
-import { AppData, DraftEntryState, PythonInstallationRecord } from './interfaces';
-import { HostSettings, HostSettingsId, MenuDef, MenuEntryId } from 'pr1';
 
 
 const ProtocolFileFilters = [
@@ -22,7 +25,10 @@ const ProtocolFileFilters = [
 
 
 export class CoreApplication {
-  static version = 1;
+  static version = 2;
+
+  private logger = rootLogger.getChild('application');
+  private pool = new util.Pool(this.logger);
 
   private electronApp: electron.App;
   private quitting: boolean;
@@ -33,13 +39,10 @@ export class CoreApplication {
   private dataDirPath: string;
   private dataPath: string;
   private hostsDirPath: string;
-  private logsDirPath: string;
+  logsDirPath: string;
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
   private startupWindow: StartupWindow | null = null;
-
-  private logger = new uol.Logger({ levels: uol.StdLevels.Python }).init();
-  private pool = new util.Pool();
 
   constructor(electronApp: electron.App) {
     this.electronApp = electronApp;
@@ -59,13 +62,18 @@ export class CoreApplication {
     });
 
     this.electronApp.on('will-quit', (event) => {
+      this.logger.debug('Trying to quit');
+
       if (!this.pool.empty) {
         event.preventDefault();
+        this.logger.debug(`Waiting for ${this.pool.size} tasks to settle`);
 
         this.pool.wait().then(() => {
           this.electronApp.quit();
         });
       }
+
+      this.logger.debug('Quitting');
     });
 
     this.electronApp.on('window-all-closed', () => {
@@ -76,14 +84,38 @@ export class CoreApplication {
       this.createStartupWindow();
     });
 
+    this.electronApp.on('certificate-error', (event, webContents, url, error, certificate, callback, isMainFrame) => {
+      let browserWindow = BrowserWindow.fromWebContents(webContents)!;
+      let hostWindow = Object.values(this.hostWindows).find((hostWindow) => (hostWindow.window === browserWindow))!;
 
-    this.logger
+      let hostSettings = hostWindow.hostSettings;
+
+      if ((error === 'net::ERR_CERT_AUTHORITY_INVALID') && (hostSettings.options.type === 'tcp') && hostSettings.options.secure) {
+        let prefix = 'sha256/';
+        let rawFingerprint = certificate.fingerprint;
+
+        if (rawFingerprint.startsWith(prefix)) {
+          let fingerprint = Buffer.from(rawFingerprint.slice(prefix.length), 'base64').toString('hex') as CertificateFingerprint;
+
+          if (fingerprint === hostSettings.options.fingerprint) {
+            event.preventDefault();
+            callback(true);
+            return;
+          }
+        }
+      }
+
+      callback(false);
+    });
+
+
+    rootLogger
       .use(uol.format())
       .pipe(new uol.ConcatTransformer())
       .pipe(process.stderr);
 
 
-    if (util.isDarwin) {
+    if (process.platform === 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         { role: 'appMenu' },
         { role: 'editMenu' },
@@ -118,6 +150,11 @@ export class CoreApplication {
         }
       ]));
     }
+  }
+
+  get debug() {
+    let envValue = process.env['DEBUG'];
+    return (!this.electronApp.isPackaged && (envValue !== '0')) || (envValue === '1');
   }
 
   async createStartupWindow() {
@@ -162,22 +199,32 @@ export class CoreApplication {
     await this.electronApp.whenReady();
     await this.loadData();
 
-    this.logger.info('Ready');
+    if (!this.data) {
+      this.logger.debug('Aborting initialization');
+      this.electronApp.quit();
+
+      return;
+    }
+
+    this.logger.info('Initialized');
+
+
+    let ipcMain = electron.ipcMain as IPCServer2d<IPCEndpoint>;
 
 
     // Window management
 
-    ipcMain.on('ready', (event) => {
+    ipcMain.on('main.ready', (event) => {
       BrowserWindow.fromWebContents(event.sender)!.show();
     });
 
 
     // Context menu creation
 
-    ipcMain.handle('contextMenu.trigger', async (event, { menu, position }) => {
-      let deferred = util.defer();
+    ipcMain.handle('main.triggerContextMenu', async (event, menu, position) => {
+      let deferred = defer<MenuEntryId[] | null>();
 
-      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry) => {
+      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry): MenuItemConstructorOptions[] => {
         let path = [...ancestors, entry.id];
 
         switch (entry.type) {
@@ -214,36 +261,81 @@ export class CoreApplication {
     // Host settings management
 
     ipcMain.handle('hostSettings.addRemoteHost', async (_event, options) => {
-      let hostSettingsId = crypto.randomUUID();
+      let hostSettingsId = crypto.randomUUID() as HostSettingsId;
 
       await this.setData({
-        hostSettings: {
-          ...this.data.hostSettings,
+        hostSettingsRecord: {
+          ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
             options: {
-              type: 'remote',
-              auth: options.auth,
-              address: options.address,
-              port: options.port
+              type: 'tcp',
+              ...options.options
             }
-          }
+          } satisfies HostSettings
         }
       });
 
       return {
-        ok: true,
-        id: hostSettingsId
+        hostSettingsId
       };
     });
 
-    ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
-      // TODO: Add error handling
+    ipcMain.handle('hostSettings.displayCertificateOfRemoteHost', async (event, options) => {
+      let result = await SocketClientBackend.test({
+        address: {
+          host: options.hostname,
+          port: options.port
+        },
+        tls: {
+          serverCertificateCheck: true,
+          serverCertificateFingerprint: options.fingerprint
+        }
+      });
 
+      if (result.ok || (result.reason === 'untrusted_server')) {
+        await electron.dialog.showCertificateTrustDialog(BrowserWindow.fromWebContents(event.sender)!, {
+          certificate: util.transformCertificate(result.tlsInfo!.certificate),
+          message: `Certificate of host with address ${options.hostname}:${options.port}`
+        });
+      } else {
+        this.logger.error('Failed to show remote host certificate');
+      }
+    });
+
+    ipcMain.handle('hostSettings.testRemoteHost', async (_event, options) => {
+      this.logger.debug(`Trying to connect to '${options.hostname}:${options.port}'`);
+
+      let result = await SocketClientBackend.test({
+        address: {
+          host: options.hostname,
+          port: options.port
+        },
+        tls: options.secure
+          ? {
+            serverCertificateCheck: !options.trusted,
+            serverCertificateFingerprint: options.fingerprint
+          }
+          : null
+      });
+
+      if ('tlsInfo' in result) {
+        let { tlsInfo, ...rest } = result;
+
+        return {
+          ...rest,
+          fingerprint: tlsInfo?.fingerprint ?? null
+        };
+      }
+
+      return result;
+    });
+
+    ipcMain.handle('hostSettings.createLocalHost', async (_event, options) => {
       let pythonInstallation = options.customPythonInstallation ?? this.pythonInstallations[options.pythonInstallationSettings.id];
 
-      let hostSettingsId = crypto.randomUUID();
+      let hostSettingsId = crypto.randomUUID() as HostSettingsId;
       let hostDirPath = path.join(this.hostsDirPath, hostSettingsId);
       let envPath = path.join(hostDirPath, 'env');
 
@@ -253,31 +345,43 @@ export class CoreApplication {
       this.logger.info(`Creating local host with settings id '${hostSettingsId}'`);
       this.logger.debug('Creating host directory');
 
-      await fs.mkdir(hostDirPath, { recursive: true });
+      let conf;
 
-      if (options.pythonInstallationSettings.virtualEnv) {
-        this.logger.debug('Creating virtual environment');
+      try {
+        await fs.mkdir(hostDirPath, { recursive: true });
 
-        await util.runCommand(`"${pythonInstallation.path}" -m venv "${envPath}"`, { architecture, timeout: 60e3 });
-        pythonPath = path.join(envPath, 'bin/python');
+        if (options.pythonInstallationSettings.virtualEnv) {
+          this.logger.debug('Creating virtual environment');
 
-        let corePackagesDirPath = util.getResourcePath('packages');
-        for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
-          this.logger.debug(`Installing core package '${corePackageRelPath}'`);
-          await util.runCommand(`"${pythonPath}" -m pip install ${path.join(corePackagesDirPath, corePackageRelPath)}`, { architecture, timeout: 60e3 });
+          await util.runCommand([pythonInstallation.path, '-m', 'venv', envPath], { architecture, timeout: 60e3 });
+          pythonPath = path.join(envPath, 'bin/python');
+
+          let corePackagesDirPath = util.getResourcePath('packages');
+          for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
+            this.logger.debug(`Installing core package '${corePackageRelPath}'`);
+            await util.runCommand([pythonPath, '-m', 'pip', 'install', path.join(corePackagesDirPath, corePackageRelPath)], { architecture, timeout: 60e3 });
+          }
         }
+
+        this.logger.debug('Initializing host configuration');
+
+        let [confStdout, _] = await util.runCommand([pythonPath, '-m', 'pr1_server', '--data-dir', hostDirPath, '--initialize'], { architecture, timeout: 60e3 });
+        conf = JSON.parse(confStdout) as ServerConfiguration;
+      } catch (err: any) {
+        util.logError(err, this.logger);
+
+        return {
+          ok: false,
+          reason: 'other',
+          message: err.message ?? 'Unknown error'
+        };
       }
-
-      this.logger.debug('Initializing host configuration');
-
-      let [confStdout, _] = await util.runCommand(`"${pythonPath}" -m pr1_server --data-dir "${hostDirPath}" --initialize`, { architecture, timeout: 60e3 });
-      let conf = JSON.parse(confStdout);
 
       this.logger.info(`Created host with identifier '${conf.identifier}'`);
 
       await this.setData({
-        hostSettings: {
-          ...this.data.hostSettings,
+        hostSettingsRecord: {
+          ...this.data.hostSettingsRecord,
           [hostSettingsId]: {
             id: hostSettingsId,
             label: options.label,
@@ -290,50 +394,52 @@ export class CoreApplication {
               identifier: conf.identifier,
               pythonPath
             }
-          }
+          } satisfies HostSettings
         }
       });
 
       return {
         ok: true,
-        id: hostSettingsId
+        hostSettingsId
       };
     });
 
     ipcMain.handle('hostSettings.delete', async (_event, { hostSettingsId }) => {
-      let { [hostSettingsId]: deletedHostSettings, ...hostSettings } = this.data.hostSettings;
-      await this.setData({ hostSettings });
+      let { [hostSettingsId]: deletedHostSettings, ...hostSettingsRecord } = this.data.hostSettingsRecord;
+      await this.setData({ hostSettingsRecord });
 
       if (deletedHostSettings.options.type === 'local') {
         await shell.trashItem(deletedHostSettings.options.dirPath);
       }
     });
 
-    ipcMain.handle('hostSettings.getCreatorContext', async (_event) => {
+    ipcMain.handle('hostSettings.getHostCreatorContext', async (_event) => {
       // console.log(require('util').inspect(this.pythonInstallations, { colors: true, depth: Infinity }));
 
       return {
-        computerName: os.hostname(),
+        computerName: util.getComputerName(),
         pythonInstallations: this.pythonInstallations
       };
     });
 
-    ipcMain.handle('hostSettings.query', async (_event) => {
+    ipcMain.handle('hostSettings.list', async (_event) => {
       return {
         defaultHostSettingsId: this.data.defaultHostSettingsId,
-        hostSettings: this.data.hostSettings
+        hostSettingsRecord: this.data.hostSettingsRecord
       };
     });
 
     ipcMain.handle('hostSettings.revealLogsDirectory', async (_event, { hostSettingsId }) => {
       let logsDirPath = path.join(this.logsDirPath, hostSettingsId);
-      await util.fsMkdir(logsDirPath);
+      await fs.mkdir(logsDirPath, { recursive: true });
 
       shell.showItemInFolder(logsDirPath);
     });
 
     ipcMain.handle('hostSettings.revealSettingsDirectory', async (_event, { hostSettingsId }) => {
-      let hostSettings = this.data.hostSettings[hostSettingsId];
+      let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
+
+      assert(hostSettings.options.type === 'local');
       shell.showItemInFolder(hostSettings.options.dirPath);
     });
 
@@ -376,18 +482,23 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.queryRemoteHosts', async (_event) => {
-      return (await searchForAdvertistedHosts()).filter((info) =>
-        true
-        // !Object.values(this.data.hostSettings).some((hostSettings) =>
-        //   (hostSettings.options.type === 'local') && (hostSettings.options.identifier === info.identifier)
-        // )
-      );
+      return (await searchForAdvertistedHosts())
+        .map((info) => ({
+          ...info,
+          bridges: info.bridges.filter((bridge): bridge is BridgeTcp => (bridge.type === 'tcp'))
+        }))
+        .filter((info) => (info.bridges.length > 0))
+        .filter((info) =>
+          !Object.values(this.data.hostSettingsRecord).some((hostSettings) =>
+            (hostSettings.options.identifier === info.identifier)
+          )
+        );
     });
 
 
     // Other
 
-    ipcMain.on('launchHost', async (_event, { hostSettingsId }) => {
+    ipcMain.on('hostSettings.launchHost', async (_event, { hostSettingsId }) => {
       this.launchHost(hostSettingsId);
     });
 
@@ -405,7 +516,7 @@ export class CoreApplication {
       Object.values(this.data.drafts).map((draftEntry) => [draftEntry.id, createDraftEntryState()])
     );
 
-    let createClientDraftEntry = async (draftEntry) => {
+    let createClientDraftEntry = async (draftEntry: DraftEntry) => {
       let stats;
 
       try {
@@ -438,11 +549,11 @@ export class CoreApplication {
         return null;
       }
 
-      let draftEntry = {
+      let draftEntry: DraftEntry = {
         id: crypto.randomUUID(),
         lastOpened: Date.now(),
         name: path.basename(result.filePath!),
-        path: result.filePath
+        path: result.filePath!
       };
 
       await fs.writeFile(draftEntry.path!, source);
@@ -595,7 +706,7 @@ export class CoreApplication {
 
       if (primitive.source) {
         let promise = draftEntryState.writePromise.then(async () => {
-          await fs.writeFile(draftEntry.path, primitive.source);
+          await fs.writeFile(draftEntry.path, primitive.source!);
 
           let stats = await fs.stat(draftEntry.path);
 
@@ -613,12 +724,12 @@ export class CoreApplication {
 
     // Internal host
 
-    ipcMain.handle('localHost.ready', async (_event, hostSettingsId) => {
-      await this.hostWindows[hostSettingsId].localHost!.ready();
+    ipcMain.handle('host.ready', async (_event, hostSettingsId) => {
+      this.hostWindows[hostSettingsId].ready();
     });
 
-    ipcMain.on('localHost.message', async (_event, hostSettingsId, message) => {
-      this.hostWindows[hostSettingsId].localHost!.sendMessage(message);
+    ipcMain.on('host.sendMessage', async (_event, hostSettingsId, message) => {
+      this.hostWindows[hostSettingsId].sendMessage(message);
     });
 
 
@@ -641,7 +752,7 @@ export class CoreApplication {
         existingWindow.focus();
       }
     } else {
-      let hostSettings = this.data.hostSettings[hostSettingsId];
+      let hostSettings = this.data.hostSettingsRecord[hostSettingsId];
 
       this.startupWindow?.window.close();
       this.createHostWindow(hostSettings);
@@ -654,17 +765,20 @@ export class CoreApplication {
 
     await fs.mkdir(this.dataDirPath, { recursive: true });
 
-    if (await util.fsExists(this.dataPath)) {
+    if (await fsExists(this.dataPath)) {
       this.logger.debug('Reading app data');
 
       let buffer = await fs.readFile(this.dataPath);
-      this.data = JSON.parse(buffer.toString());
+      let data = JSON.parse(buffer.toString());
 
-      if (this.data.version !== CoreApplication.version) {
-        this.logger.critical(`App version mismatch, found: ${this.data.version}, current: ${CoreApplication.version}`)
+      if (data.version !== CoreApplication.version) {
+        this.logger.critical(`App version mismatch, found: ${data.version}, current: ${CoreApplication.version}`)
         dialog.showErrorBox('App data version mismatch', 'The app is outdated.');
-        process.exit(1);
+
+        return;
       }
+
+      this.data = data;
     } else {
       this.logger.debug('Creating app data');
 
@@ -672,7 +786,7 @@ export class CoreApplication {
         embeddedPythonInstallation: null,
         defaultHostSettingsId: null,
         drafts: {},
-        hostSettings: {},
+        hostSettingsRecord: {},
         preferences: {},
         version: CoreApplication.version
       });

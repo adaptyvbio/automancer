@@ -1,0 +1,17 @@
+{
+  "extends": "../../shared/tsconfig.json",
+
+  "compilerOptions": {
+    "composite": true,
+    "declarationDir": "types",
+    "lib": ["es2022"],
+    "outDir": "lib",
+    "rootDir": "src"
+  },
+  "files": [
+    "src/index.ts"
+  ],
+  "include": [
+    "src/**/*"
+  ]
+}

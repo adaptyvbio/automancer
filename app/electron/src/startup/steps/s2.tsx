@@ -1,4 +1,7 @@
+//* Success
+
 import { LargeIcon, React } from 'pr1';
+import { HostSettingsId } from 'pr1-library';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
@@ -6,7 +9,7 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 export interface Data extends HostCreatorStepData {
   stepIndex: 2;
 
-  id: string;
+  hostSettingsId: HostSettingsId;
   label: string;
 }
 
@@ -31,7 +34,7 @@ export function Component(props: HostCreatorStepProps<Data>) {
         </div>
         <div className="startup-editor-action-list">
           <button type="button" className="startup-editor-action-item" onClick={() => {
-            props.launchHost(props.data.id);
+            window.api.hostSettings.launchHost({ hostSettingsId: props.data.hostSettingsId });
           }}>Launch</button>
         </div>
       </div>

@@ -1,16 +1,17 @@
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { HostIdentifier } from 'pr1-shared';
 
-import type { HostSettings } from 'pr1';
-import type { AppData } from 'pr1-app';
 import { Scanner, type Service } from './scan';
-import { SocketClient } from './socket-client';
+import { SocketClientBackend } from './socket-client';
+import { AppData, HostSettings, TcpHostOptionsCandidate } from './types/app-data';
 
 
 export function getDesktopAppDataLocation(): string | null {
   switch (process.platform) {
-    case 'darwin': return '/Users/simon/Library/Application Support/PR–1/App Data';
-    case 'win32': return '...';
+    case 'darwin': return path.resolve(os.homedir(), 'Application Support/PR–1/App Data');
+    case 'win32': return null; // TODO: Update
     default: return null;
   }
 }
@@ -47,19 +48,14 @@ export async function getDesktopAppData() {
 }
 
 
-export interface BridgeSocketInet {
-  type: 'socket';
-  options: {
-    type: 'inet';
-    hostname: string;
-    port: number;
-  }
+export interface BridgeTcp {
+  type: 'tcp';
+  options: TcpHostOptionsCandidate;
 }
 
-export interface BridgeSocketUnix {
-  type: 'socket';
+export interface BridgeUnixSocket {
+  type: 'unix';
   options: {
-    type: 'unix';
     path: string;
   };
 }
@@ -77,11 +73,9 @@ export interface BridgeStdio {
   options: {};
 }
 
-export type Bridge = BridgeSocketInet | BridgeSocketUnix | BridgeStdio | BridgeWebsocket;
-export type BridgeRemote = BridgeSocketInet | BridgeWebsocket;
+export type Bridge = BridgeTcp | BridgeUnixSocket | BridgeStdio | BridgeWebsocket;
+export type BridgeRemote = BridgeTcp | BridgeWebsocket;
 
-
-export type HostIdentifier = string;
 
 export interface HostEnvironment {
   bridges: Bridge[];
@@ -94,7 +88,7 @@ export type HostEnvironments = Record<HostIdentifier, HostEnvironment>;
 
 export interface AdvertisedHostInfo {
   bridges: BridgeRemote[];
-  identifier: string;
+  identifier: HostIdentifier;
   ipAddress: string;
   description: string;
 }
@@ -102,7 +96,7 @@ export interface AdvertisedHostInfo {
 
 export const UnixSocketDirPath = '/tmp/pr1';
 
-export const SocketServiceType = '_prone._tcp.local';
+export const TcpServiceType = '_prone._tcp.local';
 export const WebsocketServiceType = '_prone._http._tcp.local';
 
 
@@ -111,13 +105,17 @@ export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHo
   let ipAddress = (service.address?.ipv4 || service.address?.ipv6);
 
   if (service.address && service.properties && ipAddress) {
-    if (service.types.includes(SocketServiceType)) {
+    if (service.types.includes(TcpServiceType)) {
       bridges.push({
-        type: 'socket',
+        type: 'tcp',
         options: {
-          type: 'inet',
           hostname: ipAddress,
-          port: service.address.port
+          fingerprint: null,
+          identifier: (service.properties['identifier'] as HostIdentifier),
+          password: null,
+          port: service.address.port,
+          secure: true,
+          trusted: false
         }
       });
     }
@@ -134,7 +132,7 @@ export function getAdvertisedHostInfoFromService(service: Service): AdvertisedHo
 
     return {
       bridges,
-      identifier: service.properties['identifier'],
+      identifier: (service.properties['identifier'] as HostIdentifier),
       ipAddress,
       description: service.properties['description']
     };
@@ -152,7 +150,7 @@ export async function searchForHostEnvironments() {
 
   let appData = await getDesktopAppData();
 
-  for (let hostSettings of Object.values(appData?.hostSettings ?? {})) {
+  for (let hostSettings of Object.values(appData?.hostSettingsRecord ?? {})) {
     if (hostSettings.options.type === 'local') {
       let identifier = hostSettings.options.identifier;
 
@@ -169,7 +167,7 @@ export async function searchForHostEnvironments() {
   // Search for hosts advertisted over mDNS
 
   let services = await Scanner.getServices([
-    SocketServiceType,
+    TcpServiceType,
     WebsocketServiceType
   ]);
 
@@ -213,12 +211,15 @@ export async function searchForHostEnvironments() {
       continue;
     }
 
-    let identifier = match[1];
+    let identifier = match[1] as HostIdentifier;
 
     let socketFilePath = path.join(UnixSocketDirPath, socketFileName);
-    let isOpen = await SocketClient.test(socketFilePath);
+    let result = await SocketClientBackend.test({
+      address: { path: socketFilePath },
+      tls: null
+    });
 
-    if (!isOpen) {
+    if (!result.ok) {
       continue;
     }
 
@@ -232,9 +233,8 @@ export async function searchForHostEnvironments() {
     }
 
     environments[identifier].bridges.push({
-      type: 'socket',
+      type: 'unix',
       options: {
-        type: 'unix',
         path: socketFilePath
       }
     });
@@ -246,7 +246,7 @@ export async function searchForHostEnvironments() {
 
 export async function searchForAdvertistedHosts() {
   let services = await Scanner.getServices([
-    SocketServiceType,
+    TcpServiceType,
     WebsocketServiceType
   ]);
 

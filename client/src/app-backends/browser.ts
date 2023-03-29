@@ -4,7 +4,6 @@ import { DraftId, DraftPrimitive } from '../draft';
 import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
 import { HostId } from '../backends/common';
-import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
 
 
 interface MainEntry {
@@ -30,8 +29,6 @@ interface DraftEntry {
   };
 }
 
-type HostSettingsEntry = HostSettingsData;
-
 
 export class BrowserAppBackend implements AppBackend {
   static version = 1;
@@ -40,70 +37,10 @@ export class BrowserAppBackend implements AppBackend {
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
-  async deleteHostSettings(hostSettingsId: HostSettingsId) {
-    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => {
-      let { [settingsId]: _, ...hosts } = hostSettingsEntry!.hosts;
-
-      return {
-        ...hostSettingsEntry!,
-        hosts
-      };
-    }, this.#store);
-  }
-
-  async getHostSettingsData() {
-    return {
-      defaultHostSettingsId: 'foo',
-      hosts: {
-        'foo': {
-          id: 'foo',
-          label: 'Setup 1',
-          options: {
-            type: 'remote' as const,
-            auth: null,
-            address: 'localhost',
-            port: 4567
-          }
-        }
-      }
-    };
-
-    // let hostSettingsEntry = await idb.get<HostSettingsEntry>('hosts', this.#store);
-
-    // if (!hostSettingsEntry) {
-    //   hostSettingsEntry = {
-    //     defaultHostSettingsId: null,
-    //     hosts: {}
-    //   };
-
-    //   await idb.set('hosts', hostSettingsEntry, this.#store);
-    // }
-
-    // return hostSettingsEntry;
-  }
-
-  async setDefaultHostSettings(hostSettingsId: HostSettingsId | null) {
-    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => ({
-      ...hostSettingsEntry!,
-      defaultHostSettingsId: settingsId
-    }), this.#store);
-  }
-
-  async setHostSettings(settings: HostSettings) {
-    await idb.update<HostSettingsEntry>('hosts', (hostSettingsEntry) => ({
-      ...hostSettingsEntry!,
-      hosts: {
-        ...hostSettingsEntry!.hosts,
-        [settings.id]: settings
-      }
-    }), this.#store);
-  }
-
-
   async initialize() {
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
+    // if (Notification.permission === 'default') {
+    //   await Notification.requestPermission();
+    // }
 
     this.#storage = await navigator.storage.getDirectory();
 
@@ -144,7 +81,7 @@ export class BrowserAppBackend implements AppBackend {
     }
 
     let draftEntry: DraftEntry = {
-      id: crypto.randomUUID(),
+      id: (crypto.randomUUID() as DraftId),
       name: null,
 
       location: {
@@ -177,7 +114,7 @@ export class BrowserAppBackend implements AppBackend {
     return draftItem;
   }
 
-  async deleteDraft(draftId: string): Promise<void> {
+  async deleteDraft(draftId: DraftId): Promise<void> {
     let draftEntry = (await idb.get<DraftEntry>(draftId, this.#store))!;
 
     // if (draftEntry.location.type === 'private-filesystem') {
@@ -246,7 +183,7 @@ export class BrowserAppBackend implements AppBackend {
     }
 
     let newDraftEntry: DraftEntry = {
-      id: crypto.randomUUID(),
+      id: (crypto.randomUUID() as DraftId),
       name: null,
 
       location: {

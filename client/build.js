@@ -16,14 +16,6 @@ let workerEntryPoints = [
 ];
 
 esbuild.build({
-	entryPoints: ['./node_modules/react', './node_modules/react-dom'],
-	bundle: true,
-	format: 'esm',
-	minify: true,
-	outdir: path.join(__dirname, 'dist/libraries')
-});
-
-esbuild.build({
 	entryPoints: workerEntryPoints.map((entry) => `./node_modules/monaco-editor/esm/${entry}`),
 	bundle: true,
 	format: 'iife',

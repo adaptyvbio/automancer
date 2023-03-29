@@ -1,3 +1,5 @@
+//* Enter remote host settings
+
 import { Form, React } from 'pr1';
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
@@ -5,8 +7,9 @@ import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 export interface Data extends HostCreatorStepData {
   stepIndex: 0;
 
-  address: string;
+  hostname: string;
   port: string;
+  secure: boolean;
 }
 
 export function Component(props: HostCreatorStepProps<Data>) {
@@ -22,18 +25,17 @@ export function Component(props: HostCreatorStepProps<Data>) {
 
       props.setData({
         stepIndex: 1,
+
         options: {
-          type: 'remote',
-          auth: null,
-          address: props.data.address,
+          fingerprint: null,
+          hostname: props.data.hostname,
+          identifier: null,
+          password: null,
           port: parseInt(props.data.port),
-          secure: false
+          secure: props.data.secure,
+          trusted: false
         },
-        rawOptions: {
-          address: props.data.address,
-          port: props.data.port
-        },
-        rawPassword: null
+        previousStepData: props.data
       });
     }}>
       <div className="startup-editor-inner">
@@ -44,17 +46,18 @@ export function Component(props: HostCreatorStepProps<Data>) {
         <Form.Form>
           <Form.Select
             label="Protocol"
-            onInput={(_id) => { }}
+            onInput={(protocol) => void props.setData({ ...props.data, secure: (protocol === 'secure-tcp') })}
             options={[
-              { id: 'tcp', label: 'TCP' }
+              { id: 'secure-tcp', label: 'TCP with TLS' },
+              { id: 'unsecure-tcp', label: 'TCP' }
             ]}
-            value="tcp"
+            value={props.data.secure ? 'secure-tcp' : 'unsecure-tcp'}
             targetRef={firstInputRef} />
           <Form.TextField
             label="Address"
-            onInput={(address) => void props.setData({ ...props.data, address })}
+            onInput={(address) => void props.setData({ ...props.data, hostname: address })}
             placeholder="e.g. 192.168.1.143"
-            value={props.data.address} />
+            value={props.data.hostname} />
           <Form.TextField
             label="Port"
             onInput={(port) => void props.setData({ ...props.data, port })}
@@ -74,9 +77,10 @@ export function Component(props: HostCreatorStepProps<Data>) {
             props.setData({
               stepIndex: 7,
 
+              previousStepData: props.data,
               selectedHostIdentifier: null
             });
-          }}>Search on this network</button>
+          }}>Search for setups on this network</button>
           <button type="submit" className="startup-editor-action-item">Next</button>
         </div>
       </div>

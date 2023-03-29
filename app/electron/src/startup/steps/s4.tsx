@@ -1,4 +1,6 @@
-import { Form, React, Selector } from 'pr1';
+//* Select host type
+
+import { React, Selector } from 'pr1';
 
 import { HostCreatorStepData, HostCreatorStepProps } from '../host-creator';
 
@@ -44,8 +46,9 @@ export function Component(props: HostCreatorStepProps<Data>) {
           props.setData({
             stepIndex: 0,
 
-            address: '',
-            port: ''
+            hostname: '',
+            port: '',
+            secure: true
           });
 
           break;

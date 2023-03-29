@@ -20,6 +20,6 @@
     "src/index.tsx"
   ],
   "include": [
-    "src"
+    "src/**/*"
   ]
 }

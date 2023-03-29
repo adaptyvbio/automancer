@@ -12,7 +12,7 @@ export class NativeContextMenu extends React.Component {
         y: event.clientY
       };
 
-      window.common.triggerContextMenu(menu, position).then((selectedPath) => {
+      window.api.main.triggerContextMenu(menu, position).then((selectedPath) => {
         this.props.onSelect(selectedPath);
         this.props.onClose(selectedPath !== null);
       });

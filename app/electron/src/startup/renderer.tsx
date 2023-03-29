@@ -1,4 +1,6 @@
-import { HostSettingsCollection, HostSettingsId, Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostInfo, HostInfoId, Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostSettingsId, HostSettingsRecord } from 'pr1-library';
+import seqOrd from 'seq-ord';
 
 import { HostCreator } from './host-creator';
 import { NativeContextMenuProvider } from '../shared/context-menu';
@@ -10,7 +12,7 @@ export interface AppProps {
 
 export interface AppState {
   defaultHostSettingsId: HostSettingsId | null;
-  hostSettings: HostSettingsCollection | null;
+  hostSettingsRecord: HostSettingsRecord | null;
 }
 
 export class App extends React.Component<AppProps, AppState> {
@@ -21,67 +23,80 @@ export class App extends React.Component<AppProps, AppState> {
 
     this.state = {
       defaultHostSettingsId: null,
-      hostSettings: null
+      hostSettingsRecord: null
     };
   }
 
   override componentDidMount() {
     this.pool.add(async () => {
-      await this.query();
-      await window.api.ready();
+      await this.queryHostSettings();
+
+      await document.fonts.load('12px Material Symbols Rounded');
+      await document.fonts.load('12px Material Symbols Sharp');
+      await document.fonts.load('12px Space Mono');
+
+      window.api.main.ready();
     });
   }
 
-  async query() {
-    let { defaultHostSettingsId, hostSettings } = await window.api.hostSettings.query();
+  async queryHostSettings() {
+    let { defaultHostSettingsId, hostSettingsRecord } = await window.api.hostSettings.list();
 
     this.setState({
       defaultHostSettingsId,
-      hostSettings
+      hostSettingsRecord
     });
   }
 
   override render() {
-    if (!this.state.hostSettings) {
+    if (!this.state.hostSettingsRecord) {
       return null;
     }
 
     return (
       <NativeContextMenuProvider>
         <Startup
-          defaultSettingsId={this.state.defaultHostSettingsId}
-          hostSettings={this.state.hostSettings}
+          defaultHostInfoId={this.state.defaultHostSettingsId as string as HostInfoId}
+          hostInfos={
+            Object.values(this.state.hostSettingsRecord)
+              .map((hostSettings): HostInfo => ({
+                id: (hostSettings.id as string as HostInfoId),
+                description: (hostSettings.options.type === 'tcp')
+                  ? `${hostSettings.options.hostname}:${hostSettings.options.port}`
+                  : 'Local',
+                imageUrl: null,
+                label: hostSettings.label,
+                local: (hostSettings.options.type === 'local')
+              }))
+              .sort(seqOrd(function* (a, b, rules) {
+                yield rules.text(a.label, b.label);
+              }))
+          }
 
-          // createHostSettings={(options) => {
-          //   this.pool.add(async () => {
-          //     await window.api.hostSettings.create({ hostSettings: options.settings });
-          //     await this.query();
-          //   });
-          // }}
-          deleteHostSettings={(hostSettingsId) => {
+          deleteHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.delete({ hostSettingsId });
-              await this.query();
+              await window.api.hostSettings.delete({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
+              await this.queryHostSettings();
             });
           }}
-          launchHost={(hostSettingsId) => {
-            window.api.launchHost({ hostSettingsId });
+          launchHostInfo={(hostInfoId) => {
+            window.api.hostSettings.launchHost({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
           renderHostCreator={({ close }) => (
             <HostCreator
               close={close}
-              update={async () => void await this.query()} />
+              queryHostSettings={async () => void await this.queryHostSettings()} />
           )}
-          revealHostLogsDirectory={(hostSettingsId) => {
-            window.api.hostSettings.revealLogsDirectory({ hostSettingsId });
+          revealHostInfoLogsDirectory={(hostInfoId) => {
+            window.api.hostSettings.revealLogsDirectory({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
-          revealHostSettingsDirectory={(hostSettingsId) => {
-            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId });
+          revealHostInfoSettingsDirectory={(hostInfoId) => {
+            window.api.hostSettings.revealSettingsDirectory({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
           }}
-          setDefaultHostSettings={(hostSettingsId) => {
+          setDefaultHostInfo={(hostInfoId) => {
             this.pool.add(async () => {
-              await window.api.hostSettings.setDefault({ hostSettingsId });
-              await this.query();
+              await window.api.hostSettings.setDefault({ hostSettingsId: (hostInfoId as string as HostSettingsId) });
+              await this.queryHostSettings();
             });
           }} />
       </NativeContextMenuProvider>
@@ -90,7 +105,7 @@ export class App extends React.Component<AppProps, AppState> {
 }
 
 
-if (!window.common.isDarwin) {
+if (!window.api.isDarwin) {
   let sheet = window.document.styleSheets[0];
 
   sheet.insertRule(`

@@ -4,82 +4,70 @@ import { UnitNamespace } from './unit';
 import { UnionToIntersection } from './util';
 
 
-export type ReqResPairs = [
+export type RequestFunc = UnionToIntersection<
   // Server requests
-  [
-    { type: 'isBusy'; },
-    boolean
-  ],
+  (
+    (options: { type: 'isBusy'; }) => Promise<boolean>
+  )
 
   // Host requests
-  [
-    { type: 'command';
+  | (
+    (options: {
+      type: 'command';
       chipId: ChipId;
       command: unknown;
-      namespace: UnitNamespace; },
-    void
-  ],
-  [
-    { type: 'compileDraft';
+      namespace: UnitNamespace;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'compileDraft';
       draft: any;
-      options: any; },
-    any
-  ],
-  [
-    { type: 'createChip'; },
-    { chipId: ChipId; }
-  ],
-  [
-    { type: 'createDraftSample'; },
-    string
-  ],
-  [
-    { type: 'deleteChip';
+      options: any;
+    }) => Promise<any>
+  ) | (
+    (options: { type: 'createChip'; }) => Promise<{ chipId: ChipId; }>
+  ) | (
+    (options: { type: 'createDraftSample'; }) => Promise<string>
+  ) | (
+    (options: {
+      type: 'deleteChip';
       chipId: ChipId;
-      trash: boolean; },
-    void
-  ],
-  [
-    { type: 'duplicateChip';
+      trash: boolean;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'duplicateChip';
       chipId: ChipId;
-      template: boolean; },
-    void
-  ],
-  [
-    { type: 'reloadUnits'; },
-    void
-  ],
-  [
-    { type: 'revealChipDirectory';
-      chipId: ChipId; },
-    void
-  ],
-  [
-    { type: 'sendMessageToActiveBlock';
+      template: boolean;
+    }) => Promise<void>
+  ) | (
+    (options: { type: 'reloadUnits'; }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'revealChipDirectory';
+      chipId: ChipId;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'sendMessageToActiveBlock';
       chipId: ChipId;
       path: ProtocolBlockPath;
-      message: unknown; },
-    void
-  ],
-  [
-    { type: 'startDraft';
+      message: unknown;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'startDraft';
       chipId: ChipId;
       draftId: any;
-      source: string; },
-    void
-  ],
-  [
-    { type: 'upgradeChip';
-      chipId: ChipId; },
-    void
-  ]
-];
-
-export type RequestFuncFromPair<T extends [unknown, unknown]> = (request: T[0]) => Promise<T[1]>;
-export type RequestFuncT<T extends [unknown, unknown][]> = UnionToIntersection<{
-  [S in keyof T]: RequestFuncFromPair<T[S]>;
-}[number]>;
-export type RequestFunc = RequestFuncT<ReqResPairs>;
+      source: string;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'upgradeChip';
+      chipId: ChipId;
+    }) => Promise<void>
+  )
+>;
 
 
 export namespace ClientProtocol {

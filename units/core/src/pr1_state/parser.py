@@ -1,5 +1,5 @@
 from asyncio import Event
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from logging import Logger
 from types import EllipsisType
@@ -43,15 +43,14 @@ class StateParser(BaseParser):
       stable=(('stable' in attrs) and attrs['stable'].value)
     )])
 
-@debug
+@dataclass(kw_only=True)
 class StateTransform(BaseTransform):
-  def __init__(self, parser: StateParser, *, settle: bool, stable: bool):
-    self._parser = parser
-    self._settle = settle
-    self._stable = stable
+  parser: StateParser = field(repr=False)
+  settle: bool
+  stable: bool
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    analysis, child = self._parser._fiber.execute(state, transforms, origin_area=origin_area)
+    analysis, child = self.parser._fiber.execute(BlockState(), transforms, origin_area=origin_area)
 
     if isinstance(child, EllipsisType):
       return analysis, Ellipsis
@@ -68,8 +67,8 @@ class StateTransform(BaseTransform):
 
     return analysis, StateBlock(
       child=child,
-      settle=self._settle,
-      stable=self._stable,
+      settle=self.settle,
+      stable=self.stable,
       state=state
     )
 

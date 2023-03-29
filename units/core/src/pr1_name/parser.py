@@ -26,9 +26,9 @@ class NameParser(BaseParser):
   def parse_block(self, attrs: Attributes, /, adoption_stack, trace):
     if (attr := attrs.get('name')):
       analysis, result = attr.eval(EvalContext(adoption_stack), final=True)
-      return analysis, BlockUnitData(state=NameState(result.value if not isinstance(result, EllipsisType) else None))
+      return analysis, BlockUnitData(NameState(result.value if not isinstance(result, EllipsisType) else None))
     else:
-      return Analysis(), BlockUnitData(state=NameState(None))
+      return Analysis(), BlockUnitData()
 
 
 class NameState(BlockUnitState):

@@ -10,7 +10,7 @@ metadata = Metadata(
   description="Do",
   icon=MetadataIcon(kind='icon', value="description"),
   title="Do",
-  version="1.0"
+  version="2.0"
 )
 
 logger = parent_logger.getChild(namespace)

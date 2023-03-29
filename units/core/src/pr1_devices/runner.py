@@ -154,30 +154,31 @@ class DevicesStateManager(UnitStateManager):
 
       node_info.claim.destroy()
 
-  def add(self, item, state: DevicesState, *, notify, stack):
+  def add(self, item, state: Optional[DevicesState], *, notify, stack):
     analysis = MasterAnalysis()
 
     item_info = DevicesStateItemInfo(item, notify=notify)
     self._item_infos[item] = item_info
 
-    for node_path, node_value in state.values.items():
-      node = self._runner._host.root_node.find(node_path)
-      assert isinstance(node, ValueNode)
-      item_info.nodes.add(node)
+    if state:
+      for node_path, node_value in state.values.items():
+        node = self._runner._host.root_node.find(node_path)
+        assert isinstance(node, ValueNode)
+        item_info.nodes.add(node)
 
-      value_result = analysis.add(node_value.eval(EvalContext(stack), final=True))
+        value_result = analysis.add(node_value.eval(EvalContext(stack), final=True))
 
-      if isinstance(value_result, EllipsisType):
-        return analysis, Ellipsis
+        if isinstance(value_result, EllipsisType):
+          return analysis, Ellipsis
 
-      if node in self._node_infos:
-        node_info = self._node_infos[node]
-      else:
-        node_info = DevicesStateNodeInfo(path=node_path)
-        self._node_infos[node] = node_info
+        if node in self._node_infos:
+          node_info = self._node_infos[node]
+        else:
+          node_info = DevicesStateNodeInfo(path=node_path)
+          self._node_infos[node] = node_info
 
-      item_info.location.values[node_info.path] = NodeStateLocation(value_result.value)
-      bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value_result.value), key=(lambda candidate: candidate.item_info.item))
+        item_info.location.values[node_info.path] = NodeStateLocation(value_result.value)
+        bisect.insort_left(node_info.candidates, DevicesStateNodeCandidate(item_info, value_result.value), key=(lambda candidate: candidate.item_info.item))
 
     return analysis, None
 

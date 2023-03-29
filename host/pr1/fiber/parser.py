@@ -1,22 +1,17 @@
 from abc import ABC, abstractmethod
-import asyncio
-from collections import namedtuple
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path, PurePath
-from pint import UnitRegistry
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence
 
 from ..error import Trace
 from ..util.misc import Exportable
 from . import langservice as lang
 from .eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
-from .expr import PythonExpr, PythonExprAugmented
 from .. import reader
-from ..reader import LocatedValue, LocationArea
-from ..draft import Draft, DraftDiagnostic, DraftGenericError
+from ..reader import LocationArea
+from ..draft import Draft, DraftDiagnostic
 from ..ureg import ureg
-from ..util import schema as sc
 from ..util.decorators import debug
 from ..util.asyncio import run_anonymous
 
@@ -57,10 +52,10 @@ class BlockState(dict[str, Optional[BlockUnitState]]):
     if other is None:
       return self
     else:
-      result = dict()
+      result = dict[str, Optional[BlockUnitState]]()
 
       for key, value in self.items():
-        other_value = other[key]
+        other_value = other.get(key)
 
         if value is None:
           result[key] = other_value
@@ -114,18 +109,12 @@ class BlockData:
     self.state = state
     self.transforms = transforms
 
-@debug
+@dataclass
 class BlockUnitData:
-  def __init__(
-    self,
-    *,
-    envs: Optional[list[EvalEnv]] = None,
-    state: Optional[BlockUnitState] = None,
-    transforms: Optional[list['BaseTransform']] = None
-  ):
-    self.envs = envs or list()
-    self.state = state
-    self.transforms = transforms or list()
+  state: Optional[BlockUnitState] = None
+  _: KW_ONLY
+  envs: EvalEnvs = field(default_factory=EvalEnvs)
+  transforms: 'Transforms' = field(default_factory=(lambda: Transforms()))
 
 @dataclass
 class BlockUnitPreparationData:
@@ -231,7 +220,8 @@ class BaseParser(Protocol):
   def parse_block(self, attrs, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     return lang.Analysis(), BlockUnitData()
 
-class BaseTransform:
+class BaseTransform(ABC):
+  @abstractmethod
   def execute(self, state: BlockState, transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     ...
 
@@ -468,7 +458,7 @@ class FiberParser:
   def parse_block(self, preps: dict[str, Any], /, adoption_stack: EvalStack, trace: Optional[Trace] = None):
     analysis = lang.Analysis()
     state = BlockState()
-    transforms = list[BaseTransform]()
+    transforms = Transforms()
     trace = trace or Trace()
 
     # for namespace, prep in preps.items():
@@ -478,6 +468,7 @@ class FiberParser:
 
     for parser in self._parsers:
       prep = preps[parser.namespace]
+      # state[parser.namespace] = None
 
       if prep is None:
         continue
@@ -488,7 +479,9 @@ class FiberParser:
         failure = True
         continue
 
-      state[parser.namespace] = block_data.state
+      if block_data.state:
+        state[parser.namespace] = block_data.state
+
       transforms += block_data.transforms
 
     return analysis, BlockData(state=state, transforms=transforms) if not failure else Ellipsis

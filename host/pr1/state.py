@@ -143,7 +143,7 @@ class UnitStateManager(ABC):
     ...
 
   @abstractmethod
-  def add(self, item: StateProgramItem, state: Any, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> tuple[MasterAnalysis, None | EllipsisType]:
+  def add(self, item: StateProgramItem, state: Optional[Any], *, notify: Callable[[StateEvent], None], stack: EvalStack) -> tuple[MasterAnalysis, None | EllipsisType]:
     ...
 
   @abstractmethod
@@ -276,7 +276,7 @@ class GlobalStateManager:
     analysis = MasterAnalysis()
 
     for namespace, consumer in self._consumers.items():
-      value = state[namespace]
+      value = state.get(namespace)
       notify = (lambda event, namespace = namespace: self._handle_event(item, namespace, event))
 
       result = analysis.add(consumer.add(item, value, notify=notify, stack=stack))

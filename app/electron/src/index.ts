@@ -354,7 +354,7 @@ export class CoreApplication {
           this.logger.debug('Creating virtual environment');
 
           await util.runCommand([pythonInstallation.path, '-m', 'venv', envPath], { architecture, timeout: 60e3 });
-          pythonPath = path.join(envPath, 'bin/python');
+          pythonPath = path.join(envPath, ((process.platform === 'win32') ? 'Scripts/python.EXE' : 'bin/python'));
 
           let corePackagesDirPath = util.getResourcePath('packages');
           for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
@@ -449,7 +449,7 @@ export class CoreApplication {
         { buttonLabel: 'Select',
           filters: [
             ...(process.platform === 'win32'
-              ? [{ name: 'Executables', extensions: ['*.exe'] }]
+              ? [{ name: 'Executables', extensions: ['exe'] }]
               : []),
             { name: 'All Files', extensions: ['*'] }
           ],

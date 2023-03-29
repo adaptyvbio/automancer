@@ -58,6 +58,9 @@ export async function findPythonInstallations() {
   let possiblePythonLocations = [
     'python3',
     'python',
+    ...((process.platform === 'win32')
+      ? ['py']
+      : []),
     ...((process.platform === 'darwin')
       ? [
         '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
@@ -101,38 +104,40 @@ export async function findPythonInstallations() {
     let lastInstallation = installation;
     installations[installation.id] = installation;
 
-    while (true) {
-      let linkPath = null;
+    if (process.platform !== 'win32') {
+      while (true) {
+        let linkPath: string;
 
-      try {
-        linkPath = await fs.readlink(lastInstallation.path);
-      } catch (err) {
-        if ((err as { code: string; }).code === 'EINVAL') {
+        try {
+          linkPath = await fs.readlink(lastInstallation.path);
+        } catch (err) {
+          if ((err as { code: string; }).code === 'EINVAL') {
+            break;
+          }
+
+          throw err;
+        }
+
+        lastInstallation.symlink = true;
+
+        let installationPath = path.resolve(path.dirname(lastInstallation.path), linkPath);
+
+        if (installationPath in installations) {
+          installations[installationPath].leaf = false;
           break;
         }
 
-        throw err;
+        let installation = {
+          id: installationPath,
+          info,
+          leaf: false,
+          path: installationPath,
+          symlink: false
+        } satisfies PythonInstallation;
+
+        installations[installation.id] = installation;
+        lastInstallation = installation;
       }
-
-      lastInstallation.symlink = true;
-
-      let installationPath = path.resolve(path.dirname(lastInstallation.path), linkPath);
-
-      if (installationPath in installations) {
-        installations[installationPath].leaf = false;
-        break;
-      }
-
-      let installation = {
-        id: installationPath,
-        info,
-        leaf: false,
-        path: installationPath,
-        symlink: false
-      } satisfies PythonInstallation;
-
-      installations[installation.id] = installation;
-      lastInstallation = installation;
     }
   };
 

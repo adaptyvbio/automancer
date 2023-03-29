@@ -329,13 +329,18 @@ export interface Deferred<T> {
 export class Pool {
   #promises = new Set<Promise<unknown>>();
 
-  add<T>(func: () => Promise<T>): Promise<T> {
+  add<T>(func: (() => Promise<T>)): Promise<T> {
     let promise = func();
     this.#promises.add(promise);
 
-    promise.finally(() => {
-      this.#promises.delete(promise);
-    });
+    promise
+      .catch((err) => {
+        console.error('Pool error');
+        console.error(err);
+      })
+      .finally(() => {
+        this.#promises.delete(promise);
+      });
 
     return promise;
   }

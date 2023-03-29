@@ -18,7 +18,6 @@ import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
 import { Pool } from './util';
 import { Unit } from './units';
-import { BaseBackend } from './backends/base';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';

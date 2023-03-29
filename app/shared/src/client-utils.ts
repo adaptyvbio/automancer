@@ -1,7 +1,8 @@
-import { ClientProtocol, ServerProtocol, createErrorWithCode } from 'pr1-shared';
+import { createErrorWithCode } from './error';
+import { ClientProtocol, ServerProtocol } from './types/protocol';
 
 
-export async function* splitMessagesOfIterator(iterable: AsyncIterable<Buffer>) {
+export async function* splitMessagesOfIterator(iterable: AsyncIterable<{ toString(): string; }>) {
   let contents = '';
 
   for await (let chunk of iterable) {
@@ -16,17 +17,17 @@ export async function* splitMessagesOfIterator(iterable: AsyncIterable<Buffer>) 
 
 
 export function serializeMessage(message: ClientProtocol.Message) {
-  return Buffer.from(JSON.stringify(message) + '\n');
+  return (JSON.stringify(message) + '\n');
 }
 
-export async function* deserializeMessagesOfIterator(iterable: AsyncIterable<string>, options?: { handleMalformed?(msg: string): boolean; }) {
+export async function* deserializeMessagesOfIterator(iterable: AsyncIterable<string>) {
   for await (let msg of iterable) {
     let message;
 
     try {
       message = JSON.parse(msg) as ServerProtocol.Message;
     } catch (err) {
-      if (!options?.handleMalformed?.(msg) && (err instanceof SyntaxError)) {
+      if (err instanceof SyntaxError) {
         throw createErrorWithCode('Malformed message', 'APP_MALFORMED');
       }
 

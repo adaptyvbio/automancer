@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
 import net from 'node:net';
 import tls from 'node:tls';
-import { Deferred, defer, createErrorWithCode, ClientProtocol, Client, ClientBackend, ServerProtocol } from 'pr1-shared';
+import { Deferred, defer, createErrorWithCode, ClientProtocol, Client, ServerProtocol, deserializeMessagesOfIterator, splitMessagesOfIterator, serializeMessage } from 'pr1-shared';
 
 import { CertificateFingerprint } from './types/app-data';
-import { deserializeMessagesOfIterator, serializeMessage, splitMessagesOfIterator } from './client';
 
 
 export class OrdinarySocketClientClosedError extends Error {
@@ -208,7 +207,7 @@ export class SocketClientBackend {
   }
 
   async send(message: ClientProtocol.Message) {
-    this.socket.send(serializeMessage(message));
+    this.socket.send(Buffer.from(serializeMessage(message)));
   }
 
 

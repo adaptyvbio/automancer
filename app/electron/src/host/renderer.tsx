@@ -1,4 +1,4 @@
-import { AppBackend, Application, BrowserAppBackendDraftItem, DraftId, HostInfoId, MessageBackend, Pool, React, ReactDOM } from 'pr1';
+import { AppBackend, Application, DraftId, HostInfoId, Pool, React, ReactDOM } from 'pr1';
 import { DraftEntry, HostSettings, HostSettingsId } from 'pr1-library';
 import { Client, defer, Deferred, ServerProtocol } from 'pr1-shared';
 
@@ -207,28 +207,3 @@ async function createLocalClient(hostSettings: HostSettings) {
 
   return client;
 }
-
-// class LocalHostBackend extends MessageBackend {
-//   closed = new Promise<void>(() => {});
-
-//   constructor(private hostSettings: HostSettings) {
-//     super();
-//   }
-
-//   async _start(listener) {
-//     window.api.localHost.onMessage((message) => {
-//       listener(message);
-//     });
-
-//     await window.api.localHost.ready(this.hostSettings.id);
-//   }
-
-//   async _send(message) {
-//     window.api.localHost.sendMessage(this.hostSettings.id, message);
-//   }
-
-//   async loadUnit(unitInfo) {
-//     let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, 'http://localhost:4568');
-//     return await import(url.href);
-//   }
-// }

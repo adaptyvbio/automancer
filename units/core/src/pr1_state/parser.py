@@ -175,7 +175,9 @@ class StateProgram(HeadProgram):
   async def pause(self):
     match self._mode:
       # Applying state
-      case StateProgramMode.ApplyingState:
+      case StateProgramMode.ApplyingState | StateProgramMode.ResumingState:
+        start_mode = self._mode
+
         await cancel_task(self._apply_task)
 
         self._mode = StateProgramMode.SuspendingState
@@ -184,12 +186,17 @@ class StateProgram(HeadProgram):
         await self._state_manager.suspend(self._handle)
         await self._state_manager.clear(self._handle)
 
-        self._mode = StateProgramMode.PausedUnapplied
+        match start_mode:
+          case StateProgramMode.ApplyingState:
+            self._mode = StateProgramMode.PausedUnapplied
+          case StateProgramMode.ResumingState:
+            self._mode = StateProgramMode.Paused
+
         self._send_location()
 
-        # await self._handle.pause_unstable_parent()
-
+        self._handle.pause_unstable_parent()
         self._interrupted_event.set()
+
         return True
 
       # Already paused
@@ -222,7 +229,7 @@ class StateProgram(HeadProgram):
         return True
 
       # Doing something else
-      case StateProgramMode.ResumingParent | StateProgramMode.ResumingState:
+      case StateProgramMode.ResumingParent:
         return False
 
       case _:
@@ -236,32 +243,70 @@ class StateProgram(HeadProgram):
         self._mode = StateProgramMode.ResumingParent
         self._send_location()
 
-        try:
-          await self._handle.resume_parent()
-        except Exception:
-          # Set the mode back to Paused if the parent could not be resumed, e.g. because it is being paused.
+        # Set the mode back to Paused if the parent could not be resumed, e.g. because it is being paused.
+        if not await self._handle.resume_parent():
           self._mode = StateProgramMode.Paused
-          raise
+          self._send_location()
+
+          return False
 
         if self._block.settle or (not loose):
           self._mode = StateProgramMode.ResumingState
           self._send_location()
 
-          await self._state_manager.apply(self._handle, terminal=(not loose))
+          self._apply_task = asyncio.create_task(self._state_manager.apply(self._handle, terminal=(not loose)))
+
+          try:
+            failure = await self._apply_task
+          except asyncio.CancelledError:
+            return False
+          else:
+            if failure:
+              self._mode = StateProgramMode.SuspendingState
+              self._send_location()
+
+              await self._state_manager.suspend(self._handle)
+              await self._state_manager.clear(self._handle)
+
+              self._mode = StateProgramMode.Paused
+              self._send_location()
+
+              self._interrupted_event.set()
+              self._handle.pause_unstable_parent()
+
+              return False
+          finally:
+            self._apply_task = None
 
         self._mode = StateProgramMode.Normal
         self._send_location()
 
+        return True
+
       case StateProgramMode.PausedUnapplied:
         self._interrupted_event.unset()
+
+        self._mode = StateProgramMode.ResumingParent
+        self._send_location()
+
+        if not await self._handle.resume_parent():
+          self._mode = StateProgramMode.PausedUnapplied
+          self._send_location()
+
+          return False
+
         self._bypass_event.set()
 
         self._mode = StateProgramMode.ApplyingState
         self._send_location()
 
+        return True
+
       case _:
         if not loose:
           raise AssertionError
+
+        return False
 
   def stable(self):
     return self._block.stable
@@ -295,10 +340,12 @@ class StateProgram(HeadProgram):
       self._send_location(analysis=analysis)
 
       await self._state_manager.clear(self._handle)
-      # await self._handle.pause_stable()
 
       self._interrupted_event.set()
+      self._handle.pause_unstable_parent()
+
       await self._bypass_event.wait()
+      self._bypass_event.clear()
     else:
       if self._block.settle:
         self._mode = StateProgramMode.ApplyingState
@@ -312,6 +359,7 @@ class StateProgram(HeadProgram):
             failure = await self._apply_task
           except asyncio.CancelledError:
             await self._bypass_event.wait()
+            self._bypass_event.clear()
           else:
             if failure:
               self._mode = StateProgramMode.SuspendingState
@@ -324,6 +372,8 @@ class StateProgram(HeadProgram):
               self._send_location()
 
               self._interrupted_event.set()
+              self._handle.pause_unstable_parent()
+
               await self._bypass_event.wait()
               self._bypass_event.clear()
 

@@ -441,14 +441,14 @@ class DemoStateInstance(UnitStateInstance):
     # ]), failure=(self._index == 1 and self._flag == 0 and False), settled=True)) # (not wait)))
 
     # self._flag += 1
-    self._notify(StateEvent(DemoStateLocation(1), settled=True))
+    # self._notify(StateEvent(DemoStateLocation(1), settled=True))
 
-    # if self._index == 1:
-    #   self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
-    #     MasterError("Problem")
-    #   ]), failure=True))
-    # else:
-    #   self._notify(StateEvent(DemoStateLocation(1), settled=True))
+    if self._index == 2:
+      self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
+        MasterError("Problem")
+      ]), failure=True))
+    else:
+      self._notify(StateEvent(DemoStateLocation(1), settled=True))
 
   async def close(self):
     self._logger.debug('Close')

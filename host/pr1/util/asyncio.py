@@ -196,13 +196,16 @@ async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]
   return cast(Task[T], task)
 
 
-async def wait_all(items: Iterable[Coroutine[Any, Any, Any]], /):
-  tasks = [asyncio.create_task(item) for item in items]
+async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
+  cancelled_exc: Optional[asyncio.CancelledError] = None
+  tasks = [item if isinstance(item, Task) else asyncio.create_task(item) for item in items]
 
   while True:
     try:
       await asyncio.wait(tasks)
-    except asyncio.CancelledError:
+    except asyncio.CancelledError as e:
+      cancelled_exc = e
+
       for task in tasks:
         task.cancel()
     else:
@@ -214,3 +217,6 @@ async def wait_all(items: Iterable[Coroutine[Any, Any, Any]], /):
     raise BaseExceptionGroup("ExceptionGroup", exceptions)
   elif exceptions:
     raise exceptions[0]
+
+  if cancelled_exc:
+    raise cancelled_exc

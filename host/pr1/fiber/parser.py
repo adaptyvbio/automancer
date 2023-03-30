@@ -166,7 +166,7 @@ class HeadProgram(BlockProgram):
     ...
 
   @abstractmethod
-  async def resume(self, *, loose: bool):
+  async def resume(self, *, loose: bool) -> bool:
     ...
 
   def stable(self):

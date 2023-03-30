@@ -33,8 +33,8 @@ class Master:
     self.protocol = protocol
 
     self.state_manager = GlobalStateManager({
-      # namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
-      namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
       # 'foo': DemoStateInstance
     })
 
@@ -354,29 +354,28 @@ class ProgramHandle:
       else:
         await child_handle.pause_children()
 
-  async def pause_stable(self):
-    pass
+  def pause_unstable_parent(self):
+    current_handle = self
+    unstable_program = self._program
+    assert isinstance(unstable_program, HeadProgram)
 
-    # current_handle = self
-    # unstable_program = self._program
-    # assert isinstance(unstable_program, HeadProgram) # TODO: Make it possible to report failures from non-head programs
+    while isinstance(current_handle := current_handle._parent, ProgramHandle):
+      if isinstance(current_handle._program, HeadProgram):
+        if current_handle._program.stable():
+          break
 
-    # while isinstance(current_handle := current_handle._parent, ProgramHandle):
-    #   if isinstance(current_handle._program, HeadProgram):
-    #     if current_handle._program.stable():
-    #       break
+        unstable_program = current_handle._program
 
-    #     unstable_program = current_handle._program
-
-    # await unstable_program.pause()
+    self.master._pool.start_soon(unstable_program.pause())
 
   async def resume_parent(self):
     current_handle = self
 
     while (current_handle := current_handle._parent) and isinstance(current_handle, ProgramHandle):
       if isinstance(current_handle._program, HeadProgram):
-        await current_handle._program.resume(loose=True)
-        break
+        return await current_handle._program.resume(loose=True)
+
+    return True
 
   def send(self, event: ProgramExecEvent, *, lock: bool = False):
     self._analysis += event.analysis

@@ -181,15 +181,18 @@ class SegmentProgram(HeadProgram):
         assert self._bypass_future
         self._bypass_future.set_result(None)
         self._bypass_future = None
+
+        return True
+
       case SegmentProgramMode.Paused:
         self._mode = SegmentProgramMode.ResumingParent
         self._handle.send(ProgramExecEvent(location=self._location))
 
-        try:
-          await self._handle.resume_parent()
-        except Exception:
+        if not (await self._handle.resume_parent()):
           self._mode = SegmentProgramMode.Paused
-          raise
+          self._handle.send(ProgramExecEvent(location=self._location))
+
+          return False
 
         self._mode = SegmentProgramMode.ResumingProcess
         self._handle.send(ProgramExecEvent(location=self._location), lock=True)
@@ -197,8 +200,11 @@ class SegmentProgram(HeadProgram):
         self._process.resume()
         self._resume_event = Event()
         await self._resume_event.wait()
+
+        return True
+
       case _:
-        raise AssertionError
+        return False
 
   async def run(self, stack: EvalStack):
     initial_point = None

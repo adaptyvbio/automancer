@@ -14,10 +14,10 @@ from pr1.error import Error
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
 from pr1.host import Host
-from pr1.master.analysis import MasterAnalysis
+from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseRunner
-from pr1.util.asyncio import race, run_anonymous
+from pr1.util.asyncio import race, run_anonymous, wait_all
 
 from . import logger, namespace
 from .parser import DevicesState
@@ -93,11 +93,13 @@ class DevicesStateNodeInfo:
   current_candidate: Optional[DevicesStateNodeCandidate] = None
   path: NodePath
   settled: bool = False
-  task: Optional[Task] = None
+  lifecycle_task: Optional[Task] = None
   update_event: Optional[Event] = None
+  write_task: Optional[Task] = None
 
 class DevicesStateManager(UnitStateManager):
   def __init__(self, runner: 'DevicesRunner'):
+    self._canceled_lifecycle_tasks = set[Task[None]]()
     self._item_infos = dict[StateProgramItem, DevicesStateItemInfo]()
     self._node_infos = dict[ValueNode, DevicesStateNodeInfo]()
     self._runner = runner
@@ -118,25 +120,54 @@ class DevicesStateManager(UnitStateManager):
         # info.current_candidate.item_info.notify(NodeStateLocation(info.current_candidate.value))
 
         while True:
-          if node_info.current_candidate:
-            value = node_info.current_candidate.value
+          if (candidate := node_info.current_candidate):
+            value = candidate.value
 
-            match node:
-              case BooleanNode():
-                await node.write(value if value is not None else Null)
-              case EnumNode():
-                await node.write(value if value is not None else Null)
-              case NumericNode():
-                await node.write(value if value is not None else Null)
-              case _:
-                raise ValueError
+            async def write():
+              match node:
+                case BooleanNode():
+                  await node.write(value if value is not None else Null)
+                case EnumNode():
+                  await node.write(value if value is not None else Null)
+                case NumericNode():
+                  await node.write(value if value is not None else Null)
+                case _:
+                  raise ValueError
 
-            # TODO: node_info.current_candidate could have changed here
+            task = node_info.write_task = asyncio.create_task(write())
 
-            node_info.settled = True
-            node_info.current_candidate.item_info.do_notify(self)
+            try:
+              await asyncio.shield(task)
+            except asyncio.CancelledError:
+              # The candidate has changed -> run the loop again
+              if task.cancelled():
+                continue
+              # The lifecycle method is being cancelled -> proceed with the cancellation
+              else:
+                task.cancel()
+                await task
+            except Exception as e:
+              (item_info := candidate.item_info).notify(StateEvent(
+                item_info.location,
+                analysis=MasterAnalysis(errors=[
+                  MasterError(f"Device internal error: {e}")
+                ]),
+                failure=True
+              ))
+            else:
+              node_info.settled = True
+              candidate.item_info.do_notify(self)
+            finally:
+              node_info.write_task = None
 
-          race_index, _ = await race(node_info.claim.lost(), node_info.update_event.wait())
+            # The candidate has changed in the meantime, let's start again.
+            # if node_info.current_candidate is not candidate:
+            #   continue
+
+          race_index, _ = await race(
+            node_info.claim.lost(),
+            node_info.update_event.wait()
+          )
 
           if race_index == 0:
             # The claim was lost.
@@ -145,8 +176,6 @@ class DevicesStateManager(UnitStateManager):
           else:
             # The node was updated.
             node_info.update_event.clear()
-    except asyncio.CancelledError:
-      pass
     finally:
       if reg:
         await reg.cancel()
@@ -189,7 +218,11 @@ class DevicesStateManager(UnitStateManager):
       node_info = self._node_infos.get(node)
 
       if node_info:
+        old_candidate_count = len(node_info.candidates)
         node_info.candidates = [candidate for candidate in node_info.candidates if candidate.item_info.item is not item]
+
+        if len(node_info.candidates) != old_candidate_count:
+          self._updated_nodes.add(node)
 
         if node_info.current_candidate and (node_info.current_candidate.item_info.item is item):
           node_info.current_candidate = None
@@ -206,15 +239,19 @@ class DevicesStateManager(UnitStateManager):
       # TODO: Discriminate across branches
 
       node_info = self._node_infos[node]
+      current_candidate = node_info.current_candidate
       new_candidate = next((candidate for candidate in node_info.candidates[::-1] if (candidate_item := candidate.item_info.item).applied or (candidate_item in items)), None)
 
       # print('New candidate', node_info.current_candidate is not None, new_candidate is not None, node_info.current_candidate is not new_candidate)
 
-      if node_info.current_candidate is not new_candidate:
-        if node_info.current_candidate:
-          current_item_info = node_info.current_candidate.item_info
+      if current_candidate is not new_candidate:
+        if current_candidate:
+          current_item_info = current_candidate.item_info
           current_node_location = current_item_info.location.values[node_info.path]
           current_node_new_location = NodeStateLocation(current_node_location.value)
+
+          if node_info.write_task:
+            node_info.write_task.cancel()
 
           if current_node_new_location != current_node_location:
             current_item_info.location.values[node_info.path] = current_node_new_location
@@ -233,8 +270,8 @@ class DevicesStateManager(UnitStateManager):
           if not node_info.claim:
             node_info.claim = node.claim()
 
-          if not node_info.task:
-            node_info.task = run_anonymous(self._node_lifecycle(node, node_info))
+          if not node_info.lifecycle_task:
+            node_info.lifecycle_task = run_anonymous(self._node_lifecycle(node, node_info))
             node_info.update_event = Event()
 
       if not node_info.candidates:
@@ -249,13 +286,22 @@ class DevicesStateManager(UnitStateManager):
     for node in obsolete_nodes:
       node_info = self._node_infos[node]
 
-      assert node_info.task
-      node_info.task.cancel()
+      assert (task := node_info.lifecycle_task)
+
+      task.cancel()
+      task.add_done_callback(lambda task: self._canceled_lifecycle_tasks.remove(task))
+      self._canceled_lifecycle_tasks.add(task)
 
       del self._node_infos[node]
 
   async def clear(self, item):
     self.apply(list())
+
+    while (tasks := self._canceled_lifecycle_tasks):
+      try:
+        await wait_all(tasks)
+      except asyncio.CancelledError:
+        pass
 
   async def suspend(self, item):
     self._updated_nodes |= self._item_infos[item].nodes

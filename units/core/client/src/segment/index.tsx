@@ -19,9 +19,7 @@ export interface Location {
 }
 
 export enum LocationMode {
-  ApplyingState = 5,
   Broken = 0,
-  FailedState = 10,
   Halting = 1,
   Normal = 2,
   Pausing = 3,

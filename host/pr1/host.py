@@ -8,6 +8,8 @@ from graphlib import TopologicalSorter
 from types import EllipsisType
 from typing import Optional
 
+from .util.asyncio import run_double
+
 from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.nodes.collection import CollectionNode, DeviceNode
@@ -18,6 +20,7 @@ from .fiber.master2 import Master
 from .unit import UnitManager
 from .ureg import ureg
 from .util import schema as sc
+from .util.pool import Pool
 
 
 class HostRootNode(CollectionNode):
@@ -55,7 +58,8 @@ class Host:
     self.chips_dir = self.data_dir / "chips"
     self.chips_dir.mkdir(exist_ok=True)
 
-    self.devices: dict[str, DeviceNode] = dict()
+    self.devices = dict[str, DeviceNode]()
+    self.pool = Pool()
     self.root_node = HostRootNode(self.devices)
 
     self.previous_state = {
@@ -179,10 +183,7 @@ class Host:
   async def destroy(self):
     logger.info("Destroying host")
 
-    for chip in self.chips.values():
-      if isinstance(chip, Chip) and chip.master:
-        logger.info(f"Halting master running '{chip.master.protocol.name}' on chip '{chip.id}'")
-        await chip.master.wait_halt()
+    await self.pool.cancel()
 
     logger.debug("Destroying executors")
 
@@ -394,13 +395,8 @@ class Host:
 
         draft = Draft.load(request["draft"])
         compilation = draft.compile(host=self)
-        assert compilation.protocol
 
-        def done_callback(task):
-          logger.info(f"Ran protocol on chip '{chip.id}'")
-          self.update_callback()
-
-        def done_callback_immediate():
+        def cleanup_callback():
           chip.master = None
 
         def update_callback():
@@ -408,9 +404,26 @@ class Host:
 
         logger.info(f"Running protocol on chip '{chip.id}'")
 
-        chip.master = Master(compilation.protocol, chip, done_callback=done_callback_immediate, host=self)
-        await chip.master.run(update_callback)
-        asyncio.ensure_future(chip.master.done()).add_done_callback(done_callback)
+        async def func(ready):
+          assert compilation.protocol
+
+          chip.master = Master(compilation.protocol, chip, cleanup_callback=cleanup_callback, host=self)
+          await chip.master.run(update_callback)
+
+          ready()
+
+          done = asyncio.create_task(chip.master.done())
+
+          try:
+            await asyncio.shield(done)
+          except asyncio.CancelledError:
+            chip.master.halt()
+            await done
+
+          logger.info(f"Ran protocol on chip '{chip.id}'")
+          self.update_callback()
+
+        self.pool.add(await run_double(func))
 
       case "upgradeChip":
         chip = self.chips[request["chipId"]]

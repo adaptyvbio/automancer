@@ -57,6 +57,22 @@ class Pool:
       if exc:
         self.close()
 
+  def add(self, task: Task[Any]):
+    """
+    Adds a new task to the pool.
+    """
+
+    task.add_done_callback(self._done_callback)
+    self._tasks.add(task)
+
+    async def ret():
+      try:
+        return await task
+      except Exception:
+        raise asyncio.CancelledError from None
+
+    return asyncio.create_task(ret())
+
   async def cancel(self):
     """
     Cancels all tasks currently in the pool and waits for all tasks to finish, including those that might be added during cancellation.
@@ -91,7 +107,7 @@ class Pool:
 
     while (tasks := self._tasks.copy()):
       try:
-        await asyncio.shield(asyncio.wait(tasks))
+        await asyncio.wait(tasks)
       except asyncio.CancelledError:
         cancelled = True
         self.close()
@@ -106,28 +122,22 @@ class Pool:
             if exc:
               exceptions.append(exc)
 
-    if exceptions:
+    if len(exceptions) >= 2:
       raise PoolExceptionGroup("Pool error", exceptions)
+    if exceptions:
+      raise exceptions[0]
 
     if cancelled:
       raise asyncio.CancelledError
 
   def start_soon(self, coro: Coroutine[Any, Any, T], /) -> Task[T]:
     """
-    Adds a new task to the pool, created from a coroutine.
+    Creates a task from the provided coroutine and adds it to the pool.
     """
 
     task = asyncio.create_task(coro)
-    task.add_done_callback(self._done_callback)
-    self._tasks.add(task)
-
-    async def ret():
-      try:
-        return await task
-      except Exception:
-        raise asyncio.CancelledError from None
-
-    return asyncio.create_task(ret())
+    self.add(task)
+    return task
 
   @classmethod
   @contextlib.asynccontextmanager

@@ -5,7 +5,7 @@ from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, TypeVar, cast
 
 
 @dataclass
@@ -134,6 +134,28 @@ async def cancel_task(task: Optional[Task], /):
       pass
 
 
+async def race(*awaitables: Awaitable):
+  tasks = [asyncio.ensure_future(awaitable) for awaitable in awaitables]
+
+  try:
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+  except asyncio.CancelledError:
+    for task in tasks:
+      task.cancel()
+
+    await asyncio.wait(tasks)
+    raise
+
+  done_task = next(iter(done))
+
+  for task in pending:
+    task.cancel()
+
+  await asyncio.wait(pending)
+
+  return tasks.index(done_task), done_task.result()
+
+
 def run_anonymous(awaitable: Awaitable, /):
   call_trace = traceback.extract_stack()
 
@@ -152,21 +174,39 @@ def run_anonymous(awaitable: Awaitable, /):
 
 
 async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]], /) -> Task[T]:
-  ready_event = Event()
-  task = asyncio.create_task(func(ready_event.set))
+  future = Future[None]()
+
+  async def inner_func():
+    try:
+      return await func(lambda: future.set_result(None))
+    except BaseException as e:
+      if not future.done():
+        future.set_exception(e)
+      else:
+        raise
+
+  task = asyncio.create_task(inner_func())
 
   try:
-    await ready_event.wait()
+    await future
   except asyncio.CancelledError:
     task.cancel()
-    await task
+    await future
 
-  return task
+  return cast(Task[T], task)
 
 
 async def wait_all(items: Iterable[Coroutine[Any, Any, Any]], /):
   tasks = [asyncio.create_task(item) for item in items]
-  await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
+
+  while True:
+    try:
+      await asyncio.wait(tasks)
+    except asyncio.CancelledError:
+      for task in tasks:
+        task.cancel()
+    else:
+      break
 
   exceptions = [exc for task in tasks if (exc := task.exception())]
 

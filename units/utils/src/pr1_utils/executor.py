@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 from typing import Any
@@ -7,6 +8,7 @@ from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import ConfigurableNode, NodeId
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
+from pr1.devices.nodes.value import NullType
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
 
@@ -30,7 +32,8 @@ class SystemNode(DeviceNode):
       node.id: node for node in {
         EpochNode(),
         ProcessMemoryUsageNode(),
-        RandomNode()
+        RandomNode(),
+        WaitNode()
       }
     }
 
@@ -83,6 +86,22 @@ class RandomNode(PollableReadableNode, NumericNode):
 
   async def _read_value(self):
     return random.random()
+
+class WaitNode(NumericNode):
+  def __init__(self):
+    super().__init__(
+      unit=ureg.sec,
+      writable=True
+    )
+
+    self.connected = True
+    self.icon = "schedule"
+    self.id = NodeId('wait')
+    self.label = "Wait"
+
+  async def _write(self, value, /):
+    assert not isinstance(value, NullType)
+    await asyncio.sleep(value.magnitude) # type: ignore
 
 
 class Executor(BaseExecutor):

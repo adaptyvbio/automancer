@@ -1,4 +1,4 @@
-from asyncio import Future, Lock, Task
+from asyncio import Event, Future, Lock, Task
 from pprint import pprint
 from collections import deque
 from dataclasses import dataclass, field
@@ -11,6 +11,7 @@ import asyncio
 import traceback
 
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
+from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter
 from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
@@ -26,35 +27,33 @@ if TYPE_CHECKING:
 
 
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, done_callback: SimpleCallbackFunction, host: 'Host'):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: SimpleCallbackFunction, host: 'Host'):
     self.chip = chip
     self.host = host
     self.protocol = protocol
 
     self.state_manager = GlobalStateManager({
-      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
-      # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      # namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
+      namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
       # 'foo': DemoStateInstance
     })
 
     self._analysis = MasterAnalysis()
-    self._done_callback = done_callback
+    self._cleanup_callback = cleanup_callback
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._location: Optional[ProgramHandleEventEntry] = None
     self._owner: ProgramOwner
+    self._pool = Pool()
+    self._ready_future = Future[None]()
     self._update_callback: Optional[SimpleCallbackFunction] = None
     self._update_lock_depth = 0
     self._update_handle: Optional[asyncio.Handle] = None
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
 
-    self._done_future: Optional[Future[None]] = None
-    self._start_future: Optional[Future[None]] = None
-
   async def done(self):
-    assert self._done_future
-    await self._done_future
+    await self._pool.wait()
 
   def halt(self):
     self._handle._program.halt()
@@ -64,10 +63,6 @@ class Master:
 
   #   # Only set the future after in case the call was illegal and is rejected by the child program.
   #   self._pause_future = Future()
-
-  async def wait_halt(self):
-    self.halt()
-    await self.done()
 
   # async def wait_pause(self):
   #   self.pause()
@@ -109,31 +104,22 @@ class Master:
     self._owner = ProgramOwner(self._handle, self._handle._program)
 
     async def func():
-      assert self._done_future
-
       try:
-        try:
-          self.update_soon()
-          await self._owner.run(runtime_stack)
-          self.update_now()
-        finally:
-          self._done_callback()
-
-        await self.state_manager.clear()
+        self.update_soon()
+        await self._owner.run(runtime_stack)
+        self.update_now()
       except Exception as e:
-        if self._start_future:
-          self._start_future.set_exception(e)
+        if self._ready_future:
+          self._ready_future.set_exception(e)
         else:
-          self._done_future.set_exception(e)
-      else:
-        self._done_future.set_result(None)
+          raise
 
-    self._task = asyncio.create_task(func())
+        self._pool.close()
+      finally:
+        self._cleanup_callback()
+        await self.state_manager.clear()
 
-    self._done_future = Future()
-    self._start_future = Future()
-    await self._start_future
-
+    self._pool.start_soon(func())
 
   def receive(self, exec_path: list[int], message: Any):
     current_handle = self._handle
@@ -237,9 +223,9 @@ class Master:
     if self._update_callback and useful:
       self._update_callback()
 
-    if self._start_future:
-      self._start_future.set_result(None)
-      self._start_future = None
+    if self._ready_future:
+      self._ready_future.set_result(None)
+      self._ready_future = None
 
     # from pprint import pprint
     # pprint(changes)
@@ -369,18 +355,20 @@ class ProgramHandle:
         await child_handle.pause_children()
 
   async def pause_stable(self):
-    current_handle = self
-    unstable_program = self._program
-    assert isinstance(unstable_program, HeadProgram) # TODO: Make it possible to report failures from non-head programs
+    pass
 
-    while isinstance(current_handle := current_handle._parent, ProgramHandle):
-      if isinstance(current_handle._program, HeadProgram):
-        if current_handle._program.stable():
-          break
+    # current_handle = self
+    # unstable_program = self._program
+    # assert isinstance(unstable_program, HeadProgram) # TODO: Make it possible to report failures from non-head programs
 
-        unstable_program = current_handle._program
+    # while isinstance(current_handle := current_handle._parent, ProgramHandle):
+    #   if isinstance(current_handle._program, HeadProgram):
+    #     if current_handle._program.stable():
+    #       break
 
-    await unstable_program.pause()
+    #     unstable_program = current_handle._program
+
+    # await unstable_program.pause()
 
   async def resume_parent(self):
     current_handle = self

@@ -17,8 +17,7 @@ from pr1.host import Host
 from pr1.master.analysis import MasterAnalysis
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseRunner
-from pr1.util.asyncio import cancel_task, run_anonymous
-from pr1.util.misc import race
+from pr1.util.asyncio import race, run_anonymous
 
 from . import logger, namespace
 from .parser import DevicesState
@@ -197,7 +196,7 @@ class DevicesStateManager(UnitStateManager):
 
     del self._item_infos[item]
 
-  async def apply(self, items):
+  def apply(self, items):
     obsolete_nodes = set[ValueNode]()
 
     for item in items:
@@ -251,14 +250,12 @@ class DevicesStateManager(UnitStateManager):
       node_info = self._node_infos[node]
 
       assert node_info.task
-      await cancel_task(node_info.task)
       node_info.task.cancel()
-      node_info.task = None
 
       del self._node_infos[node]
 
   async def clear(self, item):
-    await self.apply(list())
+    self.apply(list())
 
   async def suspend(self, item):
     self._updated_nodes |= self._item_infos[item].nodes

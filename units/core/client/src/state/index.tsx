@@ -23,6 +23,7 @@ export enum LocationMode {
   HaltingState = 2,
   Normal = 3,
   Paused = 8,
+  PausedUnapplied = 13,
   PausingChild = 4,
   PausingState = 5,
   Resuming = 11,
@@ -79,7 +80,7 @@ export default {
     return block.child;
   },
   isBlockPaused(block, location, options) {
-    return [LocationMode.AbortedState, LocationMode.Paused].includes(location.mode);
+    return [LocationMode.AbortedState, LocationMode.Paused, LocationMode.PausedUnapplied].includes(location.mode);
   },
   onSelectBlockMenu(block, location, path) {
     switch (path.first()) {

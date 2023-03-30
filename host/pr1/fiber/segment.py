@@ -57,9 +57,7 @@ class SegmentTransform(BaseTransform):
 
 
 class SegmentProgramMode(IntEnum):
-  ApplyingState = 5
   Broken = 0
-  FailedState = 10
   Halting = 1
   Normal = 2
   Pausing = 3
@@ -135,10 +133,6 @@ class SegmentProgram(HeadProgram):
     return self._mode in (SegmentProgramMode.Broken, SegmentProgramMode.Terminated)
 
   @property
-  def _state_manager(self):
-    return self._handle.master.state_manager
-
-  @property
   def busy(self):
     return self._mode == SegmentProgramMode.Pausing
 
@@ -151,12 +145,6 @@ class SegmentProgram(HeadProgram):
     match self._mode:
       case SegmentProgramMode.Broken:
         run_anonymous(self.resume(loose=False))
-      case SegmentProgramMode.FailedState:
-        self._mode = SegmentProgramMode.Halting
-
-        assert self._bypass_future
-        self._bypass_future.set_result(None)
-        self._bypass_future = None
       case SegmentProgramMode.Normal | SegmentProgramMode.Paused:
         self._mode = SegmentProgramMode.Halting
         self._process.halt()
@@ -193,10 +181,6 @@ class SegmentProgram(HeadProgram):
         assert self._bypass_future
         self._bypass_future.set_result(None)
         self._bypass_future = None
-      case SegmentProgramMode.FailedState:
-        assert self._bypass_future
-        self._bypass_future.set_result(None)
-        self._bypass_future = None
       case SegmentProgramMode.Paused:
         self._mode = SegmentProgramMode.ResumingParent
         self._handle.send(ProgramExecEvent(location=self._location))
@@ -206,17 +190,6 @@ class SegmentProgram(HeadProgram):
         except Exception:
           self._mode = SegmentProgramMode.Paused
           raise
-
-        self._mode = SegmentProgramMode.ApplyingState
-        self._handle.send(ProgramExecEvent(location=self._location))
-
-        failed = await self._state_manager.apply(self._handle, terminal=True)
-
-        if failed:
-          self._mode = SegmentProgramMode.Paused
-          self._handle.send(ProgramExecEvent(location=self._location))
-
-          return
 
         self._mode = SegmentProgramMode.ResumingProcess
         self._handle.send(ProgramExecEvent(location=self._location), lock=True)
@@ -240,11 +213,6 @@ class SegmentProgram(HeadProgram):
 
     self._process_pausable: bool = False
     self._process_time: float = 0.0
-
-    self._mode = SegmentProgramMode.ApplyingState
-    self._handle.send(ProgramExecEvent(location=self._location))
-
-    await self._state_manager.apply(self._handle, terminal=True)
 
 
     async def run():

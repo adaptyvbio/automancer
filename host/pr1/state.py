@@ -7,6 +7,8 @@ from dataclasses import KW_ONLY, dataclass, field
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
 
+from .util.asyncio import race, wait_all
+
 from .fiber.eval import EvalStack
 from .fiber.parser import BlockState, BlockUnitState
 from .master.analysis import MasterAnalysis, MasterError
@@ -73,13 +75,18 @@ class StateProgramItem:
   parent: 'Optional[StateProgramItem]'
 
   _aborted: bool = False
-  _failed: bool = False
+  # _failed: bool = False
+  _failure_event: Event = field(default_factory=Event, init=False)
   _settle_event: Event = field(default_factory=Event, init=False)
   _update_program: Callable[[StateRecord], None]
 
   def __post_init__(self):
     if not self.location.entries:
       self._settle_event.set()
+
+  @property
+  def failed(self):
+    return self._failure_event.is_set()
 
   @property
   def settled(self):
@@ -151,7 +158,7 @@ class UnitStateManager(ABC):
     ...
 
   @abstractmethod
-  async def apply(self, items: list[StateProgramItem]):
+  def apply(self, items: list[StateProgramItem]):
     ...
 
   @abstractmethod
@@ -189,7 +196,7 @@ class UnitStateInstanceManager(UnitStateManager):
       await instance.close()
       del self._instances[item]
 
-  async def apply(self, items):
+  def apply(self, items):
     for item in items:
       instance = self._instances[item]
 
@@ -197,6 +204,7 @@ class UnitStateInstanceManager(UnitStateManager):
         try:
           instance.apply()
         except Exception as e:
+          item._failure_event.set()
           item._update(
             analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer internal error: {e}")]),
             failure=True
@@ -238,7 +246,8 @@ class GlobalStateManager:
     else:
       item._settle_event.clear()
 
-    item._failed = item._failed or event.failure
+    if event.failure:
+      item._failure_event.set()
 
     item._update(
       analysis=event.analysis,
@@ -306,42 +315,47 @@ class GlobalStateManager:
 
     assert origin_item
 
-    failed = False
     relevant_items = [ancestor_item for ancestor_item in origin_item.ancestors() if not ancestor_item.applied]
 
     for item in relevant_items:
-      item._failed = False
+      item._failure_event.clear()
+
+    errors = list[MasterError]()
 
     for namespace, consumer in self._consumers.items():
       try:
-        await consumer.apply(relevant_items)
+        consumer.apply(relevant_items)
       except Exception as e:
-        failed = True
-
-        item = relevant_items[0]
-        item._update(
-          analysis=MasterAnalysis(errors=[StateInternalError(f"State consumer '{namespace}' internal error: {e}")]),
-          failure=True
-        )
+        errors.append(StateInternalError(f"State consumer '{namespace}' internal error: {e}"))
 
     for item in relevant_items:
       item.applied = True
 
-    for item in relevant_items:
-      errors = list[MasterError]()
+    if errors:
+      item = relevant_items[0]
+      item._failure_event.set()
+      item._update(
+        analysis=MasterAnalysis(errors=errors),
+        failure=True
+      )
 
-      for namespace in self._consumers.keys():
-        entry = item.location.entries[namespace]
+    # for item in relevant_items:
+    #   errors = list[MasterError]()
 
-        if not entry:
-          errors.append(StateProtocolError(f"State consumer '{namespace}' did not provide a location synchronously"))
+    #   for namespace in self._consumers.keys():
+    #     entry = item.location.entries[namespace]
 
-      item._update(analysis=MasterAnalysis(errors=errors))
+    #     if not entry:
+    #       errors.append(StateProtocolError(f"State consumer '{namespace}' did not provide a location synchronously"))
 
-    for item in origin_item.ancestors():
-      await item._settle_event.wait()
+    #   item._update(analysis=MasterAnalysis(errors=errors))
 
-    return failed or any(item._failed for item in origin_item.ancestors())
+    await race(
+      wait_all([item._settle_event.wait() for item in origin_item.ancestors()]),
+      *[item._failure_event.wait() for item in relevant_items]
+    )
+
+    return any(item.failed for item in relevant_items)
 
   async def clear(self, handle: Optional['ProgramHandle'] = None):
     for consumer in self._consumers.values():
@@ -360,7 +374,7 @@ class GlobalStateManager:
         assert entry
         entry.settled = False
 
-      for (namespace, consumer) in self._consumers.items():
+      for namespace, consumer in self._consumers.items():
         event = await consumer.suspend(item)
 
         if event:
@@ -390,7 +404,7 @@ class DemoStateInstance(UnitStateInstance):
     self._notify = notify
 
   def prepare(self, state):
-    return MasterAnalysis(), Ellipsis
+    return MasterAnalysis(), None
 
   def apply(self):
     self._logger.debug('Apply')
@@ -418,15 +432,23 @@ class DemoStateInstance(UnitStateInstance):
       #   # Error(f"Problem {self._index}b")
       # ]))
 
-    if wait:
-      from .util.asyncio import run_anonymous
-      run_anonymous(task())
+    # if wait:
+    #   from .util.asyncio import run_anonymous
+    #   run_anonymous(task())
 
-    self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
-      MasterError(f"Applyyy {self._index}")
-    ]), failure=(self._index == 1 and self._flag == 0 and False), settled=True)) # (not wait)))
+    # self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
+    #   MasterError(f"Applyyy {self._index}")
+    # ]), failure=(self._index == 1 and self._flag == 0 and False), settled=True)) # (not wait)))
 
-    self._flag += 1
+    # self._flag += 1
+    self._notify(StateEvent(DemoStateLocation(1), settled=True))
+
+    # if self._index == 1:
+    #   self._notify(StateEvent(DemoStateLocation(1), analysis=MasterAnalysis(errors=[
+    #     MasterError("Problem")
+    #   ]), failure=True))
+    # else:
+    #   self._notify(StateEvent(DemoStateLocation(1), settled=True))
 
   async def close(self):
     self._logger.debug('Close')

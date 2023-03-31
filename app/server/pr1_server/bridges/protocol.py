@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from asyncio import Event
 from dataclasses import dataclass
+from ipaddress import IPv4Address
 from typing import Any, Callable, Coroutine, Protocol
 
 from pr1.util.types import SimpleCallbackFunction
@@ -32,7 +32,7 @@ class BaseClient(ABC):
 
 @dataclass
 class BridgeAdvertisementInfo:
-  address: str
+  address: IPv4Address
   port: int
   type: str
 

@@ -11,7 +11,7 @@ import typing
 
 FileObject = IOBase
 
-def fast_hash(input):
+def fast_hash(input: str):
   return hashlib.sha256(input.encode("utf-8")).hexdigest()
 
 def log_exception(logger, *, level = logging.DEBUG):

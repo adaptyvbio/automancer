@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from ipaddress import ip_address as parse_ip_address
+from pathlib import Path
 from typing import Any, Literal, Optional, Protocol
 import uuid
 
 from .bridges.protocol import BridgeProtocol
-from .bridges.socket import SocketBridge
+from .bridges.socket import SocketBridge, SocketBridgeOptions, SocketBridgeTcpOptions, SocketBridgeUnixOptions
 from .bridges.stdio import StdioBridge
 from .bridges.websocket import WebsocketBridge
 
@@ -64,57 +66,50 @@ class ConfBridge(Protocol):
       case _:
         raise ValueError
 
-class ConfBridgeSocket:
-  @staticmethod
-  def load(data):
-    match data["type"]:
-      case "inet":
-        return ConfBridgeSocketInet(
-          hostname=data["hostname"],
-          port=data["port"],
-          secure=data["secure"]
-        )
-      case "unix":
-        return ConfBridgeSocketUnix(
-          path=data["path"]
-        )
-      case _:
-        raise ValueError
-
 @dataclass(kw_only=True)
-class ConfBridgeSocketInet(ConfBridge):
-  hostname: str
-  port: int
+class ConfBridgeSocket:
+  options: SocketBridgeOptions
   secure: bool
 
   def create_bridge(self, *, app):
-    return SocketBridge.inet(self.hostname, self.port, app=app, secure=self.secure)
+    return SocketBridge(self.options, app=app, secure=self.secure)
 
   def export(self):
+    match self.options:
+      case SocketBridgeTcpOptions():
+        options_exported = {
+          "type": "tcp",
+          "addresses": [str(address) for address in self.options.addresses],
+          "port": self.options.port
+        }
+      case SocketBridgeUnixOptions():
+        options_exported = {
+          "type": "unix",
+          "path": self.options.path
+        }
+
     return {
       "type": "socket",
-      "options": {
-        "type": "inet",
-        "hostname": self.hostname,
-        "port": self.port
-      }
+      "options": options_exported
     }
 
-@dataclass(kw_only=True)
-class ConfBridgeSocketUnix(ConfBridge):
-  path: str
+  @classmethod
+  def load(cls, data):
+    match data["type"]:
+      case "tcp":
+        options = SocketBridgeTcpOptions(
+          addresses=[parse_ip_address(raw_address) for raw_address in data["addresses"]],
+          port=data["port"]
+        )
+      case "unix":
+        options = SocketBridgeUnixOptions(Path(data["path"]))
+      case _:
+        raise ValueError
 
-  def create_bridge(self, *, app):
-    return SocketBridge.unix(self.path, app=app)
-
-  def export(self):
-    return {
-      "type": "socket",
-      "options": {
-        "type": "unix",
-        "path": self.path
-      }
-    }
+    return cls(
+      options=options,
+      secure=data["secure"]
+    )
 
 @dataclass(kw_only=True)
 class ConfBridgeStdio(ConfBridge):

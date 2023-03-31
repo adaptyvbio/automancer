@@ -171,7 +171,7 @@ class App:
       zeroconf_services = [AsyncServiceInfo(
         f"_prone.{info.type}",
         f"{self.conf.identifier}._prone." + info.type,
-        addresses=[socket.inet_aton(info.address)],
+        addresses=[info.address.packed],
         port=info.port,
         properties={
           'description': self.conf.advertisement.description,
@@ -347,16 +347,20 @@ class App:
           pool.start_soon(self.host.start())
 
           logger.debug("Starting")
-          await pool.start_soon(ready_event.wait())
-          pool.start_soon(self.advertise())
 
-          logger.debug("Started")
+          async def ready_seq():
+            await ready_event.wait()
+            await self.advertise()
 
-          bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+            logger.debug("Started")
 
-          if self.args.local:
-            sys.stdout.write(json.dumps(bridge_infos) + "\n")
-            sys.stdout.flush()
+            bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+
+            if self.args.local:
+              sys.stdout.write(json.dumps(bridge_infos) + "\n")
+              sys.stdout.flush()
+
+          pool.start_soon(ready_seq())
       finally:
         logger.debug("Deinitializing")
     except Exception:

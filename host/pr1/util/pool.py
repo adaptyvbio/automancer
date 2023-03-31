@@ -1,34 +1,8 @@
 import asyncio
-from asyncio import Future, Task
-from contextlib import AbstractAsyncContextManager
+from asyncio import Task
 import contextlib
-from dataclasses import dataclass
-from typing import Any, Coroutine, Optional, Sequence, TypeVar
+from typing import Any, Coroutine, Optional, TypeVar
 
-
-# class NurseryManager:
-#   def open_nursery(self):
-#     return NurseryContextManager()
-
-# class NurseryContextManager(AbstractAsyncContextManager):
-#   def __init__(self):
-#     self._nursery: Optional[Nursery] = None
-
-#   async def __aenter__(self):
-#     self._nursery = Nursery()
-#     return self._nursery
-
-#   async def __aexit__(self, exc_type, exc_val, exc_tb):
-#     assert self._nursery
-#     self._nursery._closed = False
-
-#     try:
-#       await self._nursery.wait()
-#     finally:
-#       self._nursery = None
-
-# class PoolExceptionGroup(ExceptionGroup):
-#   pass
 
 PoolExceptionGroup = BaseExceptionGroup
 
@@ -41,14 +15,13 @@ class Pool:
   """
 
   def __init__(self):
+    self._open = False
     self._tasks = set[Task]()
 
   def __len__(self):
     return len(self._tasks)
 
   def _done_callback(self, task: Task):
-    self._tasks.remove(task)
-
     try:
       exc = task.exception()
     except asyncio.CancelledError:
@@ -61,6 +34,9 @@ class Pool:
     """
     Adds a new task to the pool.
     """
+
+    if not self._open:
+      raise Exception("Pool not open")
 
     task.add_done_callback(self._done_callback)
     self._tasks.add(task)
@@ -91,7 +67,7 @@ class Pool:
     for task in self._tasks:
       task.cancel()
 
-  async def wait(self):
+  def wait(self):
     """
     Waits for all tasks in the pool to finish, including those that might be added later.
 
@@ -102,6 +78,13 @@ class Pool:
       PoolExceptionGroup
     """
 
+    if self._open:
+      raise Exception("Pool already open")
+
+    self._open = True
+    return self._wait()
+
+  async def _wait(self):
     cancelled = False
     exceptions = list[BaseException]()
 
@@ -122,6 +105,8 @@ class Pool:
             if exc:
               exceptions.append(exc)
 
+          self._tasks.remove(task)
+
     if len(exceptions) >= 2:
       raise PoolExceptionGroup("Pool error", exceptions)
     if exceptions:
@@ -134,6 +119,9 @@ class Pool:
     """
     Creates a task from the provided coroutine and adds it to the pool.
     """
+
+    if not self._open:
+      raise Exception("Pool not open")
 
     task = asyncio.create_task(coro)
     self.add(task)

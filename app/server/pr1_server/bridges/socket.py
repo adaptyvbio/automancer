@@ -1,6 +1,8 @@
 from asyncio import Server, StreamReader, StreamWriter
+from ipaddress import ip_address as parse_ip_address
 import asyncio
 from collections import deque
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import socket
@@ -12,6 +14,7 @@ from pr1.util.pool import Pool
 
 from .. import logger as parent_logger
 from ..certificate import use_certificate
+from ..util import IPAddress
 from .protocol import BridgeAdvertisementInfo, BridgeProtocol, ClientClosed, BaseClient
 
 if TYPE_CHECKING:
@@ -67,39 +70,59 @@ class Client(BaseClient):
       raise ClientClosed from e
 
 
-class SocketBridge(BridgeProtocol):
-  def __init__(self, *, address: Any, app: 'App', family: int, secure: bool):
-    self.sockname: tuple[str, int] | str
+@dataclass(kw_only=True)
+class SocketBridgeTcpOptions:
+  addresses: list[IPAddress]
+  port: int
 
-    self._address = address
+@dataclass
+class SocketBridgeUnixOptions:
+  path: Path
+
+SocketBridgeOptions = SocketBridgeTcpOptions | SocketBridgeUnixOptions
+
+
+@dataclass
+class SocketBridgeTcpEffectiveOptions:
+  pairs: list[tuple[IPAddress, int]]
+
+@dataclass
+class SocketBridgeUnixEffectiveOptions:
+  path: Path
+
+SocketBridgeEffectiveOptions = SocketBridgeTcpEffectiveOptions | SocketBridgeUnixEffectiveOptions
+
+
+class SocketBridge(BridgeProtocol):
+  def __init__(self, options: SocketBridgeOptions, *, app: 'App', secure: bool):
     self._app = app
-    self._family = family
+    self._effective_options: SocketBridgeEffectiveOptions
+    self._options = options
 
     if secure:
-      self._cert_info = use_certificate(app.certs_dir, hostname=(self._address[0] if family == socket.AF_INET else None), logger=logger)
+      self._cert_info = use_certificate(
+        app.certs_dir,
+        addresses=(options.addresses if isinstance(options, SocketBridgeTcpOptions) else None),
+        logger=logger
+      )
 
       if not self._cert_info:
         logger.error("Failed to obtain a certificate")
     else:
       self._cert_info = None
 
-      if family != socket.AF_UNIX:
-        # TODO: Remove warning when hostname is localhost or 127.0.0.1
-        # https://docs.python.org/3/library/ipaddress.html#ipaddress.IPv4Network.is_private
+      if isinstance(options, SocketBridgeTcpOptions) and any(not address.is_loopback for address in options.addresses):
         logger.warning("Not using a secure connection")
 
   def advertise(self):
-    if self._family != socket.AF_INET:
+    if isinstance(self._effective_options, SocketBridgeTcpEffectiveOptions):
+      return [BridgeAdvertisementInfo(
+        type="_tcp.local.",
+        address=address,
+        port=port
+      ) for address, port in self._effective_options.pairs if address.version == 4]
+    else:
       return list[BridgeAdvertisementInfo]()
-
-    assert isinstance(self.sockname, tuple)
-    hostname, port = self.sockname
-
-    return [BridgeAdvertisementInfo(
-      type="_tcp.local.",
-      address=hostname,
-      port=port
-    )]
 
   async def start(self, handle_client, ready):
     server: Optional[Server] = None
@@ -121,19 +144,37 @@ class SocketBridge(BridgeProtocol):
         else:
           ssl_context = None
 
-        if self._family == socket.AF_UNIX:
-          server = await asyncio.start_unix_server(handle_connection_sync, self._address, ssl=ssl_context)
-        else:
-          hostname, port = self._address
-          server = await asyncio.start_server(handle_connection_sync, hostname, port, family=self._family, ssl=ssl_context)
+        match self._options:
+          case SocketBridgeTcpOptions():
+            server = await asyncio.start_server(
+              handle_connection_sync,
+              [str(address) for address in self._options.addresses],
+              port=self._options.port,
+              ssl=ssl_context
+            )
 
-        self.sockname = server.sockets[0].getsockname()
+            self._effective_options = SocketBridgeTcpEffectiveOptions([
+              (parse_ip_address(raw_address), port) for raw_address, port, *_ in [socket.getsockname() for socket in server.sockets]
+            ])
 
-        if isinstance(self.sockname, tuple):
-          hostname, port = self.sockname
-          logger.debug(f"Listening on {hostname}:{port}")
-        else:
-          logger.debug(f"Listening on {self.sockname}")
+            for address, port in self._effective_options.pairs:
+              logger.debug(f"Listening on {address}:{port}")
+
+          case SocketBridgeUnixOptions():
+            self._options.path.parent.mkdir(exist_ok=True, parents=True)
+            self._options.path.unlink(missing_ok=True)
+
+            server = await asyncio.start_unix_server(
+              handle_connection_sync,
+              self._options.path,
+              ssl=ssl_context
+            )
+
+            self._effective_options = SocketBridgeUnixEffectiveOptions(
+              Path(server.sockets[0].getsockname())
+            )
+
+            logger.debug(f"Listening on {self._effective_options.path}")
 
         ready()
     finally:
@@ -144,46 +185,21 @@ class SocketBridge(BridgeProtocol):
       logger.debug("Stopped")
 
   def export_info(self):
-    if isinstance(self.sockname, tuple):
-      hostname, port = self.sockname
-
-      return [{
-        "type": "tcp",
-        "hostname": hostname,
-        "identifier": self._app.conf.identifier,
-        "password": None,
-        "port": port,
-        "secure": False
-      }]
-    else:
-      return [{
-        "type": "unix",
-        "identifier": self._app.conf.identifier,
-        "path": self.sockname,
-        "password": None,
-        "secure": False
-      }]
-
-  @classmethod
-  def inet(cls, host: str, port: int, *, app: 'App', secure: bool = False):
-    return cls(
-      app=app,
-
-      address=(host, port),
-      family=socket.AF_INET,
-      secure=secure
-    )
-
-  @classmethod
-  def unix(cls, raw_path: str, /, *, app: 'App'):
-    path = Path(raw_path)
-    path.parent.mkdir(exist_ok=True, parents=True)
-    path.unlink(missing_ok=True)
-
-    return cls(
-      app=app,
-
-      address=str(path),
-      family=socket.AF_UNIX,
-      secure=False
-    )
+    match self._effective_options:
+      case SocketBridgeTcpEffectiveOptions():
+        return [{
+          "type": "tcp",
+          "hostname": str(address),
+          "identifier": self._app.conf.identifier,
+          "password": None,
+          "port": port,
+          "secure": False
+        } for address, port in self._effective_options.pairs]
+      case SocketBridgeUnixEffectiveOptions():
+        return [{
+          "type": "unix",
+          "identifier": self._app.conf.identifier,
+          "path": self._effective_options.path,
+          "password": None,
+          "secure": False
+        }]

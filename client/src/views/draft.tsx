@@ -32,6 +32,7 @@ import { ViewDrafts } from './protocols';
 import { ViewExecution } from './execution';
 import { DiagnosticsReport } from '../components/diagnostics-report';
 import { FileTabNav } from '../components/file-tab-nav';
+import { TimeSensitive } from '../components/time-sensitive';
 
 
 export interface ViewDraftProps {
@@ -233,8 +234,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
 
   render() {
-    let component;
-    let subtitle: string | null = null;
+    let component: React.ReactNode;
+    let subtitle: React.ReactNode | null = null;
     let subtitleVisible = false;
 
     if (!this.props.draft.readable && !this.state.requesting) {
@@ -425,13 +426,18 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
 
       if (this.props.draft.lastModified) {
-        let delta = Date.now() - this.props.draft.lastModified;
+        let lastModified = this.props.draft.lastModified;
 
-        if (delta < 5e3) {
-          subtitle = 'Just saved';
-        } else {
-          subtitle = `Last saved ${format.formatRelativeDate(this.props.draft.lastModified)}`;
-        }
+        subtitle = (
+          <TimeSensitive child={() => {
+            let delta = (Date.now() - lastModified);
+
+            return (delta < 5e3)
+              ? 'Just saved'
+              : `Last saved ${format.formatRelativeDate(lastModified)}`;
+            }
+          } interval={1e3} />
+        );
       } else {
         subtitle = null;
       }

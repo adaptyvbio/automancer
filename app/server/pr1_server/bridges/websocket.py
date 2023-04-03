@@ -52,7 +52,6 @@ class WebsocketBridge(BridgeProtocol):
   def __init__(self, app, *, conf: 'ConfBridgeWebsocket'):
     self._clients = set[Client]()
     self._conf = conf
-    server = None
 
     if conf.secure:
       self._cert_info = use_certificate(app.certs_dir, logger=logger)
@@ -63,13 +62,6 @@ class WebsocketBridge(BridgeProtocol):
       self.cert_info = None
       logger.warn("Not using a secure HTTP connection")
 
-
-  def advertise(self):
-    return [BridgeAdvertisementInfo(
-      type="_http._tcp.local.",
-      address=self._conf.hostname,
-      port=self._conf.port
-    )]
 
   async def start(self, handle_client, ready):
     server: Optional[Server] = None

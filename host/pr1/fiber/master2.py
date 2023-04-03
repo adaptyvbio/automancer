@@ -52,8 +52,8 @@ class Master:
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
 
-  async def done(self):
-    await self._pool.wait()
+  def done(self):
+    return self._pool.wait()
 
   def halt(self):
     self._handle._program.halt()

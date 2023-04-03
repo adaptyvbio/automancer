@@ -104,29 +104,30 @@ $entry-height: 30px;
 }
 
 .body {
-  display: flex;
-  flex-direction: column;
-
-  &:last-child {
-    grid-column: 2 / 4;
-  }
+  display: grid;
+  grid-template-rows: 14px 16px;
 }
 
 .description {
-  align-self: start;
+  overflow-y: clip;
 
   @include text-ellipsis();
-
   color: #999;
   font-size: 0.85rem;
   line-height: 1.15;
 }
 
 .label {
-  @include text-ellipsis();
+  overflow-y: clip;
 
+  @include text-ellipsis();
   font-weight: 500;
   line-height: 1.15;
+
+  &:only-child {
+    grid-row: 1 / -1;
+    align-self: center;
+  }
 
   &:has(*) {
     // Enables correct positioning of expressions

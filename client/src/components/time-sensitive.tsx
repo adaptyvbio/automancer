@@ -2,7 +2,7 @@ import * as React from 'react';
 
 
 export function TimeSensitive(props: React.PropsWithChildren<{
-  child(): React.ReactElement;
+  child(): React.ReactNode;
   interval?: number;
 }>) {
   const [_, forceUpdate] = React.useReducer((x) => x + 1, 0);
@@ -17,5 +17,5 @@ export function TimeSensitive(props: React.PropsWithChildren<{
     };
   }, []);
 
-  return props.child();
+  return <>{props.child()}</>;
 }

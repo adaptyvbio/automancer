@@ -176,15 +176,11 @@ class Host:
 
   async def start(self):
     try:
-      await asyncio.Future()
+      await self.pool.wait(forever=True)
     finally:
       await self.destroy()
 
   async def destroy(self):
-    logger.info("Destroying host")
-
-    await self.pool.cancel()
-
     logger.debug("Destroying executors")
 
     for executor in self.executors.values():
@@ -408,11 +404,12 @@ class Host:
           assert compilation.protocol
 
           chip.master = Master(compilation.protocol, chip, cleanup_callback=cleanup_callback, host=self)
+          done_coro = chip.master.done()
           await chip.master.run(update_callback)
 
           ready()
 
-          done = asyncio.create_task(chip.master.done())
+          done = asyncio.create_task(done_coro)
 
           try:
             await asyncio.shield(done)

@@ -7,7 +7,7 @@ import type { HostCreatorContext } from '../interfaces';
 
 
 export type IPCEndpoint = {
-  isDarwin: boolean;
+  platform: (typeof process.platform);
 
   main: {
     ready(): void;
@@ -97,7 +97,7 @@ export type IPCEndpoint = {
 };
 
 contextBridge.exposeInMainWorld('api', {
-  isDarwin: (process.platform === 'darwin'),
+  platform: process.platform,
 
   main: {
     ready: () => ipcRenderer.send('main.ready'),

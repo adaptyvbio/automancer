@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import childProcess, { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Client, defer, Deferred } from 'pr1-shared';
+import { Client, createErrorWithCode, defer, Deferred } from 'pr1-shared';
 
 import { HostEnvironment } from './search';
 import { SocketClientBackend } from './socket-client';
@@ -50,7 +50,9 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
 
     await util.fsMkdir(logDirPath);
 
-    let env: Record<string, string> = {};
+    let env: Record<string, string> = {
+      'PYTHONIOENCODING': 'utf-8'
+    };
 
     if (!hostOptions.corePackagesInstalled) {
       // env['PYTHONPATH'] = this.app.localHostModels.beta.packagesPath;
@@ -66,8 +68,8 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
         ...hostOptions.conf.bridges,
         { type: 'socket',
           options: {
-            type: 'inet',
-            hostname: '127.0.0.1',
+            type: 'tcp',
+            addresses: ['127.0.0.1'],
             port: 0,
             secure: false
           } }
@@ -188,8 +190,27 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
       });
     }
 
-    let bridgeDatas = await bridgeDatasDeferred.promise;
-    bridgeOptions = bridgeDatas.find((bridgeData) => (bridgeData.type === 'unix') || (bridgeData.hostname === '127.0.0.1'))!;
+    let bridgeOptionsList;
+
+    try {
+      bridgeOptionsList = await Promise.race([
+        bridgeDatasDeferred.promise,
+        subprocessClosed.then(() => Promise.reject(createErrorWithCode('Subprocess closed', 'APP_SUBPROCESS_CLOSED')))
+      ]);
+    } catch (err: any) {
+      if (err.code === 'APP_SUBPROCESS_CLOSED') {
+        return {
+          ok: false,
+          reason: 'subprocess_closed'
+        };
+      }
+
+      throw err;
+    }
+
+    bridgeOptions = bridgeOptionsList.find((bridgeOptions) =>
+      (bridgeOptions.type === 'unix') || ['127.0.0.1', '::1'].includes(bridgeOptions.hostname)
+    )!;
   } else {
     bridgeOptions = hostSettings.options;
   }

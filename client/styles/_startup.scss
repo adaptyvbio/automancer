@@ -130,6 +130,10 @@ $drag-region-height: 3rem;
 
       padding: 1rem;
       background-color: $color-right;
+
+      body:is([data-platform="linux"], [data-platform="win32"]) & {
+        padding-top: 3rem;
+      }
     }
 
     &-entry {

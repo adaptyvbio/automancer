@@ -29,9 +29,7 @@ export class StartupWindow {
           titleBarStyle: 'hiddenInset'
         }
         : {
-          titleBarOverlay: {
-            color: '#f6f6f6'
-          },
+          titleBarOverlay: { color: '#f6f6f6' },
           titleBarStyle: 'hidden'
         })
     });

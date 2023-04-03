@@ -61,6 +61,10 @@
   &Root {
     display: flex;
     column-gap: 0.2rem;
+
+    body:is([data-platform="linux"], [data-platform="win32"]) & {
+      margin-right: 100px;
+    }
   }
 
   &Item {

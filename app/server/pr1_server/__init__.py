@@ -344,13 +344,13 @@ class App:
           if self.static_server:
             pool.start_soon(self.static_server.start(item_ready))
 
-          pool.start_soon(self.host.start())
+          pool.start_soon(self.host.start(), critical=True)
 
           logger.debug("Starting")
 
           async def ready_seq():
             await ready_event.wait()
-            await self.advertise()
+            pool.start_soon(self.advertise())
 
             logger.debug("Started")
 

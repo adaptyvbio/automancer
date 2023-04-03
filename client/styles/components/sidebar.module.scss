@@ -78,9 +78,13 @@
       display: grid;
       align-items: center;
       gap: 0 1rem;
-      grid-template: auto auto / 40px 1fr auto;
+      grid-template-columns: 40px 1fr auto;
 
       padding: 0.6rem 1rem;
+    }
+
+    &Root:has(&Subtitle) {
+      grid-template-rows: auto auto;
     }
 
     &Icon {

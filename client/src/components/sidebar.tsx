@@ -78,26 +78,26 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
         ...(unitEntries && (unitEntries?.length > 0)
           ? [{ id: 'unit', entries: unitEntries }]
           : []),
-        { id: 'last',
-          entries: [
-            { id: 'conf',
-              label: 'Settings',
-              icon: 'settings',
-              route: '/settings' },
-/*             { id: 'design',
-              label: 'Design',
-              icon: 'design_services',
-              route: '/design' }, */
-            ...(this.props.setStartup
-                ? [{
-                  id: 'startup',
-                  label: 'Start menu',
-                  icon: 'home',
-                  route: null,
-                  onClick: () => void this.props.setStartup?.()
-                }]
-                : [])
-          ] }
+//         { id: 'last',
+//           entries: [
+//             { id: 'conf',
+//               label: 'Settings',
+//               icon: 'settings',
+//               route: '/settings' },
+// /*             { id: 'design',
+//               label: 'Design',
+//               icon: 'design_services',
+//               route: '/design' }, */
+//             ...(this.props.setStartup
+//                 ? [{
+//                   id: 'startup',
+//                   label: 'Start menu',
+//                   icon: 'home',
+//                   route: null,
+//                   onClick: () => void this.props.setStartup?.()
+//                 }]
+//                 : [])
+//           ] }
       ]
       : [];
 
@@ -135,7 +135,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
             <div className={styles.headerValueRoot}>
               <img src={this.props.hostInfo.imageUrl!} className={styles.headerValueIcon} />
               <div className={styles.headerValueTitle}>{this.props.hostInfo.label}</div>
-              <div className={styles.headerValueSubtitle}>{this.props.hostInfo.description}</div>
+              {/* <div className={styles.headerValueSubtitle}>{this.props.hostInfo.description}</div> */}
               <div className={styles.headerValueExpand}>
                 <span className="material-symbols-sharp">unfold_more</span>
               </div>

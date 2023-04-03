@@ -742,7 +742,7 @@ export class CoreApplication {
 
 
   launchHost(hostSettingsId: HostSettingsId) {
-    this.logger.info(`Launching host settings with id '${hostSettingsId}`);
+    this.logger.info(`Launching host settings with id '${hostSettingsId}'`);
 
     let existingWindow = this.hostWindows[hostSettingsId];
 

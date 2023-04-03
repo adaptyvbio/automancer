@@ -75,8 +75,8 @@ export interface ServerConfiguration {
   bridges: ({
     type: 'socket';
     options: {
-      type: 'inet';
-      hostname: string;
+      type: 'tcp';
+      addresses: string[];
       port: number;
       secure: boolean;
     } | {

@@ -73,7 +73,14 @@ export class HostWindow {
 
     this.window = new BrowserWindow({
       show: this.app.debug,
-      titleBarStyle: 'hiddenInset',
+      ...((process.platform === 'darwin')
+        ? {
+          titleBarStyle: 'hiddenInset'
+        }
+        : {
+          titleBarOverlay: { color: '#efefef' },
+          titleBarStyle: 'hidden'
+        }),
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js')
       }

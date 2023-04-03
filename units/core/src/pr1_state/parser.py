@@ -302,6 +302,9 @@ class StateProgram(HeadProgram):
 
         return True
 
+      case StateProgramMode.Normal:
+        return True
+
       case _:
         if not loose:
           raise AssertionError

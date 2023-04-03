@@ -105,16 +105,7 @@ export class App extends React.Component<AppProps, AppState> {
 }
 
 
-if (!window.api.isDarwin) {
-  let sheet = window.document.styleSheets[0];
-
-  sheet.insertRule(`
-    .startup-right-root {
-      padding-top: 3rem;
-    }
-  `, sheet.cssRules.length);
-}
-
+document.body.dataset['platform'] = window.api.platform;
 
 let root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);

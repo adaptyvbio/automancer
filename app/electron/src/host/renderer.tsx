@@ -163,6 +163,8 @@ class App extends React.Component<AppProps, AppState> {
 }
 
 
+document.body.dataset['platform'] = window.api.platform;
+
 let root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(<App />);
 

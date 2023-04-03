@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import Task
+from asyncio import Event, Task
 import contextlib
 from typing import Any, Coroutine, Optional, TypeVar
 
@@ -16,6 +16,7 @@ class Pool:
 
   def __init__(self):
     self._open = False
+    self._task_event = Event()
     self._tasks = set[Task]()
 
   def __len__(self):
@@ -39,6 +40,8 @@ class Pool:
       raise Exception("Pool not open")
 
     task.add_done_callback(self._done_callback)
+
+    self._task_event.set()
     self._tasks.add(task)
 
     async def ret():
@@ -67,7 +70,10 @@ class Pool:
     for task in self._tasks:
       task.cancel()
 
-  def wait(self):
+    # Used as a signal to wake up wait() and have it return
+    self._task_event.set()
+
+  def wait(self, *, forever: bool = False):
     """
     Waits for all tasks in the pool to finish, including those that might be added later.
 
@@ -82,30 +88,50 @@ class Pool:
       raise Exception("Pool already open")
 
     self._open = True
-    return self._wait()
+    return self._wait(forever=forever)
 
-  async def _wait(self):
+  async def _wait(self, *, forever: bool):
     cancelled = False
+    closed = False
+
     exceptions = list[BaseException]()
 
-    while (tasks := self._tasks.copy()):
-      try:
-        await asyncio.wait(tasks)
-      except asyncio.CancelledError:
-        cancelled = True
-        self.close()
+    while True:
+      while (tasks := self._tasks.copy()):
+        try:
+          await asyncio.wait(tasks)
+        except asyncio.CancelledError:
+          cancelled = True
+          self.close()
 
-      for task in tasks:
-        if task.done():
-          try:
-            exc = task.exception()
-          except asyncio.CancelledError:
-            pass
-          else:
-            if exc:
-              exceptions.append(exc)
+        for task in tasks:
+          if task.done():
+            try:
+              exc = task.exception()
+            except asyncio.CancelledError:
+              closed = True
+            else:
+              if exc:
+                exceptions.append(exc)
 
-          self._tasks.remove(task)
+            self._tasks.remove(task)
+
+      if forever and (not cancelled) and (not closed) and (not exceptions):
+        self._task_event.clear()
+
+        try:
+          await self._task_event.wait()
+        except asyncio.CancelledError:
+          cancelled = True
+          break
+
+        # Used as a signal to stop the loop
+        if not self._tasks:
+          break
+      else:
+        break
+
+    self._open = False
 
     if len(exceptions) >= 2:
       raise PoolExceptionGroup("Pool error", exceptions)
@@ -115,9 +141,13 @@ class Pool:
     if cancelled:
       raise asyncio.CancelledError
 
-  def start_soon(self, coro: Coroutine[Any, Any, T], /) -> Task[T]:
+  def start_soon(self, coro: Coroutine[Any, Any, T], /, *, critical: bool = False) -> Task[T]:
     """
     Creates a task from the provided coroutine and adds it to the pool.
+
+    Parameters:
+      coro: The coroutine to be started soon.
+      critical: Whether to close the pool when this task finishes.
     """
 
     if not self._open:
@@ -125,6 +155,18 @@ class Pool:
 
     task = asyncio.create_task(coro)
     self.add(task)
+
+    if critical:
+      def callback(task: Task[T]):
+        try:
+          task.result()
+        except:
+          pass
+        else:
+          self.close()
+
+      task.add_done_callback(callback)
+
     return task
 
   @classmethod
@@ -141,13 +183,7 @@ class Pool:
 
     pool = cls()
     exception: Optional[Exception] = None
-    wait_task = asyncio.create_task(pool.wait())
-
-    if forever:
-      async def wait_forever():
-        await asyncio.Future()
-
-      pool.start_soon(wait_forever())
+    wait_task = asyncio.create_task(pool.wait(forever=forever))
 
     try:
       yield pool

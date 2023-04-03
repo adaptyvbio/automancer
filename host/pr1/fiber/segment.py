@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import Event, Future
+from asyncio import Event, Future, Task
 from dataclasses import dataclass
 from enum import IntEnum
 import time
@@ -117,6 +117,7 @@ class SegmentProgram(HeadProgram):
     self._bypass_future: Optional[Future]
     self._pause_event: Optional[Event]
     self._resume_event: Optional[Event]
+    self._resume_task: Optional[Task[bool]]
 
   @property
   def _location(self):
@@ -148,6 +149,12 @@ class SegmentProgram(HeadProgram):
       case SegmentProgramMode.Normal | SegmentProgramMode.Paused:
         self._mode = SegmentProgramMode.Halting
         self._process.halt()
+      case SegmentProgramMode.ResumingParent:
+        self._mode = SegmentProgramMode.Halting
+        self._process.halt()
+
+        assert self._resume_task
+        self._resume_task.cancel()
       case _:
         raise AssertionError
 
@@ -165,7 +172,7 @@ class SegmentProgram(HeadProgram):
       return False
 
     self._mode = SegmentProgramMode.Pausing
-    self._handle.send(ProgramExecEvent(location=self._location), lock=True)
+    self._handle.send(ProgramExecEvent(location=self._location), lock=False)
 
     self._pause_event = Event()
     self._process.pause()
@@ -188,20 +195,32 @@ class SegmentProgram(HeadProgram):
         self._mode = SegmentProgramMode.ResumingParent
         self._handle.send(ProgramExecEvent(location=self._location))
 
-        if not (await self._handle.resume_parent()):
-          self._mode = SegmentProgramMode.Paused
-          self._handle.send(ProgramExecEvent(location=self._location))
+        async def func():
+          resumed = await self._handle.resume_parent()
 
+          if not resumed:
+            self._mode = SegmentProgramMode.Paused
+            self._handle.send(ProgramExecEvent(location=self._location))
+
+            return False
+
+          self._mode = SegmentProgramMode.ResumingProcess
+          self._handle.send(ProgramExecEvent(location=self._location), lock=False)
+
+          self._process.resume()
+          self._resume_event = Event()
+          await self._resume_event.wait()
+
+          return True
+
+        self._resume_task = asyncio.create_task(func())
+
+        try:
+          return await self._resume_task
+        except asyncio.CancelledError:
           return False
-
-        self._mode = SegmentProgramMode.ResumingProcess
-        self._handle.send(ProgramExecEvent(location=self._location), lock=True)
-
-        self._process.resume()
-        self._resume_event = Event()
-        await self._resume_event.wait()
-
-        return True
+        finally:
+          self._resume_task = None
 
       case _:
         return False
@@ -216,6 +235,7 @@ class SegmentProgram(HeadProgram):
     self._bypass_future = None
     self._pause_event = None
     self._resume_event = None
+    self._resume_task = None
 
     self._process_pausable: bool = False
     self._process_time: float = 0.0

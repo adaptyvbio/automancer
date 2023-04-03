@@ -1,4 +1,4 @@
-import { ProtocolBlock, ProtocolState, BlockUnit, React, UnitNamespace, HeadUnit } from 'pr1';
+import { ProtocolBlock, ProtocolState, BlockUnit, React, HeadUnit } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {
@@ -61,9 +61,12 @@ export default {
   createActiveBlockMenu(block, location, options) {
     let busy = false;
 
-    return location.mode === LocationMode.Normal
-      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
-      : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }];
+    return [
+      ...(location.mode === LocationMode.Normal
+        ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
+        : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }]),
+      { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy }
+    ];
   },
   getBlockClassLabel(block) {
     return 'State';
@@ -86,6 +89,7 @@ export default {
     switch (path.first()) {
       case 'pause': return { type: 'pause' };
       case 'resume': return { type: 'resume' };
+      case 'halt': return { type: 'halt' };
     }
   },
 } satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>

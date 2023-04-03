@@ -174,6 +174,8 @@ class HeadProgram(BlockProgram):
 
   def receive(self, message):
     match message["type"]:
+      case "halt":
+        self.halt()
       case "pause":
         run_anonymous(self.pause())
       case "resume":

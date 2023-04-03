@@ -150,11 +150,11 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
 };
 
 function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
-  let busy = isBlockBusy(block, location, options);
+  let busy = false; // isBlockBusy(block, location, options);
 
   return [
     ...((location.mode !== LocationMode.Paused)
-      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: (location.mode !== LocationMode.Normal) || busy }]
+      ? [{ id: 'pause', name: 'Pause', icon: 'pause_circle', disabled: busy }]
       : [{ id: 'resume', name: 'Resume', icon: 'play_circle', disabled: busy }]),
     { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: busy }
   ];
@@ -171,7 +171,7 @@ function isBlockBusy(_block: Block, location: Location, _options: { host: Host; 
 }
 
 function isBlockPaused(_block: Block, location: Location, _options: { host: Host; }) {
-  return [LocationMode.Broken, LocationMode.FailedState, LocationMode.Paused].includes(location.mode);
+  return [LocationMode.Broken, LocationMode.Paused].includes(location.mode);
 }
 
 function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {

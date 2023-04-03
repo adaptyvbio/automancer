@@ -373,7 +373,7 @@ class ProgramHandle:
 
     while (current_handle := current_handle._parent) and isinstance(current_handle, ProgramHandle):
       if isinstance(current_handle._program, HeadProgram):
-        return await current_handle._program.resume(loose=True)
+        return await asyncio.shield(self.master._pool.start_soon(current_handle._program.resume(loose=True)))
 
     return True
 

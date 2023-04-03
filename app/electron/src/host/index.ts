@@ -107,13 +107,14 @@ export class HostWindow {
   }
 
   focus() {
-    assert(this.window);
+    // TODO: Investigate
+    if (this.window) {
+      if (this.window.isMinimized()) {
+        this.window.restore();
+      }
 
-    if (this.window.isMinimized()) {
-      this.window.restore();
+      this.window.focus();
     }
-
-    this.window.focus();
   }
 
   ready() {

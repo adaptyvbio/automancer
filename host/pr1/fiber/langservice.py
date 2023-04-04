@@ -927,7 +927,7 @@ class QuantityType(Type):
       result = LocatedValue.new(None, area=obj.area)
       return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
-    if isinstance(obj, str): # and (not context.symbolic):
+    if isinstance(obj.value, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
 
       try:
@@ -938,6 +938,8 @@ class QuantityType(Type):
         return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
       except Exception:
         return Analysis(errors=[DraftGenericError("Unknown error", ranges=obj.area.ranges)]), Ellipsis
+    elif isinstance(obj.value, (float, int)):
+      value = ureg.Quantity(obj.value)
     else:
       value = obj.value
 
@@ -1005,18 +1007,30 @@ class IdentifierType(Type):
 
     return analysis, obj_new
 
-class EnumType:
+class EnumType(Type):
   def __init__(self, *variants: int | str):
+    is_int = [isinstance(variant, int) for variant in variants]
+
+    self._all_int = all(is_int)
+    self._any_int = any(is_int)
     self._variants = variants
 
-  def analyze(self, obj, context):
+  def analyze(self, obj, /, context):
     analysis = Analysis()
 
     if not obj.value in self._variants:
+      if self._any_int:
+        int_analysis, int_result = PrimitiveType(int).analyze(obj, context.update(eval_depth=0))
+
+        if not isinstance(int_result, EllipsisType) and (int_result.value in self._variants):
+          return (analysis + int_analysis), ValueAsPythonExpr.new(int_result, depth=context.eval_depth)
+        elif self._all_int:
+          analysis += int_analysis
+
       analysis.errors.append(InvalidEnumValueError(obj))
       return analysis, Ellipsis
-
-    return analysis, ValueAsPythonExpr.new(obj, depth=context.eval_depth)
+    else:
+      return analysis, ValueAsPythonExpr.new(obj, depth=context.eval_depth)
 
 
 class UnionType(Type):

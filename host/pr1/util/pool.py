@@ -14,8 +14,9 @@ class Pool:
   An object used to manage tasks created in a common context.
   """
 
-  def __init__(self):
+  def __init__(self, *, open: bool = False):
     self._open = False
+    self._preopen = open
     self._task_event = Event()
     self._tasks = set[Task]()
 
@@ -36,21 +37,13 @@ class Pool:
     Adds a new task to the pool.
     """
 
-    if not self._open:
+    if (not self._open) and not (self._preopen):
       raise Exception("Pool not open")
 
     task.add_done_callback(self._done_callback)
 
     self._task_event.set()
     self._tasks.add(task)
-
-    async def ret():
-      try:
-        return await task
-      except Exception:
-        raise asyncio.CancelledError from None
-
-    return asyncio.create_task(ret())
 
   async def cancel(self):
     """
@@ -150,7 +143,7 @@ class Pool:
       critical: Whether to close the pool when this task finishes.
     """
 
-    if not self._open:
+    if (not self._open) and not (self._preopen):
       raise Exception("Pool not open")
 
     task = asyncio.create_task(coro)

@@ -41,8 +41,8 @@ export type MenuEntry =
 
 export type MenuEntrySimpleId = number | string;
 export type MenuEntryId = MenuEntrySimpleId[] | MenuEntrySimpleId;
-export type MenuEntryPath = List<MenuEntryId>;
-export type MenuEntryPathLike = Iterable<MenuEntryId>;
+export type MenuEntryPath = List<MenuEntrySimpleId>;
+export type MenuEntryPathLike = Iterable<MenuEntrySimpleId>;
 
 export type MenuList = MenuEntry[];
 export type MenuDef = MenuList;
@@ -247,7 +247,7 @@ export const ContextMenu = React.forwardRef(function ContextMenu(props: ContextM
                           <div className="cmenu-name">{entry.name}</div>
                           {entry.shortcut && <div className="cmenu-shortcut">{entry.shortcut}</div>}
                           {entry.children && <div className="cmenu-chevron"><Icon name="chevron_right" /></div>}
-                          {entry.checked && <div className="cmenu-chevron"><Icon name="check" /></div>}
+                          {!!entry.checked && <div className="cmenu-chevron"><Icon name="check" /></div>}
                         </button>
                       </li>
                     );

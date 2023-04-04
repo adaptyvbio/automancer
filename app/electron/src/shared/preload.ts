@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DraftId, DraftPrimitive, MenuDef, MenuEntryId } from 'pr1';
+import type { DraftId, DraftPrimitive, MenuDef, MenuEntryPathLike } from 'pr1';
 import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, DraftEntry, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
 import type { HostIdentifier, ClientProtocol, ServerProtocol } from 'pr1-shared';
 
@@ -11,7 +11,7 @@ export type IPCEndpoint = {
 
   main: {
     ready(): void;
-    triggerContextMenu(menu: MenuDef, position: { x: number; y: number; }): Promise<MenuEntryId[] | null>;
+    triggerContextMenu(menu: MenuDef, position: { x: number; y: number; }): Promise<MenuEntryPathLike | null>;
   };
 
   hostSettings: {

@@ -237,7 +237,8 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
 
     let client = new Client(backend, {
       async close() {
-        let exitSubprocess = subprocess && !(await client.request({ type: 'isBusy' }));
+        // let exitSubprocess = subprocess && !(await client.request({ type: 'isBusy' }));
+        let exitSubprocess = !!subprocess;
 
         if (exitSubprocess) {
           backend.send({ type: 'exit' });

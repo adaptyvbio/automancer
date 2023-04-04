@@ -306,13 +306,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
-          <div className={graphEditorStyles.actionsGroup}>
+          {/* <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="center_focus_strong" className={graphEditorStyles.actionsIcon} /></button>
           </div>
           <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="add" className={graphEditorStyles.actionsIcon} /></button>
             <button type="button" className={graphEditorStyles.actionsButton} disabled><Icon name="remove" className={graphEditorStyles.actionsIcon} /></button>
-          </div>
+          </div> */}
           <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton} disabled={this.state.scale === 1} onClick={() => {
               this.setState((state) => {

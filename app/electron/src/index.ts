@@ -224,26 +224,53 @@ export class CoreApplication {
     ipcMain.handle('main.triggerContextMenu', async (event, menu, position) => {
       let deferred = defer<MenuEntryId[] | null>();
 
-      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => electron.Menu.buildFromTemplate(menu.flatMap((entry): MenuItemConstructorOptions[] => {
-        let path = [...ancestors, entry.id];
+      let createAppMenuFromMenu = (menu: MenuDef, ancestors: MenuEntryId[] = []) => {
+        let menuItems: MenuItemConstructorOptions[] = [];
 
-        switch (entry.type) {
-          case undefined:
-          case 'option': return [{
-            checked: !!entry.checked,
-            type: entry.checked ? 'checkbox' : 'normal',
-            enabled: !entry.disabled,
-            label: entry.name,
-            click: () => void deferred.resolve(path)
-          }];
+        for (let entry of menu) {
+          let path = [...ancestors, entry.id].flat();
 
-          case 'divider': return [{
-            type: 'separator'
-          }];
+          switch (entry.type) {
+            case undefined:
+            case 'option': {
+              menuItems.push({
+                checked: !!entry.checked,
+                type: entry.checked ? 'checkbox' : 'normal',
+                enabled: !entry.disabled,
+                label: entry.name,
+                click: () => void deferred.resolve(path)
+              });
 
-          default: return [];
+              break;
+            }
+
+            case 'divider': {
+              menuItems.push({
+                type: 'separator'
+              });
+
+              break;
+            }
+
+            case 'header': {
+              if (menuItems.length > 0) {
+                menuItems.push({
+                  type: 'separator'
+                });
+              }
+
+              menuItems.push({
+                label: entry.name,
+                enabled: false
+              });
+
+              break;
+            };
+          }
         }
-      }));
+
+        return electron.Menu.buildFromTemplate(menuItems);
+      };
 
       let appMenu = createAppMenuFromMenu(menu);
 

@@ -286,11 +286,10 @@ class DevicesStateManager(UnitStateManager):
     for node in obsolete_nodes:
       node_info = self._node_infos[node]
 
-      assert (task := node_info.lifecycle_task)
-
-      task.cancel()
-      task.add_done_callback(lambda task: self._canceled_lifecycle_tasks.remove(task))
-      self._canceled_lifecycle_tasks.add(task)
+      if (task := node_info.lifecycle_task):
+        task.cancel()
+        task.add_done_callback(lambda task: self._canceled_lifecycle_tasks.remove(task))
+        self._canceled_lifecycle_tasks.add(task)
 
       del self._node_infos[node]
 

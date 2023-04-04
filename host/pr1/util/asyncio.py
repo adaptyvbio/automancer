@@ -176,9 +176,13 @@ def run_anonymous(awaitable: Awaitable, /):
 async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]], /) -> Task[T]:
   future = Future[None]()
 
+  def ready():
+    if not future.done():
+      future.set_result(None)
+
   async def inner_func():
     try:
-      return await func(lambda: future.set_result(None))
+      return await func(ready)
     except BaseException as e:
       if not future.done():
         future.set_exception(e)

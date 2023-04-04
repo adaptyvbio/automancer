@@ -1,8 +1,8 @@
-import { ContextMenuContext, React } from 'pr1';
+import { ContextMenuContext, ContextMenuProps, React } from 'pr1';
 
 
-export class NativeContextMenu extends React.Component {
-  constructor(props) {
+export class NativeContextMenu extends React.Component<ContextMenuProps> {
+  constructor(props: ContextMenuProps) {
     super(props);
 
     this.props.triggerRef.current = (event) => {
@@ -13,18 +13,21 @@ export class NativeContextMenu extends React.Component {
       };
 
       window.api.main.triggerContextMenu(menu, position).then((selectedPath) => {
-        this.props.onSelect(selectedPath);
+        if (selectedPath !== null) {
+          this.props.onSelect(selectedPath);
+        }
+
         this.props.onClose(selectedPath !== null);
       });
     };
   }
 
-  render() {
+  override render() {
     return null;
   }
 }
 
-export function NativeContextMenuProvider(props) {
+export function NativeContextMenuProvider(props: React.PropsWithChildren<{}>) {
   return (
     <ContextMenuContext.Provider value={NativeContextMenu}>
       {props.children}

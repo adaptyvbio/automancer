@@ -27,6 +27,7 @@ setup(
     "pr1_repeat.client": ["*"],
     "pr1_segment.client": ["*"],
     "pr1_sequence.client": ["*"],
+    "pr1_shorthands.client": ["*"],
     "pr1_state.client": ["*"],
     "pr1_timer.client": ["*"]
   }

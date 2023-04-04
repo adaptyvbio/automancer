@@ -10,9 +10,10 @@ metadata = Metadata(
   description="Shorthands",
   icon=MetadataIcon(kind='icon', value="description"),
   title="Shorthands",
-  version="1.0"
+  version="2.0"
 )
 
+client_path = Path(files(__name__ + '.client'))
 logger = parent_logger.getChild(namespace)
 
 from .parser import ShorthandsParser as Parser

@@ -1,9 +1,9 @@
 import { GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue } from 'pr1';
+import { UnitNamespace } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
   namespace: typeof namespace;
-  state: null;
 
   child: ProtocolBlock;
   count: DynamicValue;
@@ -28,7 +28,7 @@ export interface Point {
 }
 
 
-const namespace = 'repeat';
+const namespace = ('repeat' as UnitNamespace);
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, location, options, context) {
@@ -56,7 +56,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
       }
     };
   },
-  render(block, path: ProtocolBlockPath, metrics, position, location, options, context) {
+  render(block, path, metrics, position, location, options, context) {
     // let label = (block.state['name'] as { value: string | null; }).value;
 
     return (

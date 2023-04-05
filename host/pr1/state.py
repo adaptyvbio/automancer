@@ -122,7 +122,7 @@ class StateProgramItem:
     ))
 
 class UnitStateInstance(ABC):
-  def __init__(self, runner: 'BaseRunner', *, notify: Callable[[StateEvent], None], stack: EvalStack):
+  def __init__(self, runner: 'BaseRunner', *, item: StateProgramItem, notify: Callable[[StateEvent], None], stack: EvalStack):
     ...
 
   def prepare(self, state: BlockUnitState) -> tuple[MasterAnalysis, None | EllipsisType]:
@@ -141,7 +141,7 @@ class UnitStateInstance(ABC):
     ...
 
 class UnitStateInstanceFactory(Protocol):
-  def __call__(self, *, notify: Callable[[StateEvent], None], stack: EvalStack) -> UnitStateInstance:
+  def __call__(self, *, item: StateProgramItem, notify: Callable[[StateEvent], None], stack: EvalStack) -> UnitStateInstance:
     ...
 
 
@@ -180,7 +180,7 @@ class UnitStateInstanceManager(UnitStateManager):
 
   def add(self, item, state, *, notify, stack):
     if state is not None:
-      instance = self._factory(notify=notify, stack=stack)
+      instance = self._factory(item=item, notify=notify, stack=stack)
       self._instances[item] = instance
 
       return instance.prepare(state)
@@ -392,7 +392,7 @@ class DemoStateLocation:
 class DemoStateInstance(UnitStateInstance):
   _next_index = 0
 
-  def __init__(self, *, notify, stack):
+  def __init__(self, *, item, notify, stack):
     self._index = self._next_index
     type(self)._next_index += 1
 

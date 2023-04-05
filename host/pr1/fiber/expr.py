@@ -8,13 +8,14 @@ from pint import Quantity
 from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
+from ..host import logger
 from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
 from ..util.decorators import debug
-from ..util.misc import Exportable
+from ..util.misc import Exportable, log_exception
 
 if TYPE_CHECKING:
   from .langservice import Analysis, Type
@@ -268,6 +269,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
         prelude=PreludeVariables
       ))
     except Exception:
+      log_exception(logger)
       return Analysis()
 
     self.metadata = static_analysis.metadata

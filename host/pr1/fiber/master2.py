@@ -354,6 +354,14 @@ class ProgramHandle:
       else:
         await child_handle.pause_children()
 
+  def pause_unstable_parent_of_children(self):
+    current_handle = self
+
+    while (child_handle := current_handle._children.get(0)):
+      current_handle = child_handle
+
+    current_handle.pause_unstable_parent()
+
   def pause_unstable_parent(self):
     current_handle = self
     unstable_program = self._program

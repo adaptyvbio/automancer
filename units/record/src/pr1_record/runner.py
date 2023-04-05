@@ -75,13 +75,13 @@ class RecordStateLocation(Exportable):
     }
 
 class RecordStateInstance(UnitStateInstance):
-  def __init__(self, runner: 'Runner', *, notify, stack):
+  def __init__(self, runner: 'Runner', *, item, notify, stack):
     self._notify = notify
     self._runner = runner
     self._stack = stack
 
     self._data: Optional[list[tuple]] = None
-    self._pool = Pool()
+    self._pool = Pool(open=True)
 
   def _read(self):
     # TODO: Warn when overflows occur

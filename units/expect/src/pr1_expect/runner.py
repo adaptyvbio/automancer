@@ -28,6 +28,7 @@ class ExpectError(Error):
 class EntryInfo:
   dependencies: set[tuple[WatchableNode, Literal['connected', 'value']]] = field(default_factory=set)
   expr_object: PythonExprObject
+  falsy: bool = False
   initialization_task: Optional[Task] = None
   message: Optional[Evaluable[LocatedString]]
   registration: Optional[AsyncCancelable] = None
@@ -39,13 +40,14 @@ class StateLocation(Exportable):
     return dict()
 
 class StateInstance(UnitStateInstance):
-  def __init__(self, runner: 'Runner', *, notify, stack):
+  def __init__(self, runner: 'Runner', *, item, notify, stack):
+    self._item = item
     self._notify = notify
     self._runner = runner
     self._stack = stack
 
     self._entry_infos = list[EntryInfo]()
-    self._pool = Pool()
+    self._pool = Pool(open=True)
 
   def prepare(self, state: StateData):
     analysis = MasterAnalysis()
@@ -80,7 +82,9 @@ class StateInstance(UnitStateInstance):
 
     if isinstance(result, EllipsisType):
       failure = True
-    elif not result.value:
+    elif (not result.value) and (not entry_info.falsy):
+      entry_info.falsy = True
+
       if entry_info.message:
         message_result = analysis.add(entry_info.message.eval(EvalContext(stack=self._stack), final=True))
 
@@ -99,15 +103,18 @@ class StateInstance(UnitStateInstance):
         failure = True
     else:
       failure = False
+      entry_info.falsy = (not result.value)
 
     analysis = MasterAnalysis.cast(analysis)
 
-    if (not analysis.empty) or failure:
+    if not analysis.empty:
       self._notify(StateEvent(
         analysis=analysis,
-        failure=failure,
         settled=True
       ))
+
+    if failure:
+      self._item.handle.pause_unstable_parent_of_children()
 
   async def _initialize(self):
     for entry_info in self._entry_infos:

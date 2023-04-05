@@ -2,7 +2,7 @@ from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol
 
-from .staticanalysis import ClassRef
+from .staticanalysis import ClassRef, CommonVariables
 from ..error import Error, ErrorDocumentReference
 from ..reader import LocatedString, LocatedValue, LocationArea
 
@@ -11,7 +11,7 @@ from ..reader import LocatedString, LocatedValue, LocationArea
 class EvalEnvValue:
   deprecated: bool = False
   description: Optional[str] = None
-  type: Optional[ClassRef] = None
+  type: ClassRef = field(default_factory=(lambda: ClassRef(CommonVariables['unknown'])))
 
 @dataclass
 class EvalEnv:

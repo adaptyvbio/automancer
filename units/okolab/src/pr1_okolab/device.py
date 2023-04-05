@@ -25,6 +25,7 @@ class BoardTemperatureNode(PollableReadableNode, NumericNode):
       unit="degC"
     )
 
+    self.icon = "thermostat"
     self.id = NodeId("boardTemperature")
     self.label = "Board temperature"
 
@@ -47,6 +48,7 @@ class TemperatureReadoutNode(PollableReadableNode, NumericNode):
       unit="degC"
     )
 
+    self.icon = "thermostat"
     self.id = NodeId("readout")
     self.label = "Temperature readout"
 
@@ -69,6 +71,7 @@ class TemperatureSetpointNode(NumericNode):
       unit="degC"
     )
 
+    self.icon = "thermostat"
     self.id = NodeId("setpoint")
     self.label = "Temperature setpoint"
 

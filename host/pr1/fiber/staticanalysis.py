@@ -601,7 +601,7 @@ def evaluate_expr_type(node: ast.expr, /, variables: Variables, context: StaticA
           and (overload := find_overload(method, args=[left_type], kwargs=dict())):
           return analysis, overload.return_type
 
-      if (left_type.cls is UnknownType) and (right_type.cls is UnknownType):
+      if (left_type.cls is UnknownType) or (right_type.cls is UnknownType):
         return analysis, ClassRef(UnknownType)
 
       return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(warning=True)), ClassRef(UnknownType)

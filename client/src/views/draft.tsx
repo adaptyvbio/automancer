@@ -33,6 +33,7 @@ import { ViewExecution } from './execution';
 import { DiagnosticsReport } from '../components/diagnostics-report';
 import { FileTabNav } from '../components/file-tab-nav';
 import { TimeSensitive } from '../components/time-sensitive';
+import { UnitTools } from '../unit';
 
 
 export interface ViewDraftProps {
@@ -202,7 +203,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             break;
           }
 
-          let unit = this.props.host.units[block.namespace];
+          let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
           block = unit.getChildBlock?.(block, key);
         }
 

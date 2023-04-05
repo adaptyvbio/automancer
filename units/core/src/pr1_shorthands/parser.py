@@ -7,6 +7,7 @@ from pr1.error import ErrorDocumentReference
 from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.process import ProgramExecEvent
+from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
 from pr1.reader import LocatedString, LocatedValue, LocationRange
 from pr1.util.decorators import debug
@@ -171,17 +172,28 @@ class ShorthandTransform(BaseTransform):
   def execute(self, state, transforms, *, origin_area):
     analysis = lang.Analysis()
     block_state: BlockState = cast(BlockState, None)
-    block_transforms = list()
+
+    transforms_final = Transforms()
+    transforms_incl_segment = Transforms()
+    has_segment_transform = lambda transforms: any(isinstance(transform, SegmentTransform) for transform in transforms)
+
+    if has_segment_transform:
+      transforms_incl_segment = transforms
+    else:
+      transforms_final += transforms
 
     for item in self._items:
-      transforms += item.data.transforms
+      if has_segment_transform(item.data.transforms) and (not transforms_incl_segment):
+        transforms_incl_segment = item.data.transforms
+      else:
+        transforms_final += item.data.transforms
 
       if block_state is not None:
         block_state = item.data.state | block_state
       else:
         block_state = item.data.state
 
-    block = analysis.add(self._parser._fiber.execute(block_state, block_transforms + transforms, origin_area=origin_area))
+    block = analysis.add(self._parser._fiber.execute(block_state, (transforms_final + transforms_incl_segment), origin_area=origin_area))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis

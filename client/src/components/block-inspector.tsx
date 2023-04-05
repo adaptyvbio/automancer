@@ -45,7 +45,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
     for (let key of this.props.blockPath) {
       let unit = UnitTools.asBlockUnit(units[targetBlock.namespace])!;
-      targetBlock = unit.getChildBlock(targetBlock, key);
+      targetBlock = unit.getChildBlock!(targetBlock, key);
       lineBlocks.push(targetBlock);
     }
 

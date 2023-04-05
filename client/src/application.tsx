@@ -21,6 +21,7 @@ import { Unit } from './units';
 import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
+import { ErrorBoundary } from './components/error-boundary';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
@@ -467,14 +468,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       }) ?? '';
 
       contents = (
-        <Component
-          app={this}
-          host={this.state.host}
-          route={viewRouteMatch}
-          setUnsavedDataCallback={(callback) => {
-            this.unsavedDataCallback = callback;
-          }}
-          key={key} />
+        <ErrorBoundary>
+          <Component
+            app={this}
+            host={this.state.host}
+            route={viewRouteMatch}
+            setUnsavedDataCallback={(callback) => {
+              this.unsavedDataCallback = callback;
+            }}
+            key={key} />
+        </ErrorBoundary>
       );
     }
 

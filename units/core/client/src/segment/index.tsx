@@ -224,9 +224,6 @@ export default {
     );
   },
 
-  getChildBlock(block, key) {
-    throw new Error();
-  },
   getChildrenExecutionRefs(block, location) {
     return null;
   },
@@ -237,9 +234,9 @@ export default {
     let unit = UnitTools.asProcessUnit(context.host.units[block.process.namespace])!;
     return unit.getProcessLabel?.(block.process.data, context) ?? null;
   },
-  getBlockLabelSuffix(block, location, context) {
-    return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
-  },
+  // getBlockLabelSuffix(block, location, context) {
+  //   return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
+  // },
 
   createActiveBlockMenu,
   createDefaultPoint,

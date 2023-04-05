@@ -7,7 +7,7 @@ export interface UnitInfo {
   development: boolean;
   enabled: boolean;
   hasClient: boolean;
-  namespace: string;
+  namespace: UnitNamespace;
   version: number;
 
   metadata: {

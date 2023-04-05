@@ -21,7 +21,7 @@
     color: #666;
   }
 
-  @at-root #{selector-append(button, &)}:hover, &._context {
+  &:hover, &._context {
     border-color: #ccc;
     box-shadow: 2px 2px 6px rgba(#000, 6%);
   }

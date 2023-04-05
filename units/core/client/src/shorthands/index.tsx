@@ -34,9 +34,11 @@ export default {
     return block.child;
   },
   getChildrenExecutionRefs(block, location) {
-    return [{
-      blockKey: (null as never),
-      executionId: 0
-    }];
+    return location.children[0]
+      ? [{
+        blockKey: (null as never),
+        executionId: 0
+      }]
+      : [];
   }
 } satisfies BlockUnit<Block, BlockMetrics, Location, never>;

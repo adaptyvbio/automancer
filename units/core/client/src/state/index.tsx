@@ -1,4 +1,5 @@
 import { ProtocolBlock, ProtocolState, BlockUnit, React, HeadUnit } from 'pr1';
+import { UnitNamespace } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -36,7 +37,7 @@ export type Key = never;
 
 
 export default {
-  namespace: 'state',
+  namespace: ('state' as UnitNamespace),
 
   graphRenderer: {
     computeMetrics(block, ancestors, location, options, context) {

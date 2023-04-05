@@ -65,7 +65,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
       activeExecPath.push(ref.executionId);
 
-      let block = unit.getChildBlock(parentBlock, key);
+      let block = unit.getChildBlock!(parentBlock, key);
       let location = unit.getActiveChildLocation!(parentLocation, ref.executionId);
 
       lineBlocks.push(block);

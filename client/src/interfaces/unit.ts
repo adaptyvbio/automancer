@@ -130,7 +130,7 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   getBlockClassLabel?(block: Block, context: UnitContext): string | null;
   getBlockLabel?(block: Block, location: Location | null, context: UnitContext): React.ReactNode | null;
   getBlockLabelSuffix?(block: Block, location: Location, context: UnitContext): string | null;
-  getChildBlock(block: Block, key: Key): ProtocolBlock;
+  getChildBlock?(block: Block, key: Key): ProtocolBlock;
   getChildrenExecutionRefs(block: Block, location: Location): { blockKey: Key; executionId: number; }[] | null;
   isBlockBusy?(block: Block, location: Location,  options: { host: Host; }): boolean;
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;

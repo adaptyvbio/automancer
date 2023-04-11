@@ -1,0 +1,78 @@
+@use "../constants" as *;
+
+
+.alt1 {
+  display: grid;
+  grid-template-columns: 500px 1fr;
+  height: 100%;
+}
+
+.alt2 {
+  border-right: 1px solid #ddd;
+}
+
+
+.root {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.2rem;
+
+  padding: 2rem;
+}
+
+.entry {
+  &Root {
+    display: grid;
+    align-items: center;
+    column-gap: 1rem;
+    grid-template-columns: auto 1fr auto $icon-size;
+
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+  }
+
+/* &Connection {
+    width: 1ch;
+    aspect-ratio: 1;
+
+    background-color: $app-green;
+    border-radius: 50%;
+  } */
+
+  &Label {
+    font-weight: 500;
+  }
+
+  &ErrorIcon {
+    color: $app-red;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 24;
+  }
+}
+
+
+.collection {
+  &Root {
+  }
+
+  &List {
+    margin-left: 1.4rem;
+    margin-top: 0.2rem;
+  }
+}
+
+.collectionRoot:not(:global(._open)) > .collectionList {
+  display: none;
+}
+
+.collectionRoot:global(._open) > .entryRoot .entryIcon {
+  rotate: 90deg;
+}
+
+
+.collectionRoot:global(._open) > .entryRoot, .entryRoot:hover {
+  background-color: #eee;
+}

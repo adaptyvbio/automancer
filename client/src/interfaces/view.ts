@@ -21,9 +21,7 @@ export interface ViewHashOptions<T extends ViewRouteMatch = ViewRouteMatchDefaul
   route: T;
 }
 
-export interface ViewType {
-  new(props: ViewProps): React.Component<ViewProps, unknown>;
-
+export type ViewType = React.ComponentType<ViewProps> & {
   hash?(options: ViewHashOptions): string;
   routes: ViewRoute[];
 }

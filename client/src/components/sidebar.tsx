@@ -47,7 +47,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
     let url = navigation.currentEntry.url;
 
     let unitEntries = this.props.host?.units && Object.values(this.props.host.units)
-      .flatMap((unit) => (unit.getGeneralTabs?.() ?? []).map((entry) => ({
+      .flatMap((unit) => (unit.generalTabs ?? []).map((entry) => ({
         ...entry,
         id: 'unit.' + entry.id,
         route: `/unit/${unit.namespace}/${entry.id}`

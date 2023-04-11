@@ -73,6 +73,7 @@ export interface SegmentData {
 
 //> Unit
 
+/** @deprecated */
 export interface NavEntry<Props> {
   id: string;
   disabled?: unknown;
@@ -81,15 +82,18 @@ export interface NavEntry<Props> {
   component: { new(props: Props): React.Component<Props, unknown>; };
 }
 
+/** @deprecated */
 export interface ChipTabComponentProps {
   chipId: ChipId;
   host: Host;
 }
 
+/** @deprecated */
 export interface GeneralTabComponentProps {
   host: Host;
 }
 
+/** @deprecated */
 export interface Unit<Code, Matrix> {
   CodeEditor?: Code extends never ? void : CodeEditorComponent<Code>;
   MatrixEditor?: MatrixEditorComponent;

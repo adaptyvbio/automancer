@@ -1,4 +1,5 @@
-import { CreateFeaturesOptions, DynamicValue, Feature, formatDynamicValue, MasterStateLocation, ProtocolState, StateUnit, util } from 'pr1';
+import { NodeHierarchy, DynamicValue, Feature, formatDynamicValue, GeneralTabComponentProps, React, StateUnit, TitleBar, util } from 'pr1';
+import { UnitNamespace } from 'pr1-shared';
 
 
 export type NodePath = string[];
@@ -75,8 +76,76 @@ export interface Location {
 }
 
 
+const namespace = ('devices' as UnitNamespace);
+
+function DeviceControlTab(props: GeneralTabComponentProps) {
+  let executor = (props.host.state.executors[namespace] as ExecutorState);
+  console.log(executor)
+
+  return (
+    <>
+      <TitleBar title="Device control" />
+      <div>
+        <NodeHierarchy entries={[
+          { type: 'node',
+            id: 'a',
+            detail: '34.7ºC',
+            icon: 'thermostat',
+            label: 'Temperature readout' },
+          {
+            type: 'collection',
+            id: 'b',
+            label: 'Temperature controller',
+            children: [
+              { type: 'node',
+                id: 'a',
+                detail: '34.7ºC',
+                icon: 'thermostat',
+                label: 'Temperature readout' },
+              { type: 'node',
+                id: 'b',
+                detail: '35.2ºC',
+                icon: 'thermostat',
+                label: 'Temperature setpoint',
+                error: 'Problem' },
+            ]
+          },
+          {
+            type: 'collection',
+            id: 'c',
+            label: 'System',
+            children: [
+              { type: 'node',
+                id: 'a',
+                detail: '53 years',
+                icon: 'schedule',
+                label: 'Epoch' },
+              { type: 'node',
+                id: 'b',
+                detail: '2 hrs 28 min',
+                icon: 'history',
+                label: 'Alive duration' },
+              { type: 'node',
+                id: 'c',
+                detail: '294 MB',
+                icon: 'memory',
+                label: 'Process memory usage' },
+              { type: 'node',
+                id: 'd',
+                detail: '0.6721',
+                icon: 'monitoring',
+                label: 'Random value' }
+            ]
+          }
+        ]} />
+      </div>
+    </>
+  )
+}
+
+
 export default {
-  namespace: 'devices',
+  namespace,
 
   createStateFeatures(state, descendantStates, location, context) {
     let executor = context.host.state.executors[this.namespace] as ExecutorState;
@@ -143,5 +212,12 @@ export default {
         label
       };
     }) ?? [];
-  }
+  },
+
+  generalTabs: [{
+    id: 'manual',
+    icon: 'tune',
+    label: 'Device control',
+    component: DeviceControlTab
+  }]
 } satisfies StateUnit<State, Location>

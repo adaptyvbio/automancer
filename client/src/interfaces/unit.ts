@@ -5,7 +5,7 @@ import type { Application } from '../application';
 import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
-import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
+import type { ChipTabComponentProps, NavEntry } from '../units';
 import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
 import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
@@ -69,16 +69,28 @@ export interface OptionsComponentProps {
   pathname: string;
 }
 
+export interface TabEntry<Props> {
+  id: string;
+  disabled?: unknown;
+  label: string;
+  icon: string;
+  component: React.ComponentType<Props>;
+}
+
+export interface GeneralTabComponentProps {
+  app: Application;
+  host: Host;
+}
+
 export interface BaseUnit {
-  OptionsComponent?: React.ComponentType<OptionsComponentProps>;
   namespace: UnitNamespace;
+
+  OptionsComponent?: React.ComponentType<OptionsComponentProps>;
+  generalTabs?: TabEntry<GeneralTabComponentProps>[];
   styleSheets?: CSSStyleSheet[];
 
   /** @deprecated */
-  getChipTabs?(chip: Chip): NavEntry<ChipTabComponentProps>[];
-
-  /** @deprecated */
-  getGeneralTabs?(): NavEntry<GeneralTabComponentProps>[];
+  getChipTabs?(chip: Chip): { }[];
 
   /** @deprecated */
   providePreview?(options: { chip: Chip; host: Host; }): string | null;

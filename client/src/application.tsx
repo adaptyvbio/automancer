@@ -22,9 +22,10 @@ import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
+import { ViewUnitTab } from './views/unit-tab';
 
 
-const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
+const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
 
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({

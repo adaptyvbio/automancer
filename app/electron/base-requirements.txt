@@ -1,0 +1,9 @@
+--extra-index-url https://gitlab.com/api/v4/projects/45232449/packages/pypi/simple
+
+pip-tools~=6.13.0
+
+pr1
+pr1-server
+
+pr1-amf
+pr1-core

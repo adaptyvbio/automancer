@@ -3,4 +3,5 @@ export * from './scan';
 export * from './search';
 export * from './socket-client';
 export * from './types/app-data';
+export * from './util';
 export * from './util/fs';

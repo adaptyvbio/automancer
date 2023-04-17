@@ -1,12 +1,12 @@
 import 'source-map-support/register';
 
-import { ok as assert } from 'assert';
+import { ok as assert } from 'node:assert';
 import chokidar from 'chokidar';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
-import fs from 'fs/promises';
-import path from 'path';
-import { AppData, BridgeTcp, CertificateFingerprint, DraftEntry, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { AppData, BridgeTcp, CertificateFingerprint, DraftEntry, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
 import * as uol from 'uol';
 
 import { MenuDef, MenuEntryId } from 'pr1';
@@ -377,25 +377,31 @@ export class CoreApplication {
       try {
         await fs.mkdir(hostDirPath, { recursive: true });
 
-        if (options.pythonInstallationSettings.virtualEnv) {
-          this.logger.debug('Creating virtual environment');
+        let requirementsFilePath = path.join(hostDirPath, 'requirements.in');
+        await fs.writeFile(requirementsFilePath, await fs.readFile(path.join(util.getResourcePath(), 'base-requirements.txt')));
 
-          await util.runCommand([pythonInstallation.path, '-m', 'venv', envPath], { architecture, timeout: 60e3 });
+        if (options.pythonInstallationSettings.virtualEnv) {
           pythonPath = path.join(envPath, ((process.platform === 'win32') ? 'Scripts/python.EXE' : 'bin/python'));
 
-          let corePackagesDirPath = util.getResourcePath('packages');
-          for (let corePackageRelPath of await fs.readdir(corePackagesDirPath)) {
-            this.logger.debug(`Installing core package '${corePackageRelPath}'`);
-            await util.runCommand([pythonPath, '-m', 'pip', 'install', path.join(corePackagesDirPath, corePackageRelPath)], { architecture, timeout: 60e3 });
-          }
+          this.logger.debug('Creating virtual environment');
+          await runCommand([pythonInstallation.path, '-m', 'venv', envPath], { architecture, timeout: 60e3 });
+
+          this.logger.debug('Installing pip-tools');
+          await runCommand([pythonPath, '-m', 'pip', 'install', 'pip-tools~=6.13.0'], { architecture, timeout: (5 * 60e3) });
+
+          this.logger.debug('Installing dependencies');
+          await runCommand([pythonPath, '-m', 'piptools', 'compile'], { architecture, cwd: hostDirPath, timeout: 60e3 });
+          await runCommand([pythonPath, '-m', 'piptools', 'sync'], { architecture, cwd: hostDirPath, timeout: (5 * 60e3) });
         }
 
         this.logger.debug('Initializing host configuration');
 
-        let [confStdout, _] = await util.runCommand([pythonPath, '-m', 'pr1_server', '--data-dir', hostDirPath, '--initialize'], { architecture, timeout: 60e3 });
+        let [confStdout, _] = await runCommand([pythonPath, '-m', 'pr1_server', '--data-dir', hostDirPath, '--initialize'], { architecture, timeout: 60e3 });
         conf = JSON.parse(confStdout) as ServerConfiguration;
       } catch (err: any) {
         util.logError(err, this.logger);
+
+        await shell.trashItem(hostDirPath);
 
         return {
           ok: false,
@@ -416,7 +422,6 @@ export class CoreApplication {
               type: 'local',
               architecture: options.pythonInstallationSettings.architecture,
               conf,
-              corePackagesInstalled: options.pythonInstallationSettings.virtualEnv,
               dirPath: hostDirPath,
               identifier: conf.identifier,
               pythonPath

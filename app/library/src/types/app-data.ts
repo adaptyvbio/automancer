@@ -57,7 +57,6 @@ export interface HostSettingsOptionsLocal {
   type: 'local';
   architecture: string | null;
   conf: ServerConfiguration;
-  corePackagesInstalled: boolean;
   dirPath: string;
   identifier: HostIdentifier;
   pythonPath: string; // | null; // null -> use embedded

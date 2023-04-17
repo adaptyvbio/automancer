@@ -1,10 +1,9 @@
-import childProcess from 'child_process';
 import electron from 'electron';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { PythonInstallation, PythonInstallationRecord, PythonVersion } from 'pr1-library';
-import tls from 'tls';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { PythonInstallation, PythonInstallationRecord, PythonVersion, runCommand } from 'pr1-library';
+import tls from 'node:tls';
 import which from 'which';
 
 import { Logger } from './logger';
@@ -70,7 +69,7 @@ export async function findPythonInstallations() {
       : [])
   ];
 
-  let condaList = await runCommand('conda env list --json', { ignoreErrors: true });
+  let condaList = await runCommand(['conda', 'env', 'list', '--json'], { ignoreErrors: true });
 
   if (condaList) {
     possiblePythonLocations.push(...JSON.parse(condaList[0]).envs.map((env: string) => path.join(env, 'bin/python')));
@@ -199,12 +198,12 @@ export function getComputerName() {
     : hostname;
 }
 
-export function getResourcePath(relativePath: string) {
-  return path.join(__dirname, '../..', relativePath);
+export function getResourcePath() {
+  return path.join(__dirname, '../..');
 
   // return app.isPackaged
-  //   ? path.join(process.resourcesPath, 'app', relativePath)
-  //   : path.join(__dirname, '..', relativePath);
+  //   ? path.join(process.resourcesPath, 'app')
+  //   : path.join(__dirname, '..');
 }
 
 export function logError(err: any, logger: Logger) {
@@ -231,36 +230,9 @@ export function parsePythonVersion(input: string): PythonVersion | null {
 
 export interface RunCommandOptions {
   architecture?: string | null;
+  cwd?: string;
   ignoreErrors?: unknown;
   timeout?: number;
-}
-
-export async function runCommand(args: string[] | string, options: RunCommandOptions & { ignoreErrors: true; }): Promise<[string, string] | null>;
-export async function runCommand(args: string[] | string, options?: RunCommandOptions): Promise<[string, string]>;
-export async function runCommand(args: string[] | string, options?: RunCommandOptions) {
-  if (typeof args === 'string') {
-    args = args.split(' ');
-  }
-
-  if (options?.architecture && (process.platform === 'darwin')) {
-    args = ['arch', '-arch', options.architecture, ...args];
-  }
-
-  let [execPath, ...otherArgs] = args;
-
-  return await new Promise<[string, string] | null>((resolve, reject) => {
-    childProcess.execFile(execPath, otherArgs, { timeout: options?.timeout ?? 1000 }, (err, stdout, stderr) => {
-      if (err) {
-        if (options?.ignoreErrors) {
-          resolve(null);
-        } else {
-          reject(err);
-        }
-      } else {
-        resolve([stdout, stderr]);
-      }
-    });
-  });
 }
 
 

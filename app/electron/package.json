@@ -9,7 +9,6 @@
     "build:app": "esbuild src/index.ts --bundle --external:electron --platform=node --loader:.node=copy --outdir=lib/app --target=node18",
     "build:app:watch": "npm run build:app -- --sourcemap=inline --watch",
     "build:client": "python3 -c \"__import__('shutil').copytree('node_modules/pr1/dist', 'lib/client', dirs_exist_ok=True)\"",
-    "build:host": "./scripts/build.sh",
     "build:preload": "esbuild src/shared/preload.ts --bundle --external:electron --outfile=lib/preload/index.js",
     "build:renderer": "esbuild src/host/renderer.tsx src/startup/renderer.tsx --bundle --external:electron --external:fs/promises --external:path --external:pr1 --external:vm --format=esm --loader:.jpeg=file --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --outdir=lib/renderer",
     "build:static": "python3 -c \"for f in __import__('pathlib').Path('src').glob('*/index.html'): d = 'lib/static' / f.relative_to('src'); d.parent.mkdir(exist_ok=True, parents=True); __import__('shutil').copy(f, d)\"",

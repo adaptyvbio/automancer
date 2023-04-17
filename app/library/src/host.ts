@@ -54,11 +54,6 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
       'PYTHONIOENCODING': 'utf-8'
     };
 
-    if (!hostOptions.corePackagesInstalled) {
-      // env['PYTHONPATH'] = this.app.localHostModels.beta.packagesPath;
-      // logger.debug(...);
-    }
-
     let conf: ServerConfiguration = {
       ...hostOptions.conf,
       advertisement: {
@@ -80,6 +75,11 @@ export async function createClient(hostEnvironmentOrSettings: HostEnvironment | 
         secure: false
       }
     };
+
+    logger.debug('Updating packages');
+    await util.runCommand([hostOptions.pythonPath, '-m', 'piptools', 'compile'], { architecture: hostOptions.architecture, cwd: hostOptions.dirPath, timeout: 60e3 });
+    await util.runCommand([hostOptions.pythonPath, '-m', 'piptools', 'sync'], { architecture: hostOptions.architecture, cwd: hostOptions.dirPath, timeout: (5 * 60e3) });
+
 
     let args = ['-m', 'pr1_server', '--conf', JSON.stringify(conf), '--data-dir', hostOptions.dirPath, '--local'];
     let executable = hostOptions.pythonPath;

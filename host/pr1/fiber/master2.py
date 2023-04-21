@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: SimpleCallbackFunction, host: 'Host'):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
     self.chip = chip
     self.host = host
     self.protocol = protocol
@@ -116,7 +116,9 @@ class Master:
 
         self._pool.close()
       finally:
-        self._cleanup_callback()
+        if self._cleanup_callback:
+          self._cleanup_callback()
+
         await self.state_manager.clear()
 
     self._pool.start_soon(func())

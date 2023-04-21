@@ -7,7 +7,7 @@ from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.segment import SegmentTransform
 from pr1.fiber import langservice as lang
-from pr1.fiber.parser import BaseParser, BlockUnitData
+from pr1.fiber.parser import BaseParser, BlockUnitData, Transforms
 from pr1.reader import LocatedValue
 from pr1.util.misc import Exportable
 
@@ -19,13 +19,12 @@ class TimerProcessData(Exportable):
   def export(self):
     return { "duration": self.duration.export() }
 
-class TimerAttributes(TypedDict, total=False):
+class Attributes(TypedDict, total=False):
   wait: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
-class TimerParser(BaseParser):
+class Parser(BaseParser):
   namespace = "timer"
 
-  root_attributes = dict()
   segment_attributes = {
     'wait': lang.Attribute(
       decisive=True,
@@ -40,13 +39,13 @@ class TimerParser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def parse_block(self, attrs: TimerAttributes, /, adoption_stack, trace):
+  def prepare(self, attrs: Attributes, /):
     if (attr := attrs.get('wait')):
-      analysis, duration = attr.eval(EvalContext(adoption_stack), final=False)
+      # analysis, duration = attr.eval(EvalContext(adoption_stack), final=False)
 
-      if isinstance(duration, EllipsisType):
-        return analysis, Ellipsis
+      # if isinstance(duration, EllipsisType):
+      #   return analysis, Ellipsis
 
-      return lang.Analysis(), BlockUnitData(transforms=[SegmentTransform(self.namespace, TimerProcessData(duration))])
+      return lang.Analysis(), [SegmentTransform(self.namespace, TimerProcessData(attr))]
     else:
-      return lang.Analysis(), BlockUnitData()
+      return lang.Analysis(), Transforms()

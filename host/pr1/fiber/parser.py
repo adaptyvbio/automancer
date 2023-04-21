@@ -2,14 +2,14 @@ from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path, PurePath
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, Sequence
 
-from ..error import Trace
-from ..util.misc import Exportable
+from ..error import Error, ErrorDocumentReference, Trace
+from ..util.misc import Exportable, HierarchyNode, split_sequence
 from . import langservice as lang
 from .eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
 from .. import reader
-from ..reader import LocationArea
+from ..reader import LocatedValue, LocationArea
 from ..draft import Draft, DraftDiagnostic
 from ..ureg import ureg
 from ..util.decorators import debug
@@ -22,13 +22,20 @@ if TYPE_CHECKING:
   from ..units.base import BaseRunner
 
 
-@debug
-class MissingProcessError(Exception):
-  def __init__(self, area: LocationArea):
-    self.area = area
+class DuplicateLeadTransformInLayer(Error):
+  def __init__(self, targets: list[LocatedValue]):
+    super().__init__(
+      "Duplicate lead transform in layer",
+      references=[ErrorDocumentReference.from_value(target) for target in targets]
+    )
 
-  def diagnostic(self):
-    return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
+class MissingLeadTransformInLayer(Error):
+  def __init__(self, target: LocatedValue):
+    super().__init__(
+      "Missing lead transform in layer",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
 
 
 class BlockUnitState(Exportable):
@@ -188,7 +195,7 @@ class BaseProgramPoint(Protocol):
   def import_value(cls, data: Any, /, block: 'BaseBlock', *, master) -> 'BaseProgramPoint':
     ...
 
-class BaseBlock(Protocol):
+class BaseBlock(ABC, HierarchyNode):
   Point: type[BaseProgramPoint]
   Program: type[BlockProgram]
 
@@ -216,18 +223,89 @@ class BaseParser(Protocol):
   def leave_protocol(self):
     return lang.Analysis()
 
+  def prepare(self, attrs: Attrs, /) -> 'tuple[lang.Analysis, Transforms | EllipsisType]':
+    ...
+
   def prepare_block(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitPreparationData | EllipsisType]:
     return lang.Analysis(), BlockUnitPreparationData(attrs)
 
   def parse_block(self, attrs, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
     return lang.Analysis(), BlockUnitData()
 
-class BaseTransform(ABC):
+class BaseDefaultTransform(ABC):
+  def __init__(self):
+    self.adoption_envs = EvalEnvs()
+    self.runtime_envs = EvalEnvs()
+
+    self.priority: int
+
   @abstractmethod
-  def execute(self, state: BlockState, transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def adopt(self, adoption_envs: EvalEnvs, adoption_stack: EvalStack) -> tuple[lang.Analysis, tuple[Any, EvalStack] | EllipsisType]:
     ...
 
-Transforms = list[BaseTransform]
+  @abstractmethod
+  def execute(self, block: BaseBlock, data: Any) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+class BaseLeadTransform(ABC):
+  def __init__(self):
+    super().__init__()
+    self.priority = 0
+
+  @abstractmethod
+  # def execute(self, execute: 'Callable[[Transforms], tuple[lang.Analysis, BaseBlock | EllipsisType]]') -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def adopt(self, adoption_envs: EvalEnvs, adoption_stack: EvalStack) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+Transforms = list[BaseDefaultTransform | BaseLeadTransform]
+
+# @dataclass
+# class TransformPrep:
+#   transform: BaseDefaultTransform | BaseLeadTransform
+#   _: KW_ONLY
+#   adoption_envs: EvalEnvs
+#   runtime_envs: EvalEnvs
+
+@dataclass
+class Layer:
+  default_transforms: list[BaseDefaultTransform]
+  lead_transform: BaseLeadTransform
+
+  def adopt(self, adoption_envs: EvalEnvs, adoption_stack: EvalStack):
+    analysis = lang.Analysis()
+    current_adoption_envs = adoption_envs.copy()
+    current_adoption_stack = adoption_stack.copy()
+
+    transform_datas = list[Any | EllipsisType]()
+
+    for transform in [*self.default_transforms, self.lead_transform]:
+      transform_result = analysis.add(transform.adopt(current_adoption_envs, current_adoption_stack))
+
+      if isinstance(transform_result, EllipsisType):
+        transform_data = Ellipsis
+      else:
+        transform_data, adoption_stack_update = transform_result
+        current_adoption_stack |= adoption_stack_update
+
+      transform_datas.append(transform_data)
+
+    if isinstance(transform_datas[-1], EllipsisType):
+      return analysis, Ellipsis
+
+    # block = analysis.add(self.lead_transform.execute(transform_datas[-1]))
+    block = transform_datas[-1]
+
+    if isinstance(block, EllipsisType):
+      return analysis, Ellipsis
+
+    for transform, transform_data in list(zip(self.default_transforms, transform_datas[0:-1]))[::-1]:
+      if not isinstance(transform_data, EllipsisType):
+        execute_result = analysis.add(transform.execute(block, transform_data))
+
+        if not isinstance(execute_result, EllipsisType):
+          block = execute_result
+
+    return analysis, block
 
 
 # ----
@@ -384,17 +462,24 @@ class FiberParser:
     for protocol_unit_details in protocol_details.values():
       adoption_stack |= protocol_unit_details.create_adoption_stack()
 
-    root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
+    layer = analysis.add(self.parse_layer(root_result_native['steps']))
 
-    if isinstance(root_block_prep, EllipsisType):
+    if isinstance(layer, EllipsisType):
       return analysis, Ellipsis
 
-    root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
+    root_block = analysis.add(layer.adopt(adoption_envs, adoption_stack))
 
-    if isinstance(root_block_data, EllipsisType):
-      return analysis, Ellipsis
+    # root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
-    root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
+    # if isinstance(root_block_prep, EllipsisType):
+    #   return analysis, Ellipsis
+
+    # root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
+
+    # if isinstance(root_block_data, EllipsisType):
+    #   return analysis, Ellipsis
+
+    # root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
 
     print("\x1b[1;31mAnalysis →\x1b[22;0m", analysis.errors)
     # print(root_block)
@@ -420,6 +505,91 @@ class FiberParser:
       user_env=self.user_env
     )
 
+
+  def parse_layer(self, attrs: Any):
+    analysis = lang.Analysis()
+    context = AnalysisContext(
+      # envs_list=[adoption_envs, runtime_envs]
+    )
+
+    block_result = analysis.add(self.block_type.analyze(attrs, context))
+
+    if isinstance(block_result, EllipsisType):
+      return analysis, Ellipsis
+
+    # Collect transforms
+
+    transforms = Transforms()
+
+    for parser in self._parsers:
+      unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, namespace=parser.namespace))
+
+      if isinstance(unit_attrs, EllipsisType):
+        continue
+
+      unit_transforms = analysis.add(parser.prepare(unit_attrs))
+
+      if isinstance(unit_transforms, EllipsisType):
+        continue
+
+      transforms += unit_transforms
+
+    # Split transforms into default and lead transforms
+
+    default_transforms = list[BaseDefaultTransform]()
+    lead_transforms = list[BaseLeadTransform]()
+
+    for transform in transforms:
+      if isinstance(transform, BaseLeadTransform):
+        lead_transforms.append(transform)
+      else:
+        default_transforms.append(transform)
+
+    if len(lead_transforms) > 1:
+      analysis.errors.append(DuplicateLeadTransformInLayer([attrs]))
+    if len(lead_transforms) < 1:
+      analysis.errors.append(MissingLeadTransformInLayer(attrs))
+      return analysis, Ellipsis
+
+    default_transforms = sorted(default_transforms, key=(lambda transform: transform.priority))
+
+    layer = Layer(
+      default_transforms,
+      lead_transforms[0]
+    )
+
+    return analysis, layer
+
+    # adoption_envs = EvalEnvs()
+    # runtime_envs = EvalEnvs()
+
+    # default_transform_preps = list[TransformPrep]()
+
+    # for transform in default_transforms:
+    #   default_transform_preps.append(TransformPrep(
+    #     transform,
+    #     adoption_envs=adoption_envs,
+    #     runtime_envs=runtime_envs
+    #   ))
+
+    #   adoption_envs += transform.adoption_envs
+    #   runtime_envs += transform.runtime_envs
+
+    # lead_transform_prep = TransformPrep(
+    #   lead_transforms[0],
+    #   adoption_envs=adoption_envs,
+    #   runtime_envs=runtime_envs
+    # )
+
+    # return analysis, (default_transform_preps, lead_transform_prep)
+
+    # return BlockPreparation(
+    #   default_transforms=default_transforms,
+    #   lead_transform=lead_transforms[0],
+
+    #   adoption_envs=adoption_envs,
+    #   runtime_envs=runtime_envs
+    # )
 
   def prepare_block(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
     runtime_envs = runtime_envs.copy()
@@ -487,20 +657,6 @@ class FiberParser:
       transforms += block_data.transforms
 
     return analysis, BlockData(state=state, transforms=transforms) if not failure else Ellipsis
-
-  # def parse_block_expr(self, data_block: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> UnresolvedBlockData | EllipsisType:
-  #   from .opaque import OpaqueValue
-
-  #   analysis, data_attrs = lang.LiteralOrExprType(self.segment_type, expr_type=lang.PrimitiveType(OpaqueValue), static=True).analyze(data_block, self.analysis_context)
-  #   self.analysis += analysis
-
-  #   if isinstance(data_attrs, EllipsisType):
-  #     return Ellipsis
-
-  #   if isinstance(data_attrs, LocatedValue) and isinstance(data_attrs.value, PythonExpr):
-  #     return UnresolvedBlockDataExpr(data_attrs.value.augment(adoption_envs))
-
-  #   return UnresolvedBlockDataLiteral(data_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
 
   def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
     if not transforms:

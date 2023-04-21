@@ -1,5 +1,4 @@
 import asyncio
-import appdirs
 import logging
 from pathlib import Path
 from pprint import pprint
@@ -32,8 +31,7 @@ logger = logging.getLogger("pr1.test")
 
 class Backend:
   def __init__(self) -> None:
-    self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
-    self.data_dir = Path("tmp/master-host").resolve()
+    self.data_dir = Path("tmp/test-host").resolve()
     logger.debug(f"Storing data in '{self.data_dir}'")
 
 
@@ -63,11 +61,11 @@ async def main():
 name: Test
 
 steps:
-  wait: 1s
-  record:
-    fields:
-      - value: Okolab.temperature
-    output: foo.bar
+  actions:
+    - actions:
+        - wait: 1s
+    - wait: 1s
+      repeat: 2
 """)
 
   draft = Draft(
@@ -83,9 +81,10 @@ steps:
   )
 
 
-  # print(parser.protocol.root)
+  if parser.protocol:
+    print(parser.protocol.root.format_hierarchy())
 
-  # return
+  return
 
   from .fiber.master2 import Master
 

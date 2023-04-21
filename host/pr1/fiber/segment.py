@@ -13,7 +13,7 @@ from ..error import Error
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
-from .parser import BaseBlock, BaseTransform, BlockProgram, BlockState, HeadProgram, Transforms
+from .parser import BaseBlock, BaseDefaultTransform, BaseLeadTransform, BlockProgram, BlockState, HeadProgram, Transforms
 from ..devices.claim import ClaimSymbol
 from ..draft import DraftDiagnostic
 from ..reader import LocationArea
@@ -45,15 +45,18 @@ class SegmentProcessData:
     }
 
 @debug
-class SegmentTransform(BaseTransform):
+class SegmentTransform(BaseLeadTransform):
   def __init__(self, namespace: str, process_data: Exportable):
     self._process = SegmentProcessData(process_data, namespace)
 
-  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> tuple[Analysis, BaseBlock | EllipsisType]:
-    if transforms:
-      return Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
+  def adopt(self, adoption_envs, adoption_stack):
+    return Analysis(), (SegmentBlock(process=self._process), EvalStack())
 
-    return Analysis(), SegmentBlock(process=self._process)
+  # def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea) -> tuple[Analysis, BaseBlock | EllipsisType]:
+  #   if transforms:
+  #     return Analysis(errors=[RemainingTransformsError(origin_area)]), Ellipsis
+
+  #   return Analysis(), SegmentBlock(process=self._process)
 
 
 class SegmentProgramMode(IntEnum):

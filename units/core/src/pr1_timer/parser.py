@@ -5,11 +5,13 @@ from types import EllipsisType
 from pint import Quantity
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.segment import SegmentTransform
-from pr1.fiber import langservice as lang
-from pr1.fiber.parser import BaseParser, BlockUnitData, Transforms
+from pr1.fiber.langservice import Analysis, Attribute, EnumType, PotentialExprType, QuantityType, UnionType
+from pr1.fiber.segment import SegmentBlock, SegmentProcessData
+from pr1.fiber.parser import BaseLeadTransformer, BaseParser, TransformerPreparationResult
 from pr1.reader import LocatedValue
 from pr1.util.misc import Exportable
+
+from . import namespace
 
 
 @dataclass
@@ -19,33 +21,100 @@ class TimerProcessData(Exportable):
   def export(self):
     return { "duration": self.duration.export() }
 
-class Attributes(TypedDict, total=False):
+class Attributes(TypedDict):
   wait: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
-class Parser(BaseParser):
-  namespace = "timer"
+# class Attributes(TypedDict, total=False):
+#   wait: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
-  segment_attributes = {
-    'wait': lang.Attribute(
-      decisive=True,
+# class Parser(BaseParser):
+#   namespace = namespace
+
+#   segment_attributes = {
+#     'wait': lang.Attribute(
+#       description="Waits for a fixed delay.",
+#       type=lang.PotentialExprType(lang.UnionType(
+#         lang.EnumType('forever'),
+#         lang.QuantityType('second')
+#       ))
+#     )
+#   }
+
+  # def prepare(self, attrs: Attributes, /):
+  #   if (attr := attrs.get('wait')):
+  #     return lang.Analysis(), [
+  #       StateApplierTransform(settle=True, stable=False),
+  #       SegmentTransform(self.namespace, TimerProcessData(attr))
+  #     ]
+  #   else:
+  #     return lang.Analysis(), Transforms()
+
+
+
+class Transformer(BaseLeadTransformer):
+  priority = 100
+  attributes = {
+    'wait': Attribute(
       description="Waits for a fixed delay.",
-      type=lang.PotentialExprType(lang.UnionType(
-        lang.EnumType('forever'),
-        lang.QuantityType('second')
+      type=PotentialExprType(UnionType(
+        EnumType('forever'),
+        QuantityType('second')
       ))
     )
   }
 
-  def __init__(self, fiber):
-    self._fiber = fiber
-
-  def prepare(self, attrs: Attributes, /):
+  def prepare(self, attrs: Attributes, /, adoption_envs, runtime_envs):
     if (attr := attrs.get('wait')):
-      # analysis, duration = attr.eval(EvalContext(adoption_stack), final=False)
-
-      # if isinstance(duration, EllipsisType):
-      #   return analysis, Ellipsis
-
-      return lang.Analysis(), [SegmentTransform(self.namespace, TimerProcessData(attr))]
+      return Analysis(), TransformerPreparationResult(attr)
     else:
-      return lang.Analysis(), Transforms()
+      return Analysis(), None
+
+  def adopt(self, data: Evaluable[LocatedValue[Quantity | Literal['forever']]], /, adoption_stack):
+    analysis, duration = data.eval(EvalContext(adoption_stack), final=False)
+
+    if isinstance(duration, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, SegmentBlock(
+      SegmentProcessData(TimerProcessData(duration), namespace=namespace)
+    )
+
+  # def finish(self, data: TimerProcessData, /):
+  #   return SegmentBlock(
+  #     SegmentProcessData(data, namespace=namespace)
+  #   )
+
+
+class Parser(BaseParser):
+  namespace = namespace
+  transformers = [Transformer()]
+
+# @dataclass
+# class TimerTransform(ProcessTransform):
+#   duration: Evaluable[LocatedValue[Quantity | Literal['forever']]]
+
+#   def adopt_process(self, adoption_envs, runtime_envs, adoption_stack):
+#     analysis, duration = self.duration.eval(EvalContext(adoption_stack), final=False)
+
+#     if isinstance(duration, EllipsisType):
+#       return analysis, Ellipsis
+
+#     return namespace, TimerProcessData(duration)
+
+
+# class Parser(BaseSimplifiedProcessParser):
+#   namespace = namespace
+#   priority = 100
+
+#   segment_attributes = {
+#     'wait': lang.Attribute(
+#       description="Waits for a fixed delay.",
+#       type=lang.PotentialExprType(lang.UnionType(
+#         lang.EnumType('forever'),
+#         lang.QuantityType('second')
+#       ))
+#     )
+#   }
+
+#   def parse(self, attrs: Attributes, /):
+#     return namespace, TimerProcessData(attrs['wait'])

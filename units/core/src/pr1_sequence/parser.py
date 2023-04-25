@@ -6,10 +6,9 @@ from typing import Any, Optional, TypedDict, cast
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, ListType
 from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import (Attrs, BaseBlock, BaseLeadTransform, BaseParser, BaseDefaultTransform,
-                              BlockData, BlockProgram, BlockState,
-                              BlockUnitData, BlockUnitPreparationData,
-                              FiberParser, Layer, Transforms)
+from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
+                              BlockData, BlockProgram, FiberParser, Layer,
+                              TransformerPreparationResult)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.reader import LocationArea
 from pr1.util.decorators import debug
@@ -17,18 +16,15 @@ from pr1.util.misc import Exportable
 
 from . import namespace
 
-
 SequenceActionInfo = tuple[BlockData, LocationArea]
 
 class Attributes(TypedDict, total=False):
   actions: list[Any]
 
 
-class Parser(BaseParser):
-  namespace = namespace
-  priority = 700
-
-  segment_attributes = {
+class Transformer(BaseLeadTransformer):
+  priority = 200
+  attributes = {
     'actions': Attribute(
       description="Describes a nested list of steps.",
       documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
@@ -41,71 +37,40 @@ class Parser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare(self, attrs: Attributes, /):
+  def prepare(self, attrs: Attributes, /, adoption_envs, adoption_stack):
     analysis = Analysis()
 
     if (attr := attrs.get('actions')):
       action_layers = list[Layer]()
 
       for action_source in attr:
-        layer = analysis.add(self._fiber.parse_layer(action_source))
+        layer = analysis.add(self._fiber.parse_layer(action_source, adoption_envs, adoption_stack))
 
         if not isinstance(layer, EllipsisType):
           action_layers.append(layer)
 
-      return analysis, [Transform(action_layers)]
+      return analysis, TransformerPreparationResult(action_layers)
 
-    return analysis, Transforms()
+    return analysis, None
 
-  # def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
-  #   if (attr := attrs.get('actions')):
-  #     actions_prep = SequencePrep()
-  #     analysis = Analysis()
-  #     analysis += cast(ListType, self.segment_attributes['actions'].type).create_completion(attr, self._fiber.block_type)
-
-  #     for action_source in attr:
-  #       action_prep = analysis.add(self._fiber.prepare_block(action_source, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
-
-  #       if isinstance(action_prep, EllipsisType):
-  #         continue
-
-  #       actions_prep.append((action_prep, action_source.area))
-
-  #     return analysis, BlockUnitPreparationData(actions_prep)
-
-  #   else:
-  #     return Analysis(), BlockUnitPreparationData()
-
-  # def parse_block(self, attrs: SequencePrep, /, adoption_stack, trace):
-  #   analysis = Analysis()
-  #   actions_info = list[SequenceActionInfo]()
-
-  #   for action_prep, action_area in attrs:
-  #     action_data = analysis.add(self._fiber.parse_block(action_prep, adoption_stack))
-
-  #     if not isinstance(action_data, EllipsisType):
-  #       actions_info.append((action_data, action_area))
-
-  #   return analysis, BlockUnitData(transforms=[
-  #     Transform(actions_info, parser=self)
-  #   ])
-
-
-@dataclass(frozen=True)
-class Transform(BaseLeadTransform):
-  action_layers: list[Layer]
-
-  def adopt(self, adoption_envs, adoption_stack):
+  def adopt(self, data: list[Layer], /, adoption_stack):
     analysis = Analysis()
     children = list[BaseBlock]()
 
-    for action_layer in self.action_layers:
-      action_block = analysis.add(action_layer.adopt(adoption_envs, adoption_stack))
+    for action_layer in data:
+      action_block = analysis.add(action_layer.adopt(adoption_stack))
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)
 
-    return analysis, (SequenceBlock(children), EvalStack()) if children else Ellipsis
+    return analysis, SequenceBlock(children) if children else Ellipsis
+
+
+class Parser(BaseParser):
+  namespace = namespace
+
+  def __init__(self, fiber: FiberParser):
+    self.transformers = [Transformer(fiber)]
 
 
 class SequenceProgramMode(IntEnum):

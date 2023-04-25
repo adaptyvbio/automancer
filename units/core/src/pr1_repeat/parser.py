@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import Analysis, Attribute, PotentialExprType, PrimitiveType
 from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import (BaseBlock, BaseParser, BaseDefaultTransform,
+from pr1.fiber.parser import (BaseBlock, BaseDefaultTransformer, BaseParser, BaseDefaultTransform,
                               BlockProgram, BlockUnitData,
-                              BlockUnitPreparationData, Transforms)
+                              BlockUnitPreparationData, TransformerAdoptionResult, TransformerPreparationResult, Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.master.analysis import MasterAnalysis
 from pr1.reader import LocatedValue
@@ -20,19 +20,37 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   repeat: Evaluable[LocatedValue[int]]
 
-class Parser(BaseParser):
-  namespace = namespace
-  priority = 1200
-
-  segment_attributes = {
+class Transformer(BaseDefaultTransformer):
+  priority = 100
+  attributes = {
     'repeat': Attribute(
       description="Repeats a block a fixed number of times.",
       type=PotentialExprType(PrimitiveType(int))
     )
   }
 
-  def __init__(self, fiber):
-    self._fiber = fiber
+  def __init__(self):
+    self.env = EvalEnv({
+      'index': EvalEnvValue()
+    }, name="Repeat", readonly=True)
+
+  def prepare(self, attrs: Attributes, /, adoption_envs, runtime_envs):
+    if (attr := attrs.get('repeat')):
+      return Analysis(), TransformerPreparationResult(attr, runtime_envs=[self.env])
+    else:
+      return Analysis(), None
+
+  def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack):
+    analysis, count = data.eval(EvalContext(adoption_stack), final=False)
+
+    return analysis, TransformerAdoptionResult(count)
+
+  def execute(self, block, data: Evaluable[LocatedValue[int | Literal['forever']]]):
+    return Analysis(), RepeatBlock(block, count=data, env=self.env)
+
+class Parser(BaseParser):
+  namespace = namespace
+  transformers = [Transformer()]
 
   def prepare(self, attrs: Attributes, /):
     if (attr := attrs.get('repeat')):
@@ -61,28 +79,8 @@ class Parser(BaseParser):
       transforms=[RepeatTransform(count=value, env=env, parser=self)]
     ) """
 
-@dataclass(kw_only=True)
-class Transform(BaseDefaultTransform):
-  priority = 100
 
-  count: Evaluable[LocatedValue[int]]
 
-  def __post_init__(self):
-    self.env = EvalEnv({
-      'index': EvalEnvValue()
-    }, name="Repeat", readonly=True)
-
-    self.runtime_envs = [self.env]
-
-  def adopt(self, adoption_envs, adoption_stack):
-    # x = self.count.evaluate(EvalContext(adoption_envs, adoption_stack))
-
-    return Analysis(), (None, {
-      self.env: { "index": 0 }
-    })
-
-  def execute(self, block, data):
-    return Analysis(), RepeatBlock(block, count=self.count, env=self.env)
 
 
 @dataclass(kw_only=True)
@@ -185,7 +183,7 @@ class RepeatBlock(BaseBlock):
   Point: type[RepeatProgramPoint] = RepeatProgramPoint
   Program = RepeatProgram
 
-  def __init__(self, block: BaseBlock, count: Evaluable[LocatedValue[int]], env: EvalEnv):
+  def __init__(self, block: BaseBlock, count: Evaluable[LocatedValue[int | Literal['forever']]], env: EvalEnv):
     self.block = block
     self.count = count
     self.env = env

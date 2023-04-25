@@ -3,7 +3,7 @@ from types import EllipsisType
 from typing import Any, TypedDict
 
 from pr1.fiber import langservice as lang
-from pr1.fiber.parser import BaseParser, BaseTransform, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser
+from pr1.fiber.parser import BaseParser, BaseDefaultTransform, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser
 
 from . import namespace
 
@@ -46,7 +46,7 @@ class DoParser(BaseParser):
     return lang.Analysis(), BlockUnitData()
 
 @dataclass
-class DoTransform(BaseTransform):
+class DoTransform(BaseDefaultTransform):
   data: BlockData
   _: KW_ONLY
   parser: DoParser = field(repr=False)
@@ -60,7 +60,7 @@ class DoTransform(BaseTransform):
 
 
 @dataclass
-class RestoreStateTransform(BaseTransform):
+class RestoreStateTransform(BaseDefaultTransform):
   state: BlockState
   _: KW_ONLY
   parser: DoParser = field(repr=False)

@@ -13,7 +13,7 @@ from pr1.reader import LocatedString, LocatedValue, LocationRange
 from pr1.util.decorators import debug
 from pr1.fiber import langservice as lang
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
-from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseProgramPoint, BaseTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, ProtocolUnitData, Transforms
+from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseProgramPoint, BaseDefaultTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, ProtocolUnitData, Transforms
 
 from . import namespace
 
@@ -164,7 +164,7 @@ class ShorthandsParser(BaseParser):
 
 
 @debug
-class ShorthandTransform(BaseTransform):
+class ShorthandTransform(BaseDefaultTransform):
   def __init__(self, items: list[ShorthandDynamicItem], /, parser: ShorthandsParser):
     self._items = items
     self._parser = parser

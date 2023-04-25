@@ -5,8 +5,9 @@ from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
                                    StrType)
-from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState
+from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState, Transforms
 from pr1.reader import LocatedString
+from pr1_state.parser import StatePublisherTransform
 
 from . import namespace
 
@@ -14,7 +15,7 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   name: Evaluable[LocatedString]
 
-class NameParser(BaseParser):
+class Parser(BaseParser):
   namespace = namespace
   segment_attributes = {
     'name': Attribute(
@@ -23,12 +24,14 @@ class NameParser(BaseParser):
     )
   }
 
-  def parse_block(self, attrs: Attributes, /, adoption_stack, trace):
+  def prepare(self, attrs: Attributes):
     if (attr := attrs.get('name')):
-      analysis, result = attr.eval(EvalContext(adoption_stack), final=True)
-      return analysis, BlockUnitData(NameState(result.value if not isinstance(result, EllipsisType) else None))
+      return Analysis(), [StatePublisherTransform(NameState("hello"))]
+
+    #   analysis, result = attr.eval(EvalContext(adoption_stack), final=True)
+    #   return analysis, BlockUnitData(NameState(result.value if not isinstance(result, EllipsisType) else None))
     else:
-      return Analysis(), BlockUnitData()
+      return Analysis(), Transforms()
 
 
 class NameState(BlockUnitState):

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import builtins
 from contextlib import contextmanager
+import copy
 from os import PathLike
 import os
 import numpy as np
@@ -427,64 +428,68 @@ class DictType(SimpleDict):
     super().__init__(attrs, foldable=foldable, strict=True)
 
 
-class DivisibleCompositeDictType(Type):
-  _native_namespace = "_"
-  _separator = "/"
+class DivisibleCompositeDictType(Type, Generic[T]):
+  def __init__(self, *, foldable: bool = True, separator: str = "/"):
+    self._attributes_by_key = dict[T, dict[str, Attribute]]()
+    self._attributes_by_name = dict[str, tuple[bool, Optional[T]]]()
+    self._attributes_by_unique_name = dict[str, tuple[T, str]]()
 
-  def __init__(self, native_attrs: Optional[dict[str, Attribute | Type]] = None, /, *, foldable: bool = True):
-    self._attributes = dict[str, dict[str, Attribute]]()
+    # [_/1]
+    # [_/1], a/1
+    # [a/1]
+    # a/1, b/1
+
     self._foldable = foldable
-
-    if native_attrs:
-      self.add(native_attrs, namespace=self._native_namespace)
+    self._separator = separator
 
   @property
   def completion_items(self):
     completion_items = list[CompletionItem]()
 
-    for namespace, attrs in self._attributes.items():
+    for namespace, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        ambiguous = any(attr_name in other_attrs for other_namespace, other_attrs in self._attributes.items() if other_namespace != namespace)
-        native = (namespace == self._native_namespace)
-
         completion_items.append(CompletionItem(
           documentation=attr._description,
           kind=attr._kind,
           label=attr_name,
-          namespace=(namespace if not native else None),
+          namespace=None,
           signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
           sublabel=attr._label,
-          text=(f"{namespace}{self._separator}{attr_name}" if ambiguous and (not native) else attr_name)
+          text=(attr_name)
         ))
 
     return completion_items
 
-  def _parse_attr_key(self, attr_key: str, /):
-    segments = attr_key.split(self._separator)
+  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], /, key: T, prefix: Optional[str] = None):
+    assert not (key in self._attributes_by_key)
+    assert key is not None
 
-    if len(segments) > 1:
-      attr_name = attr_key[(len(segments[0]) + 1):]
-      namespace = segments[0]
-    else:
-      attr_name = attr_key
-      namespace = None
+    self._attributes_by_key[key] = dict()
 
-    attr_entries = dict[str, Attribute]()
+    for attr_name, raw_attr in attrs.items():
+      if isinstance(raw_attr, Attribute):
+        attr = raw_attr
+      else:
+        attr = Attribute(cast(Type, raw_attr))
 
-    for attrs_namespace, attrs in self._attributes.items():
-      if attr_name in attrs:
-        attr_entries[attrs_namespace] = attrs[attr_name]
+      if prefix:
+        attr = copy.copy(attr)
+        unique_name = f"{prefix}{self._separator}{attr_name}"
 
-    return namespace, attr_name, attr_entries
+        assert not (unique_name in self._attributes_by_unique_name)
+        self._attributes_by_unique_name[unique_name] = (key, attr_name)
 
-  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], *, namespace: str):
-    assert not (namespace in self._attributes)
+      self._attributes_by_key[key][attr_name] = attr
 
-    for attr_name, attr in attrs.items():
-      if not isinstance(attr, Attribute):
-        attrs[attr_name] = Attribute(cast(Type, attr))
+      native = not prefix
 
-    self._attributes[namespace] = cast(dict[str, Attribute], attrs)
+      match (native, self._attributes_by_name.get(attr_name)):
+        case (_, None) | (True, (False, _)):
+          self._attributes_by_name[attr_name] = (native, key)
+        case (False, (False, _)):
+          self._attributes_by_name[attr_name] = (True, None)
+        case (True, (True, _)):
+          raise ValueError("Duplicate name")
 
   def analyze(self, obj, /, context):
     analysis, primitive_result = PrimitiveType(dict).analyze(obj, context)
@@ -508,61 +513,57 @@ class DivisibleCompositeDictType(Type):
 
     analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
-    attr_values = { namespace: dict[str, Any]() for namespace in self._attributes.keys() }
+    attr_values = { key: dict[str, Any]() for key in self._attributes_by_key.keys() }
 
     for obj_key, obj_value in obj.items():
-      namespace, attr_name, attr_entries = self._parse_attr_key(obj_key)
+      unique_attr = self._attributes_by_unique_name.get(obj_key)
 
-      # e.g. 'invalid/bar'
-      if namespace and not (namespace in self._attributes):
-        analysis.errors.append(ExtraneousKeyError(namespace, obj))
-        continue
+      # e.g. 'foo/bar'
+      if unique_attr:
+        key, attr_name = unique_attr
 
-      # e.g. 'foo/invalid' or 'invalid'
-      if not attr_entries:
-        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
-        continue
+      # e.g. 'foobar'
+      elif (unprefixed_attr := self._attributes_by_name.get(obj_key)):
+        _, unprefixed_key = unprefixed_attr
 
-      if not namespace:
         # e.g. 'bar' where '_/bar' exists
-        if self._native_namespace in attr_entries:
-          namespace = self._native_namespace
         # e.g. 'bar' where only 'a/bar' exists
-        elif len(attr_entries) == 1:
-          namespace = next(iter(attr_entries.keys()))
+        if unprefixed_key is not None:
+          key = unprefixed_key
+          attr_name = obj_key
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
           analysis.errors.append(AmbiguousKeyError(obj_key, obj))
           continue
-      # e.g. 'foo/bar'
-      else:
-        pass
 
-      if attr_name in attr_values[namespace]:
+      # e.g. 'foo/invalid' or 'invalid'
+      else:
+        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
+        continue
+
+      if attr_name in attr_values[key]:
         analysis.errors.append(DuplicateKeyError(obj_key, obj))
         continue
 
-      attr_values[namespace][attr_name] = obj_value
+      attr_values[key][attr_name] = obj_value
 
     failure = False
 
-    for namespace, attrs in self._attributes.items():
+    for prefix, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        if attr._required and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
+        if attr._required and not (attr_name in attr_values[prefix]):
+          analysis.errors.append(MissingKeyError(attr_name, obj))
           failure = True
 
     return analysis, (attr_values if not failure else Ellipsis)
 
-  def analyze_namespace(self, attr_values: dict[str, Any], /, context, *, namespace: Optional[str]):
-    namespace = namespace or self._native_namespace
-
+  def analyze_namespace(self, attr_values: dict[T, dict[str, Any]], /, context: 'AnalysisContext', *, key: T):
     analysis = Analysis()
     failure = False
     result = dict[str, Any]()
 
-    for attr_name, attr_value in attr_values[namespace].items():
-      attr = self._attributes[namespace][attr_name]
+    for attr_name, attr_value in attr_values[key].items():
+      attr = self._attributes_by_key[key][attr_name]
       attr_result = analysis.add(attr.analyze(attr_value, attr_name, context))
 
       if not isinstance(attr_result, EllipsisType):
@@ -574,7 +575,8 @@ class DivisibleCompositeDictType(Type):
 
 class SimpleDictType(DivisibleCompositeDictType):
   def __init__(self, attrs: dict[str, Attribute | Type]):
-    super().__init__(attrs)
+    super().__init__()
+    self.add(attrs, key=0)
 
   def analyze(self, obj, /, context):
     analysis, global_result = super().analyze(obj, context)
@@ -582,7 +584,7 @@ class SimpleDictType(DivisibleCompositeDictType):
     if isinstance(global_result, EllipsisType):
       return analysis, Ellipsis
 
-    result = analysis.add(super().analyze_namespace(global_result, context, namespace=None))
+    result = analysis.add(super().analyze_namespace(global_result, context, key=0))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
@@ -958,7 +960,7 @@ class QuantityType(Type):
   @staticmethod
   def check(value: Quantity, unit: Unit, *, target: LocatedValue):
     match value:
-      case Quantity() if value.check(unit):
+      case Quantity() if value.check(unit): # type: ignore
         return Analysis(), LocatedValue.new(value.to(unit), area=target.area)
       case Quantity(dimensionless=True):
         return Analysis(errors=[MissingUnitError(target, unit)]), Ellipsis

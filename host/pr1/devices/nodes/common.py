@@ -4,6 +4,7 @@ import contextlib
 from typing import NewType, Optional, Sequence
 
 from ...util.asyncio import AsyncCancelable
+from ...util.misc import HierarchyNode
 from ...util.types import SimpleCallbackFunction
 
 
@@ -17,7 +18,7 @@ NodePathLike = Sequence[NodeId]
 class NodeUnavailableError(Exception):
   pass
 
-class BaseNode(ABC):
+class BaseNode(HierarchyNode, ABC):
   def __init__(self):
     self.connected: bool
     self.id: NodeId
@@ -27,6 +28,14 @@ class BaseNode(ABC):
     self.label: Optional[str] = None
 
     self._connection_listeners = list[SimpleCallbackFunction]()
+
+  # Internal
+
+  def __get_node_name__(self):
+    return (f"[{self.id}]" + (f" {self.label}" if self.label else str())) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
+
+  def __hash__(self):
+    return id(self)
 
   # Called by the producer
 
@@ -48,9 +57,6 @@ class BaseNode(ABC):
       "icon": self.icon,
       "label": self.label
     }
-
-  def format(self, *, prefix: str = str()):
-    return (f"{self.label} ({self.id})" if self.label else str(self.id)) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
   def watch_connection(self, listener: SimpleCallbackFunction, /):
     """

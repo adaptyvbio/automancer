@@ -69,7 +69,7 @@ class HierarchyNode:
   def __get_node_name__(self) -> list[str] | str:
     return self.__class__.__name__
 
-  def __get_node_children__(self) -> list[Self]:
+  def __get_node_children__(self) -> Sequence[Self]:
     return list()
 
   def format_hierarchy(self, *, prefix: str = str()):

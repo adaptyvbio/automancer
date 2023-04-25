@@ -10,6 +10,9 @@ class CollectionNode(BaseNode):
     self.nodes: dict[NodeId, BaseNode]
     self._listening = False
 
+  def __get_node_children__(self):
+    return self.nodes.values()
+
   def walk(self, callback: Callable[[BaseNode], None], /):
     for node in self.nodes.values():
       if not isinstance(node, CollectionNode):
@@ -50,16 +53,6 @@ class CollectionNode(BaseNode):
       **super().export(),
       "nodes": { node.id: node.export() for node in self.nodes.values() }
     }
-
-  def format(self, *, prefix: str = str()):
-    output = super().format() + "\n"
-    nodes = list(self.nodes.values())
-
-    for index, node in enumerate(nodes):
-      last = index == (len(nodes) - 1)
-      output += prefix + ("└── " if last else "├── ") + node.format(prefix=(prefix + ("    " if last else "│   "))) + (str() if last else "\n")
-
-    return output
 
 
 class DeviceNode(CollectionNode):

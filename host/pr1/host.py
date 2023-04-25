@@ -153,7 +153,7 @@ class Host:
     logger.debug("Initialized executors")
     logger.info("Node tree")
 
-    for line in self.root_node.format().splitlines():
+    for line in self.root_node.format_hierarchy().splitlines():
       logger.debug(line)
 
     for path in self.chips_dir.iterdir():

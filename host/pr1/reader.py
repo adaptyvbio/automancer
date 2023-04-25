@@ -476,7 +476,7 @@ class Source(LocatedString):
 
 ObjectComments = list[LocatedString]
 
-class ReliableLocatedDict(LocatedDict):
+class ReliableLocatedDict(LocatedDict[K, V], Generic[K, V]):
   def __init__(self, value: dict, /, area: LocationArea, *, comments: dict[LocatedValue, ObjectComments], completion_ranges: Optional[set[LocationRange]] = None, fold_range: LocationRange, full_area: LocationArea):
     super().__init__(value, area)
 

@@ -1,28 +1,39 @@
 from asyncio import Event
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Optional, cast
+from typing import Any, Callable, Optional, TypedDict, cast
 
 from pr1.error import ErrorDocumentReference
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
+from pr1.fiber.langservice import Analysis, AnalysisRelation, AnalysisRename, AnyType, Attribute, KVDictType, PrimitiveType, SimpleDictType, StrType
 from pr1.fiber.master2 import ProgramOwner
+from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
+                              BaseDefaultTransform, BaseDefaultTransformer, BaseLeadTransformer, BaseParser,
+                              BaseProgramPoint, BlockData, BlockProgram,
+                              BlockState, BlockUnitData,
+                              BlockUnitPreparationData, FiberParser, Layer,
+                              ProtocolUnitData, TransformerAdoptionResult, TransformerPreparationResult, Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
-from pr1.reader import LocatedString, LocatedValue, LocationRange
+from pr1.reader import (LocatedString, LocatedValue, LocationRange,
+                        ReliableLocatedDict)
 from pr1.util.decorators import debug
-from pr1.fiber import langservice as lang
-from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
-from pr1.fiber.parser import AnalysisContext, Attrs, BaseBlock, BaseParser, BaseProgramPoint, BaseDefaultTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, ProtocolUnitData, Transforms
+from pr1.util.misc import split_sequence
 
 from . import namespace
 
 
 @dataclass(kw_only=True)
 class ShorthandStaticItem:
-  contents: Attrs | EllipsisType
+  create_layer: Callable[[], tuple[Analysis, Layer | EllipsisType]]
   definition_range: LocationRange
+  deprecated: bool
+  description: Optional[str]
   env: EvalEnv
+  layer: Optional[Layer | EllipsisType] = None
+  priority: int = 0
   ref_ranges: list[LocationRange]
 
 @dataclass(kw_only=True)
@@ -31,65 +42,190 @@ class ShorthandDynamicItem:
   data: BlockData
   name: str
 
-class ShorthandsParser(BaseParser):
-  namespace = "shorthands"
-  priority = 600
+
+class Attributes(TypedDict, total=False):
+  shorthands: ReliableLocatedDict[LocatedString, Attrs]
+
+class LeadTransformer(BaseLeadTransformer):
+  def __init__(self, parser: 'Parser'):
+    self.parser = parser
+
+    self.attributes = {
+      # shorthand_name: Attribute(
+      #   deprecated=shorthand.deprecated,
+      #   description=shorthand.description,
+      #   type=AnyType()
+      # ) for shorthand_name, shorthand in self.parser.shorthands.items() if not isinstance(shorthand.layer, EllipsisType) and shorthand.layer.lead_transform
+    }
+
+  def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
+    for shorthand_name, attr_value in data.items():
+      shorthand = self.parser.shorthands[shorthand_name]
+      assert not isinstance(shorthand.layer, EllipsisType)
+
+      return Analysis(), TransformerPreparationResult((shorthand, attr_value))
+
+      # TODO: Handle other shorthands
+
+    return Analysis(), None
+
+  def adopt(self, data: tuple[ShorthandStaticItem, Any], /, adoption_stack):
+    analysis = Analysis()
+    shorthand, value = data
+
+    assert not isinstance(shorthand.layer, EllipsisType)
+    block = analysis.add(shorthand.layer.adopt_lead(adoption_stack))
+
+    if isinstance(block, EllipsisType):
+      return analysis, Ellipsis
+
+class PassiveTransformer(BaseDefaultTransformer):
+  priority = 300
+
+  def __init__(self, parser: 'Parser'):
+    self.parser = parser
+
+  @property
+  def attributes(self):
+    return {
+      shorthand_name: Attribute(
+        deprecated=shorthand.deprecated,
+        description=shorthand.description,
+        type=AnyType()
+      ) for shorthand_name, shorthand in self.parser.shorthands.items()
+    }
+
+  def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
+    self.last_data = data
+
+    analysis = Analysis()
+    calls = list[tuple[ShorthandStaticItem, Any]]()
+
+    for shorthand_name, arg in data.items():
+      shorthand = self.parser.shorthands[shorthand_name]
+
+      if not shorthand.layer:
+        shorthand.layer = analysis.add(shorthand.create_layer())
+
+        if not isinstance(shorthand.layer, EllipsisType):
+          assert (extra_info := shorthand.layer.extra_info) is not None
+
+          if not isinstance(extra_info, EllipsisType) and ('_priority' in extra_info):
+            shorthand.priority = extra_info['_priority'].value
+
+      if (not isinstance(shorthand.layer, EllipsisType)) and (not shorthand.layer.lead_transform):
+        calls.append((shorthand, arg))
+
+    calls = sorted(calls, key=(lambda call: -call[0].priority))
+
+    return analysis, (TransformerPreparationResult(calls) if calls else None)
+
+  def adopt(self, data: list[tuple[ShorthandStaticItem, Any]], /, adoption_stack):
+    analysis = Analysis()
+    calls = list[tuple[ShorthandStaticItem, Any]]()
+
+    for shorthand, arg in data:
+      assert isinstance(shorthand.layer, Layer)
+      # TODO: Handle argument
+
+      adopted_transforms, _ = analysis.add(shorthand.layer.adopt(EvalStack({})))
+      calls.append((shorthand, adopted_transforms))
+
+    return analysis, TransformerAdoptionResult(calls)
+
+  def execute(self, data: list[tuple[ShorthandStaticItem, Any]], /, block):
+    analysis = Analysis()
+    current_block = block
+
+    for shorthand, adopted_transforms in data[::-1]:
+      assert isinstance(shorthand.layer, Layer)
+      current_block = analysis.add(shorthand.layer.execute(adopted_transforms, current_block))
+
+    return analysis, current_block
+
+
+class Parser(BaseParser):
+  namespace = namespace
 
   root_attributes = {
-    'shorthands': lang.Attribute(
-      decisive=True,
-      description="Defines shorthands, parts of steps can be reused.",
-      type=lang.KVDictType(lang.StrType(), lang.AnyType())
+    'shorthands': Attribute(
+      description="Defines shorthands, parts of steps that can be reused.",
+      type=KVDictType(StrType(), PrimitiveType(dict))
     )
   }
 
   def __init__(self, fiber: FiberParser):
-    self._fiber = fiber
-    self._shorthands = dict[str, ShorthandStaticItem]()
+    self.fiber = fiber
+    self.shorthands = dict[str, ShorthandStaticItem]()
+    self.transformers = [
+      # LeadTransformer(self)
+      PassiveTransformer(self)
+    ]
 
-    self.segment_attributes = dict[str, lang.Attribute]()
+  def enter_protocol(self, data: Attributes, /, adoption_envs, runtime_envs):
+    analysis = Analysis()
 
-  def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
-    analysis = lang.Analysis()
-
-    if (attr := attrs.get('shorthands')):
+    if (attr := data.get('shorthands')):
       for name, data_shorthand in attr.items():
         env = EvalEnv({
           'arg': EvalEnvValue()
         }, readonly=True)
-        contents = analysis.add(self._fiber.prepare_block(data_shorthand, adoption_envs=[*adoption_envs, env], runtime_envs=[*runtime_envs, env]))
 
-        comments = attr.comments[name]
-        regular_comments = [comment for comment in comments if not comment.startswith("@")]
+        create_layer = lambda data_shorthand = data_shorthand, env = env: self.fiber.parse_layer(data_shorthand, adoption_envs=[*adoption_envs, env], runtime_envs=[*runtime_envs, env], extra_attributes={
+          '_priority': Attribute(
+            PrimitiveType(int),
+            description="Sets the priority of the shorthand. Shorthands with a higher priority are executed before those with a lower priority when running a protocol."
+          )
+        }, mode='any')
 
-        deprecated = any(comment == "@deprecated" for comment in comments)
-        description = regular_comments[0] if regular_comments else None
+        # layer_attrs, special_attrs = split_sequence(list(data_shorthand.items()), lambda item: item[0].startswith("_"))
 
-        self._shorthands[name] = ShorthandStaticItem(
-          contents=contents,
+        # result = analysis.add(SimpleDictType({
+        #   '_priority': Attribute(
+        #     PrimitiveType(int),
+        #     description="Sets the priority of the shorthand. Shorthands with a higher priority are executed before those with a lower priority when running a protocol."
+        #   )
+        # }).analyze(dict(special_attrs), AnalysisContext()))
+
+        if isinstance(attr, ReliableLocatedDict):
+          comments = attr.comments[name]
+          regular_comments = [comment for comment in comments if not comment.startswith("@")]
+
+          deprecated = any(comment == "@deprecated" for comment in comments)
+          description = regular_comments[0].value if regular_comments else None
+        else:
+          deprecated = False
+          description = None
+
+        self.shorthands[name] = ShorthandStaticItem(
+          create_layer=create_layer,
           definition_range=name.area.single_range(),
+          deprecated=deprecated,
+          description=description,
           env=env,
           ref_ranges=list()
         )
 
-        self.segment_attributes[name] = lang.Attribute(
-          deprecated=deprecated,
-          description=description,
-          type=lang.AnyType()
-        )
+        print(self.shorthands)
+
+        # self.segment_attributes[name] = lang.Attribute(
+        #   deprecated=deprecated,
+        #   description=description,
+        #   type=lang.AnyType()
+        # )
 
     return analysis, ProtocolUnitData()
 
   def leave_protocol(self):
-    analysis = lang.Analysis()
+    analysis = Analysis()
 
-    for shorthand_item in self._shorthands.values():
-      analysis.renames.append(lang.AnalysisRename([
+    for shorthand_item in self.shorthands.values():
+      analysis.renames.append(AnalysisRename([
         shorthand_item.definition_range,
         *shorthand_item.ref_ranges
       ]))
 
-      analysis.relations.append(lang.AnalysisRelation(
+      analysis.relations.append(AnalysisRelation(
         shorthand_item.definition_range,
         shorthand_item.ref_ranges
       ))
@@ -104,10 +240,10 @@ class ShorthandsParser(BaseParser):
     for shorthand_name, shorthand_value in attrs.items():
       assert isinstance(shorthand_name, LocatedString)
 
-      shorthand_item = self._shorthands[shorthand_name]
+      shorthand_item = self.shorthands[shorthand_name]
       shorthand_item.ref_ranges.append(shorthand_name.area.single_range())
 
-      if isinstance(shorthand_item.contents, EllipsisType):
+      if isinstance(shorthand_item.layer, EllipsisType):
         continue
 
       result = analysis.add(lang.PotentialExprType(lang.AnyType()).analyze(shorthand_value, context))
@@ -125,7 +261,7 @@ class ShorthandsParser(BaseParser):
     shorthands_items = list[ShorthandDynamicItem]()
 
     for shorthand_name, shorthand_value in attrs.items():
-      shorthand_item = self._shorthands[shorthand_name]
+      shorthand_item = self.shorthands[shorthand_name]
       shorthand_trace = trace + [ErrorDocumentReference.from_value(shorthand_name)]
 
       if isinstance(shorthand_value, EllipsisType):
@@ -145,8 +281,8 @@ class ShorthandsParser(BaseParser):
         }
       }
 
-      assert not isinstance(shorthand_item.contents, EllipsisType)
-      shorthand_result = analysis.add(self._fiber.parse_block(shorthand_item.contents, shorthand_adoption_stack), shorthand_trace)
+      assert not isinstance(shorthand_item.layer, EllipsisType)
+      shorthand_result = analysis.add(self.fiber.parse_block(shorthand_item.layer, shorthand_adoption_stack), shorthand_trace)
 
       if isinstance(shorthand_result, EllipsisType):
         failure = True
@@ -165,7 +301,7 @@ class ShorthandsParser(BaseParser):
 
 @debug
 class ShorthandTransform(BaseDefaultTransform):
-  def __init__(self, items: list[ShorthandDynamicItem], /, parser: ShorthandsParser):
+  def __init__(self, items: list[ShorthandDynamicItem], /, parser: Parser):
     self._items = items
     self._parser = parser
 
@@ -193,13 +329,13 @@ class ShorthandTransform(BaseDefaultTransform):
       else:
         block_state = item.data.state
 
-    block = analysis.add(self._parser._fiber.execute(block_state, (transforms_final + transforms_incl_segment), origin_area=origin_area))
+    block = analysis.add(self._parser.fiber.execute(block_state, (transforms_final + transforms_incl_segment), origin_area=origin_area))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
     for item in self._items:
-      shorthand = self._parser._shorthands[item.name]
+      shorthand = self._parser.shorthands[item.name]
       block = ShorthandBlock(block, argument=item.argument, env=shorthand.env)
 
     return analysis, block

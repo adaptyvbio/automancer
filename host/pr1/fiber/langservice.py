@@ -573,6 +573,18 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     return analysis, (result if not failure else Ellipsis)
 
+  def copy(self):
+    output = DivisibleCompositeDictType.__new__(self.__class__)
+
+    output._attributes_by_key = self._attributes_by_key.copy()
+    output._attributes_by_name = self._attributes_by_name.copy()
+    output._attributes_by_unique_name = self._attributes_by_unique_name.copy()
+
+    output._foldable = self._foldable
+    output._separator = self._separator
+
+    return output
+
 class SimpleDictType(DivisibleCompositeDictType):
   def __init__(self, attrs: dict[str, Attribute | Type]):
     super().__init__()

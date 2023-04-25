@@ -239,6 +239,8 @@ class BaseParser(Protocol):
 #     return lang.Analysis(), BlockUnitData()
 
 class BaseDefaultTransform(ABC):
+  priority: ClassVar[int]
+
   def __init__(self):
     self.adoption_envs = EvalEnvs()
     self.runtime_envs = EvalEnvs()
@@ -295,7 +297,7 @@ class BaseDefaultTransformer(ABC):
 
 class BaseLeadTransformer(ABC):
   attributes = dict[str, lang.Attribute]()
-  priority: ClassVar[int]
+  priority: ClassVar[int] = 0
 
   @abstractmethod
   def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[TransformerPreparationResult] | EllipsisType]:
@@ -316,6 +318,7 @@ class Layer:
   _: KW_ONLY
   adoption_envs: EvalEnvs
   runtime_envs: EvalEnvs
+  extra_info: Optional[dict[str, Any] | EllipsisType] = None
 
   def adopt(self, adoption_stack: EvalStack):
     analysis = lang.Analysis()
@@ -525,7 +528,7 @@ class FiberParser:
     protocol_details = ProtocolDetails()
 
     for parser in self._parsers:
-      unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, key=0))
+      unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, key=parser))
 
       if isinstance(unit_attrs, EllipsisType):
         continue
@@ -618,16 +621,38 @@ class FiberParser:
     )
 
 
-  def parse_layer(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, *, mode: Literal['any', 'lead', 'passive'] = 'lead'):
+  def parse_layer(
+    self,
+    attrs: Any,
+    /,
+    adoption_envs: EvalEnvs,
+    runtime_envs: EvalEnvs,
+    *,
+    extra_attributes: Optional[dict[str, lang.Attribute | lang.Type]] = None,
+    mode: Literal['any', 'lead', 'passive'] = 'lead'
+  ):
     analysis = lang.Analysis()
     context = AnalysisContext(
       envs_list=[adoption_envs, runtime_envs]
     )
 
-    block_result = analysis.add(self.block_type.analyze(attrs, context))
+    if extra_attributes is not None:
+      block_type = self.block_type.copy()
+      block_type.add(extra_attributes, key=1)
+    else:
+      block_type = self.block_type
+
+    block_result = analysis.add(block_type.analyze(attrs, context))
 
     if isinstance(block_result, EllipsisType):
       return analysis, Ellipsis
+
+    # Process extra info
+
+    if extra_attributes is not None:
+      extra_info = analysis.add(block_type.analyze_namespace(block_result, context, key=1))
+    else:
+      extra_info = None
 
     # Collect transforms
 
@@ -673,8 +698,9 @@ class FiberParser:
 
     layer = Layer(
       default_transforms,
-      (lead_transforms[0] if mode != 'passive' else None),
+      (lead_transforms[0] if lead_transforms else None),
       adoption_envs=extra_adoption_envs,
+      extra_info=extra_info,
       runtime_envs=extra_runtime_envs
     )
 

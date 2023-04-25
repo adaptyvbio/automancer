@@ -15,4 +15,4 @@ metadata = Metadata(
 
 logger = parent_logger.getChild(namespace)
 
-from .parser import DoParser as Parser
+from .parser import Parser

@@ -21,7 +21,7 @@ class Attributes(TypedDict, total=False):
   repeat: Evaluable[LocatedValue[int]]
 
 class Transformer(BaseDefaultTransformer):
-  priority = 100
+  priority = 400
   attributes = {
     'repeat': Attribute(
       description="Repeats a block a fixed number of times.",
@@ -34,8 +34,8 @@ class Transformer(BaseDefaultTransformer):
       'index': EvalEnvValue()
     }, name="Repeat", readonly=True)
 
-  def prepare(self, attrs: Attributes, /, adoption_envs, runtime_envs):
-    if (attr := attrs.get('repeat')):
+  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+    if (attr := data.get('repeat')):
       return Analysis(), TransformerPreparationResult(attr, runtime_envs=[self.env])
     else:
       return Analysis(), None
@@ -43,44 +43,17 @@ class Transformer(BaseDefaultTransformer):
   def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack):
     analysis, count = data.eval(EvalContext(adoption_stack), final=False)
 
+    if isinstance(count, EllipsisType):
+      return analysis, Ellipsis
+
     return analysis, TransformerAdoptionResult(count)
 
-  def execute(self, block, data: Evaluable[LocatedValue[int | Literal['forever']]]):
+  def execute(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, block):
     return Analysis(), RepeatBlock(block, count=data, env=self.env)
 
 class Parser(BaseParser):
   namespace = namespace
   transformers = [Transformer()]
-
-  def prepare(self, attrs: Attributes, /):
-    if (attr := attrs.get('repeat')):
-      return Analysis(), [Transform(count=attr)]
-
-    return Analysis(), Transforms()
-
-  """
-  def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
-    if (attr := attrs.get('repeat')):
-      env = EvalEnv({
-        'index': EvalEnvValue()
-      }, name="Repeat", readonly=True)
-      return Analysis(), BlockUnitPreparationData((attr, env), envs=[env])
-
-    return Analysis(), BlockUnitPreparationData(None)
-
-  def parse_block(self, attrs: tuple[Evaluable[LocatedValue[int]], EvalEnv], /, adoption_stack, trace):
-    count, env = attrs
-    analysis, value = count.eval(EvalContext(adoption_stack), final=False)
-
-    if isinstance(value, EllipsisType):
-      return analysis, Ellipsis
-
-    return analysis, BlockUnitData(
-      transforms=[RepeatTransform(count=value, env=env, parser=self)]
-    ) """
-
-
-
 
 
 @dataclass(kw_only=True)

@@ -1,9 +1,10 @@
-from dataclasses import KW_ONLY, dataclass, field
 from types import EllipsisType
 from typing import Any, TypedDict
 
 from pr1.fiber import langservice as lang
-from pr1.fiber.parser import BaseParser, BaseDefaultTransform, BlockData, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser
+from pr1.fiber.parser import (BaseDefaultTransformer, BaseParser, FiberParser,
+                              Layer, TransformerAdoptionResult,
+                              TransformerPreparationResult)
 
 from . import namespace
 
@@ -11,59 +12,41 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   outer: Any
 
-class DoParser(BaseParser):
-  namespace = namespace
-  priority = 1300
-
-  segment_attributes = {
+class Transformer(BaseDefaultTransformer):
+  priority = 1000
+  attributes = {
     'outer': lang.Attribute(lang.AnyType())
   }
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare_block(self, attrs: Attributes, /, adoption_envs, runtime_envs):
-    if 'outer' in attrs:
-      analysis, preps = self._fiber.prepare_block(attrs['outer'], adoption_envs, runtime_envs)
+  def prepare(self, data, /, adoption_envs, runtime_envs):
+    if 'outer' in data:
+      analysis, layer = self._fiber.parse_layer(data['outer'], adoption_envs, runtime_envs, mode='passive')
 
-      if isinstance(preps, EllipsisType):
+      if isinstance(layer, EllipsisType):
         return analysis, Ellipsis
 
-      return analysis, BlockUnitPreparationData({ 'outer': preps })
+      return analysis, TransformerPreparationResult(
+        layer,
+        adoption_envs=layer.adoption_envs,
+        runtime_envs=layer.runtime_envs
+      )
+    else:
+      return lang.Analysis(), None
 
-    return lang.Analysis(), BlockUnitPreparationData()
+  def adopt(self, data: Layer, /, adoption_stack):
+    analysis, (adopted_transforms, adoption_stack) = data.adopt(adoption_stack)
+    return analysis, TransformerAdoptionResult((data, adopted_transforms), adoption_stack=adoption_stack)
 
-  def parse_block(self, attrs, /, adoption_stack, trace):
-
-    if (preps := attrs['outer']):
-      analysis, data = self._fiber.parse_block(preps, adoption_stack, trace)
-
-      if isinstance(data, EllipsisType):
-        return analysis, Ellipsis
-
-      return analysis, BlockUnitData(transforms=[DoTransform(data, parser=self)])
-
-    return lang.Analysis(), BlockUnitData()
-
-@dataclass
-class DoTransform(BaseDefaultTransform):
-  data: BlockData
-  _: KW_ONLY
-  parser: DoParser = field(repr=False)
-
-  def execute(self, state, transforms, *, origin_area):
-    return self.parser._fiber.execute(
-      self.data.state,
-      (self.data.transforms + [RestoreStateTransform(state, parser=self.parser)] + transforms),
-      origin_area=origin_area
-    )
+  def execute(self, data: tuple[Layer, Any], /, block):
+    layer, adopted_transforms = data
+    return layer.execute(adopted_transforms, block)
 
 
-@dataclass
-class RestoreStateTransform(BaseDefaultTransform):
-  state: BlockState
-  _: KW_ONLY
-  parser: DoParser = field(repr=False)
+class Parser(BaseParser):
+  namespace = namespace
 
-  def execute(self, state, transforms, *, origin_area):
-    return self.parser._fiber.execute(self.state, transforms, origin_area=origin_area)
+  def __init__(self, fiber: FiberParser):
+    self.transformers = [Transformer(fiber)]

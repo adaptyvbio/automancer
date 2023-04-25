@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol
 from .util.asyncio import race, wait_all
 
 from .fiber.eval import EvalStack
-from .fiber.parser import BlockState, BlockUnitState
+from .fiber.parser import BaseBlock, BlockState, BlockUnitState
 from .master.analysis import MasterAnalysis, MasterError
 from .util.misc import Exportable
 
@@ -380,6 +380,16 @@ class GlobalStateManager:
         if event:
           self._handle_event(item, namespace, event)
 
+
+@dataclass
+class StatePublisherBlock(BaseBlock):
+  child: BaseBlock
+
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State publisher"
 
 
 @dataclass

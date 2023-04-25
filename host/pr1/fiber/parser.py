@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path, PurePath
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Literal, Optional, Protocol, Sequence
 
 from .expr import Evaluable
 from ..error import Error, ErrorDocumentReference, Trace
@@ -23,20 +23,26 @@ if TYPE_CHECKING:
   from ..units.base import BaseRunner
 
 
-class DuplicateLeadTransformInLayer(Error):
+class DuplicateLeadTransformInLayerError(Error):
   def __init__(self, targets: list[LocatedValue]):
     super().__init__(
       "Duplicate lead transform in layer",
       references=[ErrorDocumentReference.from_value(target) for target in targets]
     )
 
-class MissingLeadTransformInLayer(Error):
+class LeadTransformInPassiveLayerError(Error):
+  def __init__(self, target: LocatedValue):
+    super().__init__(
+      "Lead transform in passive layer",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class MissingLeadTransformInLayerError(Error):
   def __init__(self, target: LocatedValue):
     super().__init__(
       "Missing lead transform in layer",
       references=[ErrorDocumentReference.from_value(target)]
     )
-
 
 
 class BlockUnitState(Exportable):
@@ -276,16 +282,15 @@ class BaseDefaultTransformer(ABC):
   attributes = dict[str, lang.Attribute]()
   priority: ClassVar[int]
 
-  @abstractmethod
-  def prepare(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[TransformerPreparationResult] | EllipsisType]:
-    return lang.Analysis(), TransformerPreparationResult(attrs)
+  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[TransformerPreparationResult] | EllipsisType]:
+    return lang.Analysis(), TransformerPreparationResult(data)
 
   @abstractmethod
   def adopt(self, data: Any, /, adoption_stack: EvalStack) -> tuple[lang.Analysis, Optional[TransformerAdoptionResult] | EllipsisType]:
     ...
 
   @abstractmethod
-  def execute(self, block: BaseBlock, data: Any) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def execute(self, data: Any, /, block: BaseBlock) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     ...
 
 class BaseLeadTransformer(ABC):
@@ -293,8 +298,8 @@ class BaseLeadTransformer(ABC):
   priority: ClassVar[int]
 
   @abstractmethod
-  def prepare(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[TransformerPreparationResult] | EllipsisType]:
-    return lang.Analysis(), TransformerPreparationResult(attrs)
+  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[TransformerPreparationResult] | EllipsisType]:
+    return lang.Analysis(), TransformerPreparationResult(data)
 
   @abstractmethod
   def adopt(self, data: Any, /, adoption_stack: EvalStack) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
@@ -307,7 +312,10 @@ BaseTransformers = list[BaseTransformer]
 @dataclass
 class Layer:
   default_transforms: list[tuple[BaseDefaultTransformer, Any]]
-  lead_transform: tuple[BaseLeadTransformer, Any]
+  lead_transform: Optional[tuple[BaseLeadTransformer, Any]]
+  _: KW_ONLY
+  adoption_envs: EvalEnvs
+  runtime_envs: EvalEnvs
 
   def adopt(self, adoption_stack: EvalStack):
     analysis = lang.Analysis()
@@ -324,20 +332,35 @@ class Layer:
       current_adoption_stack |= transform_result.adoption_stack
       adopted_transforms.append((transformer, transform_result.data))
 
+    return analysis, (adopted_transforms, current_adoption_stack)
+
+  def adopt_lead(self, adoption_stack: EvalStack):
+    assert self.lead_transform
+
+    analysis, (adopted_transforms, current_adoption_stack) = self.adopt(adoption_stack)
+
     lead_transformer, lead_transform_prep = self.lead_transform
     block = analysis.add(lead_transformer.adopt(lead_transform_prep, current_adoption_stack))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
+    root_block = analysis.add(self.execute(adopted_transforms, block))
+
+    return analysis, root_block
+
+  def execute(self, adopted_transforms: list[tuple[BaseDefaultTransformer, Any]], block: BaseBlock):
+    analysis = lang.Analysis()
+    current_block = block
+
     for transformer, transform_data in adopted_transforms[::-1]:
       if not isinstance(transform_data, EllipsisType):
-        execute_result = analysis.add(transformer.execute(block, transform_data))
+        execute_result = analysis.add(transformer.execute(transform_data, current_block))
 
         if not isinstance(execute_result, EllipsisType):
-          block = execute_result
+          current_block = execute_result
 
-    return analysis, block
+    return analysis, current_block
 
 
 # ----
@@ -485,7 +508,7 @@ class FiberParser:
     for parser in self._parsers:
       transformers += parser.transformers
 
-    self.transformers = sorted(transformers, key=(lambda transformer: transformer.priority))
+    self.transformers = sorted(transformers, key=(lambda transformer: -transformer.priority))
     del transformers
 
 
@@ -556,7 +579,7 @@ class FiberParser:
     if isinstance(layer, EllipsisType):
       return analysis, Ellipsis
 
-    root_block = analysis.add(layer.adopt(adoption_stack))
+    root_block = analysis.add(layer.adopt_lead(adoption_stack))
 
     # root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
@@ -595,7 +618,7 @@ class FiberParser:
     )
 
 
-  def parse_layer(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
+  def parse_layer(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs, *, mode: Literal['any', 'lead', 'passive'] = 'lead'):
     analysis = lang.Analysis()
     context = AnalysisContext(
       envs_list=[adoption_envs, runtime_envs]
@@ -611,10 +634,13 @@ class FiberParser:
     default_transforms = list[tuple[BaseDefaultTransformer, Any]]()
     lead_transforms = list[tuple[BaseLeadTransformer, Any]]()
 
-    current_adoption_envs = adoption_envs.copy()
-    current_runtime_envs = runtime_envs.copy()
+    extra_adoption_envs = EvalEnvs()
+    extra_runtime_envs = EvalEnvs()
 
     for transformer in self.transformers:
+      current_adoption_envs = adoption_envs + extra_adoption_envs
+      current_runtime_envs = runtime_envs + extra_runtime_envs
+
       context = AnalysisContext(
         envs_list=[current_adoption_envs, current_runtime_envs]
       )
@@ -629,23 +655,27 @@ class FiberParser:
       if isinstance(preparation_result, EllipsisType) or (not preparation_result):
         continue
 
-      current_adoption_envs += preparation_result.adoption_envs
-      current_runtime_envs += preparation_result.runtime_envs
+      extra_adoption_envs += preparation_result.adoption_envs
+      extra_runtime_envs += preparation_result.runtime_envs
 
       if isinstance(transformer, BaseLeadTransformer):
         lead_transforms.append((transformer, preparation_result.data))
       else:
         default_transforms.append((transformer, preparation_result.data))
 
-    if len(lead_transforms) > 1:
-      analysis.errors.append(DuplicateLeadTransformInLayer([attrs]))
-    if len(lead_transforms) < 1:
-      analysis.errors.append(MissingLeadTransformInLayer(attrs))
+    if (mode == 'passive') and lead_transforms:
+      analysis.errors.append(LeadTransformInPassiveLayerError(attrs))
+    if (mode != 'passive') and (len(lead_transforms) > 1):
+      analysis.errors.append(DuplicateLeadTransformInLayerError([attrs]))
+    if (mode == 'lead') and (len(lead_transforms) < 1):
+      analysis.errors.append(MissingLeadTransformInLayerError(attrs))
       return analysis, Ellipsis
 
     layer = Layer(
       default_transforms,
-      lead_transforms[0]
+      (lead_transforms[0] if mode != 'passive' else None),
+      adoption_envs=extra_adoption_envs,
+      runtime_envs=extra_runtime_envs
     )
 
     return analysis, layer

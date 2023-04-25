@@ -13,12 +13,14 @@ from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType, TransformType)
-from pr1.fiber.parser import (BaseParser, BlockUnitData,
+from pr1.fiber.parser import (BaseDefaultTransformer, BaseParser, BlockUnitData,
                               BlockUnitPreparationData, BlockUnitState,
                               FiberParser, ProtocolDetails, ProtocolUnitData,
-                              ProtocolUnitDetails)
+                              ProtocolUnitDetails, TransformerAdoptionResult, TransformerPreparationResult)
 from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
                                       OuterType, StaticAnalysisAnalysis)
+from pr1.state import StatePublisherBlock
+from pr1.reader import LocatedValue
 from pr1.util.decorators import debug
 
 from . import namespace
@@ -84,32 +86,14 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
     }
 
 
-class DevicesParser(BaseParser):
-  namespace = namespace
-  priority = 1100
+class Transformer(BaseDefaultTransformer):
+  priority = 100
 
-  def __init__(self, fiber: FiberParser):
-    self._fiber = fiber
-
-  @functools.cached_property
-  def node_map(self) -> dict[str, tuple[BaseNode, NodePath]]:
-    def add_node(node: BaseNode, parent_path: Optional[list[str]] = None):
-      nodes = dict()
-      path = (parent_path or list()) + [node.id]
-
-      if isinstance(node, CollectionNode):
-        for child in node.nodes.values():
-          nodes.update(add_node(child, path))
-
-      if isinstance(node, ValueNode) and node.writable:
-        nodes[".".join(path[1:])] = node, tuple(path[1:])
-
-      return nodes
-
-    return add_node(self._fiber.host.root_node)
+  def __init__(self, parser: 'Parser'):
+    self._parser = parser
 
   @functools.cached_property
-  def segment_attributes(self):
+  def attributes(self):
     def get_type(node):
       match node:
         case BooleanNode():
@@ -127,7 +111,54 @@ class DevicesParser(BaseParser):
       label=node.label,
       optional=True,
       type=PotentialExprType(get_type(node))
-    ) for key, (node, path) in self.node_map.items() }
+    ) for key, (node, path) in self._parser.node_map.items() }
+
+  def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack):
+    analysis = Analysis()
+    values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
+
+    for key, value in data.items():
+      node, path = self._parser.node_map[key]
+      value = analysis.add(value.eval(EvalContext(adoption_stack), final=False))
+
+      if not isinstance(value, EllipsisType):
+        values[path] = value
+
+    if values:
+      return analysis, TransformerAdoptionResult(values)
+    else:
+      return analysis, None
+
+  def execute(self, data: dict[NodePath, Evaluable[LocatedValue[Any]]], /, block):
+    return Analysis(), StatePublisherBlock(block)
+
+
+class Parser(BaseParser):
+  namespace = namespace
+
+  def __init__(self, fiber: FiberParser):
+    self._fiber = fiber
+    self.transformers = [Transformer(self)]
+
+  @functools.cached_property
+  def node_map(self):
+    queue: list[tuple[BaseNode, NodePath]] = [(self._fiber.host.root_node, NodePath())]
+    nodes = dict[str, tuple[BaseNode, NodePath]]()
+
+    while queue:
+      node, node_path = queue.pop()
+
+      if isinstance(node, CollectionNode):
+        for child_node in node.nodes.values():
+          queue.append((
+            child_node,
+            NodePath((*node_path, child_node.id))
+          ))
+
+      if isinstance(node, ValueNode) and node.writable:
+        nodes[".".join(node_path)] = node, node_path
+
+    return nodes
 
   def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
     def create_type(node: BaseNode, parent_path: NodePath = ()):
@@ -178,31 +209,6 @@ class DevicesParser(BaseParser):
     }, name="Devices", readonly=True)
 
     return Analysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
-
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
-    values = dict[NodePath, Evaluable]()
-
-    for attr_key, attr_value in attrs.items():
-      if isinstance(attr_value, EllipsisType): # ?
-        continue
-
-      # node, path = self.node_map[attr_key]
-      values[cast(NodePath, attr_key)] = attr_value
-
-    return Analysis(), BlockUnitPreparationData(values)
-
-  def parse_block(self, attrs, /, adoption_stack, trace):
-    analysis = Analysis()
-    values = dict[NodePath, Evaluable]()
-
-    for key, value in attrs.items():
-      node, path = self.node_map[key]
-      value = analysis.add(value.evaluate(EvalContext(adoption_stack)))
-
-      if not isinstance(value, EllipsisType):
-        values[path] = value
-
-    return analysis, BlockUnitData(state=DevicesState(values))
 
 
 @debug

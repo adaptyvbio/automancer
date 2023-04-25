@@ -58,7 +58,7 @@ class Transformer(BaseLeadTransformer):
     children = list[BaseBlock]()
 
     for action_layer in data:
-      action_block = analysis.add(action_layer.adopt(adoption_stack))
+      action_block = analysis.add(action_layer.adopt_lead(adoption_stack))
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)

@@ -21,6 +21,7 @@ export * from './contexts';
 export * from './draft';
 export * from './format';
 export * from './host';
+export * from './store';
 export { Startup } from './startup';
 export * from './components/icon';
 export * as Form from './components/standard-form';

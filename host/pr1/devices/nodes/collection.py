@@ -65,13 +65,10 @@ class CollectionNode(BaseNode):
 class DeviceNode(CollectionNode):
   def __init__(self):
     super().__init__()
-
-    self.model: str
     self.owner: str
 
   def export(self):
     return {
       **super().export(),
-      "model": self.model,
       "owner": self.owner
     }

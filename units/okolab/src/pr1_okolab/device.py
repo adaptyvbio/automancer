@@ -92,7 +92,6 @@ class TemperatureSetpointNode(NumericNode):
 #   print(x)
 
 class MasterDevice(DeviceNode):
-  model = "H401-T-CONTROLLER"
   owner = namespace
 
   def __init__(
@@ -106,6 +105,7 @@ class MasterDevice(DeviceNode):
     super().__init__()
 
     self.connected = False
+    self.description = "H401-T-CONTROLLER"
     self.id = NodeId(id)
     self.label = label
 
@@ -219,10 +219,9 @@ class WorkerDevice(DeviceNode, ConfigurableNode):
   ):
     super().__init__()
 
-    self.description = description
+    self.description = description or f"Okolab device (type {type})"
     self.id = NodeId(id)
     self.label = label
-    self.model = f"Okolab device (type {type})"
 
     self._enabled: Optional[bool] = None
     self._index = index

@@ -1,24 +1,26 @@
-import { NodeHierarchy, DynamicValue, Feature, formatDynamicValue, GeneralTabComponentProps, React, StateUnit, TitleBar, util, Icon, Form } from 'pr1';
-import { UnitNamespace } from 'pr1-shared';
+import { NodeHierarchy, DynamicValue, Feature, formatDynamicValue, GeneralTabComponentProps, React, StateUnit, TitleBar, util, Icon, Form, HierarchyNodeEntry, HierarchyEntry, createSyncSessionStorageStore, useSyncObjectStore } from 'pr1';
+import { List } from 'immutable';
+import { Brand, UnitNamespace } from 'pr1-shared';
 
 import styles from './styles.module.scss';
 
 
-export type NodePath = string[];
+export type NodeId = Brand<string, 'NodeId'>;
+export type NodePath = List<NodeId>;
 
 export interface BaseNode {
-  id: string;
+  id: NodeId;
   icon: string | null;
   connected: string;
+  description: string;
   label: string | null;
 }
 
 export interface CollectionNode<T = BaseNode> extends BaseNode {
-  nodes: Record<BaseNode['id'], T>;
+  nodes: Record<NodeId, T>;
 }
 
 export interface DeviceNode extends CollectionNode {
-  model: string;
   owner: string;
 }
 
@@ -44,10 +46,16 @@ export interface ValueNode extends BaseNode {
 }
 
 
-const findNode = (node: BaseNode, path: NodePath): BaseNode =>
-  path.length > 0
-    ? findNode((node as CollectionNode).nodes[path[0]], path.slice(1))
-    : node;
+const findNode = (node: BaseNode, path: NodePath) => {
+  let currentNode = node;
+
+  for (let id of path) {
+    util.assert(isCollectionNode(currentNode));
+    currentNode = currentNode.nodes[id];
+  }
+
+  return currentNode;
+};
 
 
 export interface ExecutorState {
@@ -77,19 +85,52 @@ export interface Location {
   values: [NodePath, NodeStateLocation][];
 }
 
+export function isCollectionNode(node: BaseNode): node is CollectionNode {
+  return 'nodes' in node;
+}
+
 
 const namespace = ('devices' as UnitNamespace);
 
 function DeviceControlTab(props: GeneralTabComponentProps) {
   let executor = (props.host.state.executors[namespace] as ExecutorState);
-  console.log(executor)
+  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null, NodeId[] | null>(null, createSyncSessionStorageStore('deviceControl.hierarchyOpenEntries'), {
+    deserialize: (serializedValue) => (serializedValue && List(serializedValue)),
+    serialize: (value) => (value?.toJS() ?? null),
+  });
+
+  let createNodeEntriesFromNodes = (nodes: BaseNode[], parentNodePath: NodePath = List()): HierarchyEntry<NodeId>[] => {
+    return nodes.map((node) => {
+      let nodePath = parentNodePath.push(node.id);
+
+      return {
+        id: node.id,
+        label: (node.label ?? node.id),
+        description: node.description,
+        ...(isCollectionNode(node)
+          ? {
+            type: 'collection',
+            children: createNodeEntriesFromNodes(Object.values(node.nodes), nodePath)
+          }
+          : {
+            type: 'node',
+            icon: node.icon ?? 'settings_input_hdmi',
+            selected: selectedNodePath?.equals(nodePath)
+          })
+      };
+    })
+  };
 
   return (
     <>
       <TitleBar title="Device control" />
       <div className={styles.root}>
         <div className={styles.list}>
-          <NodeHierarchy entries={[
+          <NodeHierarchy
+            entries={createNodeEntriesFromNodes(Object.values(executor.root.nodes))}
+            onSelectEntry={(entryPath) => void setSelectedNodePath(entryPath)}
+            store={createSyncSessionStorageStore('deviceControl.selectedEntry')}
+            /* [
             { type: 'node',
               id: 'a',
               detail: '34.7ºC',
@@ -141,59 +182,70 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
                   label: 'Random value' }
               ]
             }
-          ]} />
+          ] */ />
         </div>
-        <div className={styles.detailRoot}>
-          <div className={styles.detailContents}>
-            <div className={styles.detailHeaderRoot}>
-              <h1 className={styles.detailHeaderLabel}>Temperature controller</h1>
-              <p className={styles.detailHeaderDescription}>Okolab H401-K temperature controller</p>
-            </div>
-            <div className={styles.detailInfoRoot}>
-              <div className={styles.detailInfoEntry}>
-                <div className={styles.detailInfoLabel}>Full path</div>
-                <div className={styles.detailInfoValue}>
-                  <code>Okolab.TempController</code>
+        {(() => {
+          if (!selectedNodePath) {
+            return null;
+          }
+
+          let selectedNode = findNode(executor.root, selectedNodePath);
+
+          return (
+            <div className={styles.detailRoot}>
+              <div className={styles.detailContents}>
+                <div className={styles.detailHeaderRoot}>
+                  <h1 className={styles.detailHeaderLabel}>{selectedNode.label ?? selectedNode.id}</h1>
+                  <p className={styles.detailHeaderDescription}>{selectedNode.description ?? ' '}</p>
+                </div>
+                <div className={styles.detailInfoRoot}>
+                  <div className={styles.detailInfoEntry}>
+                    <div className={styles.detailInfoLabel}>Full name</div>
+                    <div className={styles.detailInfoValue}>
+                      <code>{selectedNodePath.join('.')}</code>
+                    </div>
+                  </div>
+                  <div className={styles.detailInfoEntry}>
+                    <div className={styles.detailInfoLabel}>Current user</div>
+                    <div className={styles.detailInfoValue}>–</div>
+                  </div>
+                  <div className={styles.detailConnectionRoot}>
+                    <div className={styles.detailConnectionStatus}>
+                      <Icon name="error" style="sharp" />
+                      <div>Disconnected</div>
+                    </div>
+                    <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
+                  </div>
+                </div>
+                <div className={styles.detailPlotRoot}>
+                  <div className={styles.detailPlotToolbar}>
+                    <div>Frequency: 50 Hz</div>
+                    <div>Window: 10 sec</div>
+                  </div>
+                  <div className={styles.detailPlotContents}></div>
+                </div>
+                <div className={styles.detailValues}>
+                  <div className={styles.detailValueRoot}>
+                    <div className={styles.detailValueLabel}>Current value</div>
+                    <div className={styles.detailValueQuantity}>
+                      <div className={styles.detailValueMagnitude}>34.7</div>
+                      <div className={styles.detailValueUnit}>ºC</div>
+                    </div>
+                  </div>
+                  <div className={styles.detailValueRoot}>
+                    <div className={styles.detailValueLabel}>Target value</div>
+                    <div className={styles.detailValueQuantity}>
+                      <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
+                      <div className={styles.detailValueUnit}>ºC</div>
+                    </div>
+                    <p className={styles.detailValueError}>The target value must be in the range 34.7 – 15 ºC.</p>
+                  </div>
                 </div>
               </div>
-              <div className={styles.detailInfoEntry}>
-                <div className={styles.detailInfoLabel}>Current user</div>
-                <div className={styles.detailInfoValue}>–</div>
-              </div>
-              <div className={styles.detailConnectionRoot}>
-                <div className={styles.detailConnectionStatus}>
-                  <Icon name="error" style="sharp" />
-                  <div>Disconnected</div>
-                </div>
-                <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
-              </div>
             </div>
-            <div className={styles.detailPlotRoot}>
-              <div className={styles.detailPlotToolbar}>
-                <div>Frequency: 50 Hz</div>
-                <div>Window: 10 sec</div>
-              </div>
-              <div className={styles.detailPlotContents}></div>
-            </div>
-            <div className={styles.detailValues}>
-              <div className={styles.detailValueRoot}>
-                <div className={styles.detailValueLabel}>Current value</div>
-                <div className={styles.detailValueQuantity}>
-                  <div className={styles.detailValueMagnitude}>34.7</div>
-                  <div className={styles.detailValueUnit}>ºC</div>
-                </div>
-              </div>
-              <div className={styles.detailValueRoot}>
-                <div className={styles.detailValueLabel}>Target value</div>
-                <div className={styles.detailValueQuantity}>
-                  <div className={styles.detailValueMagnitude} contentEditable>34.7</div>
-                  <div className={styles.detailValueUnit}>ºC</div>
-                </div>
-                <p className={styles.detailValueError}>The target value must be in the range 34.7 – 15 ºC.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
+
       </div>
     </>
   )

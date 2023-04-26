@@ -11,6 +11,7 @@
     "@types/react": "^18.0.16",
     "esbuild": "~0.17.0",
     "esbuild-sass-plugin": "^2.9.0",
+    "immutable": "^4.3.0",
     "postcss": "^8.4.23",
     "postcss-modules": "^6.0.0",
     "pr1": "file:../../../client",

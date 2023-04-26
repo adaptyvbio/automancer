@@ -4,7 +4,9 @@ $app-red: #ff4136;
 .root {
   display: grid;
   grid-template-columns: minmax(min-content, 500px) minmax(min-content, 1fr);
+
   height: 100%;
+  overflow-y: hidden;
 }
 
 .list {

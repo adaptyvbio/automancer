@@ -3,10 +3,6 @@
 
 
 .root {
-  display: flex;
-  flex-direction: column;
-  row-gap: 0.2rem;
-
   padding: 2rem;
 }
 
@@ -85,6 +81,12 @@
   }
 }
 
+.root, .collectionList {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.2rem;
+}
+
 .collectionRoot:not(:global(._open)) > .collectionList {
   display: none;
 }
@@ -94,7 +96,7 @@
 }
 
 
-.collectionRoot:global(._open) > .entryButton, .entryButton:hover {
+.collectionRoot:global(._open) > .entryButton, .entryButton:is(:hover, :global(._selected)) {
   background-color: #fafafa;
   border-color: #0001;
 }

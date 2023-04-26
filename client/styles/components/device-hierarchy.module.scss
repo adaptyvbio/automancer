@@ -25,9 +25,18 @@
     display: grid;
     align-items: center;
     column-gap: 1rem;
-    grid-template-columns: auto 1fr auto $icon-size;
+    grid-template-columns: 1fr $icon-size;
+  }
 
-    padding: 0.4rem 0.6rem;
+  &Button {
+    display: grid;
+    align-items: center;
+    column-gap: 0.6rem;
+    grid-template-columns: auto 1fr auto;
+
+    height: 40px;
+    padding: 0 0.6rem;
+    border: 1px solid transparent;
     border-radius: 4px;
   }
 
@@ -39,8 +48,17 @@
     border-radius: 50%;
   } */
 
+  &Body {
+    line-height: 1.2;
+  }
+
   &Label {
     font-weight: 500;
+  }
+
+  &Sublabel {
+    color: #666;
+    font-size: 0.85em;
   }
 
   &ErrorIcon {
@@ -59,7 +77,7 @@
   }
 
   &List {
-    margin-left: 1.4rem;
+    margin-left: $icon-size;
     margin-top: 0.2rem;
   }
 }
@@ -73,6 +91,7 @@
 }
 
 
-.collectionRoot:global(._open) > .entryRoot, .entryRoot:hover {
-  background-color: #eee;
+.collectionRoot:global(._open) > .entryButton, .entryButton:hover {
+  background-color: #fafafa;
+  border-color: #0001;
 }

@@ -14,6 +14,7 @@ export interface HierarchyNodeEntry {
   error?: string | null;
   icon: string;
   label: string;
+  sublabel?: string | null;
 }
 
 export interface HierarchyCollectionEntry {
@@ -23,6 +24,7 @@ export interface HierarchyCollectionEntry {
   detail?: string | null;
   error?: string | null;
   label: string;
+  sublabel?: string | null;
 }
 
 export type HierarchyEntry = HierarchyCollectionEntry | HierarchyNodeEntry;
@@ -69,16 +71,21 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
 export function NodeHierarchyEntry(props: { entry: HierarchyEntry; }) {
   switch (props.entry.type) {
     case 'collection':
-      let [open, setOpen] = React.useState(false);
+      let [open, setOpen] = React.useState(true);
 
       return (
         <div className={formatClass(styles.collectionRoot, { '_open': open })}>
-          <button type="button" className={styles.entryRoot} onClick={() => void setOpen(!open)}>
-            <Icon name="chevron_right" style="sharp" className={styles.entryIcon} />
-            <div className={styles.entryLabel}>{props.entry.label}</div>
-            <div className={styles.entryValue}></div>
-            {/* <Icon name="error" style="sharp" className={styles.entryErrorIcon} /> */}
-          </button>
+          <div className={styles.entryRoot}>
+            <button type="button" className={styles.entryButton} onClick={() => void setOpen(!open)}>
+              <Icon name="chevron_right" style="sharp" className={styles.entryIcon} />
+              <div className={styles.entryBody}>
+                <div className={styles.entryLabel}>{props.entry.label}</div>
+                {props.entry.sublabel && <div className={styles.entrySublabel}>{props.entry.sublabel}</div>}
+              </div>
+              <div className={styles.entryValue}></div>
+              {/* <Icon name="error" style="sharp" className={styles.entryErrorIcon} /> */}
+            </button>
+          </div>
           <div className={styles.collectionList}>
             {props.entry.children.map((childEntry) => <NodeHierarchyEntry entry={childEntry} key={childEntry.id} />)}
           </div>
@@ -86,16 +93,17 @@ export function NodeHierarchyEntry(props: { entry: HierarchyEntry; }) {
       );
     case 'node':
       return (
-        <button type="button" className={styles.entryRoot}>
-          <Icon name={props.entry.icon} style="sharp" className={styles.entryIcon} />
-          <div className={styles.entryLabel}>{props.entry.label}</div>
-          {props.entry.detail && <div className={styles.entryValue}>{props.entry.detail}</div>}
+        <div className={styles.entryRoot}>
+          <button type="button" className={styles.entryButton}>
+            <Icon name={props.entry.icon} style="sharp" className={styles.entryIcon} />
+            <div className={styles.entryBody}>
+              <div className={styles.entryLabel}>{props.entry.label}</div>
+              {props.entry.sublabel && <div className={styles.entrySublabel}>{props.entry.sublabel}</div>}
+            </div>
+            {props.entry.detail && <div className={styles.entryValue}>{props.entry.detail}</div>}
+          </button>
           {props.entry.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />}
-        </button>
+        </div>
       );
   }
 }
-
-// export function NodeHierarchyCollectionEntry(props: { entry: HierarchyCollectionEntry; }) {
-
-// }

@@ -96,6 +96,7 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
             type: 'collection',
             id: 'b',
             label: 'Temperature controller',
+            sublabel: 'Okolab H401-K temperature controller',
             children: [
               { type: 'node',
                 id: 'a',

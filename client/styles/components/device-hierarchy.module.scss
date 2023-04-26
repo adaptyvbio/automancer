@@ -1,15 +1,5 @@
 @use "../constants" as *;
-
-
-.alt1 {
-  display: grid;
-  grid-template-columns: 500px 1fr;
-  height: 100%;
-}
-
-.alt2 {
-  border-right: 1px solid #ddd;
-}
+@use "../mixins" as *;
 
 
 .root {
@@ -52,8 +42,21 @@
     line-height: 1.2;
   }
 
+  &Icon {
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 24;
+  }
+
   &Label {
     font-weight: 500;
+
+    // &::after {
+    //   content: " ●";
+    //   color: #0074d9;
+    // }
   }
 
   &Sublabel {

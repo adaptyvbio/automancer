@@ -1,5 +1,7 @@
-import { NodeHierarchy, DynamicValue, Feature, formatDynamicValue, GeneralTabComponentProps, React, StateUnit, TitleBar, util } from 'pr1';
+import { NodeHierarchy, DynamicValue, Feature, formatDynamicValue, GeneralTabComponentProps, React, StateUnit, TitleBar, util, Icon, Form } from 'pr1';
 import { UnitNamespace } from 'pr1-shared';
+
+import styles from './styles.module.scss';
 
 
 export type NodePath = string[];
@@ -85,60 +87,113 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
   return (
     <>
       <TitleBar title="Device control" />
-      <div>
-        <NodeHierarchy entries={[
-          { type: 'node',
-            id: 'a',
-            detail: '34.7ºC',
-            icon: 'thermostat',
-            label: 'Temperature readout' },
-          {
-            type: 'collection',
-            id: 'b',
-            label: 'Temperature controller',
-            sublabel: 'Okolab H401-K temperature controller',
-            children: [
-              { type: 'node',
-                id: 'a',
-                detail: '34.7ºC',
-                icon: 'thermostat',
-                label: 'Temperature readout' },
-              { type: 'node',
-                id: 'b',
-                detail: '35.2ºC',
-                icon: 'thermostat',
-                label: 'Temperature setpoint',
-                error: 'Problem' },
-            ]
-          },
-          {
-            type: 'collection',
-            id: 'c',
-            label: 'System',
-            children: [
-              { type: 'node',
-                id: 'a',
-                detail: '53 years',
-                icon: 'schedule',
-                label: 'Epoch' },
-              { type: 'node',
-                id: 'b',
-                detail: '2 hrs 28 min',
-                icon: 'history',
-                label: 'Alive duration' },
-              { type: 'node',
-                id: 'c',
-                detail: '294 MB',
-                icon: 'memory',
-                label: 'Process memory usage' },
-              { type: 'node',
-                id: 'd',
-                detail: '0.6721',
-                icon: 'monitoring',
-                label: 'Random value' }
-            ]
-          }
-        ]} />
+      <div className={styles.root}>
+        <div className={styles.list}>
+          <NodeHierarchy entries={[
+            { type: 'node',
+              id: 'a',
+              detail: '34.7ºC',
+              icon: 'thermostat',
+              label: 'Temperature readout' },
+            {
+              type: 'collection',
+              id: 'b',
+              label: 'Temperature controller',
+              sublabel: 'Okolab H401-K temperature controller',
+              children: [
+                { type: 'node',
+                  id: 'a',
+                  detail: '34.7ºC',
+                  icon: 'thermostat',
+                  label: 'Temperature readout' },
+                { type: 'node',
+                  id: 'b',
+                  detail: '35.2ºC',
+                  icon: 'thermostat',
+                  label: 'Temperature setpoint',
+                  error: 'Problem' },
+              ]
+            },
+            {
+              type: 'collection',
+              id: 'c',
+              label: 'System',
+              children: [
+                { type: 'node',
+                  id: 'a',
+                  detail: '53 years',
+                  icon: 'schedule',
+                  label: 'Epoch' },
+                { type: 'node',
+                  id: 'b',
+                  detail: '2 hrs 28 min',
+                  icon: 'history',
+                  label: 'Alive duration' },
+                { type: 'node',
+                  id: 'c',
+                  detail: '294 MB',
+                  icon: 'memory',
+                  label: 'Process memory usage' },
+                { type: 'node',
+                  id: 'd',
+                  detail: '0.6721',
+                  icon: 'monitoring',
+                  label: 'Random value' }
+              ]
+            }
+          ]} />
+        </div>
+        <div className={styles.detailRoot}>
+          <div className={styles.detailContents}>
+            <div className={styles.detailHeaderRoot}>
+              <h1 className={styles.detailHeaderLabel}>Temperature controller</h1>
+              <p className={styles.detailHeaderDescription}>Okolab H401-K temperature controller</p>
+            </div>
+            <div className={styles.detailInfoRoot}>
+              <div className={styles.detailInfoEntry}>
+                <div className={styles.detailInfoLabel}>Full path</div>
+                <div className={styles.detailInfoValue}>
+                  <code>Okolab.TempController</code>
+                </div>
+              </div>
+              <div className={styles.detailInfoEntry}>
+                <div className={styles.detailInfoLabel}>Current user</div>
+                <div className={styles.detailInfoValue}>–</div>
+              </div>
+              <div className={styles.detailConnectionRoot}>
+                <div className={styles.detailConnectionStatus}>
+                  <Icon name="error" style="sharp" />
+                  <div>Disconnected</div>
+                </div>
+                <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
+              </div>
+            </div>
+            <div className={styles.detailPlotRoot}>
+              <div className={styles.detailPlotToolbar}>
+                <div>Frequency: 50 Hz</div>
+                <div>Window: 10 sec</div>
+              </div>
+              <div className={styles.detailPlotContents}></div>
+            </div>
+            <div className={styles.detailValues}>
+              <div className={styles.detailValueRoot}>
+                <div className={styles.detailValueLabel}>Current value</div>
+                <div className={styles.detailValueQuantity}>
+                  <div className={styles.detailValueMagnitude}>34.7</div>
+                  <div className={styles.detailValueUnit}>ºC</div>
+                </div>
+              </div>
+              <div className={styles.detailValueRoot}>
+                <div className={styles.detailValueLabel}>Target value</div>
+                <div className={styles.detailValueQuantity}>
+                  <div className={styles.detailValueMagnitude} contentEditable>34.7</div>
+                  <div className={styles.detailValueUnit}>ºC</div>
+                </div>
+                <p className={styles.detailValueError}>The target value must be in the range 34.7 – 15 ºC.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </>
   )

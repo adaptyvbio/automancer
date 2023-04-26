@@ -35,6 +35,10 @@ body {
   font-family: $main-font;
 }
 
+code {
+  font-family: $monospace-font;
+}
+
 #root {
   height: 100%;
 }

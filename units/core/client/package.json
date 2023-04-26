@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build": "npm run build:js && npm run build:python",
-    "build:js": "python3 -c \"__import__('os').system(f'''esbuild --bundle {' '.join(__import__('glob').glob('src/*/index.*'))} --external:pr1 --external:react --format=esm --outbase=src --outdir=dist ''' + ' '.join(__import__('sys').argv[1:]))\"",
+    "build:js": "node build.mjs",
     "build:python": "python3 -c \"for d in __import__('pathlib').Path('dist').glob('*'): (d / '__init__.py').open('w')\"",
     "deref": "python3 -c \"for f in __import__('pathlib').Path('dist').glob('*'): d = f'../src/pr1_{f.name}/client'; __import__('os').unlink(d); __import__('shutil').copytree(f, d);\"",
     "ref": "python3 -c \"import os\nfor f in __import__('pathlib').Path('dist').glob('*'): d = f'../src/pr1_{f.name}/client'; __import__('shutil').rmtree(d); os.symlink(os.path.relpath(f, d + '/..'), d);\"",
@@ -9,7 +9,10 @@
   },
   "devDependencies": {
     "@types/react": "^18.0.16",
-    "esbuild": "~0.15.16",
+    "esbuild": "~0.17.0",
+    "esbuild-sass-plugin": "^2.9.0",
+    "postcss": "^8.4.23",
+    "postcss-modules": "^6.0.0",
     "pr1": "file:../../../client",
     "pr1-shared": "file:../../../app/shared",
     "typescript": "~4.9.0"

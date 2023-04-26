@@ -1,4 +1,4 @@
-import { ProtocolBlock, ProtocolState, BlockUnit, React, HeadUnit } from 'pr1';
+import { ProtocolBlock, ProtocolState, BlockUnit, HeadUnit } from 'pr1';
 import { UnitNamespace } from 'pr1-shared';
 
 
@@ -36,7 +36,7 @@ export enum LocationMode {
 export type Key = never;
 
 
-export default {
+const unit: BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location> = {
   namespace: ('state' as UnitNamespace),
 
   graphRenderer: {
@@ -93,4 +93,6 @@ export default {
       case 'halt': return { type: 'halt' };
     }
   },
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>
+};
+
+export default unit;

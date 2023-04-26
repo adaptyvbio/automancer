@@ -1,8 +1,8 @@
 /// <reference path="global-interfaces.d.ts" />
 /// <reference path="types.d.ts" />
 
-import * as React from 'react';
-import * as ReactDOM from 'react-dom/client';
+import * as React_ from 'react';
+import * as ReactDOM_ from 'react-dom/client';
 import { createRoot } from 'react-dom/client';
 
 import { BrowserApp } from './browser-app';
@@ -27,7 +27,12 @@ export * from './components/icon';
 export * as Form from './components/standard-form';
 export { Pool } from './util';
 export * as util from './util';
-export { React, ReactDOM };
+
+/** @deprecated */
+export const React = React_;
+
+/** @deprecated */
+export const ReactDOM = ReactDOM_;
 
 export * from './dynamic-value';
 export * from './geometry';

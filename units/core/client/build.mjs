@@ -4,22 +4,25 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import externalLibraries from 'pr1/scripts/external.js';
 
-let currentDirPath = path.dirname(fileURLToPath(import.meta.url));
-let sourceDirPath = path.join(currentDirPath, 'src');
+
+let workingDirPath = path.dirname(fileURLToPath(import.meta.url));
+let sourceDirPath = path.join(workingDirPath, 'src');
 
 let watch = process.argv.slice(2).includes('--watch');
 
-let ctx = await esbuild.context({
-	entryPoints: (await fs.readdir(path.join(sourceDirPath)))
+let context = await esbuild.context({
+	entryPoints: (await fs.readdir(sourceDirPath))
 		.map((relativeDirPath) => path.join(sourceDirPath, relativeDirPath, 'index.tsx')),
+	absWorkingDir: workingDirPath,
 	bundle: true,
+	external: Object.keys(externalLibraries),
 	format: 'esm',
-	external: ['pr1'],
-	outdir: path.join(currentDirPath, 'dist'),
-  define: { this: 'window' },
 	minify: !watch,
+	outdir: 'dist',
 	sourcemap: watch,
+  define: { this: 'window' },
 	plugins: [
 		sassPlugin({
 			filter: /\.module\.scss$/,
@@ -30,8 +33,8 @@ let ctx = await esbuild.context({
 });
 
 if (watch) {
-	await ctx.watch();
+	await context.watch();
 } else {
-	await ctx.rebuild();
-	await ctx.dispose();
+	await context.rebuild();
+	await context.dispose();
 }

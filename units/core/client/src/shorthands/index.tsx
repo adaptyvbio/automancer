@@ -1,4 +1,4 @@
-import { BlockUnit, GraphRendererDefaultMetrics, ProtocolBlock, React } from 'pr1';
+import { BlockUnit, GraphRendererDefaultMetrics, ProtocolBlock } from 'pr1';
 import { UnitNamespace } from 'pr1-shared';
 
 
@@ -17,7 +17,7 @@ export interface Location {
 
 const namespace = ('shorthands' as UnitNamespace);
 
-export default {
+export const unit: BlockUnit<Block, BlockMetrics, Location, never> = {
   namespace,
   graphRenderer: {
     computeMetrics(block, ancestors, location, options, context) {
@@ -41,4 +41,6 @@ export default {
       }]
       : [];
   }
-} satisfies BlockUnit<Block, BlockMetrics, Location, never>;
+}
+
+export default unit;

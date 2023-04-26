@@ -1,4 +1,6 @@
-import { GraphRendererDefaultMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, React, UnknownUnit, BlockUnit } from 'pr1';
+import { GraphRendererDefaultMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, UnknownUnit, BlockUnit } from 'pr1';
+import { UnitNamespace } from 'pr1-shared';
+import { Fragment } from 'react';
 
 
 export interface Block extends ProtocolBlock {
@@ -28,7 +30,7 @@ export interface Point {
 const horizontalCellGap = 2;
 const verticalCellGap = 1;
 
-const namespace = 'sequence';
+const namespace = ('sequence' as UnitNamespace);
 
 const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
   computeMetrics(block, ancestors, location, options, context) {
@@ -120,7 +122,7 @@ const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
           : options.attachmentStart
       });
 
-      return <React.Fragment key={childIndex}>{el}</React.Fragment>;
+      return <Fragment key={childIndex}>{el}</Fragment>;
     });
 
     return (

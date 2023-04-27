@@ -3,7 +3,6 @@ from asyncio import Lock
 from typing import Any, Generic, NewType, Optional, TypeVar, final
 
 from ...util.asyncio import Cancelable
-
 from ...fiber.expr import export_value
 from ..claim import Claimable
 from .common import ConfigurableNode, NodeListener, NodeUnavailableError, configure
@@ -36,7 +35,6 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
     if self.writable:
       self.claimable = Claimable(change_callback=self._claim_change)
-
       self._ownership_listeners = set[NodeListener]()
 
   # Internal
@@ -75,6 +73,14 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     """
 
     raise NotImplementedError
+
+  # @abstractmethod
+  async def _export_spec(self) -> Any:
+    pass
+
+  # @abstractmethod
+  async def _export_value(self, value: T, /) -> Any:
+    pass
 
   # Called by the producer
 
@@ -158,12 +164,24 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
   def export(self):
     return {
       **super().export(),
+      "spec": self._export_spec(),
       "value": {
         "nullable": self.nullable,
         "readable": self.readable,
-        "writable": self.writable,
-
-        "value": export_value(self.value) if (self.value is not None) else None,
-        "targetValue": export_value(self.target_value) if (self.value is not None) else None
+        "writable": self.writable
       }
     }
+
+  def export_value(self, value: Optional[T | NullType], /):
+    match value:
+      case None:
+        return None
+      case NullType():
+        return {
+          "type": "null"
+        }
+      case _:
+        return {
+          "type": "default",
+          "value": self._export_value(value)
+        }

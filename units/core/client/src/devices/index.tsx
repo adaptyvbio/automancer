@@ -26,24 +26,13 @@ export interface DeviceNode extends CollectionNode {
 }
 
 export interface ValueNode extends BaseNode {
-  value: {
-    nullable: boolean;
-    readable: boolean;
-    writable: boolean;
-  } & ({
+  spec: {
     type: 'boolean';
-    value: boolean;
-  } | {
-    type: 'enum';
-    cases: {
-      id: number | string;
-      label: string | null;
-    }[];
-    value: number | string;
   } | {
     type: 'numeric';
-    value: DynamicValue;
-  });
+    dimensionality: Record<`[${string}]`, number>;
+    unitFormatted: string | null;
+  };
 }
 
 
@@ -90,9 +79,24 @@ export function isCollectionNode(node: BaseNode): node is CollectionNode {
   return 'nodes' in node;
 }
 
+export function isValueNode(node: BaseNode): node is ValueNode {
+  return 'spec' in node;
+}
+
+
+export type ContainedValue = {
+  time: never;
+  value: {
+    type: 'null';
+  } | {
+    type: 'default';
+    value: unknown;
+  } | null;
+}
 
 export interface NodeState {
   connected: boolean;
+  value: ContainedValue | null;
   writable: {
     owner: {
       type: 'client';
@@ -100,6 +104,7 @@ export interface NodeState {
     } | {
       type: 'unknown';
     } | null;
+    targetValue: ContainedValue;
   } | null;
 }
 
@@ -310,23 +315,44 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
                   </div>
                   <div className={styles.detailPlotContents}></div>
                 </div>
-                <div className={styles.detailValues}>
-                  <div className={styles.detailValueRoot}>
-                    <div className={styles.detailValueLabel}>Current value</div>
-                    <div className={styles.detailValueQuantity}>
-                      <div className={styles.detailValueMagnitude}>34.7</div>
-                      <div className={styles.detailValueUnit}>ºC</div>
+                {isValueNode(node) && (
+                  <div className={styles.detailValues}>
+                    <div className={styles.detailValueRoot}>
+                      <div className={styles.detailValueLabel}>{nodeState.connected ? 'Current value' : 'Last known value'}</div>
+                      <div className={styles.detailValueQuantity}>
+                        <div className={styles.detailValueMagnitude}>
+                          {(() => {
+                            let container = nodeState.value!;
+
+                            if (!container.value) {
+                              // The value is unknown.
+                              return '–';
+                            } if (container.value.type === 'null') {
+                              // The device is disabled.
+                              return '[disabled]';
+                            }
+
+                            switch (node.spec.type) {
+                              case 'numeric':
+                                return (container.value.value as { magnitude: number; }).magnitude.toFixed(2);
+                              default:
+                                return '[unknown]';
+                            }
+                          })()}
+                        </div>
+                        {(node.spec.type === 'numeric') && node.spec.unitFormatted && (nodeState.value!.value?.type === 'default') && <div className={styles.detailValueUnit}>{node.spec.unitFormatted}</div>}
+                      </div>
+                    </div>
+                    <div className={styles.detailValueRoot}>
+                      <div className={styles.detailValueLabel}>Target value</div>
+                      <div className={styles.detailValueQuantity}>
+                        <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
+                        <div className={styles.detailValueUnit}>ºC</div>
+                      </div>
+                      <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
                     </div>
                   </div>
-                  <div className={styles.detailValueRoot}>
-                    <div className={styles.detailValueLabel}>Target value</div>
-                    <div className={styles.detailValueQuantity}>
-                      <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
-                      <div className={styles.detailValueUnit}>ºC</div>
-                    </div>
-                    <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           );

@@ -71,13 +71,14 @@ class NumericNode(ValueNode[Quantity], ABC):
 
       await self.write(Null)
 
-  def export(self):
-    exported = super().export()
-
+  def _export_spec(self):
     return {
-      **exported,
-      "value": {
-        **exported["value"],
-        "type": "numeric"
-      }
+      "type": "numeric",
+      "dimensionality": dict(self.unit.dimensionality), # type: ignore
+      "unitFormatted": (f"{self.unit:~H}" or None)
+    }
+
+  def _export_value(self, value: Quantity, /):
+    return {
+      "magnitude": value.m_as(self.unit)
     }

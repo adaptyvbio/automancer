@@ -62,7 +62,7 @@ class Executor(BaseExecutor):
     all_nodes = list(self._host.root_node.iter_all())
     node_paths_by_node = { node: node_path for node_path, node in all_nodes }
 
-    watcher = Watcher([node for _, node in all_nodes], modes={'connection', 'ownership'})
+    watcher = Watcher([node for _, node in all_nodes], modes={'connection', 'ownership', 'value'})
 
     async with watcher:
       yield [[node_path, export_node_state(node)] for node_path, node in all_nodes]
@@ -86,17 +86,28 @@ class Executor(BaseExecutor):
 
 def export_node_state(node: BaseNode, /):
   state = {
-    "connected": node.connected
+    "connected": node.connected,
+    "value": None,
+    "writable": None
   }
 
-  if isinstance(node, ValueNode) and node.writable:
-    owner = node.claimable.owner()
-
+  if isinstance(node, ValueNode):
     state |= {
-      "writable": {
-        "owner": (export_claim_marker(owner.marker) if owner else None)
+      "value": {
+        "time": None,
+        "value": node.export_value(node.value)
       }
     }
+
+    if node.writable:
+      owner = node.claimable.owner()
+
+      state |= {
+        "writable": {
+          "owner": (export_claim_marker(owner.marker) if owner else None),
+          "targetValue": node.export_value(node.target_value)
+        }
+      }
 
   return state
 

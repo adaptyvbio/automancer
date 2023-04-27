@@ -303,7 +303,7 @@ class Host:
     self.previous_state = state
     return state_update
 
-  async def process_request(self, request, *, client) -> Any:
+  async def process_request(self, request, *, agent) -> Any:
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       await chip.runners[request["namespace"]].command(request["command"])
@@ -368,8 +368,11 @@ class Host:
         self.update_callback()
         return { "chipId": duplicated.id }
 
+      case "requestExecutor":
+        return await self.executors[request["namespace"]].request(request["data"], agent=agent)
+
       case "revealChipDirectory":
-        if client.remote:
+        if agent.client.remote:
           return
 
         chip = self.chips[request["chipId"]]

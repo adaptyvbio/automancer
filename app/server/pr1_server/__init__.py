@@ -11,7 +11,8 @@ import sys
 import traceback
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+from .agent import Agent
 
 import zeroconf
 from pr1 import Host
@@ -249,44 +250,50 @@ class App:
         "data": self.host.get_state()
       })
 
-      async for message in client:
-        match message["type"]:
-          case "exit":
-            logger.info("Exiting after receiving an exit message")
-
-            assert self._pool
-            self._pool.close()
-          case "request":
-            response_data = await self.process_request(client, message["data"])
-
-            await client.send({
-              "type": "response",
-              "id": message["id"],
-              "data": response_data
-            })
-    except ClientClosed:
+      async with Pool.open(forever=True) as pool:
+        agent = Agent(client, pool=pool)
+        agent.pool.start_soon(self.handle_client_messages(agent))
+    except* ClientClosed:
       logger.debug(f"Disconnected client '{client.id}'")
-    except asyncio.CancelledError:
-      pass
-    except Exception:
-      traceback.print_exc()
     finally:
       del self.clients[client.id]
       logger.debug(f"Removed client '{client.id}'")
 
-  async def broadcast(self, message):
+  async def handle_client_message(self, message: Any, agent: Agent):
+    match message["type"]:
+      case "channel":
+        await agent.receive(message["data"], channel_id=message["id"])
+      case "exit":
+        logger.info("Exiting after receiving an exit message")
+
+        assert self._pool
+        self._pool.close()
+      case "request":
+        response_data = await self.process_request(message["data"], agent=agent)
+
+        await agent.client.send({
+          "type": "response",
+          "id": message["id"],
+          "data": response_data
+        })
+
+  async def handle_client_messages(self, agent: Agent):
+    async for message in agent.client:
+      agent.pool.start_soon(self.handle_client_message(message, agent))
+
+  async def broadcast(self, message: Any):
     for client in list(self.clients.values()):
       try:
         await client.send(message)
       except ClientClosed:
         pass
 
-  async def process_request(self, client, request):
+  async def process_request(self, request: Any, *, agent: Agent) -> Any:
     match request["type"]:
       case "isBusy":
-        return (len(self.clients) >= 2) or self.host.busy()
+        return (len(self.clients) > 1) or self.host.busy()
       case _:
-        return await self.host.process_request(request, client=client)
+        return await self.host.process_request(request, agent=agent)
 
   def update(self):
     if not self.updating:

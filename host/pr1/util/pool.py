@@ -15,6 +15,7 @@ class Pool:
   """
 
   def __init__(self, *, open: bool = False):
+    self._closing = False
     self._open = False
     self._preopen = open
     self._task_event = Event()
@@ -60,6 +61,8 @@ class Pool:
     Calling this function multiple times will increment the cancellation counter of tasks already in the pool, and cancel newly-added tasks.
     """
 
+    self._closing = True
+
     for task in self._tasks:
       task.cancel()
 
@@ -102,14 +105,14 @@ class Pool:
             try:
               exc = task.exception()
             except asyncio.CancelledError:
-              closed = True
+              pass
             else:
               if exc:
                 exceptions.append(exc)
 
             self._tasks.remove(task)
 
-      if forever and (not cancelled) and (not closed) and (not exceptions):
+      if forever and (not cancelled) and (not self._closing) and (not exceptions):
         self._task_event.clear()
 
         try:

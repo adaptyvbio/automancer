@@ -5,16 +5,13 @@ from asyncio import Event, Handle, Task
 from typing import AsyncIterator, Callable, NewType, Optional, Sequence
 
 from ...util.asyncio import AsyncCancelable, cancel_task
-from .common import ConfigurableNode, NodeUnavailableError, configure, unconfigure
+from .common import ConfigurableNode, NodeListener, NodeUnavailableError, configure, unconfigure
 from .value import NodeRevision, ValueNode
-
-
-WatchableNodeListener = Callable[['WatchableNode'], None]
 
 
 class WatchableNode(ValueNode):
   @abstractmethod
-  async def watch_value(self, listener: WatchableNodeListener, /) -> AsyncCancelable:
+  async def watch_value(self, listener: NodeListener, /) -> AsyncCancelable:
     """
     Watches the node by fetching its value at a regular interval.
 

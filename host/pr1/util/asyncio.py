@@ -5,12 +5,18 @@ from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, TypeVar, cast
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar, cast
+
+from .types import SimpleAsyncCallbackFunction, SimpleCallbackFunction
 
 
 @dataclass
+class Cancelable:
+  cancel: SimpleCallbackFunction
+
+@dataclass
 class AsyncCancelable:
-  cancel: Callable[[], Awaitable[None]]
+  cancel: SimpleAsyncCallbackFunction
 
 
 T = TypeVar('T')
@@ -131,7 +137,7 @@ async def cancel_task(task: Optional[Task], /):
     try:
       await task
     except asyncio.CancelledError:
-      pass
+      task.uncancel()
 
 
 async def race(*awaitables: Awaitable):
@@ -155,6 +161,27 @@ async def race(*awaitables: Awaitable):
 
   return tasks.index(done_task), done_task.result()
 
+
+U = TypeVar('U', AsyncCancelable, Cancelable)
+
+async def register_all(awaitables: Sequence[Awaitable[U]], /):
+  tasks = [asyncio.ensure_future(awaitable) for awaitable in awaitables]
+
+  try:
+    await wait_all(tasks)
+  except (asyncio.CancelledError, Exception):
+    for task in tasks:
+      reg = task.result()
+
+      match reg:
+        case AsyncCancelable():
+          await reg.cancel()
+        case Cancelable():
+          reg.cancel()
+
+    raise
+
+  return [task.result() for task in tasks]
 
 def run_anonymous(awaitable: Awaitable, /):
   call_trace = traceback.extract_stack()

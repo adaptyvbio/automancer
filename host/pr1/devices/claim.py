@@ -5,6 +5,8 @@ from typing import Any, Callable, Coroutine, Literal, Optional, Protocol, overlo
 import warnings
 import weakref
 
+from ..util.types import SimpleAsyncCallbackFunction, SimpleCallbackFunction
+
 from ..util.asyncio import DualEvent
 
 
@@ -34,17 +36,22 @@ class ClaimSymbol:
 
 
 class Claim:
-  def __init__(self, target: 'Claimable'):
+  def __init__(self, marker: Optional[Any], target: 'Claimable'):
     self._event = DualEvent()
     self._ref = weakref.ref[Claim](self, target._finalize_claim)
     self._target = target
+
+    self.marker = marker
 
   @property
   def owned(self):
     return self._event.is_set()
 
-  def destroy(self):
+  async def destroy(self):
     if self.owned:
+      if self._target._clear_callback:
+        await self._target._clear_callback()
+
       self._target._designate_owner()
     else:
       self._target._claim_refs.remove(self._ref)
@@ -56,9 +63,17 @@ class Claim:
     await self._event.wait_set()
 
 class Claimable:
-  def __init__(self):
+  def __init__(
+    self,
+    *,
+    change_callback: Optional[SimpleCallbackFunction] = None,
+    clear_callback: Optional[SimpleAsyncCallbackFunction] = None
+  ):
     self._claim_refs = list[weakref.ref[Claim]]()
     self._current_claim_ref: Optional[weakref.ref[Claim]] = None
+
+    self._change_callback = change_callback
+    self._clear_callback = clear_callback
 
   def _get_current_claim(self):
     return self._current_claim_ref() if self._current_claim_ref else None
@@ -78,6 +93,9 @@ class Claimable:
     else:
       self._current_claim_ref = None
 
+    if self._change_callback:
+      self._change_callback()
+
   def _finalize_claim(self, ref: weakref.ref[Claim]):
     if self._current_claim_ref is ref:
       self._designate_owner()
@@ -86,11 +104,14 @@ class Claimable:
       self._claim_refs.remove(self._current_claim_ref)
       warnings.warn(f"Leak of awaiting claim to {self}")
 
-  def claim(self):
-    claim = Claim(self)
+  def claim(self, marker: Optional[Any] = None, *, force: bool = False):
+    claim = Claim(marker, target=self)
     self._claim_refs.append(claim._ref)
 
     if not self._get_current_claim():
       self._designate_owner()
 
     return claim
+
+  def owner(self):
+    return self._get_current_claim()

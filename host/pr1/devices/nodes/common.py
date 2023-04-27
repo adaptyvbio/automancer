@@ -1,15 +1,19 @@
 from abc import ABC, abstractmethod
 from asyncio import Protocol
 import contextlib
-from typing import NewType, Optional, Sequence
+from typing import Callable, NewType, Optional, Sequence, TypeVar
 
-from ...util.asyncio import AsyncCancelable
+from ...util.asyncio import AsyncCancelable, Cancelable
 from ...util.types import SimpleCallbackFunction
 
 
 NodeId = NewType('NodeId', str)
 NodePath = tuple[NodeId, ...]
 NodePathLike = Sequence[NodeId]
+
+
+T = TypeVar('T', bound='BaseNode')
+NodeListener = Callable[[T], None]
 
 
 # Base nodes
@@ -26,7 +30,7 @@ class BaseNode(ABC):
     self.icon: Optional[str] = None
     self.label: Optional[str] = None
 
-    self._connection_listeners = list[SimpleCallbackFunction]()
+    self._connection_listeners = list[NodeListener]()
 
   # Called by the producer
 
@@ -36,7 +40,7 @@ class BaseNode(ABC):
 
   def _trigger_connection_listeners(self):
     for listener in self._connection_listeners:
-      listener()
+      listener(self)
 
   # Called by the consumer
 
@@ -49,10 +53,13 @@ class BaseNode(ABC):
       "label": self.label
     }
 
+  def iter_all(self):
+    yield self
+
   def format(self, *, prefix: str = str()):
     return (f"{self.label} ({self.id})" if self.label else str(self.id)) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
-  def watch_connection(self, listener: SimpleCallbackFunction, /):
+  def watch_connection(self, listener: NodeListener, /):
     """
     Watches the node's connection status for changes.
 
@@ -65,10 +72,10 @@ class BaseNode(ABC):
 
     self._connection_listeners.append(listener)
 
-    async def cancel():
+    def cancel():
       self._connection_listeners.remove(listener)
 
-    return AsyncCancelable(cancel)
+    return Cancelable(cancel)
 
 
 class ConfigurableNode(BaseNode, ABC):
@@ -86,12 +93,16 @@ class ConfigurableNode(BaseNode, ABC):
     assert not self.connected
 
     await self._configure()
+
     self.connected = True
+    self._trigger_connection_listeners()
 
   async def unconfigure(self):
     assert self.connected
 
     self.connected = False
+    self._trigger_connection_listeners()
+
     await self._unconfigure()
 
   @contextlib.asynccontextmanager

@@ -6,7 +6,7 @@ import time
 import uuid
 from graphlib import TopologicalSorter
 from types import EllipsisType
-from typing import Optional
+from typing import Any, Optional
 
 from .util.asyncio import run_double
 
@@ -303,7 +303,7 @@ class Host:
     self.previous_state = state
     return state_update
 
-  async def process_request(self, request, *, client):
+  async def process_request(self, request, *, client) -> Any:
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       await chip.runners[request["namespace"]].command(request["command"])

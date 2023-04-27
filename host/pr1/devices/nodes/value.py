@@ -1,10 +1,12 @@
 from abc import ABC
 from asyncio import Lock
-from typing import Generic, NewType, Optional, TypeVar, final
+from typing import Any, Generic, NewType, Optional, TypeVar, final
+
+from ...util.asyncio import Cancelable
 
 from ...fiber.expr import export_value
 from ..claim import Claimable
-from .common import ConfigurableNode, NodeUnavailableError, configure
+from .common import ConfigurableNode, NodeListener, NodeUnavailableError, configure
 
 
 @final
@@ -33,7 +35,21 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self.writable = writable
 
     if self.writable:
-      self._claimable = Claimable()
+      self._claimable = Claimable(
+        change_callback=self._claim_change,
+        clear_callback=self._claim_clear
+      )
+
+      self._ownership_listeners = set[NodeListener]()
+
+  # Internal
+
+  def _claim_change(self):
+    for listener in self._ownership_listeners:
+      listener(self)
+
+  async def _claim_clear(self):
+    await self.write(None)
 
   # To be implemented
 
@@ -54,11 +70,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
     raise NotImplementedError
 
-
-  def _target_reached(self) -> bool:
-    raise NotImplementedError
-
-  async def _write(self, value: T | NullType, /):
+  async def _write(self, value: Optional[T | NullType], /):
     """
     Writes the node's value.
 
@@ -86,11 +98,11 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
   # Called by the consumer
 
-  def claim(self):
+  def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     if not self.writable:
       raise NotImplementedError
 
-    return self._claimable.claim()
+    return self._claimable.claim(marker, force=force)
 
   async def read(self):
     """
@@ -121,7 +133,18 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
     return False
 
-  async def write(self, value: T | NullType, /):
+  def watch_ownership(self, listener: NodeListener, /):
+    if not self.writable:
+      raise NotImplementedError
+
+    self._ownership_listeners.add(listener)
+
+    def cancel():
+      self._connection_listeners.remove(listener)
+
+    return Cancelable(cancel)
+
+  async def write(self, value: Optional[T | NullType], /):
     from .readable import SubscribableReadableNode
 
     self.target_value = value

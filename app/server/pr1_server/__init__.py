@@ -227,6 +227,7 @@ class App:
         #   agent.export() for agent in self.auth_agents
         # ] if requires_auth else None,
         # "features": {},
+        "clientId": client.id,
         "identifier": self.conf.identifier,
         "staticUrl": (self.static_server.url if self.static_server else None),
         "version": self.conf.version

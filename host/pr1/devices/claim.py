@@ -41,20 +41,25 @@ class Claim:
     self._ref = weakref.ref[Claim](self, target._finalize_claim)
     self._target = target
 
+    self.alive = True
     self.marker = marker
 
   @property
   def owned(self):
     return self._event.is_set()
 
-  async def destroy(self):
-    if self.owned:
-      if self._target._clear_callback:
-        await self._target._clear_callback()
+  def destroy(self):
+    if not self.alive:
+      raise Exception("Already destroyed")
 
+    self.alive = False
+
+    if self.owned:
       self._target._designate_owner()
     else:
       self._target._claim_refs.remove(self._ref)
+
+    self._event.unset()
 
   async def lost(self):
     await self._event.wait_unset()
@@ -66,14 +71,11 @@ class Claimable:
   def __init__(
     self,
     *,
-    change_callback: Optional[SimpleCallbackFunction] = None,
-    clear_callback: Optional[SimpleAsyncCallbackFunction] = None
+    change_callback: Optional[SimpleCallbackFunction] = None
   ):
+    self._change_callback = change_callback
     self._claim_refs = list[weakref.ref[Claim]]()
     self._current_claim_ref: Optional[weakref.ref[Claim]] = None
-
-    self._change_callback = change_callback
-    self._clear_callback = clear_callback
 
   def _get_current_claim(self):
     return self._current_claim_ref() if self._current_claim_ref else None
@@ -106,10 +108,23 @@ class Claimable:
 
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     claim = Claim(marker, target=self)
-    self._claim_refs.append(claim._ref)
+    current_claim = self._get_current_claim()
 
-    if not self._get_current_claim():
-      self._designate_owner()
+    if force:
+      if current_claim:
+        self._claim_refs.append(current_claim._ref)
+        current_claim._event.unset()
+
+      self._current_claim_ref = claim._ref
+      claim._event.set()
+
+      if self._change_callback:
+        self._change_callback()
+    else:
+      self._claim_refs.append(claim._ref)
+
+      if not current_claim:
+        self._designate_owner()
 
     return claim
 

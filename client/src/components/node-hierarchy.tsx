@@ -15,7 +15,7 @@ export interface HierarchyNodeEntry<EntryId extends OrdinaryId> {
   id: EntryId;
   description?: string | null;
   detail?: string | null;
-  error?: string | null;
+  error?: unknown;
   icon: string;
   label: string;
   selected?: unknown;
@@ -118,7 +118,7 @@ export function NodeHierarchyEntry<HierarchyEntryId extends OrdinaryId>(props: {
             </div>
             {props.entry.detail && <div className={styles.entryValue}>{props.entry.detail}</div>}
           </button>
-          {props.entry.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />}
+          {!!props.entry.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />}
         </div>
       );
   }

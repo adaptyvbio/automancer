@@ -1,6 +1,4 @@
-import asyncio
-from typing import Awaitable, Callable
-from .common import BaseNode, NodeId
+from .common import BaseNode, NodeId, NodePath
 
 
 class CollectionNode(BaseNode):
@@ -18,8 +16,9 @@ class CollectionNode(BaseNode):
   def iter_all(self):
     yield from super().iter_all()
 
-    for node in self.nodes.values():
-      yield from node.iter_all()
+    for child_node in self.nodes.values():
+      for node_path, node in child_node.iter_all():
+        yield NodePath([self.id, *node_path]), node
 
   def format(self, *, prefix: str = str()):
     output = super().format() + "\n"

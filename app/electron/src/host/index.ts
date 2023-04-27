@@ -122,9 +122,7 @@ export class HostWindow {
 
     this.window!.webContents.send('host.message', {
       type: 'initialize',
-      identifier: this.client!.identifier!,
-      staticUrl: this.client!.staticUrl,
-      version: this.client!.version!
+      ...this.client!.initializationData!
     } satisfies ServerProtocol.InitializationMessage);
 
     this.window!.webContents.send('host.message', {

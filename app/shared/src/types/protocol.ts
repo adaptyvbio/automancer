@@ -1,4 +1,4 @@
-import { ChannelId } from '../client';
+import { ChannelId, ClientId } from '../client';
 import { Chip, ChipId, HostIdentifier, HostState } from './host';
 import { ProtocolBlockPath } from './master';
 import { UnitNamespace } from './unit';
@@ -106,6 +106,7 @@ export namespace ServerProtocol {
 
   export interface InitializationMessage {
     type: 'initialize';
+    clientId: ClientId;
     identifier: HostIdentifier;
     staticUrl: string | null;
     version: number;

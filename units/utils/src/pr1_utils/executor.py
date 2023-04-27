@@ -66,6 +66,7 @@ class EpochNode(PollableReadableNode, NumericNode):
     )
 
     self.connected = True
+    self.description = "Time since Jan 1st, 1970"
     self.id = NodeId('epoch')
     self.label = "Unix epoch"
 

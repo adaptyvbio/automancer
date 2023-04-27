@@ -1,6 +1,7 @@
-import { List } from 'immutable';
-import { DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Icon, NodeHierarchy, StateUnit, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
-import { Brand, UnitNamespace } from 'pr1-shared';
+import { List, Map as ImMap } from 'immutable';
+import { Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Icon, NodeHierarchy, StateUnit, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
+import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
+import { useEffect, useState } from 'react';
 
 import styles from './styles.module.scss';
 
@@ -90,6 +91,19 @@ export function isCollectionNode(node: BaseNode): node is CollectionNode {
 }
 
 
+export interface NodeState {
+  connected: boolean;
+  writable: {
+    owner: {
+      type: 'client';
+      clientId: ClientId;
+    } | {
+      type: 'unknown';
+    } | null;
+  } | null;
+}
+
+
 const namespace = ('devices' as UnitNamespace);
 
 function DeviceControlTab(props: GeneralTabComponentProps) {
@@ -99,9 +113,12 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
     serialize: (value) => (value?.toJS() ?? null),
   });
 
+  let [nodeStates, setNodeStates] = useState<ImMap<NodePath, NodeState> | null>(null);
+
   let createNodeEntriesFromNodes = (nodes: BaseNode[], parentNodePath: NodePath = List()): HierarchyEntry<NodeId>[] => {
     return nodes.map((node) => {
       let nodePath = parentNodePath.push(node.id);
+      let nodeState = nodeStates?.get(nodePath);
 
       return {
         id: node.id,
@@ -115,11 +132,39 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
           : {
             type: 'node',
             icon: node.icon ?? 'settings_input_hdmi',
+            error: (nodeState && !nodeState.connected),
             selected: selectedNodePath?.equals(nodePath)
           })
       };
     })
   };
+
+  useEffect(() => {
+    props.app.pool.add(async () => {
+      let { channelId } = (await props.host.client.request({
+        type: 'requestExecutor',
+        namespace,
+        data: {
+          type: 'listen'
+        }
+      }) as { channelId: ChannelId; });
+
+      let channel = props.host.client.listen<[NodeId[], NodeState][], {}>(channelId);
+
+      for await (let change of channel) {
+        setNodeStates((nodeStates) => (nodeStates ?? ImMap()).withMutations((nodeStatesMut) => {
+          for (let [nodePath, nodeState] of change) {
+            nodeStatesMut.set(List(nodePath), nodeState);
+          }
+        }));
+      }
+
+      return () => {
+        channel.send({});
+        channel.close();
+      };
+    });
+  }, []);
 
   return (
     <>
@@ -185,37 +230,78 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
           ] */ />
         </div>
         {(() => {
-          if (!selectedNodePath) {
+          if (!selectedNodePath || !nodeStates) {
             return null;
           }
 
-          let selectedNode = findNode(executor.root, selectedNodePath);
+          let nodePath = selectedNodePath;
+          let node = findNode(executor.root, nodePath);
+          let nodeState = nodeStates.get(nodePath)!;
+
+          let owner = nodeState.writable?.owner;
+          let owned = (owner?.type === 'client') && (owner.clientId === props.host.clientId);
 
           return (
-            <div className={styles.detailRoot}>
+            <div className={styles.detailRoot} key={nodePath.join('.')}>
               <div className={styles.detailContents}>
                 <div className={styles.detailHeaderRoot}>
-                  <h1 className={styles.detailHeaderLabel}>{selectedNode.label ?? selectedNode.id}</h1>
-                  <p className={styles.detailHeaderDescription}>{selectedNode.description ?? ' '}</p>
+                  <div className={styles.detailHeaderTitle}>
+                    <h1 className={styles.detailHeaderLabel}>{node.label ?? node.id}</h1>
+                    <p className={styles.detailHeaderDescription}>{node.description ?? ' '}</p>
+                  </div>
+                  <div className={styles.detailHeaderActions}>
+                    {nodeState.writable && (
+                      <Button onClick={() => {
+                        props.app.pool.add(async () => {
+                          await props.host.client.request({
+                            type: 'requestExecutor',
+                            namespace,
+                            data: {
+                              type: (owned ? 'release' : 'claim'),
+                              nodePath: nodePath.toJS()
+                            }
+                          })
+                        });
+                      }}>{owned ? 'Release' : 'Claim'}</Button>
+                    )}
+                  </div>
                 </div>
                 <div className={styles.detailInfoRoot}>
                   <div className={styles.detailInfoEntry}>
                     <div className={styles.detailInfoLabel}>Full name</div>
                     <div className={styles.detailInfoValue}>
-                      <code>{selectedNodePath.join('.')}</code>
+                      <code>{nodePath.join('.')}</code>
                     </div>
                   </div>
                   <div className={styles.detailInfoEntry}>
-                    <div className={styles.detailInfoLabel}>Current user</div>
-                    <div className={styles.detailInfoValue}>–</div>
+                    <div className={styles.detailInfoLabel}>Status</div>
+                    <div className={styles.detailInfoValue}>
+                      {nodeState.connected ? 'Connected' : 'Disconnected'}
+                    </div>
                   </div>
-                  <div className={styles.detailConnectionRoot}>
+                  {nodeState.writable && (
+                    <div className={styles.detailInfoEntry}>
+                      <div className={styles.detailInfoLabel}>Current user</div>
+                      <div className={styles.detailInfoValue}>{(() => {
+                        if (!owner) {
+                          return '–';
+                        } if (owned) {
+                          return 'You';
+                        } if (owner.type === 'client') {
+                          return 'Another client';
+                        }
+
+                        return '[Unknown]';
+                      })()}</div>
+                    </div>
+                  )}
+                  {/* <div className={styles.detailConnectionRoot}>
                     <div className={styles.detailConnectionStatus}>
                       <Icon name="error" style="sharp" />
                       <div>Disconnected</div>
                     </div>
                     <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
-                  </div>
+                  </div> */}
                 </div>
                 <div className={styles.detailPlotRoot}>
                   <div className={styles.detailPlotToolbar}>
@@ -238,7 +324,7 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
                       <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
                       <div className={styles.detailValueUnit}>ºC</div>
                     </div>
-                    <p className={styles.detailValueError}>The target value must be in the range 34.7 – 15 ºC.</p>
+                    <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
                   </div>
                 </div>
               </div>

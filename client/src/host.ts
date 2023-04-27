@@ -1,11 +1,11 @@
-import type { Client, HostId, HostState } from 'pr1-shared';
+import type { Client, ClientId, HostId, HostState } from 'pr1-shared';
 
 import type { Units } from './interfaces/unit';
 
 
 export interface Host {
   client: Client;
-  id: HostId;
+  clientId: ClientId;
   state: HostState;
   staticUrl: string | null;
   units: Units;

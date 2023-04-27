@@ -5,6 +5,9 @@ import { HostIdentifier, HostState } from './types/host';
 import { ClientProtocol, RequestFunc, ServerProtocol } from './types/protocol';
 
 
+export type ClientId = Brand<string, 'ClientId'>;
+
+
 export type ChannelId = Brand<number, 'ChannelId'>;
 
 export interface ChannelData {
@@ -34,9 +37,23 @@ export class Client {
   private userClose: (() => Promise<void>) | null;
   private userClosing = false;
 
-  identifier: HostIdentifier | null = null;
+  info: {
+    clientId: ClientId;
+    identifier: HostIdentifier | null,
+    staticUrl: string | null,
+    version: number | null
+  } | null = null;
+
+  initializationData: Omit<ServerProtocol.InitializationMessage, 'type'> | null = null;
   state: HostState | null = null;
+
+  /** @deprecated */
+  identifier: HostIdentifier | null = null;
+
+  /** @deprecated */
   staticUrl: string | null = null;
+
+  /** @deprecated */
   version: number | null = null;
 
   constructor(private backend: ClientBackend, options?: {
@@ -141,10 +158,15 @@ export class Client {
       }
     }
 
-    this.identifier = initializationMessage.identifier;
+    this.info = {
+      clientId: initializationMessage.clientId,
+      identifier: initializationMessage.identifier,
+      staticUrl: initializationMessage.staticUrl,
+      version: initializationMessage.version
+    };
+
+    this.initializationData = initializationMessage;
     this.state = stateMessage.data;
-    this.staticUrl = initializationMessage.staticUrl;
-    this.version = initializationMessage.version;
 
     return {
       ok: true,

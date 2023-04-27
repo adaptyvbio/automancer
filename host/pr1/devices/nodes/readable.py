@@ -74,7 +74,7 @@ class SubscribableReadableNode(WatchableNode, ConfigurableNode):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
 
-    self._value_listeners = set[WatchableNodeListener]()
+    self._value_listeners = set[NodeListener[WatchableNode]]()
 
     #
     # Node states

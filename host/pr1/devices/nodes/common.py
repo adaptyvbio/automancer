@@ -54,7 +54,7 @@ class BaseNode(ABC):
     }
 
   def iter_all(self):
-    yield self
+    yield (NodePath([self.id]), self)
 
   def format(self, *, prefix: str = str()):
     return (f"{self.label} ({self.id})" if self.label else str(self.id)) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"

@@ -26,7 +26,14 @@ $app-red: #ff4136;
 
   &Header {
     &Root {
+      display: grid;
+      grid-template-columns: 1fr auto;
+
       margin-bottom: 2rem;
+    }
+
+    &Title {
+
     }
 
     &Label {
@@ -36,6 +43,12 @@ $app-red: #ff4136;
     &Description {
       color: #666;
       font-size: 1.2rem;
+    }
+
+    &Actions {
+      display: flex;
+      align-self: center;
+      column-gap: 0.4rem;
     }
   }
 

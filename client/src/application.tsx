@@ -131,9 +131,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     let host: Host = {
       client,
-      id: client.state!.info.id,
+      clientId: client.info!.clientId,
       state: client.state!,
-      staticUrl: client.staticUrl,
+      staticUrl: client.info!.staticUrl,
       units: (null as unknown as Host['units'])
     };
 
@@ -145,7 +145,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     client.closed
       .catch((err) => {
-        console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
+        console.error(`Backend of host terminated with error: ${err.message ?? err}`);
         console.error(err);
       })
       .finally(() => {

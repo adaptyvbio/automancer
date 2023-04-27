@@ -35,10 +35,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self.writable = writable
 
     if self.writable:
-      self._claimable = Claimable(
-        change_callback=self._claim_change,
-        clear_callback=self._claim_clear
-      )
+      self.claimable = Claimable(change_callback=self._claim_change)
 
       self._ownership_listeners = set[NodeListener]()
 
@@ -47,9 +44,6 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
   def _claim_change(self):
     for listener in self._ownership_listeners:
       listener(self)
-
-  async def _claim_clear(self):
-    await self.write(None)
 
   # To be implemented
 
@@ -102,7 +96,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     if not self.writable:
       raise NotImplementedError
 
-    return self._claimable.claim(marker, force=force)
+    return self.claimable.claim(marker, force=force)
 
   async def read(self):
     """
@@ -140,7 +134,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self._ownership_listeners.add(listener)
 
     def cancel():
-      self._connection_listeners.remove(listener)
+      self._ownership_listeners.remove(listener)
 
     return Cancelable(cancel)
 

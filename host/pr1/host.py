@@ -24,7 +24,7 @@ from .util.pool import Pool
 
 
 class HostRootNode(CollectionNode):
-  def __init__(self, devices):
+  def __init__(self, devices: dict[NodeId, BaseNode]):
     super().__init__()
 
     self.connected = True
@@ -32,6 +32,10 @@ class HostRootNode(CollectionNode):
     self.id = NodeId('root')
     self.label = "Root"
     self.nodes = devices
+
+  def iter_all(self):
+    for child_node in self.nodes.values():
+      yield from child_node.iter_all()
 
   def find(self, path: NodePath) -> Optional[BaseNode]:
     node = self

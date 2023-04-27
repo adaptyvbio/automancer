@@ -183,6 +183,7 @@ async def register_all(awaitables: Sequence[Awaitable[U]], /):
 
   return [task.result() for task in tasks]
 
+
 def run_anonymous(awaitable: Awaitable, /):
   call_trace = traceback.extract_stack()
 
@@ -225,6 +226,15 @@ async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]
     await future
 
   return cast(Task[T], task)
+
+
+async def shield(awaitable: Awaitable[T], /) -> T:
+  task = asyncio.ensure_future(awaitable)
+
+  try:
+    return await asyncio.shield(task)
+  except asyncio.CancelledError:
+    return await task
 
 
 async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):

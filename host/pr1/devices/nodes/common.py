@@ -1,10 +1,8 @@
-from abc import ABC, abstractmethod
-from asyncio import Protocol
+from abc import ABC
 import contextlib
-from typing import Callable, NewType, Optional, Sequence, TypeVar
+from typing import Callable, Literal, NewType, Optional, Protocol, Sequence, TypeVar
 
-from ...util.asyncio import AsyncCancelable, Cancelable
-from ...util.types import SimpleCallbackFunction
+from ...util.asyncio import Cancelable, DualEvent
 
 
 NodeId = NewType('NodeId', str)
@@ -12,8 +10,12 @@ NodePath = tuple[NodeId, ...]
 NodePathLike = Sequence[NodeId]
 
 
-T = TypeVar('T', bound='BaseNode')
-NodeListener = Callable[[T], None]
+T = TypeVar('T', bound='BaseNode', contravariant=True)
+NodeListenerMode = Literal['connection', 'ownership', 'target', 'value']
+
+class NodeListener(Protocol[T]):
+  def __call__(self, node: T, *, mode: NodeListenerMode):
+    ...
 
 
 # Base nodes
@@ -23,14 +25,14 @@ class NodeUnavailableError(Exception):
 
 class BaseNode(ABC):
   def __init__(self):
-    self.connected: bool
     self.id: NodeId
 
     self.description: Optional[str] = None
     self.icon: Optional[str] = None
     self.label: Optional[str] = None
 
-    self._connection_listeners = list[NodeListener]()
+    self._connected_event = DualEvent()
+    self._listeners = dict[NodeListenerMode, list[NodeListener]]()
 
   # Called by the producer
 
@@ -38,11 +40,32 @@ class BaseNode(ABC):
   def _label(self):
     return f"'{self.label or self.id}'"
 
-  def _trigger_connection_listeners(self):
-    for listener in self._connection_listeners:
-      listener(self)
+  def _attach_listener(self, listener: NodeListener, *, mode: NodeListenerMode):
+    if not mode in self._listeners:
+      self._listeners[mode] = list()
+
+    self._listeners[mode].append(listener)
+
+    def cancel():
+      self._listeners[mode].remove(listener)
+
+    return Cancelable(cancel)
+
+  def _trigger_listeners(self, *, mode: NodeListenerMode):
+    if (listeners := self._listeners.get(mode)):
+      for listener in listeners:
+        listener(self, mode=mode)
 
   # Called by the consumer
+
+  @property
+  def connected(self):
+    return self._connected_event.is_set()
+
+  @connected.setter
+  def connected(self, value: bool, /):
+    self._connected_event.toggle(value)
+    self._trigger_listeners(mode='connection')
 
   def export(self):
     return {
@@ -59,6 +82,12 @@ class BaseNode(ABC):
   def format(self, *, prefix: str = str()):
     return (f"{self.label} ({self.id})" if self.label else str(self.id)) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
+  async def wait_connected(self):
+    await self._connected_event.wait_set()
+
+  async def wait_disconnected(self):
+    await self._connected_event.wait_unset()
+
   def watch_connection(self, listener: NodeListener, /):
     """
     Watches the node's connection status for changes.
@@ -70,12 +99,7 @@ class BaseNode(ABC):
       An `AsyncCancelable` which can be used stop watching the node.
     """
 
-    self._connection_listeners.append(listener)
-
-    def cancel():
-      self._connection_listeners.remove(listener)
-
-    return Cancelable(cancel)
+    return self._attach_listener(listener, mode='connection')
 
 
 class ConfigurableNode(BaseNode, ABC):
@@ -93,15 +117,11 @@ class ConfigurableNode(BaseNode, ABC):
     assert not self.connected
 
     await self._configure()
-
     self.connected = True
-    self._trigger_connection_listeners()
 
   async def unconfigure(self):
     assert self.connected
-
     self.connected = False
-    self._trigger_connection_listeners()
 
     await self._unconfigure()
 

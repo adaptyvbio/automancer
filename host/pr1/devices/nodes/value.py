@@ -1,11 +1,12 @@
-from abc import ABC
-from asyncio import Lock
+import time
+from abc import ABC, abstractmethod
+from asyncio import Event, Lock
 from typing import Any, Generic, NewType, Optional, TypeVar, final
 
-from ...util.asyncio import Cancelable
-from ...fiber.expr import export_value
+from ...util.pool import Pool
 from ..claim import Claimable
-from .common import ConfigurableNode, NodeListener, NodeUnavailableError, configure
+from .common import (BaseNode, ConfigurableNode, NodeListener,
+                     NodeListenerMode, NodeUnavailableError, configure)
 
 
 @final
@@ -20,22 +21,41 @@ T = TypeVar('T')
 NodeRevision = NewType('NodeRevision', int)
 
 class ValueNode(ConfigurableNode, ABC, Generic[T]):
-  def __init__(self, *, nullable: bool = False, readable: bool = False, writable: bool = False):
+  def __init__(
+      self,
+      *,
+      nullable: bool = False,
+      pool: Pool,
+      readable: bool = False,
+      stable: bool = True,
+      writable: bool = False
+    ):
+    """
+    Creates a value node.
+
+    Parameters
+      nullable: Whether the node's value can be set to a disabled state known as "null".
+      readable: Whether the node is readable.
+      stable: Whether the node's value might change despite being claimed.
+      writable: Whether the node is writable.
+    """
+
     super().__init__()
 
     self._lock = Lock()
+    self._pool = pool
     self._revision = NodeRevision(0)
 
-    self.target_value: Optional[T | NullType] = None
-    self.value: Optional[T | NullType] = None
+    self.target_value: Optional[tuple[float, Optional[T | NullType]]] = None
+    self.value: Optional[tuple[float, T | NullType]] = None
 
+    self.stable = stable
     self.nullable = nullable
     self.readable = readable
     self.writable = writable
 
     if self.writable:
       self.claimable = Claimable(change_callback=self._claim_change)
-      self._ownership_listeners = set[NodeListener]()
 
   # Internal
 
@@ -44,6 +64,15 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
       listener(self)
 
   # To be implemented
+
+  async def _clear(self):
+    """
+    Clears the node's value.
+
+    Raises
+      asyncio.CancelledError
+      NodeUnavailableError
+    """
 
   async def _read(self) -> bool:
     """
@@ -62,7 +91,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
     raise NotImplementedError
 
-  async def _write(self, value: Optional[T | NullType], /):
+  async def _write(self, value: (T | NullType), /):
     """
     Writes the node's value.
 
@@ -74,13 +103,13 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
     raise NotImplementedError
 
-  # @abstractmethod
+  @abstractmethod
   async def _export_spec(self) -> Any:
-    pass
+    ...
 
-  # @abstractmethod
+  @abstractmethod
   async def _export_value(self, value: T, /) -> Any:
-    pass
+    ...
 
   # Called by the producer
 
@@ -91,10 +120,10 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
       except NotImplementedError:
         pass
 
-      while (self.target_value is not None) and (self.value != self.target_value):
+      while (self.target_value is not None) and ((self.value is None) or (self.value[1] != self.target_value[1])):
         async with self._lock:
-          await self._write(self.target_value)
-          self.value = self.target_value
+          await self._write(self.target_value[1])
+          self.value = (time.time(), self.target_value[1])
 
   # Called by the consumer
 
@@ -103,6 +132,16 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
       raise NotImplementedError
 
     return self.claimable.claim(marker, force=force)
+
+  async def clear(self):
+    self.target_value = (time.time(), None)
+
+    async with self._lock:
+      if self.connected:
+        try:
+          self._clear()
+        except NodeUnavailableError:
+          pass
 
   async def read(self):
     """
@@ -128,6 +167,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
         else:
           if changed:
             self._revision = NodeRevision(self._revision + 1)
+            self._trigger_listeners(mode='value')
 
           return True
 
@@ -137,17 +177,22 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     if not self.writable:
       raise NotImplementedError
 
-    self._ownership_listeners.add(listener)
+    return self._attach_listener(listener, mode='ownership')
 
-    def cancel():
-      self._ownership_listeners.remove(listener)
+  def watch_target(self, listener: NodeListener, /):
+    if not self.writable:
+      raise NotImplementedError
 
-    return Cancelable(cancel)
+    return self._attach_listener(listener, mode='target')
 
-  async def write(self, value: Optional[T | NullType], /):
+  async def write(self, value: T | NullType, /):
     from .readable import SubscribableReadableNode
 
-    self.target_value = value
+    if not self.writable:
+      raise NotImplementedError
+
+    self.target_value = (time.time(), value)
+    self._trigger_listeners(mode='target')
 
     async with self._lock:
       if self.connected:
@@ -157,9 +202,44 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
           pass
         else:
           self.value = self.target_value
+          self._trigger_listeners(mode='value')
 
-          if isinstance(self, SubscribableReadableNode):
-            self._trigger()
+  async def maintain(self, value: T | NullType, /):
+    from .readable import WatchableNode
+
+    if not self.writable:
+      raise NotImplementedError
+
+    self.target_value = (time.time(), value)
+    self._trigger_listeners(mode='target')
+
+    async with self._lock:
+      while True:
+        await self.wait_connected()
+
+        try:
+          await self._write(value)
+        except NodeUnavailableError:
+          continue
+
+        self.value = (time.time(), value)
+
+        if isinstance(self, WatchableNode) and (not self.stable):
+          change_event = Event()
+
+          def listener(node: BaseNode, *, mode: NodeListenerMode):
+            change_event.set()
+
+          reg = await self.watch_value(listener)
+
+          try:
+            while True:
+              await change_event.wait()
+              change_event.clear()
+
+              await self._write(value)
+          finally:
+            reg.cancel()
 
   def export(self):
     return {

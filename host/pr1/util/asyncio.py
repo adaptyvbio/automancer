@@ -116,6 +116,12 @@ class DualEvent:
     self._set_event.clear()
     self._unset_event.set()
 
+  def toggle(self, value: bool, /):
+    if value:
+      self.set()
+    else:
+      self.unset()
+
   async def wait_set(self):
     await self._set_event.wait()
 
@@ -201,12 +207,15 @@ def run_anonymous(awaitable: Awaitable, /):
   return asyncio.create_task(func())
 
 
-async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]], /) -> Task[T]:
+async def run_double(func: Callable[[Callable[[], bool]], Coroutine[Any, Any, T]], /) -> Task[T]:
   future = Future[None]()
 
   def ready():
     if not future.done():
       future.set_result(None)
+      return True
+    else:
+      return False
 
   async def inner_func():
     try:

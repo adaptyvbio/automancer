@@ -1,32 +1,27 @@
 from dataclasses import KW_ONLY, dataclass
+import time
 from typing import Generic, Optional, TypeVar
 
 from .value import ValueNode
 
 
 class BooleanNode(ValueNode[bool]):
-  def __init__(self, **kwargs):
-    super().__init__(**kwargs)
+  def _export_spec(self):
+    return {
+      "type": "boolean"
+    }
+
+  def _export_value(self, value: bool, /):
+    return value
 
   async def _read(self):
     old_value = self.value
-    self.value = await self._read_value()
+    self.value = (time.time(), await self._read_value())
 
-    return self.value != old_value
+    return (old_value is None) or (self.value[1] != old_value[1])
 
   async def _read_value(self) -> bool:
     raise NotImplementedError
-
-  def export(self):
-    exported = super().export()
-
-    return {
-      **exported,
-      "value": {
-        **exported["value"],
-        "type": "boolean"
-      }
-    }
 
 
 T = TypeVar('T', int, str)
@@ -44,24 +39,21 @@ class EnumNode(ValueNode[T], Generic[T]):
 
   async def _read(self):
     old_value = self.value
-    self.value = await self._read_value()
+    self.value = (time.time(), await self._read_value())
 
-    return self.value != old_value
+    return (old_value is None) or (self.value[1] != old_value[1])
 
   async def _read_value(self) -> T:
     raise NotImplementedError
 
-  def export(self):
-    exported = super().export()
-
+  def _export_spec(self):
     return {
-      **exported,
-      "value": {
-        **exported["value"],
-        "type": "enum",
-        "cases": [{
-          "id": case.id,
-          "label": case.label
-        } for case in self.cases]
-      }
+      "type": "enum",
+      "cases": [{
+        "id": case.id,
+        "label": case.label
+      } for case in self.cases]
     }
+
+  def _export_value(self, value: T, /):
+    return value

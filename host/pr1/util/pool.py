@@ -88,7 +88,6 @@ class Pool:
 
   async def _wait(self, *, forever: bool):
     cancelled = False
-    closed = False
 
     exceptions = list[BaseException]()
 

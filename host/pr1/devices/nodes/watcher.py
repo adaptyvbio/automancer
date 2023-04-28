@@ -7,11 +7,10 @@ from typing import Literal, Optional, Sequence
 from .value import ValueNode
 from ...util.asyncio import AsyncCancelable, Cancelable, register_all
 from .readable import WatchableNode
-from .common import BaseNode
+from .common import BaseNode, NodeListenerMode
 
 
-WatchMode = Literal['connection', 'ownership', 'value']
-WatchModes = set[WatchMode]
+WatchModes = set[NodeListenerMode]
 WatchEvent = dict[BaseNode, WatchModes]
 
 class Watcher:
@@ -48,7 +47,7 @@ class Watcher:
 
     changed_nodes = dict[BaseNode, WatchModes]()
 
-    def main_listener(mode: WatchMode, node: WatchableNode):
+    def listener(node: WatchableNode, *, mode: NodeListenerMode):
       if not node in changed_nodes:
         changed_nodes[node] = WatchModes()
 
@@ -67,18 +66,16 @@ class Watcher:
 
         changed_nodes.clear()
 
-    connection_listener = functools.partial(main_listener, 'connection')
-    ownership_listener = functools.partial(main_listener, 'ownership')
-    value_listener = functools.partial(main_listener, 'value')
-
-    self._async_regs = await register_all([node.watch_value(value_listener) for node in self._nodes if isinstance(node, WatchableNode)]) if 'value' in self._modes else list[AsyncCancelable]()
     self._sync_regs = list[Cancelable]()
 
+    if 'value' in self._modes:
+      self._sync_regs += await register_all([node.watch_value(listener) for node in self._nodes if isinstance(node, WatchableNode)])
+
     if 'connection' in self._modes:
-      self._sync_regs += [node.watch_connection(connection_listener) for node in self._nodes]
+      self._sync_regs += [node.watch_connection(listener) for node in self._nodes]
 
     if 'ownership' in self._modes:
-      self._sync_regs += [node.watch_ownership(ownership_listener) for node in self._nodes if isinstance(node, ValueNode) and node.writable]
+      self._sync_regs += [node.watch_ownership(listener) for node in self._nodes if isinstance(node, ValueNode) and node.writable]
 
     self._ready = True
 
@@ -89,13 +86,9 @@ class Watcher:
       self._callback_handle.cancel()
       self._callback_handle = None
 
-    for reg in self._async_regs:
-      await reg.cancel()
-
     for reg in self._sync_regs:
       reg.cancel()
 
-    del self._async_regs
     del self._sync_regs
 
     self._started = False

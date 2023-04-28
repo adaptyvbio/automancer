@@ -21,7 +21,7 @@ class BoardTemperatureNode(PollableReadableNode, NumericNode):
   def __init__(self, *, master: 'MasterDevice'):
     super().__init__(
       readable=True,
-      min_interval=0.2,
+      interval=0.2,
       unit="degC"
     )
 
@@ -44,7 +44,7 @@ class TemperatureReadoutNode(PollableReadableNode, NumericNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
       readable=True,
-      min_interval=0.2,
+      interval=0.2,
       unit="degC"
     )
 

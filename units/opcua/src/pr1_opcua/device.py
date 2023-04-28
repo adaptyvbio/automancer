@@ -45,7 +45,7 @@ class OPCUADeviceNode(PollableReadableNode):
     type: str,
     **kwargs
   ):
-    super().__init__(min_interval=0.2, readable=True, **kwargs)
+    super().__init__(interval=0.2, readable=True, **kwargs)
 
     self.description = description
     self.id = id

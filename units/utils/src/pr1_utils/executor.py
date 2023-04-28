@@ -42,8 +42,8 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
     super().__init__(
       readable=True,
       dtype='u4',
-      min_interval=0.3,
-      unit=ureg.byte
+      interval=0.3,
+      unit=ureg.MB
     )
 
     self.connected = True
@@ -61,8 +61,8 @@ class EpochNode(PollableReadableNode, NumericNode):
     super().__init__(
       readable=True,
       dtype='u8',
-      min_interval=0.3,
-      unit=ureg.sec
+      interval=0.3,
+      unit=ureg.year
     )
 
     self.connected = True
@@ -78,7 +78,7 @@ class RandomNode(PollableReadableNode, NumericNode):
     super().__init__(
       readable=True,
       dtype='f4',
-      min_interval=0.2
+      interval=0.2
     )
 
     self.connected = True

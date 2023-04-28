@@ -19,7 +19,7 @@ import { UnitTools } from '../unit';
 
 
 export interface GraphEditorProps {
-  execution: ViewExecution;
+  execution?: ViewExecution;
   host: Host;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;

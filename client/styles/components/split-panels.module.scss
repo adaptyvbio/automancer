@@ -30,13 +30,13 @@ $border-color: #ddd;
 
     // Hover area
     &::before {
-      width: 6px;
+      width: 600%;
       translate: calc(0.5px - 50%) 0;
     }
 
     // Blue handle
     &::after {
-      width: 1px;
+      width: 100%;
       background-color: $border-color;
     }
 

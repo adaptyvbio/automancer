@@ -380,7 +380,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                     summary={summary}
                     tree={this.state.compilation?.protocol?.root ?? null} />
                 ) },
-              { nominalSize: CSSNumericValue.parse('400px'),
+              { nominalSize: CSS.px(400),
                 onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
                 open: this.state.inspectorOpen,
                 component: (

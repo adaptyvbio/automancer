@@ -551,6 +551,10 @@ class FiberParser:
 
     self.block_type = lang.DivisibleCompositeDictType()
 
+    for parser in self._parsers:
+      if hasattr(parser, 'layer_attributes'):
+        self.block_type.add(parser.layer_attributes, key=parser)
+
     for transformer in self.transformers:
       self.block_type.add(transformer.attributes, key=transformer)
 
@@ -662,7 +666,21 @@ class FiberParser:
     extra_adoption_envs = EvalEnvs()
     extra_runtime_envs = EvalEnvs()
 
+    result_by_parser = dict[BaseParser, Any]()
+
+    for parser in self._parsers:
+      if hasattr(parser, 'preload'):
+        result = analysis.add(self.block_type.analyze_namespace(block_result, context, key=parser))
+
+        if isinstance(result, EllipsisType):
+          return analysis, Ellipsis
+
+        _ = analysis.add(parser.preload(result))
+        result_by_parser[parser] = result
+
     for transformer in self.transformers:
+      parser = next(parser for parser in self._parsers if transformer in parser.transformers)
+
       current_adoption_envs = adoption_envs + extra_adoption_envs
       current_runtime_envs = runtime_envs + extra_runtime_envs
 
@@ -670,7 +688,10 @@ class FiberParser:
         envs_list=[current_adoption_envs, current_runtime_envs]
       )
 
-      unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, key=transformer))
+      if hasattr(parser, 'layer_attributes'):
+        unit_attrs = result_by_parser[parser]
+      else:
+        unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, key=transformer))
 
       if isinstance(unit_attrs, EllipsisType):
         continue

@@ -20,11 +20,21 @@ class EvalEnv:
   name: Optional[str] = None
   readonly: bool = False
 
+  def instantiate(self):
+    return EvalEnvInstance(self)
+
   def __hash__(self):
     return id(self)
 
   def __repr__(self):
     return f"{self.__class__.__name__}(name={self.name!r})"
+
+@dataclass
+class EvalEnvInstance:
+  env: EvalEnv
+
+  def __hash__(self):
+    return id(self)
 
 EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]

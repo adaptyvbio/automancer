@@ -60,12 +60,21 @@ async def main():
   document = Document.text("""
 name: Test
 
+shorthands:
+  foo:
+    Oko.setpoint: 37 degC
+    _priority: 1
+  bar:
+    repeat: 2
+    _priority: 0
+  x:
+    PLC.A1: ${{ arg }}
+    _priority: 0
+
 steps:
-  actions:
-    - actions:
-        - wait: 1s
-    - wait: 1s
-      repeat: 2
+  wait: 1 s
+  bar: 76
+  x: ${{ 3.0 * unit.msec }}
 """)
 
   draft = Draft(

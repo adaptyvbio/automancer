@@ -6,14 +6,18 @@ from typing import Any, Callable, Optional, TypedDict, cast
 from pr1.error import ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
-from pr1.fiber.langservice import Analysis, AnalysisRelation, AnalysisRename, AnyType, Attribute, KVDictType, PrimitiveType, SimpleDictType, StrType
+from pr1.fiber.langservice import (Analysis, AnalysisRelation, AnalysisRename,
+                                   AnyType, Attribute, KVDictType, PotentialExprType,
+                                   PrimitiveType, SimpleDictType, StrType)
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
-                              BaseDefaultTransform, BaseDefaultTransformer, BaseLeadTransformer, BaseParser,
+                              BaseDefaultTransform, BaseDefaultTransformer,
+                              BaseLeadTransformer, BaseParser,
                               BaseProgramPoint, BlockData, BlockProgram,
                               BlockState, BlockUnitData,
                               BlockUnitPreparationData, FiberParser, Layer,
-                              ProtocolUnitData, TransformerAdoptionResult, TransformerPreparationResult, Transforms)
+                              ProtocolUnitData, TransformerAdoptionResult,
+                              TransformerPreparationResult, Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
@@ -85,50 +89,44 @@ class PassiveTransformer(BaseDefaultTransformer):
   def __init__(self, parser: 'Parser'):
     self.parser = parser
 
-  @property
-  def attributes(self):
-    return {
-      shorthand_name: Attribute(
-        deprecated=shorthand.deprecated,
-        description=shorthand.description,
-        type=AnyType()
-      ) for shorthand_name, shorthand in self.parser.shorthands.items()
-    }
-
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
-    self.last_data = data
-
     analysis = Analysis()
     calls = list[tuple[ShorthandStaticItem, Any]]()
 
+    context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
+
     for shorthand_name, arg in data.items():
       shorthand = self.parser.shorthands[shorthand_name]
-
-      if not shorthand.layer:
-        shorthand.layer = analysis.add(shorthand.create_layer())
-
-        if not isinstance(shorthand.layer, EllipsisType):
-          assert (extra_info := shorthand.layer.extra_info) is not None
-
-          if not isinstance(extra_info, EllipsisType) and ('_priority' in extra_info):
-            shorthand.priority = extra_info['_priority'].value
+      assert shorthand.layer
 
       if (not isinstance(shorthand.layer, EllipsisType)) and (not shorthand.layer.lead_transform):
-        calls.append((shorthand, arg))
+        arg_result = analysis.add(PotentialExprType(AnyType()).analyze(arg, context))
+
+        if not isinstance(arg_result, EllipsisType):
+          calls.append((shorthand, arg_result))
 
     calls = sorted(calls, key=(lambda call: -call[0].priority))
 
     return analysis, (TransformerPreparationResult(calls) if calls else None)
 
-  def adopt(self, data: list[tuple[ShorthandStaticItem, Any]], /, adoption_stack):
+  def adopt(self, data: list[tuple[ShorthandStaticItem, Evaluable[LocatedValue[Any]]]], /, adoption_stack):
     analysis = Analysis()
     calls = list[tuple[ShorthandStaticItem, Any]]()
 
     for shorthand, arg in data:
       assert isinstance(shorthand.layer, Layer)
-      # TODO: Handle argument
 
-      adopted_transforms, _ = analysis.add(shorthand.layer.adopt(EvalStack({})))
+      arg_result = analysis.add(arg.eval(EvalContext(adoption_stack), final=True))
+
+      if isinstance(arg_result, EllipsisType):
+        continue
+
+      adopted_transforms, _ = analysis.add(shorthand.layer.adopt(adoption_stack | {
+        shorthand.env: {
+          'arg': arg_result.value().value
+        }
+      }))
+
       calls.append((shorthand, adopted_transforms))
 
     return analysis, TransformerAdoptionResult(calls)
@@ -161,6 +159,33 @@ class Parser(BaseParser):
       # LeadTransformer(self)
       PassiveTransformer(self)
     ]
+
+  @property
+  def layer_attributes(self):
+    return {
+      shorthand_name: Attribute(
+        deprecated=shorthand.deprecated,
+        description=shorthand.description,
+        type=AnyType()
+      ) for shorthand_name, shorthand in self.shorthands.items()
+    }
+
+  def preload(self, raw_attrs: Attrs, /):
+    analysis = Analysis()
+
+    for shorthand_name in raw_attrs.keys():
+      shorthand = self.shorthands[shorthand_name]
+
+      if not shorthand.layer:
+        shorthand.layer = analysis.add(shorthand.create_layer())
+
+        if not isinstance(shorthand.layer, EllipsisType):
+          assert (extra_info := shorthand.layer.extra_info) is not None
+
+          if not isinstance(extra_info, EllipsisType) and ('_priority' in extra_info):
+            shorthand.priority = extra_info['_priority'].value
+
+    return analysis, None
 
   def enter_protocol(self, data: Attributes, /, adoption_envs, runtime_envs):
     analysis = Analysis()
@@ -206,7 +231,7 @@ class Parser(BaseParser):
           ref_ranges=list()
         )
 
-        print(self.shorthands)
+        # print(self.shorthands)
 
         # self.segment_attributes[name] = lang.Attribute(
         #   deprecated=deprecated,

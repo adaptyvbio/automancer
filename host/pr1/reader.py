@@ -8,7 +8,7 @@ import re
 import sys
 from typing import Any, Generic, Optional, TypeVar
 
-from .draft import DraftDiagnostic
+from .error import Diagnostic, ErrorDocumentReference
 from .util.decorators import deprecated
 
 
@@ -570,37 +570,36 @@ class Token:
   value: Optional[LocatedString]
 
 
-class ReaderError(Exception):
-  def diagnostic(self):
-    return DraftDiagnostic("Unknown error")
+class ReaderError(Diagnostic):
+  pass
 
 class UnreadableIndentationError(ReaderError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Unreadable indentation", ranges=self.target.area.ranges)
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Unreadable indentation",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class MissingKeyError(ReaderError):
-  def __init__(self, location):
-    self.location = location
-
-  def diagnostic(self):
-    return DraftDiagnostic("Missing key", ranges=[self.location])
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Missing key",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class InvalidLineError(ReaderError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid line", ranges=self.target.area.ranges)
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid line",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class InvalidCharacterError(ReaderError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid character", ranges=self.target.area.ranges)
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid character",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 
 def tokenize(raw_source: Source | str, /):
@@ -761,26 +760,28 @@ class StackEntry:
 
 
 class DuplicateKeyError(ReaderError):
-  def __init__(self, original: LocatedString, duplicate: LocatedString):
-    self.original = original
-    self.duplicate = duplicate
-
-  def diagnostic(self):
-    return DraftDiagnostic("Duplicate key", ranges=(self.original.area + self.duplicate.area).ranges)
+  def __init__(self, original: LocatedString, duplicate: LocatedString, /):
+    super().__init__(
+      "Invalid value, expected expression",
+      references=[
+        ErrorDocumentReference.from_value(original, id='origin'),
+        ErrorDocumentReference.from_value(duplicate, id='duplicate')
+      ]
+    )
 
 class InvalidIndentationError(ReaderError):
-  def __init__(self, target: LocatedString):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid indentation", ranges=self.target.area.ranges)
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid indentation",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class InvalidTokenError(ReaderError):
-  def __init__(self, target: LocatedString):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid token", ranges=self.target.area.ranges)
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid token",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 
 def analyze(tokens: list[Token]):

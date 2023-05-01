@@ -405,7 +405,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                         { id: 'report',
                           label: 'Report',
                           contents: () => (
-                            <DiagnosticsReport diagnostics={this.state.compilation?.analysis.diagnostics ?? []} />
+                            <DiagnosticsReport
+                              analysis={this.state.compilation?.analysis ?? null} />
                           ) }
                       ]} />
                   </div>
@@ -525,13 +526,8 @@ export function FilledDraftSummary(props: {
   }
 
   let compilation = props.compilation!;
-
-  let [errorCount, warningCount] = compilation.analysis.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
-    switch (diagnostic.kind) {
-      case 'error': return [errorCount + 1, warningCount];
-      case 'warning': return [errorCount, warningCount + 1];
-    }
-  }, [0, 0]);
+  let errorCount = compilation.analysis.errors.length;
+  let warningCount = compilation.analysis.warnings.length;
 
   let onStart = compilation.valid
     ? props.onStart

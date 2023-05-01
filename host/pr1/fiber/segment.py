@@ -15,7 +15,6 @@ from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEven
 from .langservice import Analysis
 from .parser import BaseBlock, BaseDefaultTransform, BaseLeadTransform, BlockProgram, BlockState, HeadProgram, Transforms
 from ..devices.claim import ClaimSymbol
-from ..draft import DraftDiagnostic
 from ..reader import LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable, UnreachableError

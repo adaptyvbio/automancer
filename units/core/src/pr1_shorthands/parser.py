@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional, TypedDict, cast
 
-from pr1.error import ErrorDocumentReference
+from pr1.error import Error, ErrorDocumentReference, ErrorFileReference, Trace
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
 from pr1.fiber.langservice import (Analysis, AnalysisRelation, AnalysisRename,
@@ -23,12 +23,16 @@ from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
 from pr1.fiber.process import ProgramExecEvent
 from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
-from pr1.reader import (LocatedString, LocatedValue, LocationRange,
+from pr1.reader import (LocatedString, LocatedValue, LocationArea, LocationRange,
                         ReliableLocatedDict)
 from pr1.util.decorators import debug
-from pr1.util.misc import split_sequence
 
 from . import namespace
+
+
+class CircularReferenceError(Error):
+  def __init__(self, target: LocatedValue):
+    super().__init__("Invalid circular reference", references=[ErrorDocumentReference.from_value(target)])
 
 
 @dataclass(kw_only=True)
@@ -39,6 +43,7 @@ class ShorthandStaticItem:
   description: Optional[str]
   env: EvalEnv
   layer: Optional[Layer | EllipsisType] = None
+  preparing: bool = False
   priority: int = 0
   ref_ranges: list[LocationRange]
 
@@ -66,7 +71,7 @@ class LeadTransformer(BaseLeadTransformer):
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
     analysis = Analysis()
-    calls = list[LeadTransformerPreparationResult[tuple[ShorthandStaticItem, Any]]]()
+    calls = list[LeadTransformerPreparationResult[tuple[ShorthandStaticItem, LocationArea, Any]]]()
 
     context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
 
@@ -78,13 +83,14 @@ class LeadTransformer(BaseLeadTransformer):
         arg_result = analysis.add(PotentialExprType(AnyType()).analyze(arg, context))
 
         if not isinstance(arg_result, EllipsisType):
-          calls.append(LeadTransformerPreparationResult((shorthand, arg_result), origin_area=shorthand_name.area))
+          call_area = cast(LocatedString, shorthand_name).area
+          calls.append(LeadTransformerPreparationResult((shorthand, call_area, arg_result), origin_area=call_area))
 
     return analysis, calls
 
-  def adopt(self, data: tuple[ShorthandStaticItem, Any], /, adoption_stack):
+  def adopt(self, data: tuple[ShorthandStaticItem, LocationArea, Any], /, adoption_stack, trace):
     analysis = Analysis()
-    shorthand, arg = data
+    shorthand, call_area, arg = data
 
     assert shorthand.layer
     assert not isinstance(shorthand.layer, EllipsisType)
@@ -98,7 +104,7 @@ class LeadTransformer(BaseLeadTransformer):
       shorthand.env: {
         'arg': arg_result.value().value
       }
-    }))
+    }, [*trace, ErrorDocumentReference.from_area(call_area)]))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
@@ -113,7 +119,7 @@ class PassiveTransformer(BasePassiveTransformer):
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
     analysis = Analysis()
-    calls = list[tuple[ShorthandStaticItem, Any]]()
+    calls = list[tuple[ShorthandStaticItem, LocationArea, Evaluable]]()
 
     context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
 
@@ -125,17 +131,17 @@ class PassiveTransformer(BasePassiveTransformer):
         arg_result = analysis.add(PotentialExprType(AnyType()).analyze(arg, context))
 
         if not isinstance(arg_result, EllipsisType):
-          calls.append((shorthand, arg_result))
+          calls.append((shorthand, cast(LocatedString, shorthand_name).area, arg_result))
 
     calls = sorted(calls, key=(lambda call: -call[0].priority))
 
     return analysis, (PassiveTransformerPreparationResult(calls) if calls else None)
 
-  def adopt(self, data: list[tuple[ShorthandStaticItem, Evaluable[LocatedValue[Any]]]], /, adoption_stack):
+  def adopt(self, data: list[tuple[ShorthandStaticItem, LocationArea, Evaluable[LocatedValue[Any]]]], /, adoption_stack, trace):
     analysis = Analysis()
     calls = list[tuple[ShorthandStaticItem, Any]]()
 
-    for shorthand, arg in data:
+    for shorthand, call_area, arg in data:
       assert isinstance(shorthand.layer, Layer)
 
       arg_result = analysis.add(arg.eval(EvalContext(adoption_stack), final=True))
@@ -147,7 +153,7 @@ class PassiveTransformer(BasePassiveTransformer):
         shorthand.env: {
           'arg': arg_result.value().value
         }
-      }))
+      }, [*trace, ErrorDocumentReference.from_area(call_area)]))
 
       calls.append((shorthand, adopted_transforms))
 
@@ -199,6 +205,12 @@ class Parser(BaseParser):
       shorthand = self.shorthands[shorthand_name]
 
       if not shorthand.layer:
+        if shorthand.preparing:
+          shorthand.layer = Ellipsis
+          analysis.errors.append(CircularReferenceError(cast(LocatedString, shorthand_name)))
+          continue
+
+        shorthand.preparing = True
         shorthand.layer = analysis.add(shorthand.create_layer())
 
         if not isinstance(shorthand.layer, EllipsisType):
@@ -266,126 +278,23 @@ class Parser(BaseParser):
   def leave_protocol(self):
     analysis = Analysis()
 
-    for shorthand_item in self.shorthands.values():
+    for shorthand in self.shorthands.values():
+      if not shorthand.layer:
+        # TODO: Add unused highlight
+        _ = analysis.add(shorthand.create_layer())
+
       analysis.renames.append(AnalysisRename([
-        shorthand_item.definition_range,
-        *shorthand_item.ref_ranges
+        shorthand.definition_range,
+        *shorthand.ref_ranges
       ]))
 
       analysis.relations.append(AnalysisRelation(
-        shorthand_item.definition_range,
-        shorthand_item.ref_ranges
+        shorthand.definition_range,
+        shorthand.ref_ranges
       ))
 
     return analysis
 
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
-    analysis = lang.Analysis()
-    context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
-    prep = dict[str, Evaluable]()
-
-    for shorthand_name, shorthand_value in attrs.items():
-      assert isinstance(shorthand_name, LocatedString)
-
-      shorthand_item = self.shorthands[shorthand_name]
-      shorthand_item.ref_ranges.append(shorthand_name.area.single_range())
-
-      if isinstance(shorthand_item.layer, EllipsisType):
-        continue
-
-      result = analysis.add(lang.PotentialExprType(lang.AnyType()).analyze(shorthand_value, context))
-
-      if isinstance(result, EllipsisType):
-        continue
-
-      prep[shorthand_name] = result
-
-    return analysis, BlockUnitPreparationData(prep)
-
-  def parse_block(self, attrs: dict[LocatedString, Evaluable], /, adoption_stack, trace):
-    analysis = lang.Analysis()
-    failure = False
-    shorthands_items = list[ShorthandDynamicItem]()
-
-    for shorthand_name, shorthand_value in attrs.items():
-      shorthand_item = self.shorthands[shorthand_name]
-      shorthand_trace = trace + [ErrorDocumentReference.from_value(shorthand_name)]
-
-      if isinstance(shorthand_value, EllipsisType):
-        failure = True
-        continue
-
-      value = analysis.add(shorthand_value.eval(EvalContext(adoption_stack), final=True), shorthand_trace)
-
-      if isinstance(value, EllipsisType):
-        failure = True
-        continue
-
-      shorthand_adoption_stack: EvalStack = {
-        **adoption_stack,
-        shorthand_item.env: {
-          'arg': value.value().value if isinstance(value, ValueAsPythonExpr) else None
-        }
-      }
-
-      assert not isinstance(shorthand_item.layer, EllipsisType)
-      shorthand_result = analysis.add(self.fiber.parse_block(shorthand_item.layer, shorthand_adoption_stack), shorthand_trace)
-
-      if isinstance(shorthand_result, EllipsisType):
-        failure = True
-        continue
-
-      shorthands_items.append(
-        ShorthandDynamicItem(
-          argument=value,
-          data=shorthand_result,
-          name=shorthand_name
-        )
-      )
-
-    return analysis, BlockUnitData(transforms=([ShorthandTransform(shorthands_items, parser=self)] if shorthands_items else list())) if not failure else Ellipsis
-
-
-@debug
-class ShorthandTransform(BaseDefaultTransform):
-  def __init__(self, items: list[ShorthandDynamicItem], /, parser: Parser):
-    self._items = items
-    self._parser = parser
-
-  def execute(self, state, transforms, *, origin_area):
-    analysis = lang.Analysis()
-    block_state: BlockState = cast(BlockState, None)
-
-    transforms_final = Transforms()
-    transforms_incl_segment = Transforms()
-    has_segment_transform = lambda transforms: any(isinstance(transform, SegmentTransform) for transform in transforms)
-
-    if has_segment_transform:
-      transforms_incl_segment = transforms
-    else:
-      transforms_final += transforms
-
-    for item in self._items:
-      if has_segment_transform(item.data.transforms) and (not transforms_incl_segment):
-        transforms_incl_segment = item.data.transforms
-      else:
-        transforms_final += item.data.transforms
-
-      if block_state is not None:
-        block_state = item.data.state | block_state
-      else:
-        block_state = item.data.state
-
-    block = analysis.add(self._parser.fiber.execute(block_state, (transforms_final + transforms_incl_segment), origin_area=origin_area))
-
-    if isinstance(block, EllipsisType):
-      return analysis, Ellipsis
-
-    for item in self._items:
-      shorthand = self._parser.shorthands[item.name]
-      block = ShorthandBlock(block, argument=item.argument, env=shorthand.env)
-
-    return analysis, block
 
 
 @dataclass

@@ -4,7 +4,7 @@ from typing import Any
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.fiber.langservice import (Analysis, ArbitraryQuantityType, Attribute,
                                    BoolType, DictType, EnumType,
-                                   IdentifierType, InvalidValueError, ListType,
+                                   IdentifierType, ListType,
                                    StrType)
 from pr1.units.base import BaseExecutor
 from pr1.host import Host

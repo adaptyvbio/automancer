@@ -1,4 +1,4 @@
-import type { Brand } from 'pr1-shared';
+import type { Brand, Diagnostic } from 'pr1-shared';
 
 import { DraftItem } from './app-backends/base';
 import { Protocol } from './interfaces/protocol';
@@ -23,6 +23,7 @@ export interface DraftCompletion {
   ranges: DraftRange[];
 }
 
+/** @deprecated */
 export interface DraftDiagnostic {
   kind: 'error' | 'warning';
   message: string;
@@ -53,12 +54,13 @@ export type DraftSelection = DraftRange;
 export interface DraftCompilation {
   analysis: {
     completions: DraftCompletion[];
-    diagnostics: DraftDiagnostic[];
+    errors: Diagnostic[];
     folds: DraftFold[];
     hovers: DraftHover[];
     relations: DraftRelation[];
     renames: DraftRename[];
     selections: DraftSelection[];
+    warnings: Diagnostic[];
   };
 
   documentPaths: string[];

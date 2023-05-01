@@ -112,7 +112,7 @@ class Transformer(BasePassiveTransformer):
       type=PotentialExprType(get_type(node))
     ) for key, (node, path) in self._parser.node_map.items() }
 
-  def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack):
+  def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
     analysis = Analysis()
     values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
 

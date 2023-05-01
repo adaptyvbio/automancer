@@ -1,3 +1,4 @@
+import type { DiagnosticReference } from './analysis';
 import type { UnitNamespace } from './unit';
 
 
@@ -32,7 +33,7 @@ export interface ProtocolError {
   id: string | null;
   description: string[];
   message: string;
-  references: MasterErrorReference[];
+  references: DiagnosticReference[];
 }
 
 
@@ -51,25 +52,6 @@ export interface MasterError extends ProtocolError {
   id: string;
   date: number;
   path: ProtocolBlockPath;
-}
-
-export type MasterErrorReference = MasterErrorDocumentReference | MasterErrorFileReference;
-
-export interface MasterErrorBaseReference {
-  type: string;
-  id: string | null;
-  label: string | null;
-}
-
-export type MasterErrorDocumentReference = MasterErrorBaseReference & {
-  type: 'document';
-  documentId: string;
-  ranges: [number, number][]; // DraftRange[]
-}
-
-export type MasterErrorFileReference = MasterErrorBaseReference & {
-  type: 'file';
-  path: string;
 }
 
 export interface MasterProcessState {

@@ -1,22 +1,18 @@
 import ast
-import builtins
-import functools
 import math
-from typing import Optional
 
 from .eval import EvalOptions, EvalError
 from .. import reader as reader
-from ..draft import DraftDiagnostic
-from ..reader import LocatedString, LocatedValue, LocationArea, LocationRange, Source
+from ..reader import LocatedString, LocatedValue, LocationArea, Source
 
 
 class InvalidCall(EvalError):
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid call", ranges=self.area.ranges)
+  def __init__(self, area: LocationArea, /):
+    super().__init__(area, "Invalid call")
 
 class InvalidNode(EvalError):
-  def diagnostic(self):
-    return DraftDiagnostic("Invalid node", ranges=self.area.ranges)
+  def __init__(self, area: LocationArea, /):
+    super().__init__(area, "Invalid node")
 
 
 def evaluate(expr: ast.expr, /, input: LocatedString, options: EvalOptions):

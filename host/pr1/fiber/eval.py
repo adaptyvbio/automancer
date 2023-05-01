@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol
 
 from .staticanalysis import ClassRef, CommonVariables
-from ..error import Error, ErrorDocumentReference
+from ..error import Diagnostic, Error, ErrorDocumentReference
 from ..reader import LocatedString, LocatedValue, LocationArea
 
 
@@ -50,12 +50,10 @@ class EvalContext:
 class EvalOptions:
   variables: EvalVariables = field(default_factory=EvalVariables)
 
-class EvalError(Exception, Error):
+class EvalError(Diagnostic, Exception):
   def __init__(self, area: LocationArea, /, message: str):
     Exception.__init__(self)
     Error.__init__(self, f"Evaluation error: {message}", references=[ErrorDocumentReference.from_area(area)])
-
-    self.area = area
 
 
 def evaluate(compiled: Any, /, contents: LocatedString, options: EvalOptions):

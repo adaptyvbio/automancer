@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 from types import EllipsisType
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional, TypedDict, cast
 
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, ListType
@@ -10,7 +10,7 @@ from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
                               BlockData, BlockProgram, FiberParser, Layer,
                               LeadTransformerPreparationResult)
 from pr1.fiber.process import ProgramExecEvent
-from pr1.reader import LocationArea
+from pr1.reader import LocatedString, LocationArea
 from pr1.util.decorators import debug
 from pr1.util.misc import Exportable
 
@@ -37,28 +37,28 @@ class Transformer(BaseLeadTransformer):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare(self, attrs: Attributes, /, adoption_envs, adoption_stack):
+  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     analysis = Analysis()
 
-    if (attr := attrs.get('actions')):
+    if (attr := data.get('actions')):
       action_layers = list[Layer]()
 
       for action_source in attr:
-        layer = analysis.add(self._fiber.parse_layer(action_source, adoption_envs, adoption_stack))
+        layer = analysis.add(self._fiber.parse_layer(action_source, adoption_envs, runtime_envs))
 
         if not isinstance(layer, EllipsisType):
           action_layers.append(layer)
 
-      return analysis, [LeadTransformerPreparationResult(action_layers)]
+      return analysis, [LeadTransformerPreparationResult(action_layers, origin_area=cast(LocatedString, next(iter(data.keys()))).area)]
 
     return analysis, list()
 
-  def adopt(self, data: list[Layer], /, adoption_stack):
+  def adopt(self, data: list[Layer], /, adoption_stack, trace):
     analysis = Analysis()
     children = list[BaseBlock]()
 
     for action_layer in data:
-      action_block = analysis.add(action_layer.adopt_lead(adoption_stack))
+      action_block = analysis.add(action_layer.adopt_lead(adoption_stack, trace))
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)

@@ -36,8 +36,8 @@ class Transformer(BasePassiveTransformer):
     else:
       return lang.Analysis(), None
 
-  def adopt(self, data: Layer, /, adoption_stack):
-    analysis, (adopted_transforms, adoption_stack) = data.adopt(adoption_stack)
+  def adopt(self, data: Layer, /, adoption_stack, trace):
+    analysis, (adopted_transforms, adoption_stack) = data.adopt(adoption_stack, trace)
     return analysis, TransformerAdoptionResult((data, adopted_transforms), adoption_stack=adoption_stack)
 
   def execute(self, data: tuple[Layer, Any], /, block):

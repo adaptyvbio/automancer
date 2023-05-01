@@ -1,5 +1,6 @@
 import { Range } from 'immutable';
 import * as monaco from 'monaco-editor';
+import { concatenateDiagnostics, DiagnosticDocumentReference } from 'pr1-shared';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
@@ -136,26 +137,39 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        return compilation.analysis.diagnostics.flatMap((diagnostic) => {
-          return diagnostic.ranges.map(([startIndex, endIndex]) => {
-            let start = this.model.getPositionAt(startIndex);
-            let end = this.model.getPositionAt(endIndex);
+        return concatenateDiagnostics(compilation.analysis).flatMap(([diagnostic, kind]) =>
+          [
+            ...diagnostic.references.map((reference) => [
+              reference,
+              diagnostic.message,
+              { 'error': monaco.MarkerSeverity.Error,
+                'warning': monaco.MarkerSeverity.Warning }[kind]
+            ] as const),
+            ...(diagnostic.trace ?? []).map((reference, index) => [
+              reference,
+              `${diagnostic.message} (${diagnostic.trace!.length - index}/${diagnostic.trace!.length})`,
+              monaco.MarkerSeverity.Hint
+            ] as const)
+          ]
+            .filter(([reference, _message, _severity]) => (reference.type === 'document'))
+            .flatMap(([reference, message, severity]) =>
+              (reference as DiagnosticDocumentReference).ranges.map(([startIndex, endIndex]) => {
+                let start = this.model.getPositionAt(startIndex);
+                let end = this.model.getPositionAt(endIndex);
 
-            return {
-              startColumn: start.column,
-              startLineNumber: start.lineNumber,
+                return {
+                  startColumn: start.column,
+                  startLineNumber: start.lineNumber,
 
-              endColumn: end.column,
-              endLineNumber: end.lineNumber,
+                  endColumn: end.column,
+                  endLineNumber: end.lineNumber,
 
-              message: diagnostic.message,
-              severity: {
-                'error': monaco.MarkerSeverity.Error,
-                'warning': monaco.MarkerSeverity.Warning
-              }[diagnostic.kind]
-            };
-          });
-        });
+                  message: message,
+                  severity
+                };
+              })
+            )
+        );
       }
     });
 

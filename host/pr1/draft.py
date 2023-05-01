@@ -72,6 +72,7 @@ class DraftCompilation:
         "relations": [relation.export() for relation in self.analysis.relations],
         "renames": [rename.export() for rename in self.analysis.renames],
         "selections": [selection.export() for selection in self.analysis.selections],
+        "tokens": [token.export() for token in self.analysis.tokens],
         "warnings": [warning.export() for warning in self.analysis.warnings]
       },
       "documentPaths": [str(path) for path in self.document_paths],

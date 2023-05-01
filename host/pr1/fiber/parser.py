@@ -727,6 +727,9 @@ class FiberParser:
       analysis.errors.append(MissingLeadTransformInLayerError(attrs))
       return analysis, Ellipsis
 
+    for _, transform in lead_transforms:
+      analysis.tokens.append(lang.AnalysisToken("lead", ErrorDocumentReference.from_area(transform.origin_area)))
+
     layer = Layer(
       (lead_transforms[0] if lead_transforms else None),
       passive_transforms,

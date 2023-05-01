@@ -74,6 +74,17 @@ class AnalysisSelection(Exportable):
   def export(self):
     return [self.range.start, self.range.end]
 
+@dataclass
+class AnalysisToken(Exportable):
+  name: str
+  reference: ErrorDocumentReference
+
+  def export(self):
+    return {
+      "name": self.name,
+      "reference": self.reference.export()
+    }
+
 
 T = TypeVar('T')
 
@@ -89,6 +100,7 @@ class Analysis:
   relations: list[AnalysisRelation] = field(default_factory=list)
   renames: list[AnalysisRename] = field(default_factory=list)
   selections: list[AnalysisSelection] = field(default_factory=list)
+  tokens: list[AnalysisToken] = field(default_factory=list)
 
   def add(self, other: tuple['Analysis', T], /, trace: Optional[Trace] = None) -> T:
     analysis, value = other
@@ -108,6 +120,7 @@ class Analysis:
     self.relations += analysis.relations
     self.renames += analysis.renames
     self.selections += analysis.selections
+    self.tokens += analysis.tokens
 
     return value
 
@@ -121,7 +134,8 @@ class Analysis:
       markers=(self.markers + other.markers),
       relations=(self.relations + other.relations),
       renames=(self.renames + other.renames),
-      selections=(self.selections + other.selections)
+      selections=(self.selections + other.selections),
+      tokens=(self.tokens + other.tokens)
     )
 
   def __repr__(self):

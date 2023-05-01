@@ -22,6 +22,9 @@ window.MonacoEnvironment = {
 };
 
 
+export const SEMANTIC_TOKEN_TYPES = ['lead'];
+
+
 export interface TextEditorProps {
   autoSave: boolean;
   compilation: DraftCompilation | null;
@@ -90,7 +93,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       // This breaks the RenameProvider.
       // overflowWidgetsDomNode: this.refWidgetContainer.current!,
       fixedOverflowWidgets: true,
-      readOnly: false // !this.props.draft.writable
+      readOnly: false, // !this.props.draft.writable
+      'semanticHighlighting.enabled': true
     }, {
       storageService: {
         get() {},
@@ -105,6 +109,15 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         onDidChangeValue() {}
     }
     });
+
+    // @ts-expect-error
+    this.editor._themeService._theme.getTokenStyleMetadata = (type: string, modifiers: never, language) => {
+      if (type === 'lead') {
+        return {
+          underline: true
+        };
+      }
+    };
 
     this.model = this.editor.getModel()!;
 
@@ -370,6 +383,48 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             rejectReason: 'You cannot rename this element.'
           } as (monaco.languages.RenameLocation & monaco.languages.Rejection);
       },
+
+      getLegend: () => ({
+        tokenModifiers: [],
+        tokenTypes: SEMANTIC_TOKEN_TYPES
+      }),
+      provideDocumentSemanticTokens: async (model, lastResultId, token) => {
+        let compilation = await this.getCompilation();
+        let lastPosition = new monaco.Position(1, 0);
+
+        let data = compilation.analysis.tokens
+          .map((token) => ({
+            range: token.reference.ranges[0],
+            typeIndex: SEMANTIC_TOKEN_TYPES.indexOf(token.name)
+          }))
+          .filter(({ typeIndex }) => (typeIndex >= 0))
+          .sort((a, b) => (a.range[0] - b.range[0]))
+          .flatMap(({ range: [startOffset, endOffset], typeIndex }) => {
+            let startPosition = this.model.getPositionAt(startOffset);
+            let lineNumberDiff = (startPosition.lineNumber - lastPosition.lineNumber);
+
+            let result = [
+              lineNumberDiff,
+              ((lineNumberDiff < 1)
+                ? (startPosition.column - lastPosition.column)
+                : startPosition.column - 1),
+              (endOffset - startOffset),
+              typeIndex,
+              0
+            ];
+
+            lastPosition = startPosition;
+
+            return result;
+          });
+
+        return {
+          data: new Uint32Array(data)
+        };
+      },
+      releaseDocumentSemanticTokens: (resultId) => {
+
+      }
     }, { signal: this.controller.signal });
   }
 

@@ -58,6 +58,11 @@ export interface DraftMarker {
   reference: DiagnosticDocumentReference;
 }
 
+export interface DraftToken {
+  name: string;
+  reference: DiagnosticDocumentReference;
+}
+
 export interface DraftCompilation {
   analysis: {
     completions: DraftCompletion[];
@@ -68,6 +73,7 @@ export interface DraftCompilation {
     relations: DraftRelation[];
     renames: DraftRename[];
     selections: DraftSelection[];
+    tokens: DraftToken[];
     warnings: Diagnostic[];
   };
 

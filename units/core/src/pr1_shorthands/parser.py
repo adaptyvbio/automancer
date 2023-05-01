@@ -3,27 +3,23 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional, TypedDict, cast
 
-from pr1.error import Error, ErrorDocumentReference, ErrorFileReference, Trace
+from pr1.error import Error, ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
-from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
-from pr1.fiber.langservice import (Analysis, AnalysisRelation, AnalysisRename,
+from pr1.fiber.expr import Evaluable
+from pr1.fiber.langservice import (Analysis, AnalysisMarker, AnalysisRelation, AnalysisRename,
                                    AnyType, Attribute, KVDictType,
                                    PotentialExprType, PrimitiveType, StrType)
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
-                              BaseDefaultTransform, BaseLeadTransformer,
-                              BaseParser, BasePassiveTransformer,
-                              BaseProgramPoint, BlockData, BlockProgram,
-                              BlockState, BlockUnitData,
-                              BlockUnitPreparationData, FiberParser, Layer,
+                              BaseLeadTransformer, BaseParser,
+                              BasePassiveTransformer, BaseProgramPoint,
+                              BlockData, BlockProgram, FiberParser, Layer,
                               LeadTransformerPreparationResult,
                               PassiveTransformerPreparationResult,
-                              ProtocolUnitData, TransformerAdoptionResult,
-                              Transforms)
+                              ProtocolUnitData, TransformerAdoptionResult)
 from pr1.fiber.process import ProgramExecEvent
-from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
-from pr1.reader import (LocatedString, LocatedValue, LocationArea, LocationRange,
+from pr1.reader import (LocatedString, LocatedValue, LocationArea,
                         ReliableLocatedDict)
 from pr1.util.decorators import debug
 
@@ -38,14 +34,15 @@ class CircularReferenceError(Error):
 @dataclass(kw_only=True)
 class ShorthandStaticItem:
   create_layer: Callable[[], tuple[Analysis, Layer | EllipsisType]]
-  definition_range: LocationRange
+  definition_body_ref: ErrorDocumentReference
+  definition_name_ref: ErrorDocumentReference
   deprecated: bool
   description: Optional[str]
   env: EvalEnv
   layer: Optional[Layer | EllipsisType] = None
   preparing: bool = False
   priority: int = 0
-  ref_ranges: list[LocationRange]
+  references: list[ErrorDocumentReference]
 
 @dataclass(kw_only=True)
 class ShorthandDynamicItem:
@@ -55,19 +52,11 @@ class ShorthandDynamicItem:
 
 
 class Attributes(TypedDict, total=False):
-  shorthands: ReliableLocatedDict[LocatedString, Attrs]
+  shorthands: ReliableLocatedDict[LocatedString, ReliableLocatedDict[LocatedString, Any]]
 
 class LeadTransformer(BaseLeadTransformer):
   def __init__(self, parser: 'Parser'):
     self.parser = parser
-
-    self.attributes = {
-      # shorthand_name: Attribute(
-      #   deprecated=shorthand.deprecated,
-      #   description=shorthand.description,
-      #   type=AnyType()
-      # ) for shorthand_name, shorthand in self.parser.shorthands.items() if not isinstance(shorthand.layer, EllipsisType) and shorthand.layer.lead_transform
-    }
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
     analysis = Analysis()
@@ -203,11 +192,14 @@ class Parser(BaseParser):
 
     for shorthand_name in raw_attrs.keys():
       shorthand = self.shorthands[shorthand_name]
+      located_name = cast(LocatedString, shorthand_name)
+
+      shorthand.references.append(ErrorDocumentReference.from_value(located_name))
 
       if not shorthand.layer:
         if shorthand.preparing:
           shorthand.layer = Ellipsis
-          analysis.errors.append(CircularReferenceError(cast(LocatedString, shorthand_name)))
+          analysis.errors.append(CircularReferenceError(located_name))
           continue
 
         shorthand.preparing = True
@@ -258,20 +250,13 @@ class Parser(BaseParser):
 
         self.shorthands[name] = ShorthandStaticItem(
           create_layer=create_layer,
-          definition_range=name.area.single_range(),
+          definition_body_ref=ErrorDocumentReference.from_area(LocationArea([data_shorthand.area.enclosing_range()])),
+          definition_name_ref=ErrorDocumentReference.from_area(LocationArea([name.area.single_range()])),
           deprecated=deprecated,
           description=description,
           env=env,
-          ref_ranges=list()
+          references=list()
         )
-
-        # print(self.shorthands)
-
-        # self.segment_attributes[name] = lang.Attribute(
-        #   deprecated=deprecated,
-        #   description=description,
-        #   type=lang.AnyType()
-        # )
 
     return analysis, ProtocolUnitData()
 
@@ -280,17 +265,30 @@ class Parser(BaseParser):
 
     for shorthand in self.shorthands.values():
       if not shorthand.layer:
-        # TODO: Add unused highlight
+        analysis.markers.append(AnalysisMarker(
+          "Unused shorthand",
+          shorthand.definition_name_ref,
+          kind='unnecessary'
+        ))
+
         _ = analysis.add(shorthand.create_layer())
 
+      if shorthand.deprecated:
+        analysis.markers.append(AnalysisMarker(
+          "Deprecated shorthand",
+          shorthand.definition_name_ref,
+          kind='deprecated'
+        ))
+
       analysis.renames.append(AnalysisRename([
-        shorthand.definition_range,
-        *shorthand.ref_ranges
+        shorthand.definition_name_ref,
+        *shorthand.references
       ]))
 
       analysis.relations.append(AnalysisRelation(
-        shorthand.definition_range,
-        shorthand.ref_ranges
+        shorthand.definition_body_ref,
+        shorthand.definition_name_ref,
+        shorthand.references
       ))
 
     return analysis

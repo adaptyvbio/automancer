@@ -68,6 +68,7 @@ class DraftCompilation:
         "errors": [error.export() for error in self.analysis.errors],
         "folds": [fold.export() for fold in self.analysis.folds],
         "hovers": [hover.export() for hover in self.analysis.hovers],
+        "markers": [marker.export() for marker in self.analysis.markers],
         "relations": [relation.export() for relation in self.analysis.relations],
         "renames": [rename.export() for rename in self.analysis.renames],
         "selections": [selection.export() for selection in self.analysis.selections],

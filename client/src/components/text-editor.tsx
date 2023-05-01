@@ -137,39 +137,53 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        return concatenateDiagnostics(compilation.analysis).flatMap(([diagnostic, kind]) =>
-          [
-            ...diagnostic.references.map((reference) => [
+        return [
+          ...concatenateDiagnostics(compilation.analysis).flatMap(([diagnostic, kind]) => [
+            ...diagnostic.references.map((reference) => ({
+              message: diagnostic.message,
               reference,
-              diagnostic.message,
-              { 'error': monaco.MarkerSeverity.Error,
-                'warning': monaco.MarkerSeverity.Warning }[kind]
-            ] as const),
-            ...(diagnostic.trace ?? []).map((reference, index) => [
+              severity: {
+                'error': monaco.MarkerSeverity.Error,
+                'warning': monaco.MarkerSeverity.Warning
+              }[kind],
+              tag: null
+            })),
+            ...(diagnostic.trace ?? []).map((reference, index) => ({
+              message: `${diagnostic.message} (${diagnostic.trace!.length - index}/${diagnostic.trace!.length})`,
               reference,
-              `${diagnostic.message} (${diagnostic.trace!.length - index}/${diagnostic.trace!.length})`,
-              monaco.MarkerSeverity.Hint
-            ] as const)
-          ]
-            .filter(([reference, _message, _severity]) => (reference.type === 'document'))
-            .flatMap(([reference, message, severity]) =>
-              (reference as DiagnosticDocumentReference).ranges.map(([startIndex, endIndex]) => {
-                let start = this.model.getPositionAt(startIndex);
-                let end = this.model.getPositionAt(endIndex);
+              severity: monaco.MarkerSeverity.Hint,
+              tag: null
+            }))
+          ]),
+          ...compilation.analysis.markers.map((marker) => ({
+            message: marker.message,
+            reference: marker.reference,
+            severity: monaco.MarkerSeverity.Hint,
+            tag: {
+              'deprecated': monaco.MarkerTag.Deprecated,
+              'unnecessary': monaco.MarkerTag.Unnecessary
+            }[marker.kind]
+          }))
+        ]
+          .filter((diagnostic) => (diagnostic.reference.type === 'document'))
+          .flatMap((diagnostic) =>
+            (diagnostic.reference as DiagnosticDocumentReference).ranges.map(([startIndex, endIndex]) => {
+              let start = this.model.getPositionAt(startIndex);
+              let end = this.model.getPositionAt(endIndex);
 
-                return {
-                  startColumn: start.column,
-                  startLineNumber: start.lineNumber,
+              return {
+                startColumn: start.column,
+                startLineNumber: start.lineNumber,
 
-                  endColumn: end.column,
-                  endLineNumber: end.lineNumber,
+                endColumn: end.column,
+                endLineNumber: end.lineNumber,
 
-                  message: message,
-                  severity
-                };
-              })
-            )
-        );
+                message: diagnostic.message,
+                severity: diagnostic.severity,
+                tags: (diagnostic.tag !== null) ? [diagnostic.tag] : []
+              };
+            })
+          );
       }
     });
 
@@ -235,11 +249,14 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let relation = compilation.analysis.relations.find((relation) =>
-          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          [relation.definitionName, ...relation.references].some((reference) => {
+            let range = reference.ranges[0];
+            return getModelRangeFromDraftRange(model, range).containsPosition(position)
+          })
         );
 
         return (relation && {
-          range: getModelRangeFromDraftRange(model, relation.definition),
+          range: getModelRangeFromDraftRange(model, relation.definitionBody.ranges[0]),
           uri: model.uri
         }) ?? null;
       },
@@ -283,11 +300,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let relation = compilation.analysis.relations.find((relation) =>
-          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          [relation.definitionName, ...relation.references].some((reference) => getModelRangeFromDraftRange(model, reference.ranges[0]).containsPosition(position))
         );
 
-        return (relation && [relation.definition, ...relation.references].map((range) => ({
-          range: getModelRangeFromDraftRange(model, range),
+        return (relation && [relation.definitionName, ...relation.references].map((reference) => ({
+          range: getModelRangeFromDraftRange(model, reference.ranges[0]),
           uri: model.uri
         }))) ?? null;
       },
@@ -299,15 +316,15 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let rename = compilation.analysis.renames.find((rename) =>
-          rename.ranges.some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          rename.items.some((item) => getModelRangeFromDraftRange(model, item.ranges[0]).containsPosition(position))
         );
 
         return rename
           ? {
-            edits: rename.ranges.map((range) => ({
+            edits: rename.items.map((item) => ({
               resource: model.uri,
               textEdit: {
-                range: getModelRangeFromDraftRange(model, range),
+                range: getModelRangeFromDraftRange(model, item.ranges[0]),
                 text: newName
               },
               versionId: model.getVersionId()
@@ -336,8 +353,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let range = util.findMap(compilation.analysis.renames, (rename) =>
-          util.findMap(rename.ranges, (range) => {
-            let modelRange = getModelRangeFromDraftRange(model, range);
+          util.findMap(rename.items, (item) => {
+            let modelRange = getModelRangeFromDraftRange(model, item.ranges[0]);
             return modelRange.containsPosition(position)
               ? modelRange
               : null;

@@ -3,7 +3,7 @@ import copy
 import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from io import FileIO, IOBase, TextIOBase
 from logging import Logger
 from os import PathLike
@@ -32,23 +32,39 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class AnalysisRelation(Exportable):
-  definition: LocationRange
-  references: list[LocationRange]
+class AnalysisMarker(Exportable):
+  message: str
+  reference: ErrorDocumentReference
+  _: KW_ONLY
+  kind: Literal['deprecated', 'unnecessary']
 
   def export(self):
     return {
-      "definition": [self.definition.start, self.definition.end],
-      "references": [[range.start, range.end] for range in self.references]
+      "kind": self.kind,
+      "message": self.message,
+      "reference": self.reference.export()
+    }
+
+@dataclass
+class AnalysisRelation(Exportable):
+  definition_body: ErrorDocumentReference
+  definition_name: ErrorDocumentReference
+  references: list[ErrorDocumentReference]
+
+  def export(self):
+    return {
+      "definitionBody": self.definition_body.export(),
+      "definitionName": self.definition_name.export(),
+      "references": [ref.export() for ref in self.references]
     }
 
 @dataclass
 class AnalysisRename(Exportable):
-  ranges: list[LocationRange]
+  items: list[ErrorDocumentReference]
 
   def export(self):
     return {
-      "ranges": [[range.start, range.end] for range in self.ranges]
+      "items": [ref.export() for ref in self.items]
     }
 
 @dataclass
@@ -69,6 +85,7 @@ class Analysis:
   completions: list[Any] = field(default_factory=list)
   folds: list[Any] = field(default_factory=list)
   hovers: list[Any] = field(default_factory=list)
+  markers: list[AnalysisMarker] = field(default_factory=list)
   relations: list[AnalysisRelation] = field(default_factory=list)
   renames: list[AnalysisRename] = field(default_factory=list)
   selections: list[AnalysisSelection] = field(default_factory=list)
@@ -87,6 +104,7 @@ class Analysis:
     self.completions += analysis.completions
     self.folds += analysis.folds
     self.hovers += analysis.hovers
+    self.markers += analysis.markers
     self.relations += analysis.relations
     self.renames += analysis.renames
     self.selections += analysis.selections
@@ -100,6 +118,7 @@ class Analysis:
       completions=(self.completions + other.completions),
       folds=(self.folds + other.folds),
       hovers=(self.hovers + other.hovers),
+      markers=(self.markers + other.markers),
       relations=(self.relations + other.relations),
       renames=(self.renames + other.renames),
       selections=(self.selections + other.selections)
@@ -168,28 +187,28 @@ class Hover:
 class AmbiguousKeyError(Diagnostic):
   def __init__(self, key: str, target: LocatedValue):
     super().__init__(
-      f"Ambiguous key '{key}",
+      f"Ambiguous key '{key}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class DuplicateKeyError(Diagnostic):
   def __init__(self, key: str, target: LocatedValue):
     super().__init__(
-      f"Duplicate key '{key}",
+      f"Duplicate key '{key}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class ExtraneousKeyError(Diagnostic):
   def __init__(self, key: str, target: LocatedValue):
     super().__init__(
-      f"Unrecognized key '{key}",
+      f"Unrecognized key '{key}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class MissingKeyError(Diagnostic):
   def __init__(self, key: str, target: LocatedValue):
     super().__init__(
-      f"Missing key '{key}",
+      f"Missing key '{key}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 

@@ -1,13 +1,15 @@
 from dataclasses import dataclass
-from typing import Literal, TypedDict
 from types import EllipsisType
+from typing import Literal, TypedDict
 
 from pint import Quantity
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import Analysis, Attribute, EnumType, PotentialExprType, QuantityType, UnionType
+from pr1.fiber.langservice import (Analysis, Attribute, EnumType,
+                                   PotentialExprType, QuantityType, UnionType)
+from pr1.fiber.parser import (BaseLeadTransformer, BaseParser,
+                              LeadTransformerPreparationResult)
 from pr1.fiber.segment import SegmentBlock, SegmentProcessData
-from pr1.fiber.parser import BaseLeadTransformer, BaseParser, TransformerPreparationResult
 from pr1.reader import LocatedValue
 from pr1.util.misc import Exportable
 
@@ -65,9 +67,9 @@ class Transformer(BaseLeadTransformer):
 
   def prepare(self, attrs: Attributes, /, adoption_envs, runtime_envs):
     if (attr := attrs.get('wait')):
-      return Analysis(), TransformerPreparationResult(attr)
+      return Analysis(), [LeadTransformerPreparationResult(attr)]
     else:
-      return Analysis(), None
+      return Analysis(), list()
 
   def adopt(self, data: Evaluable[LocatedValue[Quantity | Literal['forever']]], /, adoption_stack):
     analysis, duration = data.eval(EvalContext(adoption_stack), final=False)

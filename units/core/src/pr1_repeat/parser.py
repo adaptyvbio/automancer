@@ -2,13 +2,15 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Literal, Optional, TypedDict
 
-from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import Analysis, Attribute, PotentialExprType, PrimitiveType
+from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
+                                   PrimitiveType)
 from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import (BaseBlock, BaseDefaultTransformer, BaseParser, BaseDefaultTransform,
-                              BlockProgram, BlockUnitData,
-                              BlockUnitPreparationData, TransformerAdoptionResult, TransformerPreparationResult, Transforms)
+from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
+                              BlockProgram,
+                              PassiveTransformerPreparationResult,
+                              TransformerAdoptionResult)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.master.analysis import MasterAnalysis
 from pr1.reader import LocatedValue
@@ -20,7 +22,7 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   repeat: Evaluable[LocatedValue[int]]
 
-class Transformer(BaseDefaultTransformer):
+class Transformer(BasePassiveTransformer):
   priority = 400
   attributes = {
     'repeat': Attribute(
@@ -36,7 +38,7 @@ class Transformer(BaseDefaultTransformer):
 
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     if (attr := data.get('repeat')):
-      return Analysis(), TransformerPreparationResult(attr, runtime_envs=[self.env])
+      return Analysis(), PassiveTransformerPreparationResult(attr, runtime_envs=[self.env])
     else:
       return Analysis(), None
 

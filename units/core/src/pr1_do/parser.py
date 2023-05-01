@@ -2,9 +2,9 @@ from types import EllipsisType
 from typing import Any, TypedDict
 
 from pr1.fiber import langservice as lang
-from pr1.fiber.parser import (BaseDefaultTransformer, BaseParser, FiberParser,
+from pr1.fiber.parser import (BasePassiveTransformer, BaseParser, FiberParser,
                               Layer, TransformerAdoptionResult,
-                              TransformerPreparationResult)
+                              PassiveTransformerPreparationResult)
 
 from . import namespace
 
@@ -12,7 +12,7 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   outer: Any
 
-class Transformer(BaseDefaultTransformer):
+class Transformer(BasePassiveTransformer):
   priority = 1000
   attributes = {
     'outer': lang.Attribute(lang.AnyType())
@@ -28,7 +28,7 @@ class Transformer(BaseDefaultTransformer):
       if isinstance(layer, EllipsisType):
         return analysis, Ellipsis
 
-      return analysis, TransformerPreparationResult(
+      return analysis, PassiveTransformerPreparationResult(
         layer,
         adoption_envs=layer.adoption_envs,
         runtime_envs=layer.runtime_envs

@@ -513,7 +513,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
-    attr_values = { key: dict[str, Any]() for key in self._attributes_by_key.keys() }
+    attr_values = { key: dict[LocatedString, Any]() for key in self._attributes_by_key.keys() }
 
     for obj_key, obj_value in obj.items():
       unique_attr = self._attributes_by_unique_name.get(obj_key)
@@ -545,7 +545,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
         analysis.errors.append(DuplicateKeyError(obj_key, obj))
         continue
 
-      attr_values[key][attr_name] = obj_value
+      attr_values[key][LocatedString(attr_name, absolute=False, area=obj_key.area)] = obj_value
 
     failure = False
 
@@ -557,10 +557,10 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     return analysis, (attr_values if not failure else Ellipsis)
 
-  def analyze_namespace(self, attr_values: dict[T, dict[str, Any]], /, context: 'AnalysisContext', *, key: T):
+  def analyze_namespace(self, attr_values: dict[T, dict[LocatedString, Any]], /, context: 'AnalysisContext', *, key: T):
     analysis = Analysis()
     failure = False
-    result = dict[str, Any]()
+    result = dict[LocatedString, Any]()
 
     for attr_name, attr_value in attr_values[key].items():
       attr = self._attributes_by_key[key][attr_name]

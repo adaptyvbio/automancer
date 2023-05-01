@@ -7,17 +7,19 @@ from pr1.error import ErrorDocumentReference
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable, ValueAsPythonExpr
 from pr1.fiber.langservice import (Analysis, AnalysisRelation, AnalysisRename,
-                                   AnyType, Attribute, KVDictType, PotentialExprType,
-                                   PrimitiveType, SimpleDictType, StrType)
+                                   AnyType, Attribute, KVDictType,
+                                   PotentialExprType, PrimitiveType, StrType)
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
-                              BaseDefaultTransform, BaseDefaultTransformer,
-                              BaseLeadTransformer, BaseParser,
+                              BaseDefaultTransform, BaseLeadTransformer,
+                              BaseParser, BasePassiveTransformer,
                               BaseProgramPoint, BlockData, BlockProgram,
                               BlockState, BlockUnitData,
                               BlockUnitPreparationData, FiberParser, Layer,
+                              LeadTransformerPreparationResult,
+                              PassiveTransformerPreparationResult,
                               ProtocolUnitData, TransformerAdoptionResult,
-                              TransformerPreparationResult, Transforms)
+                              Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.fiber.segment import SegmentTransform
 from pr1.master.analysis import MasterAnalysis
@@ -63,27 +65,47 @@ class LeadTransformer(BaseLeadTransformer):
     }
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
-    for shorthand_name, attr_value in data.items():
+    analysis = Analysis()
+    calls = list[LeadTransformerPreparationResult[tuple[ShorthandStaticItem, Any]]]()
+
+    context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
+
+    for shorthand_name, arg in data.items():
       shorthand = self.parser.shorthands[shorthand_name]
-      assert not isinstance(shorthand.layer, EllipsisType)
+      assert shorthand.layer
 
-      return Analysis(), TransformerPreparationResult((shorthand, attr_value))
+      if (not isinstance(shorthand.layer, EllipsisType)) and shorthand.layer.lead_transform:
+        arg_result = analysis.add(PotentialExprType(AnyType()).analyze(arg, context))
 
-      # TODO: Handle other shorthands
+        if not isinstance(arg_result, EllipsisType):
+          calls.append(LeadTransformerPreparationResult((shorthand, arg_result), origin_area=shorthand_name.area))
 
-    return Analysis(), None
+    return analysis, calls
 
   def adopt(self, data: tuple[ShorthandStaticItem, Any], /, adoption_stack):
     analysis = Analysis()
-    shorthand, value = data
+    shorthand, arg = data
 
+    assert shorthand.layer
     assert not isinstance(shorthand.layer, EllipsisType)
-    block = analysis.add(shorthand.layer.adopt_lead(adoption_stack))
+
+    arg_result = analysis.add(arg.eval(EvalContext(adoption_stack), final=True))
+
+    if isinstance(arg_result, EllipsisType):
+      return analysis, Ellipsis
+
+    block = analysis.add(shorthand.layer.adopt_lead(adoption_stack | {
+      shorthand.env: {
+        'arg': arg_result.value().value
+      }
+    }))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
 
-class PassiveTransformer(BaseDefaultTransformer):
+    return analysis, block
+
+class PassiveTransformer(BasePassiveTransformer):
   priority = 300
 
   def __init__(self, parser: 'Parser'):
@@ -107,7 +129,7 @@ class PassiveTransformer(BaseDefaultTransformer):
 
     calls = sorted(calls, key=(lambda call: -call[0].priority))
 
-    return analysis, (TransformerPreparationResult(calls) if calls else None)
+    return analysis, (PassiveTransformerPreparationResult(calls) if calls else None)
 
   def adopt(self, data: list[tuple[ShorthandStaticItem, Evaluable[LocatedValue[Any]]]], /, adoption_stack):
     analysis = Analysis()
@@ -156,7 +178,7 @@ class Parser(BaseParser):
     self.fiber = fiber
     self.shorthands = dict[str, ShorthandStaticItem]()
     self.transformers = [
-      # LeadTransformer(self)
+      LeadTransformer(self),
       PassiveTransformer(self)
     ]
 

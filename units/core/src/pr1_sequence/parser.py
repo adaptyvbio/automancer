@@ -1,14 +1,14 @@
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import dataclass
 from enum import IntEnum
 from types import EllipsisType
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, Optional, TypedDict
 
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.langservice import Analysis, AnyType, Attribute, ListType
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
                               BlockData, BlockProgram, FiberParser, Layer,
-                              TransformerPreparationResult)
+                              LeadTransformerPreparationResult)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.reader import LocationArea
 from pr1.util.decorators import debug
@@ -49,9 +49,9 @@ class Transformer(BaseLeadTransformer):
         if not isinstance(layer, EllipsisType):
           action_layers.append(layer)
 
-      return analysis, TransformerPreparationResult(action_layers)
+      return analysis, [LeadTransformerPreparationResult(action_layers)]
 
-    return analysis, None
+    return analysis, list()
 
   def adopt(self, data: list[Layer], /, adoption_stack):
     analysis = Analysis()

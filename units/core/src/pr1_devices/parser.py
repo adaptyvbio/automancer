@@ -1,26 +1,25 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
-from pr1.devices.nodes.value import Null, ValueNode
+from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
                                    PotentialExprType, PrimitiveType,
-                                   QuantityType, TransformType)
-from pr1.fiber.parser import (BaseDefaultTransformer, BaseParser, BlockUnitData,
-                              BlockUnitPreparationData, BlockUnitState,
-                              FiberParser, ProtocolDetails, ProtocolUnitData,
-                              ProtocolUnitDetails, TransformerAdoptionResult, TransformerPreparationResult)
+                                   QuantityType)
+from pr1.fiber.parser import (BaseParser, BasePassiveTransformer,
+                              BlockUnitState, FiberParser, ProtocolUnitData,
+                              ProtocolUnitDetails, TransformerAdoptionResult)
 from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
-                                      OuterType, StaticAnalysisAnalysis)
-from pr1.state import StatePublisherBlock
+                                      StaticAnalysisAnalysis)
 from pr1.reader import LocatedValue
+from pr1.state import StatePublisherBlock
 from pr1.util.decorators import debug
 
 from . import namespace
@@ -86,7 +85,7 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
     }
 
 
-class Transformer(BaseDefaultTransformer):
+class Transformer(BasePassiveTransformer):
   priority = 100
 
   def __init__(self, parser: 'Parser'):

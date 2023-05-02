@@ -83,18 +83,11 @@ const computeGraph:  ProtocolBlockGraphRenderer<Block, Key, Location> = (block, 
     },
 
     render(position, renderOptions) {
-      let active = (location !== null);
-      let vertical = options.settings.vertical;
+      let active = false; // (location !== null);
 
       return (
         <GraphNode
           active={active}
-          attachmentPoints={{
-            bottom: (renderOptions.attachmentEnd && vertical),
-            left: (renderOptions.attachmentStart && !vertical),
-            right: (renderOptions.attachmentEnd && !vertical),
-            top: (renderOptions.attachmentStart && vertical)
-          }}
           autoMove={false}
           cellSize={{
             width,

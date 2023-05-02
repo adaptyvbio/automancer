@@ -1,11 +1,6 @@
 .root {
   display: flex;
-
-  margin: 1rem 0;
-  padding: 2rem 1rem;
-
   background-color: #ff413633;
-  border-radius: 6px;
 
   &Wide {
     min-height: 220px;
@@ -24,7 +19,9 @@
   button {
     display: inline;
     width: auto;
+
     text-decoration: underline;
+    text-underline-position: under;
   }
 
   strong {

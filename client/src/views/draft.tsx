@@ -34,6 +34,7 @@ import { DiagnosticsReport } from '../components/diagnostics-report';
 import { FileTabNav } from '../components/file-tab-nav';
 import { TimeSensitive } from '../components/time-sensitive';
 import { UnitTools } from '../unit';
+import { ErrorBoundary } from '../components/error-boundary';
 
 
 export interface ViewDraftProps {
@@ -373,12 +374,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               { onToggle: (graphOpen) => void this.setState({ graphOpen }),
                 open: this.state.graphOpen,
                 component: (
-                  <GraphEditor
-                    host={this.props.host}
-                    selectBlock={this.selectBlock.bind(this)}
-                    selectedBlockPath={this.state.selectedBlockPath}
-                    summary={summary}
-                    tree={this.state.compilation?.protocol?.root ?? null} />
+                  <ErrorBoundary>
+                    <GraphEditor
+                      host={this.props.host}
+                      selectBlock={this.selectBlock.bind(this)}
+                      selectedBlockPath={this.state.selectedBlockPath}
+                      summary={summary}
+                      tree={this.state.compilation?.protocol?.root ?? null} />
+                  </ErrorBoundary>
                 ) },
               { nominalSize: CSSNumericValue.parse('400px'),
                 onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),

@@ -14,7 +14,6 @@ import { OverflowableText } from '../components/overflowable-text';
 import { FeatureGroupDef } from '../interfaces/unit';
 import { MenuDef, MenuEntryPath } from './context-menu';
 import { ViewExecution } from '../views/execution';
-import { UnitTools } from '../unit';
 import { UnknownPluginBlockImpl } from '../interfaces/plugin';
 
 
@@ -210,16 +209,12 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           discreteBlocks.push(currentBlock);
 
-          // if (!currentBlockImpl.getChild) {
-          //   break;
-          // }
-
           currentBlock = currentBlockImpl.getChild!(currentBlock, 0);
         }
 
         // console.log(discreteBlocks, currentBlock);
 
-        if (discreteBlocks.length > 0) {
+        if ((discreteBlocks.length > 0) && currentBlockImpl.getChild) {
           return computeContainerBlockGraph(({
             child: currentBlock
           } as any), [], [], null, {
@@ -230,7 +225,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           }, context);
         }
 
-        let metrics = currentBlockImpl.computeGraph!(block, path, ancestors, location, {
+        let metrics = currentBlockImpl.computeGraph!(currentBlock, path, [...ancestors, ...discreteBlocks], location, {
           settings,
           computeMetrics: (key, childLocation: unknown | null) => {
             let childBlock = blockImpl.getChild!(block, key);
@@ -356,7 +351,6 @@ interface GraphNodeDef {
 
 export function GraphNode(props: {
   active?: unknown;
-  attachmentPoints: SideFlags;
   autoMove: unknown;
   cellSize: Size;
   createMenu(): MenuDef;
@@ -368,20 +362,6 @@ export function GraphNode(props: {
   settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
-
-  let mx = settings.nodePadding + settings.nodeHeaderHeight * 0.8;
-  let my = settings.nodePadding + settings.nodeHeaderHeight * 0.5;
-  let attachPoints: Point[] = [];
-
-  if (props.attachmentPoints.left) {
-    attachPoints.push({ x: settings.nodePadding, y: my });
-  } if (props.attachmentPoints.right) {
-    attachPoints.push({ x: settings.cellPixelSize * props.cellSize.width - settings.nodePadding, y: my });
-  } if (props.attachmentPoints.top) {
-    attachPoints.push({ x: mx, y: settings.nodePadding });
-  } if (props.attachmentPoints.bottom) {
-    attachPoints.push({ x: mx, y: settings.cellPixelSize * props.cellSize.height - settings.nodePadding });
-  }
 
   return (
     <g
@@ -420,17 +400,6 @@ export function GraphNode(props: {
           </div>
         </ContextMenuArea>
       </foreignObject>
-
-      {attachPoints.map((attachPoint, index) => (
-        <circle
-          cx={attachPoint.x}
-          cy={attachPoint.y}
-          r="5"
-          fill="#fff"
-          stroke="#000"
-          strokeWidth="2"
-          key={index} />
-      ))}
     </g>
   );
 }
@@ -482,24 +451,32 @@ export function GraphLink(props: {
 
   let d = `M${startX} ${startY}`;
 
-  // if (link.end.y !== link.start.y) {
-  //   let dir = (link.start.y < link.end.y) ? 1 : -1;
+  let curveHalfHeight = settings.cellPixelSize * 0.5;
 
-  //   let midCellX = Math.round((link.start.x + link.end.x) * 0.5);
-  //   let midX = settings.cellPixelSize * midCellX;
+  let midX = (startX + endX) * 0.5;
+  let midY = (startY + endY) * 0.5;
 
-  //   let midStartX = settings.cellPixelSize * (midCellX - 1);
-  //   let midEndX = settings.cellPixelSize * (midCellX + 1);
+  d += `L${startX} ${midY - curveHalfHeight}Q${startX} ${midY} ${midX} ${midY}Q${endX} ${midY} ${endX} ${midY + curveHalfHeight}L${endX} ${endY}`;
 
-  //   let curveStartY = settings.cellPixelSize * (link.start.y + 1 * dir);
-  //   let curveEndY = settings.cellPixelSize * (link.end.y - 1 * dir);
-
-  //   d += `L${midStartX} ${startY}Q${midX} ${startY} ${midX} ${curveStartY}L${midX} ${curveEndY}Q${midX} ${endY} ${midEndX} ${endY}`;
-  // }
-
-  d += `L${endX} ${endY}`;
-
-  return <path d={d} className={graphEditorStyles.link} />
+  return (
+    <>
+      <path d={d} className={graphEditorStyles.link} />
+      <circle
+        cx={startX}
+        cy={startY}
+        r="5"
+        fill="#fff"
+        stroke="#000"
+        strokeWidth="2" />
+      <circle
+        cx={endX}
+        cy={endY}
+        r="5"
+        fill="#fff"
+        stroke="#000"
+        strokeWidth="2" />
+    </>
+  );
 }
 
 
@@ -534,18 +511,18 @@ const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock, 0> =
   let childMetrics = options.computeMetrics(0, null);
 
   let size = {
-      width: childMetrics.size.width + 2,
-      height: childMetrics.size.height + 3
-    }
+    width: childMetrics.size.width + 2,
+    height: childMetrics.size.height + 3
+  };
 
   return {
     start: {
-      x: childMetrics.start.x + 1,
-      y: childMetrics.start.y + 2
+      x: 0,
+      y: 0
     },
     end: {
-      x: childMetrics.end.x + 1,
-      y: childMetrics.end.y + 2
+      x: 0,
+      y: size.height
     },
     size,
 
@@ -558,7 +535,7 @@ const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock, 0> =
             cellSize={size}
             position={position}
             settings={options.settings}
-            title={'Hello'} />
+            title={'Hello, world!'} />
           {childMetrics.render({
             x: position.x + 1,
             y: position.y + 2

@@ -1,4 +1,4 @@
-import { BlockUnit, GraphRendererDefaultMetrics, ProtocolBlock, React } from 'pr1';
+import { BlockUnit, ProtocolBlockGraphRendererMetrics, ProtocolBlock, React } from 'pr1';
 import { UnitNamespace } from 'pr1-shared';
 
 
@@ -7,7 +7,7 @@ export interface Block extends ProtocolBlock {
   child: ProtocolBlock;
 }
 
-export type BlockMetrics = GraphRendererDefaultMetrics;
+export type BlockMetrics = ProtocolBlockGraphRendererMetrics;
 
 export interface Location {
   children: { 0: unknown; };

@@ -183,6 +183,7 @@ class SequenceBlock(BaseBlock):
 
   def export(self):
     return {
-      "namespace": "sequence",
+      "name": "_",
+      "namespace": namespace,
       "children": [child.export() for child in self._children]
     }

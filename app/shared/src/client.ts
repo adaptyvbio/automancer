@@ -1,7 +1,7 @@
 import { Deferred, defer } from './defer';
 import { createErrorWithCode } from './error';
 import { HostIdentifier, HostState } from './types/host';
-import { ClientProtocol, RequestFunc, ServerProtocol } from './types/protocol';
+import { ClientProtocol, RequestFunc, ServerProtocol } from './types/communication';
 
 
 export interface ClientBackend {

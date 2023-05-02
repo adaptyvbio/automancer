@@ -1,6 +1,6 @@
+import { OrdinaryId } from 'pr1-shared';
 import * as React from 'react';
 
-import type { OrdinaryId } from '../interfaces/util';
 import { Icon } from './icon';
 
 

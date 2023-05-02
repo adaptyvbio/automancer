@@ -45,6 +45,7 @@ export * from './unit';
 
 export * from './interfaces/host';
 export * from './interfaces/graph';
+export * from './interfaces/plugin';
 export * from './interfaces/protocol';
 export * from './interfaces/unit';
 export * from './interfaces/view';

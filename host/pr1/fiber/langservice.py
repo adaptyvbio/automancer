@@ -8,6 +8,7 @@ from io import FileIO, IOBase, TextIOBase
 from logging import Logger
 from os import PathLike
 from pathlib import Path
+import re
 from tokenize import TokenError
 from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
@@ -244,6 +245,10 @@ class MissingAttributeError(Diagnostic):
 class InvalidDataTypeError(Diagnostic):
   def __init__(self, target: LocatedValue, /, message: str):
     super().__init__(f"Invalid data type: {message}", references=[ErrorDocumentReference.from_value(target)])
+
+class InvalidIntegerError(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(f"Invalid integer", references=[ErrorDocumentReference.from_value(target)])
 
 
 class Type(Protocol):
@@ -741,11 +746,24 @@ class PrimitiveType(Type):
 
   def _analyze(self, obj, /, context):
     match self._primitive:
-      case builtins.float | builtins.int if isinstance(obj, str):
+      case builtins.int if isinstance(obj, str):
+        assert isinstance(obj, LocatedString)
+
+        if match := re.compile(r"^0x([0-9a-f]+)$").match(obj.value):
+          value = int(match[1], 16)
+        elif match := re.compile(r"^0b([01]+)$").match(obj.value):
+          value = int(match[1], 2)
+        elif re.compile(r"^-?[0-9]+$").match(obj.value):
+          value = int(obj.value)
+        else:
+          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+
+        return Analysis(), LocatedValue.new(value, area=obj.area)
+      case builtins.float if isinstance(obj, str):
         assert isinstance(obj, LocatedString)
 
         try:
-          value = self._primitive(obj.value)
+          value = float(obj.value)
         except (TypeError, ValueError):
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
         else:
@@ -759,6 +777,8 @@ class PrimitiveType(Type):
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _ if not isinstance(obj.value, self._primitive):
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+      case builtins.int if isinstance(obj.value, int): # Convert booleans to ints
+        return Analysis(), LocatedValue.new(int(obj.value), obj.area)
       case _:
         return Analysis(), obj
 
@@ -1019,6 +1039,25 @@ class ArbitraryQuantityType:
 class BoolType(PrimitiveType):
   def __init__(self):
     super().__init__(bool)
+
+class IntType(Type):
+  def __init__(self, *, mode: Literal['any', 'positive', 'positive_or_null'] = 'any'):
+    self._mode = mode
+
+  def analyze(self, obj, /, context):
+    analysis, raw_result = PrimitiveType(int).analyze(obj, context.update(eval_depth=0))
+
+    if isinstance(raw_result, EllipsisType):
+      return analysis, Ellipsis
+
+    result = cast(LocatedValue[int], raw_result)
+
+    if (result.value < 0) and (self._mode != 'any'):
+      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+    elif (result.value == 0) and (self._mode == 'positive'):
+      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+    else:
+      return Analysis(), ValueAsPythonExpr(result, depth=context.eval_depth)
 
 class StrType(PrimitiveType):
   def __init__(self):

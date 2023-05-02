@@ -332,7 +332,7 @@ class Layer:
     adopted_transforms = list[tuple[BasePassiveTransformer, Any]]()
 
     for transformer, transform in self.passive_transforms:
-      transform_result = analysis.add(transformer.adopt(transform.data, current_adoption_stack, trace))
+      transform_result = analysis.add(transformer.adopt(transform.data, current_adoption_stack, trace), trace=trace)
 
       if isinstance(transform_result, EllipsisType) or not transform_result:
         continue

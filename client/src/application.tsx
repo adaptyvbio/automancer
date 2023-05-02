@@ -22,6 +22,7 @@ import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
+import { Units } from './interfaces/unit';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
@@ -131,6 +132,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let host: Host = {
       client,
       id: client.state!.info.id,
+      plugins: (null as unknown as Host['plugins']),
       state: client.state!,
       staticUrl: client.staticUrl,
       units: (null as unknown as Host['units'])
@@ -167,7 +169,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => !expiredStyleSheets.includes(sheet));
     }
 
-    let units: Record<UnitNamespace, Unit<unknown, unknown>> = Object.fromEntries(
+    let units: Units = Object.fromEntries(
       (await Promise.all(
         targetUnitsInfo
           .filter((unitInfo) => (unitInfo.hasClient && host.staticUrl))
@@ -196,6 +198,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.setState((state) => ({
       host: {
         ...state.host!,
+        plugins: {
+          ...state.host!.plugins,
+          ...(units as any)
+        },
         units: {
           ...state.host!.units,
           ...units

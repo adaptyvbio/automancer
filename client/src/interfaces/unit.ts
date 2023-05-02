@@ -6,7 +6,7 @@ import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, GeneralTabComponentProps, NavEntry } from '../units';
-import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
+import type { ProtocolBlockGraphRendererMetrics, ProtocolBlockGraphRenderer } from './graph';
 import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
 
 
@@ -54,7 +54,7 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 
-  graphRenderer?: GraphRenderer<Block, GraphRendererDefaultMetrics>;
+  graphRenderer?: ProtocolBlockGraphRenderer<Block, ProtocolBlockGraphRendererMetrics>;
 }
 
 
@@ -122,7 +122,7 @@ export type UnknownHeadUnit = HeadUnit<ProtocolBlock | never, unknown>;
 
 
 export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, Key> extends BaseUnit {
-  graphRenderer: GraphRenderer<Block, BlockMetrics, Location>;
+  graphRenderer: ProtocolBlockGraphRenderer<Block, BlockMetrics, Location>;
 
   createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
   createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;

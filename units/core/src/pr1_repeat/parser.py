@@ -4,7 +4,7 @@ from typing import Any, Literal, Optional, TypedDict
 
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
+from pr1.fiber.langservice import (Analysis, Attribute, IntType, PotentialExprType,
                                    PrimitiveType)
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
@@ -27,7 +27,7 @@ class Transformer(BasePassiveTransformer):
   attributes = {
     'repeat': Attribute(
       description="Repeats a block a fixed number of times.",
-      type=PotentialExprType(PrimitiveType(int))
+      type=PotentialExprType(IntType(mode='positive_or_null'))
     )
   }
 
@@ -42,7 +42,7 @@ class Transformer(BasePassiveTransformer):
     else:
       return Analysis(), None
 
-  def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack):
+  def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack, trace):
     analysis, count = data.eval(EvalContext(adoption_stack), final=False)
 
     if isinstance(count, EllipsisType):
@@ -168,6 +168,7 @@ class RepeatBlock(BaseBlock):
 
   def export(self):
     return {
+      "name": "_",
       "namespace": namespace,
       "count": self.count.export(),
       "child": self.block.export()

@@ -1,4 +1,5 @@
-import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, React, SimpleFeatureList, UnitTools } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, ProtocolBlockGraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolError, ProtocolProcess, React, SimpleFeatureList, UnitTools, Plugin, PluginBlockImpl, ProtocolBlockGraphRendererMetrics } from 'pr1';
+import { PluginName, ProtocolBlock, ProtocolBlockName, ProtocolBlockPath } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -37,116 +38,111 @@ export interface Point {
 }
 
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, location, options, context) {
-    let parentBlock = ancestors.at(-1);
-    let state = UnitTools.getBlockState(parentBlock);
-    let name = state && UnitTools.getBlockStateNameFromState(state);
+const computeGraph:  ProtocolBlockGraphRenderer<Block, Key, Location> = (block, path, ancestors, location, options, context) => {
+  let parentBlock = ancestors.at(-1);
+  let state = UnitTools.getBlockState(parentBlock);
+  let name = state && UnitTools.getBlockStateNameFromState(state);
 
-    let processUnit = context.host.units[block.process.namespace] as ProcessUnit<unknown, unknown>;
-    let processFeatures = UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(block.process.data, null, context) ?? []);
-    let stateFeatures = state
-      ? Object.values(context.host.units).flatMap((unit) => {
-        return (unit.namespace in state!)
-          ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(state![unit.namespace], null, null, context) ?? []
-          : [];
-      })
-      : [];
+  let processUnit = context.host.units[block.process.namespace] as ProcessUnit<unknown, unknown>;
+  let processFeatures = UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(block.process.data, null, context) ?? []);
+  let stateFeatures = state
+    ? Object.values(context.host.units).flatMap((unit) => {
+      return (unit.namespace in state!)
+        ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(state![unit.namespace], null, null, context) ?? []
+        : [];
+    })
+    : [];
 
-    let features = [
-      ...processFeatures,
-      ...stateFeatures
-    ];
+  let features = [
+    ...processFeatures,
+    ...stateFeatures
+  ];
 
-    let featureCount = features.length;
-    let settings = options.settings;
+  let featureCount = features.length;
+  let settings = options.settings;
 
-    let width = Math.round((280 + settings.nodePadding * 2) / settings.cellPixelSize);
-    let height = Math.ceil((
-      ((name !== null) ? settings.nodeHeaderHeight : 0)
-      + (30 * featureCount)
-      + (5.6 * (featureCount - 1))
-      + (settings.nodeBodyPaddingY * 2)
-      + (settings.nodePadding * 2)
-      + (settings.nodeBorderWidth * 2)
-    ) / settings.cellPixelSize);
+  let width = Math.round((280 + settings.nodePadding * 2) / settings.cellPixelSize);
+  let height = Math.ceil((
+    ((name !== null) ? settings.nodeHeaderHeight : 0)
+    + (30 * featureCount)
+    + (5.6 * (featureCount - 1))
+    + (settings.nodeBodyPaddingY * 2)
+    + (settings.nodePadding * 2)
+    + (settings.nodeBorderWidth * 2)
+  ) / settings.cellPixelSize);
 
-    return {
-      features,
-      name,
+  return {
+    compactable: true,
+    start: { x: 0, y: 0 },
+    end: options.settings.vertical
+      ? { x: 0, y: height }
+      : { x: width, y: 0 },
+    size: {
+      width,
+      height
+    },
 
-      compactable: true,
-      start: { x: 0, y: 0 },
-      end: options.settings.vertical
-        ? { x: 0, y: height }
-        : { x: width, y: 0 },
-      size: {
-        width,
-        height
-      }
-    };
-  },
+    render(position, renderOptions) {
+      let active = (location !== null);
+      let vertical = options.settings.vertical;
 
-  render(block, path, metrics, position, location, options, context) {
-    let active = (location !== null);
-    let vertical = options.settings.vertical;
+      return (
+        <GraphNode
+          active={active}
+          attachmentPoints={{
+            bottom: (renderOptions.attachmentEnd && vertical),
+            left: (renderOptions.attachmentStart && !vertical),
+            right: (renderOptions.attachmentEnd && !vertical),
+            top: (renderOptions.attachmentStart && vertical)
+          }}
+          autoMove={false}
+          cellSize={{
+            width,
+            height
+          }}
+          createMenu={() => {
+            return [
+              ...(active
+                ? createActiveBlockMenu(block, location!, context)
+                : []),
+              { id: 'jump', name: 'Jump to', icon: 'move_down' },
+              { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
+            ];
+          }}
+          node={{
+            id: 'a',
+            title: (name !== null) ? { value: name } : null,
+            features,
+            position
+          }}
+          onSelectBlockMenu={(menuPath) => {
+            let message = onSelectBlockMenu(block, location!, menuPath);
 
-    return (
-      <GraphNode
-        active={active}
-        attachmentPoints={{
-          bottom: (options.attachmentEnd && vertical),
-          left: (options.attachmentStart && !vertical),
-          right: (options.attachmentEnd && !vertical),
-          top: (options.attachmentStart && vertical)
-        }}
-        autoMove={false}
-        cellSize={{
-          width: metrics.size.width,
-          height: metrics.size.height
-        }}
-        createMenu={() => {
-          return [
-            ...(active
-              ? createActiveBlockMenu(block, location!, context)
-              : []),
-            { id: 'jump', name: 'Jump to', icon: 'move_down' },
-            { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
-          ];
-        }}
-        node={{
-          id: 'a',
-          title: (metrics.name !== null) ? { value: metrics.name } : null,
-          features: metrics.features,
-          position
-        }}
-        onSelectBlockMenu={(menuPath) => {
-          let message = onSelectBlockMenu(block, location!, menuPath);
-
-          if (message) {
-            // ...
-            return;
-          }
-
-          switch (menuPath.first()) {
-            case 'jump': {
-              let tree = options.settings.editor.props.tree!;
-
-              let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
-                let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
-                return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
-              };
-
-              let point = getChildPoint(tree, path);
-              options.settings.editor.props.execution.jump(point);
+            if (message) {
+              // ...
+              return;
             }
-          }
-        }}
-        path={path}
-        selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
-        settings={options.settings} />
-    );
-  }
+
+            switch (menuPath.first()) {
+              case 'jump': {
+                let tree = options.settings.editor.props.tree!;
+
+                let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
+                  let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
+                  return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
+                };
+
+                let point = getChildPoint(tree, path);
+                options.settings.editor.props.execution.jump(point);
+              }
+            }
+          }}
+          path={path}
+          selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
+          settings={options.settings} />
+      );
+    }
+  };
 };
 
 function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
@@ -187,60 +183,71 @@ function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPat
 
 
 export default {
-  namespace: 'segment',
+  namespace: ('segment' as PluginName),
 
-  graphRenderer,
-
-  HeadComponent(props) {
-    let process = props.block.process;
-    let processLocation = props.location?.process ?? null;
-    let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
-
-    let ProcessComponent = processLocation && processUnit.ProcessComponent;
-    let broken = (props.location?.mode === LocationMode.Broken);
-
-    return (
-      <>
-        <SimpleFeatureList list={[
-          UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(process.data, processLocation, props.context))
-        ]} />
-
-        {props.location && <p style={{ margin: '1rem' }}>Mode: {LocationMode[props.location.mode]}</p>}
-
-        {ProcessComponent && (
-          !broken
-            ? <ProcessComponent
-                context={props.context}
-                data={process.data}
-                location={processLocation!}
-                time={props.location!.time} />
-            : <DiagnosticsReport diagnostics={[
-              { kind: 'error',
-                message: props.location!.error!.message,
-                ranges: [] }
-            ]} />
-        )}
-      </>
-    );
+  blocks: {
+    ['_' as ProtocolBlockName]: {
+      computeGraph,
+      renderEntries(block, location) {
+        return {
+          entries: []
+        };
+      },
+    } satisfies PluginBlockImpl<Block, Key, Location>
   },
 
-  getChildrenExecutionRefs(block, location) {
-    return null;
-  },
-  getBlockClassLabel(block, context) {
-    return 'Segment';
-  },
-  getBlockLabel(block, location, context) {
-    let unit = UnitTools.asProcessUnit(context.host.units[block.process.namespace])!;
-    return unit.getProcessLabel?.(block.process.data, context) ?? null;
-  },
-  // getBlockLabelSuffix(block, location, context) {
-  //   return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
+  // graphRenderer,
+
+  // HeadComponent(props) {
+  //   let process = props.block.process;
+  //   let processLocation = props.location?.process ?? null;
+  //   let processUnit = UnitTools.asProcessUnit(props.context.host.units[process.namespace])!;
+
+  //   let ProcessComponent = processLocation && processUnit.ProcessComponent;
+  //   let broken = (props.location?.mode === LocationMode.Broken);
+
+  //   return (
+  //     <>
+  //       <SimpleFeatureList list={[
+  //         UnitTools.ensureProcessFeatures(processUnit.createProcessFeatures(process.data, processLocation, props.context))
+  //       ]} />
+
+  //       {props.location && <p style={{ margin: '1rem' }}>Mode: {LocationMode[props.location.mode]}</p>}
+
+  //       {ProcessComponent && (
+  //         !broken
+  //           ? <ProcessComponent
+  //               context={props.context}
+  //               data={process.data}
+  //               location={processLocation!}
+  //               time={props.location!.time} />
+  //           : <DiagnosticsReport diagnostics={[
+  //             { kind: 'error',
+  //               message: props.location!.error!.message,
+  //               ranges: [] }
+  //           ]} />
+  //       )}
+  //     </>
+  //   );
   // },
 
-  createActiveBlockMenu,
-  createDefaultPoint,
-  isBlockBusy,
-  isBlockPaused,
-  onSelectBlockMenu
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>;
+  // getChildrenExecutionRefs(block, location) {
+  //   return null;
+  // },
+  // getBlockClassLabel(block, context) {
+  //   return 'Segment';
+  // },
+  // getBlockLabel(block, location, context) {
+  //   let unit = UnitTools.asProcessUnit(context.host.units[block.process.namespace])!;
+  //   return unit.getProcessLabel?.(block.process.data, context) ?? null;
+  // },
+  // // getBlockLabelSuffix(block, location, context) {
+  // //   return `(mode: ${LocationMode[location.mode]}, ${location.mode})`;
+  // // },
+
+  // createActiveBlockMenu,
+  // createDefaultPoint,
+  // isBlockBusy,
+  // isBlockPaused,
+  // onSelectBlockMenu
+} satisfies Plugin; // <Block, BlockMetrics, Location, Key> & HeadUnit<Block, Location>;

@@ -1,13 +1,12 @@
-import { Set as ImSet } from 'immutable';
+import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { GraphRendererDefaultMetrics } from '../interfaces/graph';
+import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { Point, SideFlags, SideValues, Size } from '../geometry';
-import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { ContextMenuArea } from './context-menu-area';
 import { FeatureGroup } from '../components/features';
@@ -16,10 +15,11 @@ import { FeatureGroupDef } from '../interfaces/unit';
 import { MenuDef, MenuEntryPath } from './context-menu';
 import { ViewExecution } from '../views/execution';
 import { UnitTools } from '../unit';
+import { UnknownPluginBlockImpl } from '../interfaces/plugin';
 
 
 export interface GraphEditorProps {
-  execution: ViewExecution;
+  execution?: ViewExecution;
   host: Host;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
@@ -30,10 +30,8 @@ export interface GraphEditorProps {
 
 export interface GraphEditorState {
   animatingView: boolean;
-  size: Size | null;
-
   offset: Point;
-  scale: number;
+  size: Size | null;
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
@@ -48,13 +46,16 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       this.initialized = true;
       this.setSize();
     } else {
-      this.clearSize();
       this.observerDebounced();
     }
   });
 
-  observerDebounced = util.debounce(150, () => {
+  observerDebounced = util.debounce(500, () => {
     this.setSize();
+
+    // this.setState((state) => ({
+    //   offset: this.getBoundOffset(state.offset)
+    // }));
   }, { signal: this.controller.signal });
 
   constructor(props: GraphEditorProps) {
@@ -62,10 +63,8 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     this.state = {
       animatingView: false,
-      size: null,
-
-      scale: 1,
-      offset: { x: 0, y: 0 }
+      offset: { x: 0, y: 0 },
+      size: null
     };
   }
 
@@ -117,22 +116,6 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     // });
   }
 
-  getOffsetForScale(newScale: number, refPoint: Point, state: GraphEditorState): Point {
-    let matrix = new DOMMatrix()
-      .translate(state.offset.x, state.offset.y)
-      .scale(state.scale)
-      .translate(refPoint.x, refPoint.y)
-      .scale(newScale / state.scale)
-      .translate(-refPoint.x, -refPoint.y)
-      .scale(1 / state.scale)
-      .translate(-state.offset.x, -state.offset.y);
-
-    return matrix.transformPoint({
-      x: state.offset.x,
-      y: state.offset.y
-    });
-  }
-
   getBoundOffset(point: Point): Point {
     return {
       x: Math.min(Math.max(point.x, this.offsetBoundaries.min.x), this.offsetBoundaries.max.x),
@@ -147,7 +130,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
   componentDidMount() {
     let container = this.refContainer.current!;
 
-    // This will immediately call setSize()
+    // This will immediately call setSize().
     this.observer.observe(container);
 
     this.controller.signal.addEventListener('abort', () => {
@@ -157,31 +140,12 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     container.addEventListener('wheel', (event) => {
       event.preventDefault();
 
-      let rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-
-      this.setState((state): any => {
-        let mouseX = event.clientX - rect.left;
-        let mouseY = event.clientY - rect.top;
-
-        if (event.ctrlKey) {
-          let newScale = state.scale * (1 + event.deltaY / 100);
-          newScale = Math.max(0.6, Math.min(3, newScale));
-
-          return {
-            ...state,
-            offset: this.getBoundOffset(this.getOffsetForScale(newScale, { x: mouseX, y: mouseY }, state)),
-            scale: newScale
-          };
-        } else {
-          return {
-            ...state,
-            offset: this.getBoundOffset({
-              x: state.offset.x + event.deltaX * state.scale,
-              y: state.offset.y + event.deltaY * state.scale
-            })
-          };
-        }
-      });
+      this.setState((state) => ({
+        offset: this.getBoundOffset({
+          x: state.offset.x + event.deltaX * 1,
+          y: state.offset.y + event.deltaY * 1
+        })
+      }));
     }, { passive: false, signal: this.controller.signal });
 
 
@@ -218,35 +182,69 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let settings = this.settings!;
     let renderedTree!: React.ReactNode | null;
 
-    if (this.props.tree) {
-      let computeMetrics = (
-        block: ProtocolBlock,
-        ancestors: ProtocolBlock[],
-        location: unknown
-      ) => {
-        let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-        return unit.graphRenderer.computeMetrics(block, ancestors, location, { computeMetrics, settings }, context);
-      };
+    let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
-      let render = (
+    if (this.props.tree) {
+      // console.log(this.props.tree);
+      console.log('---');
+
+      let computeGraph = (
         block: ProtocolBlock,
         path: ProtocolBlockPath,
-        metrics: GraphRendererDefaultMetrics,
-        position: Point,
-        location: unknown | null,
-        options: {
-          attachmentEnd: boolean;
-          attachmentStart: boolean;
+        ancestors: ProtocolBlock[],
+        location: unknown
+      ): ProtocolBlockGraphRendererMetrics => {
+        let blockImpl = getBlockImpl(block);
+
+        let currentBlock = block;
+        let currentBlockImpl: UnknownPluginBlockImpl;
+
+        let discreteBlocks: ProtocolBlock[] = [];
+
+        while (true) {
+          currentBlockImpl = getBlockImpl(currentBlock);
+
+          if (currentBlockImpl.computeGraph) {
+            break;
+          }
+
+          discreteBlocks.push(currentBlock);
+
+          // if (!currentBlockImpl.getChild) {
+          //   break;
+          // }
+
+          currentBlock = currentBlockImpl.getChild!(currentBlock, 0);
         }
-      ) => {
-        let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-        return unit.graphRenderer!.render(block, path, metrics, position, location, { render, settings, ...options }, context);
+
+        // console.log(discreteBlocks, currentBlock);
+
+        if (discreteBlocks.length > 0) {
+          return computeContainerBlockGraph(({
+            child: currentBlock
+          } as any), [], [], null, {
+            settings,
+            computeMetrics(key, location) {
+              return computeGraph(currentBlock, [], [...ancestors, ...discreteBlocks], null);
+            },
+          }, context);
+        }
+
+        let metrics = currentBlockImpl.computeGraph!(block, path, ancestors, location, {
+          settings,
+          computeMetrics: (key, childLocation: unknown | null) => {
+            let childBlock = blockImpl.getChild!(block, key);
+            return computeGraph(childBlock, [...path, key], [...ancestors, block], childLocation);
+          }
+        }, context);
+
+        return metrics;
       };
 
-      let origin = { x: 1, y: 1 } satisfies Point;
-      let treeMetrics = computeMetrics(this.props.tree, [], this.props.location ?? null);
+      let origin: Point = { x: 1, y: 1 };
+      let treeMetrics = computeGraph(this.props.tree, [], [], this.props.location ?? null);
 
-      renderedTree = render(this.props.tree, [], treeMetrics, origin, this.props.location ?? null, {
+      renderedTree = treeMetrics.render(origin, {
         attachmentEnd: false,
         attachmentStart: false
       });
@@ -266,24 +264,27 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       this.offsetBoundaries = {
         min,
         max: {
-          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - this.state.size.width * this.state.scale),
-          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - this.state.size.height * this.state.scale)
+          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - this.state.size.width),
+          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - this.state.size.height)
         }
       };
     } else {
       renderedTree = null;
     }
 
-    let frac = (x: number) => x - Math.floor(x);
+    let frac = (x: number) => (x - Math.floor(x));
     let offsetX = this.state.offset.x;
     let offsetY = this.state.offset.y;
-    let scale = this.state.scale;
 
     return (
       <div className={graphEditorStyles.root} ref={this.refContainer}>
         <svg
           viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`}
           className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}
+          style={{
+            width: `${this.state.size.width}px`,
+            height: `${this.state.size.height}px`
+          }}
           onClick={() => {
             this.props.selectBlock(null);
           }}>
@@ -295,39 +296,24 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           <rect
             x="0" y="0"
-            width={(this.state.size.width + settings.cellPixelSize) * scale}
-            height={(this.state.size.height + settings.cellPixelSize) * scale}
+            width={(this.state.size.width + settings.cellPixelSize)}
+            height={(this.state.size.height + settings.cellPixelSize)}
             fill="url(#grid)"
-            transform={`scale(${1 / scale}) translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
-          <g transform={`translate(${-offsetX / scale} ${-offsetY / scale}) scale(${1 / scale})`} onTransitionEnd={() => {
+            transform={`translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
+          <g transform={`translate(${-offsetX} ${-offsetY})`} onTransitionEnd={() => {
             this.setState({ animatingView: false });
           }}>
             {renderedTree}
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
-          {/* <div className={graphEditorStyles.actionsGroup}>
+          <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="center_focus_strong" className={graphEditorStyles.actionsIcon} /></button>
           </div>
-          <div className={graphEditorStyles.actionsGroup}>
+          {/* <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="add" className={graphEditorStyles.actionsIcon} /></button>
             <button type="button" className={graphEditorStyles.actionsButton} disabled><Icon name="remove" className={graphEditorStyles.actionsIcon} /></button>
           </div> */}
-          <div className={graphEditorStyles.actionsGroup}>
-            <button type="button" className={graphEditorStyles.actionsButton} disabled={this.state.scale === 1} onClick={() => {
-              this.setState((state) => {
-                let centerX = this.state.size!.width * 0.5;
-                let centerY = this.state.size!.height * 0.5;
-
-                return {
-                  animatingView: true,
-
-                  offset: this.getOffsetForScale(1, { x: centerX, y: centerY }, state),
-                  scale: 1
-                };
-              });
-            }}>Reset</button>
-          </div>
         </div>
         {this.props.summary && (
           <div className={graphEditorStyles.summary}>
@@ -542,3 +528,43 @@ export function NodeContainer(props: {
     </g>
   );
 }
+
+
+const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock, 0> = (block, path, ancestors, location, options, context) => {
+  let childMetrics = options.computeMetrics(0, null);
+
+  let size = {
+      width: childMetrics.size.width + 2,
+      height: childMetrics.size.height + 3
+    }
+
+  return {
+    start: {
+      x: childMetrics.start.x + 1,
+      y: childMetrics.start.y + 2
+    },
+    end: {
+      x: childMetrics.end.x + 1,
+      y: childMetrics.end.y + 2
+    },
+    size,
+
+    render(position, renderOptions) {
+      // let label = (block.state['name'] as { value: string | null; }).value;
+
+      return (
+        <>
+          <NodeContainer
+            cellSize={size}
+            position={position}
+            settings={options.settings}
+            title={'Hello'} />
+          {childMetrics.render({
+            x: position.x + 1,
+            y: position.y + 2
+          }, renderOptions)}
+        </>
+      );
+    }
+  }
+};

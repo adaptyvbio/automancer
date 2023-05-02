@@ -34,16 +34,19 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
     super(props);
 
     let collapsed;
+    let manualCollapseControl;
 
     try {
       collapsed = JSON.parse(window.sessionStorage[CollapsedStorageKey]);
+      manualCollapseControl = true;
     } catch (_err) {
       collapsed = false;
+      manualCollapseControl = false;
     }
 
     this.state = {
       collapsed,
-      manualCollapseControl: false
+      manualCollapseControl
     };
   }
 
@@ -57,13 +60,17 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
       let newRect = entries[0].contentRect;
 
       if ((newRect.width < AUTO_COLLAPSE_LOWER_WIDTH) && !this.state.collapsed && (!this.state.manualCollapseControl || (rect.width > AUTO_COLLAPSE_LOWER_WIDTH))) {
+        window.sessionStorage[CollapsedStorageKey] = JSON.stringify(true);
+
         this.setState({
           collapsed: true,
           manualCollapseControl: false
         });
       }
 
-      if ((newRect.width > AUTO_COLLAPSE_UPPER_WIDTH) && this.state.collapsed && (!this.state.manualCollapseControl || (rect.width > AUTO_COLLAPSE_UPPER_WIDTH))) {
+      if ((newRect.width > AUTO_COLLAPSE_UPPER_WIDTH) && this.state.collapsed && (!this.state.manualCollapseControl || (rect.width < AUTO_COLLAPSE_UPPER_WIDTH))) {
+        window.sessionStorage[CollapsedStorageKey] = JSON.stringify(false);
+
         this.setState({
           collapsed: false,
           manualCollapseControl: false

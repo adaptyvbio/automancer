@@ -6,11 +6,6 @@ export interface Block extends ProtocolBlock {
   process: ProtocolProcess;
 }
 
-export interface BlockMetrics {
-  features: FeatureGroupDef;
-  name: string | null;
-}
-
 export interface Location {
   error: ProtocolError | null;
   mode: LocationMode;
@@ -38,7 +33,7 @@ export interface Point {
 }
 
 
-const computeGraph:  ProtocolBlockGraphRenderer<Block, Key, Location> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<Block, Key, Location> = (block, path, ancestors, location, options, context) => {
   let parentBlock = ancestors.at(-1);
   let state = UnitTools.getBlockState(parentBlock);
   let name = state && UnitTools.getBlockStateNameFromState(state);
@@ -54,6 +49,7 @@ const computeGraph:  ProtocolBlockGraphRenderer<Block, Key, Location> = (block, 
     : [];
 
   let features = [
+    ...processFeatures,
     ...processFeatures,
     ...stateFeatures
   ];
@@ -103,7 +99,7 @@ const computeGraph:  ProtocolBlockGraphRenderer<Block, Key, Location> = (block, 
             ];
           }}
           node={{
-            id: 'a',
+            id: '_',
             title: (name !== null) ? { value: name } : null,
             features,
             position
@@ -181,10 +177,13 @@ export default {
   blocks: {
     ['_' as ProtocolBlockName]: {
       computeGraph,
-      renderEntries(block, location) {
-        return {
-          entries: []
-        };
+      createEntries(block, location) {
+        return [{
+          features: [
+            { icon: 'not_listed_location',
+              label: 'Process' }
+          ]
+        }];
       },
     } satisfies PluginBlockImpl<Block, Key, Location>
   },

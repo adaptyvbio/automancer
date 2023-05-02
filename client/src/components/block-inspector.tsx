@@ -1,15 +1,25 @@
+import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
+import { Fragment } from 'react';
 
+import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
-import { Icon } from './icon';
-import * as util from '../util';
-import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, UnitTools } from '../unit';
-import { SimpleFeatureList } from './features';
+import { PluginBlockEntry, PluginContext } from '../interfaces/plugin';
+import { ProtocolBlockAggregate } from '../interfaces/protocol';
 import { UnitContext } from '../interfaces/unit';
+import { getBlockAggregates, UnitTools } from '../unit';
+import * as util from '../util';
 import { ErrorBoundary } from './error-boundary';
+import { SimpleFeatureList } from './features';
+import { Icon } from './icon';
+
+
+export interface PluginBlockEntryInfos {
+  block: ProtocolBlock;
+  entry: PluginBlockEntry;
+}
 
 
 export interface BlockInspectorProps {
@@ -32,78 +42,101 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
   render() {
     if (!this.props.blockPath) {
-      return <div />;
+      return (
+        <div className={spotlightStyles.placeholder}>
+          <p>Nothing selected</p>
+        </div>
+      );
     }
 
-    let context = {
-      host: this.props.host
-    } satisfies UnitContext;
-    let units = this.props.host.units;
+    let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
-    let targetBlock = this.props.protocol.root;
-    let lineBlocks = [targetBlock];
+    let currentBlock = this.props.protocol.root;
+    let lineBlocks: ProtocolBlock[] = [currentBlock];
+    let lastLeadTransformedBlockIndex = -1;
 
-    for (let key of this.props.blockPath) {
-      let unit = UnitTools.asBlockUnit(units[targetBlock.namespace])!;
-      targetBlock = unit.getChildBlock!(targetBlock, key);
-      lineBlocks.push(targetBlock);
+    for (let [blockIndex, key] of this.props.blockPath.entries()) {
+      let currentBlockImpl = getBlockImpl(currentBlock);
+      currentBlock = currentBlockImpl.getChild!(currentBlock, key);
+      lineBlocks.push(currentBlock);
+
+      if (currentBlockImpl.computeGraph) {
+        lastLeadTransformedBlockIndex = blockIndex;
+      }
     }
 
-    let aggregates = getBlockAggregates(lineBlocks)
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, null, this.props.protocol.name, context);
+    let leafBlock = lineBlocks.at(-1);
+    let title: string | null = null;
 
-    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace]);
-    let HeadComponent = headUnit?.HeadComponent;
+    let entryInfos: PluginBlockEntryInfos[] = [];
+    let breadcrumbItems: {
+      path: ProtocolBlockPath;
+      value: string;
+    }[] = [];
+
+    for (let [blockIndex, block] of lineBlocks.entries()) {
+      if (block.namespace === 'name') {
+        let nameBlock = block as (ProtocolBlock & {
+          value: string;
+        });
+
+        breadcrumbItems.push({
+          path: this.props.blockPath.slice(0, blockIndex),
+          value: nameBlock.value
+        });
+
+        if (blockIndex > lastLeadTransformedBlockIndex) {
+          title = nameBlock.value;
+        }
+      }
+
+      for (let entry of (getBlockImpl(block).createEntries?.(block, null) ?? [])) {
+        entryInfos.push({
+          block,
+          entry
+        });
+      }
+    }
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
-        {(
+        {(breadcrumbItems.length > 0) && (
           <div className={spotlightStyles.breadcrumbRoot}>
-            {aggregateLabelItems.map((item, itemIndex, arr) => {
+            {breadcrumbItems.map((item, itemIndex, arr) => {
               let last = itemIndex === (arr.length - 1);
 
               return (
-                <React.Fragment key={itemIndex}>
+                <Fragment key={itemIndex}>
                   <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                    this.props.selectBlock(this.props.blockPath!.slice(0, item.offset));
-                  }}>{renderLabel(item.label)}</button>
+                    this.props.selectBlock(item.path);
+                  }}>{item.value}</button>
                   {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{renderLabel(aggregateLabelItems.at(-1).label)}</h2>
+          <h2 className={spotlightStyles.title}>{title ?? getBlockImpl(leafBlock).getClassLabel?.(leafBlock) ?? 'Unknown'}</h2>
         </div>
 
-        {HeadComponent && (
-          <ErrorBoundary>
-            <HeadComponent
-              block={lineBlocks.at(-1)}
-              context={context}
-              location={null} />
-          </ErrorBoundary>
-        )}
-
-        <SimpleFeatureList list={
-          Array.from(aggregates.entries())
-            .filter(([_aggregateIndex, aggregate]) => aggregate.state)
-            .map(([aggregateIndex, aggregate]) => {
-              return Object.values(units).flatMap((unit) => {
-                return (unit.namespace in aggregate.state!)
-                  ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                    aggregate.state![unit.namespace],
-                    aggregates
-                      .slice(aggregateIndex + 1)
-                      .map((aggregate) => aggregate.state![unit.namespace]),
-                    null,
-                    context
-                  ) ?? []
-                  : [];
-              });
-            })
-        } />
+        <div className={featureStyles.group}>
+          {Array.from(entryInfos).reverse().map(({ block, entry }) => (
+            entry.features.map((feature, featureIndex) => (
+              <div className={featureStyles.entry} key={featureIndex}>
+                <Icon name={feature.icon} className={featureStyles.icon} />
+                <button type="button" className={featureStyles.body}>
+                  {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
+                  <div className={featureStyles.label}>{feature.label}</div>
+                </button>
+                <button type="button" className={featureStyles.action}>
+                  <Icon name="pause" />
+                </button>
+                {/* <Icon name="power_off" className={featureStyles.errorIcon} /> */}
+              </div>
+            ))
+          ))}
+        </div>
       </div>
     );
   }

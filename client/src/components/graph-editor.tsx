@@ -3,18 +3,18 @@ import * as React from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
 
-import { Icon } from './icon';
-import * as util from '../util';
-import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
-import { Point, SideFlags, SideValues, Size } from '../geometry';
-import { Host } from '../host';
-import { ContextMenuArea } from './context-menu-area';
 import { FeatureGroup } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
-import { FeatureGroupDef } from '../interfaces/unit';
-import { MenuDef, MenuEntryPath } from './context-menu';
-import { ViewExecution } from '../views/execution';
+import { Point, SideValues, Size } from '../geometry';
+import { Host } from '../host';
+import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { UnknownPluginBlockImpl } from '../interfaces/plugin';
+import { FeatureGroupDef } from '../interfaces/unit';
+import * as util from '../util';
+import { ViewExecution } from '../views/execution';
+import { MenuDef, MenuEntryPath } from './context-menu';
+import { ContextMenuArea } from './context-menu-area';
+import { Icon } from './icon';
 
 
 export interface GraphEditorProps {
@@ -197,6 +197,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
         let currentBlock = block;
         let currentBlockImpl: UnknownPluginBlockImpl;
+        let currentBlockPath = path;
 
         let discreteBlocks: ProtocolBlock[] = [];
 
@@ -209,27 +210,32 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
           discreteBlocks.push(currentBlock);
 
-          currentBlock = currentBlockImpl.getChild!(currentBlock, 0);
+          let key = 0;
+          currentBlock = currentBlockImpl.getChild!(currentBlock, key);
+          currentBlockPath.push(key);
         }
 
-        // console.log(discreteBlocks, currentBlock);
-
         if ((discreteBlocks.length > 0) && currentBlockImpl.getChild) {
+          let label = discreteBlocks.map((block) => {
+            let blockImpl = getBlockImpl(block);
+            return blockImpl.getClassLabel?.(block) ?? 'Unknown';
+          }).join(', ');
+
           return computeContainerBlockGraph(({
-            child: currentBlock
-          } as any), [], [], null, {
+            label
+          } as any), currentBlockPath.slice(0, -1), [], null, {
             settings,
             computeMetrics(key, location) {
-              return computeGraph(currentBlock, [], [...ancestors, ...discreteBlocks], null);
+              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...discreteBlocks], null);
             },
           }, context);
         }
 
-        let metrics = currentBlockImpl.computeGraph!(currentBlock, path, [...ancestors, ...discreteBlocks], location, {
+        let metrics = currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...discreteBlocks], location, {
           settings,
           computeMetrics: (key, childLocation: unknown | null) => {
             let childBlock = blockImpl.getChild!(block, key);
-            return computeGraph(childBlock, [...path, key], [...ancestors, block], childLocation);
+            return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, block], childLocation);
           }
         }, context);
 
@@ -480,8 +486,9 @@ export function GraphLink(props: {
 }
 
 
-export function NodeContainer(props: {
+export function GraphNodeContainer(props: {
   cellSize: Size;
+  path: ProtocolBlockPath;
   position: Point;
   settings: GraphRenderSettings;
   title: React.ReactNode;
@@ -489,25 +496,30 @@ export function NodeContainer(props: {
   let { settings } = props;
 
   return (
-    <g className={graphEditorStyles.group}>
-      <foreignObject
-        x={settings.cellPixelSize * props.position.x}
-        y={settings.cellPixelSize * props.position.y}
-        width={settings.cellPixelSize * props.cellSize.width}
-        height={settings.cellPixelSize * props.cellSize.height}
-        className={graphEditorStyles.groupobject}>
-          <div className={graphEditorStyles.group}>
-            <OverflowableText>
-              <div className={graphEditorStyles.grouplabel}>{props.title}</div>
-            </OverflowableText>
-          </div>
-        </foreignObject>
-    </g>
+    <foreignObject
+      x={settings.cellPixelSize * props.position.x}
+      y={settings.cellPixelSize * props.position.y}
+      width={settings.cellPixelSize * props.cellSize.width}
+      height={settings.cellPixelSize * props.cellSize.height}
+      className={graphEditorStyles.groupobject}>
+        <div
+          className={util.formatClass(graphEditorStyles.group, { '_selected': util.deepEqual(props.path, settings.editor.props.selectedBlockPath) })}
+          onClick={(event) => {
+            event.stopPropagation();
+            settings.editor.selectBlock(props.path);
+          }}>
+          <OverflowableText>
+            <div className={graphEditorStyles.grouplabel}>{props.title}</div>
+          </OverflowableText>
+        </div>
+      </foreignObject>
   );
 }
 
 
-const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock, 0> = (block, path, ancestors, location, options, context) => {
+const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock & {
+  label: string;
+}, 0> = (block, path, ancestors, location, options, context) => {
   let childMetrics = options.computeMetrics(0, null);
 
   let size = {
@@ -527,15 +539,14 @@ const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock, 0> =
     size,
 
     render(position, renderOptions) {
-      // let label = (block.state['name'] as { value: string | null; }).value;
-
       return (
         <>
-          <NodeContainer
+          <GraphNodeContainer
             cellSize={size}
+            path={path}
             position={position}
             settings={options.settings}
-            title={'Hello, world!'} />
+            title={block.label} />
           {childMetrics.render({
             x: position.x + 1,
             y: position.y + 2

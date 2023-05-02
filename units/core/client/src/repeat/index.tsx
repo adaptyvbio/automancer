@@ -1,4 +1,4 @@
-import { ProtocolBlockGraphRendererMetrics, ProtocolBlockGraphRenderer, NodeContainer, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue, Plugin, PluginBlockImpl } from 'pr1';
+import { ProtocolBlockGraphRendererMetrics, ProtocolBlockGraphRenderer, GraphNodeContainer, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue, Plugin, PluginBlockImpl } from 'pr1';
 import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 
@@ -31,14 +31,39 @@ export default {
 
   blocks: {
     ['_' as ProtocolBlockName]: {
+      createEntries(block, location) {
+        let numericCount = location?.count ?? (
+          (block.count.type === 'number')
+            ? block.count.value
+            : null
+        );
+
+        let [description, label] = (numericCount !== 0)
+          ? [
+            'Repeat',
+            (numericCount !== null)
+              ? {
+                1: 'Once',
+                2: 'Twice'
+              }[numericCount] ?? `${numericCount} times`
+              : <>formatDynamicValue(block.count) times</>
+          ]
+          : [null, 'Skip'];
+
+        return [{
+          features: [{
+            description,
+            icon: 'replay',
+            label
+          }]
+        }];
+      },
       getChild(block, key) {
         return block.child;
       },
-      renderEntries(block, location) {
-        return {
-          entries: []
-        };
-      },
+      getClassLabel(block) {
+        return 'Repeat';
+      }
     } satisfies PluginBlockImpl<Block, Key, Location>
   }
 } satisfies Plugin;

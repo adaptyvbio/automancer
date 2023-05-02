@@ -30,6 +30,11 @@ export interface PluginContext {
 }
 
 
+export interface PluginBlockEntry {
+  id?: OrdinaryId;
+  features: Feature[];
+}
+
 export interface PluginBlockImplHeadComponentProps<Block extends ProtocolBlock, Location> {
   block: Block;
   location: Location | null;
@@ -40,17 +45,11 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Key extends Ordina
   HeadComponent?: ReactElement<PluginBlockImplHeadComponentProps<Block, Location>>;
 
   computeGraph?: ProtocolBlockGraphRenderer<Block, Key, Location>;
+  createEntries?(block: Block, location: Location | null): PluginBlockEntry[];
   createEntryMenu?(block: Block, entryId: OrdinaryId): MenuDef;
   getChild?(block: Block, key: Key): ProtocolBlock;
   getClassLabel?(block: Block): string;
   getLabel?(block: Block): string;
-  // graphRenderer?: ProtocolBlockGraphRenderer<Block, Metrics, Location>;
-  renderEntries(block: Block, location: Location | null): {
-    entries: {
-      id: OrdinaryId;
-      features: Feature[];
-    }[];
-  };
 }
 
 export type UnknownPluginBlockImpl = PluginBlockImpl<any, OrdinaryId, any>;

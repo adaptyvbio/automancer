@@ -1,13 +1,15 @@
+from dataclasses import dataclass
 from types import EllipsisType
-from typing import Optional, Self, TypedDict
+from typing import TypedDict
 
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
                                    StrType)
-from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitState, Transforms
+from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
+                              PassiveTransformerPreparationResult,
+                              TransformerAdoptionResult)
 from pr1.reader import LocatedString
-from pr1_state.parser import StatePublisherTransform
 
 from . import namespace
 
@@ -15,33 +17,48 @@ from . import namespace
 class Attributes(TypedDict, total=False):
   name: Evaluable[LocatedString]
 
-class Parser(BaseParser):
-  namespace = namespace
-  segment_attributes = {
+class Transformer(BasePassiveTransformer):
+  priority = 100
+  attributes = {
     'name': Attribute(
       description="Sets the block's name.",
       type=PotentialExprType(StrType(), static=True)
     )
   }
 
-  def prepare(self, attrs: Attributes):
-    if (attr := attrs.get('name')):
-      return Analysis(), [StatePublisherTransform(NameState("hello"))]
-
-    #   analysis, result = attr.eval(EvalContext(adoption_stack), final=True)
-    #   return analysis, BlockUnitData(NameState(result.value if not isinstance(result, EllipsisType) else None))
+  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+    if (attr := data.get('name')):
+      return Analysis(), PassiveTransformerPreparationResult(attr)
     else:
-      return Analysis(), Transforms()
+      return Analysis(), None
+
+  def adopt(self, data: Evaluable[LocatedString], /, adoption_stack, trace):
+    analysis, result = data.eval(EvalContext(adoption_stack), final=True)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, TransformerAdoptionResult(result)
+
+  def execute(self, data: LocatedString, /, block):
+    return Analysis(), NameBlock(block, name=data.value)
 
 
-class NameState(BlockUnitState):
-  def __init__(self, value: Optional[str], /):
-    self.value = value
+class Parser(BaseParser):
+  namespace = namespace
+  transformers = [Transformer()]
 
-  def __or__(self, other: Self):
-    return NameState(self.value or other.value)
+
+@dataclass
+class NameBlock(BaseBlock):
+  block: BaseBlock
+  name: str
 
   def export(self):
     return {
-      "value": self.value
+      "name": "_",
+      "namespace": namespace,
+
+      "child": self.block.export(),
+      "value": self.name
     }

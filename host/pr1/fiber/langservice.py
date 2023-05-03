@@ -200,28 +200,28 @@ class Hover:
 
 
 class AmbiguousKeyError(Diagnostic):
-  def __init__(self, key: str, target: LocatedValue):
+  def __init__(self, target: LocatedValue, /):
     super().__init__(
-      f"Ambiguous key '{key}'",
+      f"Ambiguous key '{target}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class DuplicateKeyError(Diagnostic):
-  def __init__(self, key: str, target: LocatedValue):
+  def __init__(self, target: LocatedValue, /):
     super().__init__(
-      f"Duplicate key '{key}'",
+      f"Duplicate key '{target}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class ExtraneousKeyError(Diagnostic):
-  def __init__(self, key: str, target: LocatedValue):
+  def __init__(self, target: LocatedValue, /):
     super().__init__(
-      f"Unrecognized key '{key}'",
+      f"Unrecognized key '{target}'",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
 class MissingKeyError(Diagnostic):
-  def __init__(self, key: str, target: LocatedValue):
+  def __init__(self, target: LocatedValue, /, key: str):
     super().__init__(
       f"Missing key '{key}'",
       references=[ErrorDocumentReference.from_value(target)]
@@ -390,12 +390,12 @@ class CompositeDict:
 
       # e.g. 'invalid/bar'
       if namespace and not (namespace in self._namespaces):
-        analysis.errors.append(ExtraneousKeyError(namespace, obj))
+        analysis.errors.append(ExtraneousKeyError(namespace))
         continue
 
       # e.g. 'foo/invalid' or 'invalid'
       if not attr_entries:
-        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
+        analysis.errors.append(ExtraneousKeyError(obj_key))
         continue
 
       if not namespace:
@@ -407,14 +407,14 @@ class CompositeDict:
           namespace = next(iter(attr_entries.keys()))
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
-          analysis.errors.append(AmbiguousKeyError(obj_key, obj))
+          analysis.errors.append(AmbiguousKeyError(obj_key))
           continue
       # e.g. 'foo/bar'
       else:
         pass
 
       if attr_name in attr_values[namespace]:
-        analysis.errors.append(DuplicateKeyError(obj_key, obj))
+        analysis.errors.append(DuplicateKeyError(obj_key))
         continue
 
       attr = attr_entries[namespace]
@@ -431,7 +431,7 @@ class CompositeDict:
     for attr_name, attr_entries in self._attributes.items():
       for namespace, attr in attr_entries.items():
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
+          analysis.errors.append(MissingKeyError(obj, (f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name))
           strict_failed = True
 
     analysis.completions.append(Completion(
@@ -569,16 +569,16 @@ class DivisibleCompositeDictType(Type, Generic[T]):
           attr_name = obj_key
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
-          analysis.errors.append(AmbiguousKeyError(obj_key, obj))
+          analysis.errors.append(AmbiguousKeyError(obj_key))
           continue
 
       # e.g. 'foo/invalid' or 'invalid'
       else:
-        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
+        analysis.errors.append(ExtraneousKeyError(obj_key))
         continue
 
       if attr_name in attr_values[key]:
-        analysis.errors.append(DuplicateKeyError(obj_key, obj))
+        analysis.errors.append(DuplicateKeyError(obj_key))
         continue
 
       attr_values[key][LocatedString(attr_name, absolute=False, area=obj_key.area)] = obj_value
@@ -588,7 +588,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
     for prefix, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
         if attr._required and not (attr_name in attr_values[prefix]):
-          analysis.errors.append(MissingKeyError(attr_name, obj))
+          analysis.errors.append(MissingKeyError(obj, attr_name))
           failure = True
 
     return analysis, (attr_values if not failure else Ellipsis)

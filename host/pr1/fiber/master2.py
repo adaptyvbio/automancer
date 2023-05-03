@@ -18,7 +18,7 @@ from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
-from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol, HeadProgram
+from .parser import BaseBlock, BaseProgramPoint, BlockProgram, FiberProtocol, HeadProgram
 from ..chip import Chip
 from ..ureg import ureg
 
@@ -100,13 +100,13 @@ class Master:
     self._update_callback = update_callback
 
     self._handle = ProgramHandle(self, id=0)
-    self._handle._program = self.protocol.root.Program(self.protocol.root, self._handle)
+    self._handle._program = self.protocol.root.create_program(self._handle)
     self._owner = ProgramOwner(self._handle, self._handle._program)
 
     async def func():
       try:
         self.update_soon()
-        await self._owner.run(runtime_stack)
+        await self._owner.run(None, runtime_stack)
         self.update_now()
       except Exception as e:
         if self._ready_future:
@@ -334,7 +334,7 @@ class ProgramHandle:
 
   def create_child(self, child_block: BaseBlock, *, id: int = 0):
     handle = ProgramHandle(self, id=id)
-    handle._program = child_block.Program(child_block, handle)
+    handle._program = child_block.create_program(handle)
 
     assert not (handle._id in self._children)
     self._children[handle._id] = handle
@@ -420,8 +420,8 @@ class ProgramOwner:
   def halt(self):
     self._program.halt()
 
-  async def run(self, stack: EvalStack):
-    await self._program.run(stack)
+  async def run(self, point: Optional[BaseProgramPoint], stack: EvalStack):
+    await self._program.run(point, stack)
 
     for child_handle in self._handle._children.values():
       assert child_handle._consumed

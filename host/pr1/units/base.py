@@ -6,7 +6,7 @@ from typing import Any, Optional, Protocol, Type
 from ..state import UnitStateInstance, UnitStateManager
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
-from ..fiber.process import Process as ProcessProtocol
+from ..fiber.process import BaseProcess as ProcessProtocol
 
 Metadata = namedtuple("Metadata", ["author", "description", "icon", "license", "title", "url", "version"], defaults=[None, None, None, None, None, None, None])
 MetadataIcon = namedtuple("MetadataIcon", ["kind", "value"])

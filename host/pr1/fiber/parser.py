@@ -170,7 +170,7 @@ class BlockProgram(ABC):
   #   await self._parent.call_resume()
 
   @abstractmethod
-  async def run(self, stack: EvalStack):
+  async def run(self, point: 'Optional[BaseProgramPoint]', stack: EvalStack):
     ...
 
 class HeadProgram(BlockProgram):
@@ -196,14 +196,16 @@ class HeadProgram(BlockProgram):
       case _:
         super().receive(message)
 
-class BaseProgramPoint(Protocol):
-  @classmethod
-  def import_value(cls, data: Any, /, block: 'BaseBlock', *, master) -> 'BaseProgramPoint':
-    ...
+class BaseProgramPoint(ABC):
+  pass
 
 class BaseBlock(ABC, HierarchyNode):
-  Point: ClassVar[type[BaseProgramPoint]]
-  Program: ClassVar[type[BlockProgram]]
+  def create_program(self, handle: 'ProgramHandle') -> BlockProgram:
+    ...
+
+  @abstractmethod
+  def import_point(self, data: Any, /) -> BaseProgramPoint:
+    ...
 
   def export(self):
     ...

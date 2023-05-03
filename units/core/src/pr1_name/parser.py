@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
@@ -9,6 +9,7 @@ from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
                               PassiveTransformerPreparationResult,
                               TransformerAdoptionResult)
+from pr1.fiber.transparent import TransparentProgram
 from pr1.reader import LocatedString
 
 from . import namespace
@@ -51,14 +52,20 @@ class Parser(BaseParser):
 
 @dataclass
 class NameBlock(BaseBlock):
-  block: BaseBlock
+  child: BaseBlock
   name: str
+
+  def create_program(self, handle):
+    return TransparentProgram(self.child, handle)
+
+  def import_point(self, data, /):
+    return self.child.import_point(data)
 
   def export(self):
     return {
       "name": "_",
       "namespace": namespace,
 
-      "child": self.block.export(),
+      "child": self.child.export(),
       "value": self.name
     }

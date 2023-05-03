@@ -9,19 +9,24 @@ from pr1.fiber.langservice import (Analysis, Attribute, EnumType,
                                    PotentialExprType, QuantityType, UnionType)
 from pr1.fiber.parser import (BaseLeadTransformer, BaseParser,
                               LeadTransformerPreparationResult)
-from pr1.fiber.segment import SegmentBlock, SegmentProcessData
+from pr1.fiber.process import BaseProcessData, ProcessBlock
 from pr1.reader import LocatedString, LocatedValue
-from pr1.util.misc import Exportable
 
 from . import namespace
 
 
 @dataclass
-class TimerProcessData(Exportable):
+class ProcessData(BaseProcessData):
   duration: Evaluable[LocatedValue[Quantity | Literal['forever']]]
 
   def export(self):
-    return { "duration": self.duration.export() }
+    return {
+      "duration": self.duration.export()
+    }
+
+  def import_point(self, data, /):
+    from .process import ProcessPoint
+    return ProcessPoint(progress=data["progress"])
 
 class Attributes(TypedDict):
   wait: Evaluable[LocatedValue[Quantity | Literal['forever']]]
@@ -46,13 +51,16 @@ class Transformer(BaseLeadTransformer):
       return Analysis(), list()
 
   def adopt(self, data: Evaluable[LocatedValue[Quantity | Literal['forever']]], /, adoption_stack, trace):
+    from .process import Process
+
     analysis, duration = data.eval(EvalContext(adoption_stack), final=False)
 
     if isinstance(duration, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, SegmentBlock(
-      SegmentProcessData(TimerProcessData(duration), namespace=namespace)
+    return analysis, ProcessBlock(
+      ProcessData(duration),
+      Process
     )
 
 

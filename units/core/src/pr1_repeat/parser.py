@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, Literal, Optional, TypedDict
+from typing import Literal, Optional, TypedDict
 
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, IntType, PotentialExprType,
-                                   PrimitiveType)
+from pr1.fiber.langservice import (Analysis, Attribute, IntType, PotentialExprType)
 from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
+from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer, BaseProgramPoint,
                               BlockProgram,
                               PassiveTransformerPreparationResult,
                               TransformerAdoptionResult)
@@ -71,15 +70,8 @@ class RepeatProgramLocation:
 
 @dataclass(kw_only=True)
 class RepeatProgramPoint:
-  child: Any
+  child: Optional[BaseProgramPoint]
   iteration: int
-
-  @classmethod
-  def import_value(cls, data: Any, /, block: 'RepeatBlock', *, master):
-    return cls(
-      child=(block.block.Point.import_value(data["child"], block.block, master=master) if data["child"] is not None else None),
-      iteration=data["iteration"]
-    )
 
 @debug
 class RepeatProgram(BlockProgram):
@@ -155,9 +147,6 @@ class RepeatProgram(BlockProgram):
 
 @debug
 class RepeatBlock(BaseBlock):
-  Point: type[RepeatProgramPoint] = RepeatProgramPoint
-  Program = RepeatProgram
-
   def __init__(self, block: BaseBlock, count: Evaluable[LocatedValue[int | Literal['forever']]], env: EvalEnv):
     self.block = block
     self.count = count
@@ -165,6 +154,15 @@ class RepeatBlock(BaseBlock):
 
   def __get_node_children__(self):
     return [self.block]
+
+  def create_program(self, handle):
+    return RepeatProgram(self, handle)
+
+  def import_point(self, data, /):
+    return RepeatProgramPoint(
+      child=self.block.import_point(data["child"]),
+      iteration=data["iteration"]
+    )
 
   def export(self):
     return {

@@ -13,6 +13,7 @@ from pr1.devices.nodes.value import Null, ValueNode
 from pr1.error import Error
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
+from pr1.fiber.master2 import Master
 from pr1.host import Host
 from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
@@ -41,8 +42,8 @@ class Declaration:
 
 @dataclass
 class NodeInfo:
-  claim: Claim
   candidate_count: int = 0
+  claim: Optional[Claim] = None
   current_declaration: Optional[Declaration] = None
   settle_event: Event = field(default_factory=Event)
   update_event: Event = field(default_factory=Event)
@@ -56,15 +57,15 @@ class Runner(BaseRunner):
     self._declarations = list[Declaration]()
     self._node_infos = dict[ValueNode, NodeInfo]()
 
+    self._master: Master
+
   def add(self, trace: PublisherTrace, assignments: dict[ValueNode, Any]):
     declaration = Declaration(assignments, trace)
     bisect.insort(self._declarations, declaration)
 
     for node, value in assignments.items():
       if not node in self._node_infos:
-        self._node_infos[node] = NodeInfo(
-          claim=node.claim()
-        )
+        self._node_infos[node] = NodeInfo()
 
       self._node_infos[node].candidate_count += 1
 
@@ -101,13 +102,15 @@ class Runner(BaseRunner):
 
 
   async def _node_worker(self, node: ValueNode, node_info: NodeInfo):
-    assert node_info.claim
+    # assert node_info.claim
     assert node_info.update_event
 
     # def listener():
     #   pass
 
     # reg = node.watch_connection(listener)
+
+    node_info.claim = node.claim()
 
     try:
       while True:
@@ -121,15 +124,20 @@ class Runner(BaseRunner):
           if node_info.current_declaration:
             value = node_info.current_declaration.assignments[node]
 
-            match node:
-              case BooleanNode():
-                job = node.maintain(value if value is not None else Null)
-              case EnumNode():
-                job = node.maintain(value if value is not None else Null)
-              case NumericNode():
-                job = node.maintain(value if value is not None else Null)
-              case _:
-                raise ValueError
+            job = asyncio.Future()
+
+            await asyncio.sleep(1)
+            node_info.settle_event.set()
+
+            # match node:
+            #   case BooleanNode():
+            #     job = node.maintain(value if value is not None else Null)
+            #   case EnumNode():
+            #     job = node.maintain(value if value is not None else Null)
+            #   case NumericNode():
+            #     job = node.maintain(value if value is not None else Null)
+            #   case _:
+            #     raise ValueError
 
             try:
               await race(job, node_info.update_event.wait())
@@ -147,3 +155,4 @@ class Runner(BaseRunner):
           # node_info.settled = True
     finally:
       node_info.claim.destroy()
+      node_info.claim = None

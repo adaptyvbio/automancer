@@ -1,7 +1,7 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Literal, final
+from typing import Any, Literal, final
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
@@ -14,8 +14,10 @@ from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType)
 from pr1.fiber.master2 import ProgramHandle
-from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer, BaseProgram, BaseProgramPoint,
-                              BlockUnitState, FiberParser, ProtocolUnitData,
+from pr1.fiber.parser import (BaseBlock, BaseParser,
+                              BasePartialPassiveTransformer,
+                              BasePassiveTransformer, BaseProgram, BlockUnitState,
+                              FiberParser, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
 from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
                                       StaticAnalysisAnalysis)
@@ -84,6 +86,30 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
 
 @dataclass
 @final
+class ApplierBlock(BaseBlock):
+  child: BaseBlock
+
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State applier"
+
+  def create_program(self, handle):
+    from .program import ApplierProgram
+    return ApplierProgram(self, handle)
+
+  def import_point(self, data, /):
+    return self.child.import_point(data)
+
+  def export(self):
+    return {
+      "child": self.child.export()
+    }
+
+
+@dataclass
+@final
 class PublisherBlock(BaseBlock):
   assignments: dict[NodePath, Evaluable[LocatedValue[Any]]]
   child: BaseBlock
@@ -108,7 +134,7 @@ class PublisherBlock(BaseBlock):
     }
 
 
-class Transformer(BasePassiveTransformer):
+class PublisherTransformer(BasePassiveTransformer):
   priority = 100
 
   def __init__(self, parser: 'Parser'):
@@ -155,12 +181,21 @@ class Transformer(BasePassiveTransformer):
     return Analysis(), PublisherBlock(data, block)
 
 
+class ApplierTransformer(BasePartialPassiveTransformer):
+  def execute(self, block):
+    return Analysis(), ApplierBlock(block)
+
+
 class Parser(BaseParser):
   namespace = namespace
 
   def __init__(self, fiber: FiberParser):
+    super().__init__(fiber)
+
     self._fiber = fiber
-    self.transformers = [Transformer(self)]
+
+    self.leaf_transformers = [ApplierTransformer()]
+    self.transformers = [PublisherTransformer(self)]
 
   @functools.cached_property
   def node_map(self):

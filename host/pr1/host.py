@@ -93,26 +93,29 @@ class Host:
       document = Document.text((self.data_dir / "setup.yml").open().read())
 
       analysis, conf_data = reader.loads2(document.source)
-      conf = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
+      raw_conf: Any = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
 
       print_analysis(analysis, logger)
 
-      if isinstance(conf, EllipsisType) or analysis.errors:
+      if isinstance(raw_conf, EllipsisType) or analysis.errors:
         sys.exit(1)
 
-      conf = cast(reader.LocatedValue, conf).dislocate()
+      conf = cast(reader.LocatedValue, raw_conf).dislocate()
+      units_conf = {
+        namespace: {
+          **conf['units'][namespace],
+          'options': raw_unit_conf.get('options')
+        } for namespace, raw_unit_conf in (raw_conf['units'] or dict()).items()
+      }
     else:
       conf = {
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
-        'units': {
-          'template': {
-            'enabled': False
-          }
-        },
+        'units': {},
         'version': 1
       }
 
+      units_conf = dict()
       conf_path.open("w").write(reader.dumps(conf))
 
     self.id = conf['id']
@@ -123,7 +126,7 @@ class Host:
     # -- Load units ---------------------------------------
 
     self.executors = dict()
-    self.manager = UnitManager(conf['units'] or dict())
+    self.manager = UnitManager(units_conf)
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 

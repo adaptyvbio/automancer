@@ -44,6 +44,9 @@ class Transformer(BaseLeadTransformer):
     )
   }
 
+  def __init__(self, parser: 'Parser'):
+    self._parser = parser
+
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     if (attr := data.get('wait')):
       return Analysis(), [LeadTransformerPreparationResult(attr, origin_area=cast(LocatedString, next(iter(data.keys()))).area)]
@@ -58,12 +61,19 @@ class Transformer(BaseLeadTransformer):
     if isinstance(duration, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, ProcessBlock(
+    block = analysis.add(self._parser._fiber.wrap(ProcessBlock(
       ProcessData(duration),
       Process
-    )
+    )))
+
+    return analysis, block
 
 
 class Parser(BaseParser):
   namespace = namespace
-  transformers = [Transformer()]
+
+  def __init__(self, fiber):
+    super().__init__(fiber)
+
+    self._fiber = fiber
+    self.transformers = [Transformer(self)]

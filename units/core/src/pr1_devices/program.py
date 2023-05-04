@@ -14,7 +14,7 @@ from pr1.fiber.master2 import Master, ProgramHandle, ProgramOwner
 from pr1.fiber.parser import BaseBlock, BaseProgram, BaseProgramPoint
 
 from . import namespace
-from .parser import PublisherBlock
+from .parser import ApplierBlock, PublisherBlock
 
 
 class PublisherProgramMode:
@@ -112,6 +112,11 @@ class PublisherProgram(BaseProgram):
       owner = self._handle.create_child(self._block.child)
       self._mode = PublisherProgramMode.Normal(owner)
 
+      self._handle.send(ProgramExecEvent(
+        analysis=MasterAnalysis.cast(analysis),
+        location=PublisherProgramLocation(location_assignments, self._mode)
+      ))
+
       await owner.run(point, stack)
       self._runner.remove(declaration)
 
@@ -119,9 +124,9 @@ class PublisherProgram(BaseProgram):
 
 
 @dataclass
-@final
-class ApplierBlock(BaseBlock):
-  child: BaseBlock
+class ApplierProgramLocation(Exportable):
+  def export(self):
+    return {}
 
 @final
 class ApplierProgram(BaseProgram):
@@ -132,10 +137,11 @@ class ApplierProgram(BaseProgram):
     self._handle = handle
     self._runner = cast(Runner, handle.master.chip.runners[namespace])
 
-    self._owner: ProgramOwner
+    self._owner: Optional[ProgramOwner] = None
 
   def halt(self):
-    self._owner.halt()
+    if self._owner:
+      self._owner.halt()
 
   def receive(self, message, /):
     match message:
@@ -145,11 +151,15 @@ class ApplierProgram(BaseProgram):
         pass
 
   async def run(self, point, stack):
-    owner = self._handle.create_child(self._block.child)
+    self._handle.send(ProgramExecEvent(location=ApplierProgramLocation()))
 
+    self._runner._master = self._handle.master
     self._runner.apply()
+    print("Applied")
 
     await self._runner.wait()
 
-    await owner.run(point, stack)
-    del owner
+    self._owner = self._handle.create_child(self._block.child)
+
+    await self._owner.run(point, stack)
+    del self._owner

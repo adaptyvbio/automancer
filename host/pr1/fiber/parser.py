@@ -217,23 +217,21 @@ BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 Attrs = dict[str, Any]
 AttrsOptional = dict[str, Any | EllipsisType]
 
-class BaseParser(Protocol):
+class BaseParser(ABC):
   namespace: str
   layer_attributes: Optional[dict[str, lang.Attribute]] = None
   root_attributes = dict[str, lang.Attribute]()
+
   transformers: 'list[BaseTransformer]'
 
   def __init__(self, fiber: 'FiberParser'):
-    pass
+    self.leaf_transformers = list[BasePartialPassiveTransformer]()
 
   def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, ProtocolUnitData]:
     return lang.Analysis(), ProtocolUnitData()
 
   def leave_protocol(self):
     return lang.Analysis()
-
-  # def prepare(self, attrs: Attrs, /) -> 'tuple[lang.Analysis, Transforms | EllipsisType]':
-  #   ...
 
 class BaseDefaultTransform(ABC):
   priority: ClassVar[int]
@@ -301,6 +299,11 @@ class BasePassiveTransformer(ABC):
 
   @abstractmethod
   def execute(self, data: Any, /, block: BaseBlock) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+class BasePartialPassiveTransformer(ABC):
+  @abstractmethod
+  def execute(self, block: BaseBlock) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
     ...
 
 class BaseLeadTransformer(ABC):
@@ -742,3 +745,16 @@ class FiberParser:
     )
 
     return analysis, layer
+
+  def wrap(self, block: BaseBlock, /):
+    analysis = lang.Analysis()
+    current_block = block
+
+    for parser in self._parsers:
+      for transformer in parser.leaf_transformers:
+        current_block = analysis.add(transformer.execute(block))
+
+        if isinstance(current_block, EllipsisType):
+          return analysis, Ellipsis
+
+    return analysis, current_block

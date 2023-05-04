@@ -170,6 +170,8 @@ class Parser(BaseParser):
   }
 
   def __init__(self, fiber: FiberParser):
+    super().__init__(fiber)
+
     self.fiber = fiber
     self.shorthands = dict[str, ShorthandStaticItem]()
     self.transformers = [

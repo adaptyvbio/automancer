@@ -45,12 +45,15 @@ class Master:
     self._location: Optional[ProgramHandleEventEntry] = None
     self._owner: ProgramOwner
     self._pool = Pool()
-    self._ready_future = Future[None]()
     self._update_callback: Optional[SimpleCallbackFunction] = None
     self._update_lock_depth = 0
     self._update_handle: Optional[asyncio.Handle] = None
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
+
+  @property
+  def pool(self):
+    return self._pool
 
   def done(self):
     return self._pool.wait()
@@ -108,14 +111,11 @@ class Master:
         self.update_soon()
         await self._owner.run(None, runtime_stack)
         self.update_now()
-      except Exception as e:
-        if self._ready_future:
-          self._ready_future.set_exception(e)
-        else:
-          raise
-
-        self._pool.close()
       finally:
+        if self._update_handle:
+          self._update_handle.cancel()
+          self._update_handle = None
+
         if self._cleanup_callback:
           self._cleanup_callback()
 
@@ -224,10 +224,6 @@ class Master:
 
     if self._update_callback and useful:
       self._update_callback()
-
-    if self._ready_future:
-      self._ready_future.set_result(None)
-      self._ready_future = None
 
     # from pprint import pprint
     # pprint(changes)

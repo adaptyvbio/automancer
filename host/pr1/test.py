@@ -62,9 +62,11 @@ async def main():
 name: Test
 
 steps:
-  actions:
-    - wait: 2 sec
-    - wait: 2 sec
+  wait: 1 sec
+  # actions:
+  #   - wait: 2 sec
+  #   # - wait: 2 sec
+  PLC.A1: 5
 """)
 
   draft = Draft(

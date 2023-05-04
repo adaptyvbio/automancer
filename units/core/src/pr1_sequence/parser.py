@@ -62,6 +62,7 @@ class Parser(BaseParser):
   namespace = namespace
 
   def __init__(self, fiber: FiberParser):
+    super().__init__(fiber)
     self.transformers = [Transformer(fiber)]
 
 @dataclass

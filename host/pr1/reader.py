@@ -289,7 +289,7 @@ class LocatedValue(Generic[T]):
       case _:
         return LocatedValueContainer(obj, area)
 
-  def dislocate(self):
+  def dislocate(self) -> Any:
     match self.value:
       case dict():
         return { key.dislocate(): value.dislocate() for key, value in self.value.items() }

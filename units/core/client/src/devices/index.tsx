@@ -282,10 +282,10 @@ interface WindowOption {
 }
 
 const ChartWindowOptions: WindowOption[] = [
+  { label: '1 sec', value: 1e3 },
   { label: '10 sec', value: 10e3 },
   { label: '1 min', value: 60e3 },
-  { label: '10 min', value: (10 * 60e3) },
-  { label: '30 min', value: (30 * 60e3) }
+  { label: '10 min', value: (10 * 60e3) }
 ];
 
 
@@ -352,7 +352,6 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 
       if ((this.data.length < 1) || (newTime !== this.data.at(-1)[0])) {
         this.data.push([newTime, newValue]);
-
         this.controlChartRender();
       }
     }
@@ -400,16 +399,23 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
     let displayWindow = this.state.chartWindowOption.value;
 
     let now = Date.now();
-    let data = this.data
-      .map(([time, value]) => [(time - now), value])
-      .filter(([delta, value]) => (-delta < displayWindow));
-    let allY = data.map(([x, y]) => y);
+    let data = this.data.map(([time, value]) => [(time - now), value]);
+
+    let firstIncludedIndex = data.findIndex(([delta, value]) => -delta < displayWindow);
+    data = (firstIncludedIndex >= 0)
+      ? data.slice(Math.max(0, firstIncludedIndex - 1))
+      : [];
+
+    let values = data.map(([delta, value]) => value);
+    let minValue = Math.min(...values);
+    let maxValue = Math.max(...values);
+    let diff = maxValue - minValue;
+
+    minValue -= diff * 0.05;
+    maxValue += diff * 0.05;
 
     this.chart
-      .yDomain([
-        Math.min(...allY),
-        Math.max(...allY)
-      ])
+      .yDomain([minValue, maxValue])
       // .yTickFormat((value, index) => `${value.toFixed(2)} MB`);
 
 

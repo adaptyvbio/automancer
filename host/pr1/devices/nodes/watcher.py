@@ -74,6 +74,9 @@ class Watcher:
     if 'connection' in self._modes:
       self._sync_regs += [node.watch_connection(listener) for node in self._nodes]
 
+    if 'content' in self._modes:
+      self._sync_regs += [node.watch_content(listener) for node in self._nodes if isinstance(node, ValueNode)]
+
     if 'ownership' in self._modes:
       self._sync_regs += [node.watch_ownership(listener) for node in self._nodes if isinstance(node, ValueNode) and node.writable]
 

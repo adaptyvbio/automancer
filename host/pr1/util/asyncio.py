@@ -247,6 +247,9 @@ async def shield(awaitable: Awaitable[T], /) -> T:
 
 
 async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
+  if not items:
+    return
+
   cancelled_exc: Optional[asyncio.CancelledError] = None
   tasks = [item if isinstance(item, Task) else asyncio.create_task(item) for item in items]
 

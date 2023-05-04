@@ -62,7 +62,7 @@ class Executor(BaseExecutor):
     all_nodes = list(self._host.root_node.iter_all())
     node_paths_by_node = { node: node_path for node_path, node in all_nodes }
 
-    watcher = Watcher([node for _, node in all_nodes], modes={'connection', 'ownership', 'value'})
+    watcher = Watcher([node for _, node in all_nodes], modes={'connection', 'content', 'ownership'})
 
     async with watcher:
       yield [[node_path, export_node_state(node)] for node_path, node in all_nodes]
@@ -93,10 +93,10 @@ def export_node_state(node: BaseNode, /):
 
   if isinstance(node, ValueNode):
     state |= {
-      "value": {
-        "time": None,
-        "value": node.export_value(node.value)
-      }
+      "value": (node.value and {
+        "time": (node.value[0] * 1000),
+        "value": node.export_value(node.value[1])
+      })
     }
 
     if node.writable:

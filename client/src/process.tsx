@@ -95,6 +95,7 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, never, Location> =
 
 export function createProcessBlockImpl<Data, Location>(options: {
   createFeatures?(data: Data, location: Location | null): FeatureGroupDef;
+  getLabel?(data: Data): string | null;
 }): PluginBlockImpl<ProtocolBlock & {
   data: Data;
 }, never, Location> {
@@ -107,6 +108,9 @@ export function createProcessBlockImpl<Data, Location>(options: {
             label: 'Process' }
         ]
       }];
-    }
+    },
+    getLabel(block) {
+      return options.getLabel?.(block.data) ?? null;
+    },
   };
 }

@@ -19,7 +19,7 @@ class Attributes(TypedDict, total=False):
   name: Evaluable[LocatedString]
 
 class Transformer(BasePassiveTransformer):
-  priority = 100
+  priority = 800
   attributes = {
     'name': Attribute(
       description="Sets the block's name.",

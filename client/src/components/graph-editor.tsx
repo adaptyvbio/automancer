@@ -1,4 +1,4 @@
-import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
@@ -15,16 +15,17 @@ import { ViewExecution } from '../views/execution';
 import { MenuDef, MenuEntryPath } from './context-menu';
 import { ContextMenuArea } from './context-menu-area';
 import { Icon } from './icon';
+import { getBlockName } from '../protocol';
 
 
 export interface GraphEditorProps {
   execution?: ViewExecution;
   host: Host;
+  protocol: Protocol | null;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selectedBlockPath: ProtocolBlockPath | null;
   location?: unknown;
   summary?: React.ReactNode;
-  tree: ProtocolBlock | null;
 }
 
 export interface GraphEditorState {
@@ -36,7 +37,7 @@ export interface GraphEditorState {
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
   controller = new AbortController();
   initialized = false;
-  offsetBoundaries!: { min: Point; max: Point; };
+  offsetBoundaries: { min: Point; max: Point; } | null = null;
   refContainer = React.createRef<HTMLDivElement>();
   settings: GraphRenderSettings | null = null;
 
@@ -92,30 +93,11 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         y: settings.cellPixelSize * 0
       }
     });
-
-    // this.setState((state) => {
-    //   let metrics = this.props.host.getGraphMetrics(this.props.tree!);
-    //   let { width, height } = this.state.size;
-
-    //   let scale = Math.min(
-    //     width / metrics.width,
-    //     height / metrics.height
-    //   );
-
-    //   let offset = {
-    //     x: (width - metrics.width * scale) / 2,
-    //     y: (height - metrics.height * scale) / 2
-    //   };
-
-    //   return {
-    //     ...state,
-    //     offset,
-    //     scale
-    //   };
-    // });
   }
 
   getBoundOffset(point: Point): Point {
+    util.assert(this.offsetBoundaries);
+
     return {
       x: Math.min(Math.max(point.x, this.offsetBoundaries.min.x), this.offsetBoundaries.max.x),
       y: Math.min(Math.max(point.y, this.offsetBoundaries.min.y), this.offsetBoundaries.max.y)
@@ -139,12 +121,14 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     container.addEventListener('wheel', (event) => {
       event.preventDefault();
 
-      this.setState((state) => ({
-        offset: this.getBoundOffset({
-          x: state.offset.x + event.deltaX * 1,
-          y: state.offset.y + event.deltaY * 1
-        })
-      }));
+      if (this.offsetBoundaries) {
+        this.setState((state) => ({
+          offset: this.getBoundOffset({
+            x: state.offset.x + event.deltaX * 1,
+            y: state.offset.y + event.deltaY * 1
+          })
+        }));
+      }
     }, { passive: false, signal: this.controller.signal });
 
 
@@ -183,67 +167,70 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
 
     let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
-    if (this.props.tree) {
+    if (this.props.protocol?.root) {
       // console.log(this.props.tree);
-      console.log('---');
+      // console.log('---');
 
       let computeGraph = (
-        block: ProtocolBlock,
+        groupRootBlock: ProtocolBlock,
         path: ProtocolBlockPath,
         ancestors: ProtocolBlock[],
         location: unknown
       ): ProtocolBlockGraphRendererMetrics => {
-        let blockImpl = getBlockImpl(block);
+        // let blockImpl = getBlockImpl(block);
 
-        let currentBlock = block;
+        let currentBlock = groupRootBlock;
         let currentBlockImpl: UnknownPluginBlockImpl;
         let currentBlockPath = path;
 
-        let discreteBlocks: ProtocolBlock[] = [];
+        let groupBlocks: ProtocolBlock[] = [];
+        let groupName: string | null = null;
 
         while (true) {
           currentBlockImpl = getBlockImpl(currentBlock);
+          let currentBlockName = getBlockName(currentBlock);
 
-          if (currentBlockImpl.computeGraph) {
+          if (currentBlockImpl.computeGraph || (currentBlockName && groupName)) {
             break;
           }
 
-          discreteBlocks.push(currentBlock);
+          if (currentBlockName) {
+            groupName = currentBlockName;
+          }
+
+          groupBlocks.push(currentBlock);
 
           let key = 0;
           currentBlock = currentBlockImpl.getChild!(currentBlock, key);
           currentBlockPath.push(key);
         }
 
-        if ((discreteBlocks.length > 0) && currentBlockImpl.getChild) {
-          let label = discreteBlocks.map((block) => {
-            let blockImpl = getBlockImpl(block);
-            return blockImpl.getClassLabel?.(block) ?? 'Unknown';
-          }).join(', ');
+        let defaultLabelComponents = groupBlocks.flatMap((block) => {
+          return getBlockImpl(block).getLabel?.(block) ?? [];
+        });
 
+        if ((groupBlocks.length > 0) && (groupName || (defaultLabelComponents.length > 0))) {
           return computeContainerBlockGraph(({
-            label
+            label: (groupName ?? defaultLabelComponents.join(', '))
           } as any), currentBlockPath.slice(0, -1), [], null, {
             settings,
             computeMetrics(key, location) {
-              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...discreteBlocks], null);
+              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], null);
             },
           }, context);
         }
 
-        let metrics = currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...discreteBlocks], location, {
+        return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], location, {
           settings,
           computeMetrics: (key, childLocation: unknown | null) => {
-            let childBlock = blockImpl.getChild!(block, key);
-            return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, block], childLocation);
+            let childBlock = currentBlockImpl.getChild!(currentBlock, key);
+            return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
           }
         }, context);
-
-        return metrics;
       };
 
       let origin: Point = { x: 1, y: 1 };
-      let treeMetrics = computeGraph(this.props.tree, [], [], this.props.location ?? null);
+      let treeMetrics = computeGraph(this.props.protocol.root, [], [], this.props.location ?? null);
 
       renderedTree = treeMetrics.render(origin, {
         attachmentEnd: false,
@@ -407,6 +394,9 @@ export function GraphNode(props: {
   settings: GraphRenderSettings;
 }) {
   let { node, settings } = props;
+
+  // let host = props.settings.editor.props.host;
+  // let blockAnalysis = analyzeBlockPath(props.settings.editor.props.protocol!, props.path, { host });
 
   return (
     <g

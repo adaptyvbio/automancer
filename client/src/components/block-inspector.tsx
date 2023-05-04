@@ -9,11 +9,10 @@ import { Host } from '../host';
 import { PluginBlockEntry, PluginContext } from '../interfaces/plugin';
 import { ProtocolBlockAggregate } from '../interfaces/protocol';
 import { UnitContext } from '../interfaces/unit';
-import { getBlockAggregates, UnitTools } from '../unit';
+import { UnitTools } from '../unit';
 import * as util from '../util';
-import { ErrorBoundary } from './error-boundary';
-import { SimpleFeatureList } from './features';
 import { Icon } from './icon';
+import { analyzeBlockPath } from '../protocol';
 
 
 export interface PluginBlockEntryInfos {
@@ -49,67 +48,30 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       );
     }
 
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.blockPath, { host: this.props.host });
+
     let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
-    let currentBlock = this.props.protocol.root;
-    let lineBlocks: ProtocolBlock[] = [currentBlock];
-    let lastLeadTransformedBlockIndex = -1;
+    let ancestorGroups = blockAnalysis.groups.slice(0, -1);
+    let leafGroup = blockAnalysis.groups.at(-1);
 
-    for (let [blockIndex, key] of this.props.blockPath.entries()) {
-      let currentBlockImpl = getBlockImpl(currentBlock);
-      currentBlock = currentBlockImpl.getChild!(currentBlock, key);
-      lineBlocks.push(currentBlock);
+    let leafBlock = blockAnalysis.blocks.at(-1);
+    let leafBlockImpl = getBlockImpl(leafBlock);
 
-      if (currentBlockImpl.computeGraph) {
-        lastLeadTransformedBlockIndex = blockIndex;
-      }
-    }
-
-    let leafBlock = lineBlocks.at(-1);
-    let title: string | null = null;
-
-    let entryInfos: PluginBlockEntryInfos[] = [];
-    let breadcrumbItems: {
-      path: ProtocolBlockPath;
-      value: string;
-    }[] = [];
-
-    for (let [blockIndex, block] of lineBlocks.entries()) {
-      if (block.namespace === 'name') {
-        let nameBlock = block as (ProtocolBlock & {
-          value: string;
-        });
-
-        breadcrumbItems.push({
-          path: this.props.blockPath.slice(0, blockIndex),
-          value: nameBlock.value
-        });
-
-        if (blockIndex > lastLeadTransformedBlockIndex) {
-          title = nameBlock.value;
-        }
-      }
-
-      for (let entry of (getBlockImpl(block).createEntries?.(block, null) ?? [])) {
-        entryInfos.push({
-          block,
-          entry
-        });
-      }
-    }
+    // console.log(blockAnalysis);
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
-        {(breadcrumbItems.length > 0) && (
+        {(ancestorGroups.length > 0) && (
           <div className={spotlightStyles.breadcrumbRoot}>
-            {breadcrumbItems.map((item, itemIndex, arr) => {
-              let last = itemIndex === (arr.length - 1);
+            {ancestorGroups.map((group, groupIndex, arr) => {
+              let last = groupIndex === (arr.length - 1);
 
               return (
-                <Fragment key={itemIndex}>
+                <Fragment key={groupIndex}>
                   <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                    this.props.selectBlock(item.path);
-                  }}>{item.value}</button>
+                    this.props.selectBlock(group.path);
+                  }}>{group.name ?? <i>Untitled</i>}</button>
                   {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
                 </Fragment>
               );
@@ -117,25 +79,46 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{title ?? getBlockImpl(leafBlock).getClassLabel?.(leafBlock) ?? 'Unknown'}</h2>
+          <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafBlock) ?? 'Untitled'}</i>}</h2>
         </div>
 
-        <div className={featureStyles.group}>
-          {Array.from(entryInfos).reverse().map(({ block, entry }) => (
-            entry.features.map((feature, featureIndex) => (
-              <div className={featureStyles.entry} key={featureIndex}>
-                <Icon name={feature.icon} className={featureStyles.icon} />
-                <div className={featureStyles.body}>
-                  {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
-                  <div className={featureStyles.label}>{feature.label}</div>
+        {blockAnalysis.isLeafBlockTerminal && (
+          <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
+            {leafBlockImpl.createEntries?.(leafBlock, null).map((entry) => (
+              entry.features.map((feature, featureIndex) => (
+                <div className={util.formatClass(featureStyles.entry, featureStyles.entryAccent)} key={featureIndex}>
+                  <Icon name={feature.icon} className={featureStyles.icon} />
+                  <div className={featureStyles.body}>
+                    {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
+                    <div className={featureStyles.label}>{feature.label}</div>
+                  </div>
                 </div>
-                <Icon name="power_off" className={featureStyles.errorIcon} />
+              ))
+            ))}
+          </div>
+        )}
+
+        <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
+          {blockAnalysis.groups.slice().reverse().map((group) =>
+            group.blocks.slice().reverse().map((block) => {
+              let blockImpl = getBlockImpl(block);
+              return blockImpl.createEntries?.(block, null).map((entry) => (
+                entry.features.map((feature, featureIndex) => (
+                  <div className={featureStyles.entry} key={featureIndex}>
+                    <Icon name={feature.icon} className={featureStyles.icon} />
+                    <div className={featureStyles.body}>
+                      {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
+                      <div className={featureStyles.label}>{feature.label}</div>
+                    </div>
+                    {/* <Icon name="power_off" className={featureStyles.errorIcon} />
                 <button type="button" className={featureStyles.action}>
                   <Icon name="expand_more" />
-                </button>
-              </div>
-            ))
-          ))}
+                </button> */}
+                  </div>
+                ))
+              ))
+            })
+          )}
         </div>
       </div>
     );

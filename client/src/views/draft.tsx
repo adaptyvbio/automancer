@@ -28,6 +28,7 @@ import * as util from '../util';
 import { Pool } from '../util';
 import { ViewExecution } from './execution';
 import { ViewDrafts } from './protocols';
+import { getBlockImpl } from '../protocol';
 
 
 export interface ViewDraftProps {
@@ -188,28 +189,23 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         compiling: false
       });
 
-      // TODO: Improve
       if (this.state.selectedBlockPath) {
-        let block = compilation.protocol?.root;
+        let currentBlock = compilation.protocol?.root;
 
         for (let key of this.state.selectedBlockPath) {
-          if (!block) {
+          if (!currentBlock) {
             this.setState({ selectedBlockPath: null });
             break;
           }
 
-          let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-          block = unit.getChildBlock?.(block, key);
+          let currentBlockImpl = getBlockImpl(currentBlock, { host: this.props.host });
+          currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
         }
 
-        if (!block) {
+        if (!currentBlock) {
           this.setState({ selectedBlockPath: null });
         }
       }
-
-      // if (options.global) {
-      //   await this.props.app.saveDraftCompilation(this.props.draft, compilation);
-      // }
     }
 
     return compilation;
@@ -405,10 +401,10 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                   <ErrorBoundary>
                     <GraphEditor
                       host={this.props.host}
+                      protocol={this.state.compilation?.protocol ?? null}
                       selectBlock={this.selectBlock.bind(this)}
                       selectedBlockPath={this.state.selectedBlockPath}
-                      summary={summary}
-                      tree={this.state.compilation?.protocol?.root ?? null} />
+                      summary={summary} />
                   </ErrorBoundary>
                 ) },
               { nominalSize: CSSNumericValue.parse('400px'),

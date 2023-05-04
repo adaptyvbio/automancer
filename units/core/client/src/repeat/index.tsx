@@ -63,7 +63,23 @@ export default {
       },
       getClassLabel(block) {
         return 'Repeat';
-      }
+      },
+      getLabel(block) {
+        let numericCount = (block.count.type === 'number')
+          ? block.count.value
+          : null;
+
+        if (numericCount !== null) {
+          return 'Repeat ' + ({
+            1: 'once',
+            2: 'twice'
+          }[numericCount] ?? `${numericCount} times`);
+        } else {
+          return (
+            <>Repeat {formatDynamicValue(block.count)} times</>
+          );
+        }
+      },
     } satisfies PluginBlockImpl<Block, Key, Location>
   }
 } satisfies Plugin;

@@ -1,5 +1,5 @@
 import type { OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName, UnitNamespace } from 'pr1-shared';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import type { Application } from '../application';
 import type { MenuDef } from '../components/context-menu';
@@ -49,8 +49,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Key extends Ordina
   createEntryMenu?(block: Block, entryId: OrdinaryId): MenuDef;
   getChild?(block: Block, key: Key): ProtocolBlock;
   getClassLabel?(block: Block): string;
-  getLabel?(block: Block): string;
-  // getSingleChild?(block: Block): ProtocolBlock;
+  getLabel?(block: Block): ReactNode | null;
 }
 
 export type UnknownPluginBlockImpl = PluginBlockImpl<any, OrdinaryId, any>;

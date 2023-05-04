@@ -30,6 +30,9 @@ export default {
           ) ?? 'Forever'
         }];
       },
+      getLabel(data) {
+        return 'Wait';
+      },
     })
   }
 } satisfies Plugin

@@ -6,7 +6,7 @@ import functools
 import math
 import re
 import sys
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar, cast
 
 from .error import Diagnostic, ErrorDocumentReference
 from .util.decorators import deprecated
@@ -288,6 +288,17 @@ class LocatedValue(Generic[T]):
         return LocatedString(obj, area, absolute=False)
       case _:
         return LocatedValueContainer(obj, area)
+
+  def dislocate(self):
+    match self.value:
+      case dict():
+        return { key.dislocate(): value.dislocate() for key, value in self.value.items() }
+      case list():
+        return [item.dislocate() for item in self.value]
+      case set():
+        return {item.dislocate() for item in self.value}
+      case _:
+        return self.value
 
   # @deprecated
   @staticmethod
@@ -704,7 +715,7 @@ def tokenize(raw_source: Source | str, /):
         if key:
           token.key = key
         else:
-          errors.append(MissingKeyError(location=key.area.location()))
+          errors.append(MissingKeyError(key))
           token.key = None
 
         token.value = value if value else None
@@ -1082,25 +1093,22 @@ def dumps(obj, depth = 0, cont = False):
   raise Exception("Invalid input")
 
 
-def parse(raw_source: Source | str, /):
-  tokens, errors, _ = tokenize(raw_source)
-
-  if errors:
-    raise errors[0]
-
-  result, errors, _ = analyze(tokens)
-
-  if errors:
-    raise errors[0]
-
-  return result
-
-
 def loads(raw_source: Source | str, /) -> tuple[Any, list[ReaderError], list[ReaderError]]:
   tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
   result, analysis_errors, analysis_warnings = analyze(tokens)
 
   return result, tokenization_errors + analysis_errors, tokenization_warnings + analysis_warnings
+
+def loads2(raw_source: Source | str, /):
+  from .fiber.langservice import Analysis
+
+  tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
+  result, analysis_errors, analysis_warnings = analyze(tokens)
+
+  return Analysis(
+    errors=cast(list[Diagnostic], tokenization_errors + analysis_errors),
+    warnings=cast(list[Diagnostic], (tokenization_warnings + analysis_warnings))
+  ), result
 
 
 ## Tests

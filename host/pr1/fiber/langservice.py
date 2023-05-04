@@ -1442,13 +1442,19 @@ class DataTypeType(Type):
       return analysis, ValueAsPythonExpr.new(LocatedValue.new(value, obj.area), depth=context.eval_depth)
 
 
-# TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):
   for error in analysis.errors:
-    diagnostic = error.diagnostic()
-    area = LocationArea(diagnostic.ranges)
+    logger.error(error.message)
 
-    logger.error(diagnostic.message)
+    for ref in error.references:
+      if isinstance(ref, ErrorDocumentReference) and ref.area:
+        for line in ref.area.format().splitlines():
+          logger.debug(line)
 
-    for line in area.format().splitlines():
-      logger.debug(line)
+  for warning in analysis.warnings:
+    logger.warning(warning.message)
+
+    for ref in warning.references:
+      if isinstance(ref, ErrorDocumentReference) and ref.area:
+        for line in ref.area.format().splitlines():
+          logger.debug(line)

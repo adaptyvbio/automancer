@@ -11,7 +11,7 @@ NodePathLike = Sequence[NodeId]
 
 
 T = TypeVar('T', bound='BaseNode', contravariant=True)
-NodeListenerMode = Literal['connection', 'ownership', 'target', 'value']
+NodeListenerMode = Literal['connection', 'content', 'ownership', 'target', 'value']
 
 class NodeListener(Protocol[T]):
   def __call__(self, node: T, *, mode: NodeListenerMode):

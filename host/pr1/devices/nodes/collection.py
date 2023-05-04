@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from .common import BaseNode, NodeId, NodePath
 
 
@@ -32,9 +34,10 @@ class CollectionNode(BaseNode):
 
 
 class DeviceNode(CollectionNode):
+  owner: ClassVar[str]
+
   def __init__(self):
     super().__init__()
-    self.owner: str
 
   def export(self):
     return {

@@ -20,12 +20,11 @@ T = TypeVar('T')
 
 NodeRevision = NewType('NodeRevision', int)
 
-class ValueNode(ConfigurableNode, ABC, Generic[T]):
+class ValueNode(BaseNode, ABC, Generic[T]):
   def __init__(
       self,
       *,
       nullable: bool = False,
-      pool: Pool,
       readable: bool = False,
       stable: bool = True,
       writable: bool = False
@@ -34,19 +33,22 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     Creates a value node.
 
     Parameters
-      nullable: Whether the node's value can be set to a disabled state known as "null".
+      nullable: Whether the node's value can be set to a disabled state known as `Null`.
       readable: Whether the node is readable.
-      stable: Whether the node's value might change despite being claimed.
+      stable: Whether the node's value might change due to external cause, despite being claimed.
       writable: Whether the node is writable.
     """
 
     super().__init__()
 
-    self._lock = Lock()
-    self._pool = pool
+    # This is updated each time _read() returns true, meaning self.value changed.
     self._revision = NodeRevision(0)
 
+    # outer None -> target value is implicitly undefined (= never called write())
+    # inner None -> target value is explicitly undefined (= don't care)
     self.target_value: Optional[tuple[float, Optional[T | NullType]]] = None
+
+    # None -> value is unknown
     self.value: Optional[tuple[float, T | NullType]] = None
 
     self.stable = stable
@@ -54,14 +56,17 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self.readable = readable
     self.writable = writable
 
+    if self.readable:
+      self._read_lock = Lock()
+
     if self.writable:
       self.claimable = Claimable(change_callback=self._claim_change)
+      self._write_lock = Lock()
 
   # Internal
 
   def _claim_change(self):
-    for listener in self._ownership_listeners:
-      listener(self)
+    self._trigger_listeners(mode='ownership')
 
   # To be implemented
 
@@ -111,20 +116,6 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
   async def _export_value(self, value: T, /) -> Any:
     ...
 
-  # Called by the producer
-
-  async def _configure(self):
-    async with configure(super()):
-      try:
-        await self._read()
-      except NotImplementedError:
-        pass
-
-      while (self.target_value is not None) and ((self.value is None) or (self.value[1] != self.target_value[1])):
-        async with self._lock:
-          await self._write(self.target_value[1])
-          self.value = (time.time(), self.target_value[1])
-
   # Called by the consumer
 
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
@@ -132,16 +123,6 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
       raise NotImplementedError
 
     return self.claimable.claim(marker, force=force)
-
-  async def clear(self):
-    self.target_value = (time.time(), None)
-
-    async with self._lock:
-      if self.connected:
-        try:
-          self._clear()
-        except NodeUnavailableError:
-          pass
 
   async def read(self):
     """
@@ -158,7 +139,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     if not self.readable:
       raise NotImplementedError
 
-    async with self._lock:
+    async with self._read_lock:
       if self.connected:
         try:
           changed = await self._read()
@@ -169,9 +150,14 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
             self._revision = NodeRevision(self._revision + 1)
             self._trigger_listeners(mode='value')
 
+          self._trigger_listeners(mode='content')
+
           return True
 
     return False
+
+  def watch_content(self, listener: NodeListener, /):
+    return self._attach_listener(listener, mode='content')
 
   def watch_ownership(self, listener: NodeListener, /):
     if not self.writable:
@@ -194,7 +180,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self.target_value = (time.time(), value)
     self._trigger_listeners(mode='target')
 
-    async with self._lock:
+    async with self._write_lock:
       if self.connected:
         try:
           await self._write(value)
@@ -213,7 +199,7 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
     self.target_value = (time.time(), value)
     self._trigger_listeners(mode='target')
 
-    async with self._lock:
+    async with self._write_lock:
       while True:
         await self.wait_connected()
 
@@ -224,22 +210,24 @@ class ValueNode(ConfigurableNode, ABC, Generic[T]):
 
         self.value = (time.time(), value)
 
-        if isinstance(self, WatchableNode) and (not self.stable):
-          change_event = Event()
+        await self.wait_disconnected()
 
-          def listener(node: BaseNode, *, mode: NodeListenerMode):
-            change_event.set()
+        # if isinstance(self, WatchableNode) and (not self.stable):
+        #   change_event = Event()
 
-          reg = await self.watch_value(listener)
+        #   def listener(node: BaseNode, *, mode: NodeListenerMode):
+        #     change_event.set()
 
-          try:
-            while True:
-              await change_event.wait()
-              change_event.clear()
+        #   reg = await self.watch_value(listener)
 
-              await self._write(value)
-          finally:
-            reg.cancel()
+        #   try:
+        #     while True:
+        #       await change_event.wait()
+        #       change_event.clear()
+
+        #       await self._write(value)
+        #   finally:
+        #     reg.cancel()
 
   def export(self):
     return {

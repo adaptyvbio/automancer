@@ -1,13 +1,12 @@
 import asyncio
 import warnings
 from abc import abstractmethod
-from asyncio import Event, Handle, Task
-from typing import AsyncIterator, Callable, NewType, Optional, Sequence
+from asyncio import Event, Task
+from typing import AsyncIterator, Optional
 
-from ...util.asyncio import AsyncCancelable, Cancelable, cancel_task, run_double
-from ...util.types import SimpleCallbackFunction
-from .common import (ConfigurableNode, NodeListener, NodeUnavailableError,
-                     configure, unconfigure)
+from ...util.asyncio import Cancelable
+from ...util.pool import Pool
+from .common import NodeListener, NodeUnavailableError
 from .value import NodeRevision, ValueNode
 
 
@@ -28,20 +27,40 @@ class WatchableNode(ValueNode):
     """
 
 
-class SubscribableReadableNode(WatchableNode, ConfigurableNode):
+class SubscribableReadableNode(WatchableNode):
   """
   A readable node whose changes can be reported by the node's implementation.
   """
 
-  def __init__(self, **kwargs):
+  def __init__(self, *, pool: Pool, **kwargs):
     super().__init__(**kwargs)
 
+    self._pool = pool
     self._watch_canceled = False
     self._watch_count = 0
     self._watch_task: Optional[Task[None]] = None
     self._watching_event = Event()
 
   # Internal
+
+  def _start_watch(self, reg: Cancelable):
+    self._watch_count += 1
+
+    if not self._watch_task:
+      self._watch_task = self._pool.start_soon(self._watch())
+
+    def cancel():
+      # The _watch_task property could already have been set to None if an error occured in _watch().
+      if self._watch_task:
+        self._watch_canceled = True
+        self._watch_task.cancel()
+
+      self._watch_count -= 1
+
+      reg.cancel()
+
+    return Cancelable(cancel)
+
 
   async def _watch(self):
     try:
@@ -54,8 +73,8 @@ class SubscribableReadableNode(WatchableNode, ConfigurableNode):
 
           try:
             async for _ in self._subscribe():
+              # Listeners should be called by _subscribe().
               self._watching_event.set()
-              self._trigger_listeners(mode='value')
           except NodeUnavailableError:
             pass
           else:
@@ -66,6 +85,7 @@ class SubscribableReadableNode(WatchableNode, ConfigurableNode):
           else:
             raise
     finally:
+      self._watch_canceled = False
       self._watch_task = None
       self._watching_event.clear()
 
@@ -86,29 +106,21 @@ class SubscribableReadableNode(WatchableNode, ConfigurableNode):
 
   # Called by the consumer
 
+  def watch_content(self, listener, /):
+    reg = super().watch_content(listener)
+    return self._start_watch(reg)
+
   async def watch_value(self, listener, /):
     reg = self._attach_listener(listener, mode='value')
-    self._watch_count += 1
-
-    if not self._watch_task:
-      self._watch_task = self._pool.start_soon(self._watch())
-
-    def cancel():
-      assert self._watch_task
-      self._watch_task.cancel()
-
-      self._watch_canceled = True
-      self._watch_count -= 1
-
-      reg.cancel()
+    new_reg = self._start_watch(reg)
 
     try:
       await self._watching_event.wait()
     except asyncio.CancelledError:
-      cancel()
+      new_reg.cancel()
       raise
 
-    return Cancelable(cancel)
+    return new_reg
 
 
 class PollableReadableNode(SubscribableReadableNode):

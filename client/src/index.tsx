@@ -49,12 +49,14 @@ export * from './components/timed-progress-bar';
 export * from './components/title-bar';
 export * from './components/item-list';
 export * from './components/selector';
+export * from './components/static-select';
 export * from './unit';
 
 export * from './interfaces/host';
 export * from './interfaces/graph';
 export * from './interfaces/protocol';
 export * from './interfaces/unit';
+export * from './interfaces/util';
 export * from './interfaces/view';
 
 

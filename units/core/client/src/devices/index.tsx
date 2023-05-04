@@ -1,9 +1,9 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { List, Map as ImMap } from 'immutable';
-import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Host, Icon, NodeHierarchy, StateUnit, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Host, Icon, NodeHierarchy, OrdinaryId, StateUnit, StaticSelect, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
-import { Component, createRef, useEffect, useRef, useState } from 'react';
+import { Component, PropsWithChildren, createRef, useEffect, useRef, useState } from 'react';
 
 import styles from './styles.module.scss';
 
@@ -276,6 +276,19 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
 }
 
 
+interface WindowOption {
+  label: string;
+  value: number;
+}
+
+const ChartWindowOptions: WindowOption[] = [
+  { label: '10 sec', value: 10e3 },
+  { label: '1 min', value: 60e3 },
+  { label: '10 min', value: (10 * 60e3) },
+  { label: '30 min', value: (30 * 60e3) }
+];
+
+
 interface NodeDetailProps {
   app: Application;
   executor: ExecutorState;
@@ -287,24 +300,25 @@ interface NodeDetailProps {
 
 interface NodeDetailState {
   chartReady: boolean;
+  chartWindowOption: WindowOption;
 }
 
 class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   private chart: any;
   private data: [number, number][] = [];
   private chartRenderId: number | null = null;
-  private chartControlId: number | null = null;
   private refChart = createRef<HTMLDivElement>();
 
-  private displayTimeWindow = 5e3;
+  private previousDisplayWindow = 0;
   private minSampleCount = 4;
-  private storageTimeWindow = 5e3;
+  private storageWindow = 30 * 60e3;
 
   constructor(props: NodeDetailProps) {
     super(props);
 
     this.state = {
-      chartReady: false
+      chartReady: false,
+      chartWindowOption: ChartWindowOptions[1]
     };
 
     let xScale = d3.scaleLinear();
@@ -327,21 +341,6 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
           .series([series1])
           .mapping((data, index, series) => data)
       );
-
-    this.chart
-      .xDomain([-this.displayTimeWindow, 0])
-      .xTickFormat((value, index) => {
-        let minutes = Math.round(-value / 60e3);
-        let seconds = Math.round((-value - minutes * 60e3) / 1e3);
-
-        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      });
-  }
-
-  override componentDidMount() {
-    this.chartControlId = setInterval(() => {
-      this.controlChartRender();
-    }, 2e3);
   }
 
   override componentDidUpdate(prevProps: Readonly<NodeDetailProps>, prevState: Readonly<NodeDetailState>, snapshot?: any) {
@@ -370,11 +369,6 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 
   override componentWillUnmount() {
     this.cancelChartRender();
-
-    if (this.chartControlId !== null) {
-      clearInterval(this.chartControlId);
-      this.chartControlId = null;
-    }
   }
 
   cancelChartRender() {
@@ -387,7 +381,7 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   controlChartRender() {
     let now = Date.now();
 
-    let sliceIndex = this.data.findIndex(([time, value]) => time > (now - this.storageTimeWindow));
+    let sliceIndex = this.data.findIndex(([time, value]) => time > (now - this.storageWindow));
     this.data.splice(0, (sliceIndex >= 0) ? (sliceIndex - 1) : this.data.length);
 
     if (this.data.length >= this.minSampleCount) {
@@ -403,8 +397,12 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   }
 
   renderChart() {
+    let displayWindow = this.state.chartWindowOption.value;
+
     let now = Date.now();
-    let data = this.data.map(([time, value]) => [(time - now), value]);
+    let data = this.data
+      .map(([time, value]) => [(time - now), value])
+      .filter(([delta, value]) => (-delta < displayWindow));
     let allY = data.map(([x, y]) => y);
 
     this.chart
@@ -413,6 +411,21 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
         Math.max(...allY)
       ])
       // .yTickFormat((value, index) => `${value.toFixed(2)} MB`);
+
+
+    if (displayWindow !== this.previousDisplayWindow) {
+      this.previousDisplayWindow = displayWindow;
+
+      this.chart
+        .xDomain([-displayWindow, 0])
+        .xTickFormat((delta: number) => {
+          let minutes = Math.floor(-delta / 60e3);
+          let seconds = Math.round((-delta - minutes * 60e3) / 1e3);
+
+          return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        });
+    }
+
 
     d3.select(this.refChart.current!)
       .datum(data)
@@ -489,8 +502,13 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
           </div>
           <div className={styles.detailChartRoot}>
             <div className={styles.detailChartToolbar}>
-              <div>Frequency: 50 Hz</div>
-              <div>Window: 10 sec</div>
+              {/* <div>Frequency: 50 Hz</div> */}
+              <StaticSelect
+                options={ChartWindowOptions}
+                selectOption={(chartWindowOption) => void this.setState({ chartWindowOption })}
+                selectedOption={this.state.chartWindowOption}>
+                Window: {this.state.chartWindowOption.label}
+              </StaticSelect>
             </div>
             <div className={styles.detailChartContainer}>
               {this.state.chartReady

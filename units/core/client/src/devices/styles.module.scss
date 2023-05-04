@@ -72,7 +72,7 @@ $app-red: #ff4136;
     }
   }
 
-  &Plot {
+  &Chart {
     &Root {
       display: flex;
       flex-direction: column;
@@ -90,10 +90,26 @@ $app-red: #ff4136;
       color: #666;
     }
 
-    &Contents {
+    &Container {
       height: 400px;
-      background-color: #eee;
-      border-radius: 4px;
+      background-color: #fafafa;
+      border-radius: 6px;
+    }
+
+    &Placeholder {
+      display: flex;
+      height: 100%;
+
+      p {
+        margin: auto;
+
+        color: #666;
+        font-weight: 500;
+      }
+    }
+
+    &Contents {
+      height: 100%;
     }
   }
 
@@ -146,6 +162,7 @@ $app-red: #ff4136;
 
     &Magnitude {
       font-size: 1.8rem;
+      font-variant-numeric: tabular-nums;
       font-weight: 600;
       line-height: 1.2;
 

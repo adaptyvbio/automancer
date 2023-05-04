@@ -7,7 +7,12 @@
     "ref": "python3 -c \"import os\nfor f in __import__('pathlib').Path('dist').glob('*'): d = f'../src/pr1_{f.name}/client'; __import__('shutil').rmtree(d); os.symlink(os.path.relpath(f, d + '/..'), d);\"",
     "test": "tsc"
   },
+  "dependencies": {
+    "d3": "^7.8.4",
+    "d3fc": "^15.2.6"
+  },
   "devDependencies": {
+    "@types/d3": "^7.4.0",
     "@types/react": "^18.0.16",
     "esbuild": "~0.17.0",
     "esbuild-sass-plugin": "^2.9.0",

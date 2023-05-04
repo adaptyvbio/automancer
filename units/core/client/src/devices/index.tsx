@@ -1,7 +1,9 @@
+import * as d3 from 'd3';
+import * as fc from 'd3fc';
 import { List, Map as ImMap } from 'immutable';
-import { Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Icon, NodeHierarchy, StateUnit, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Host, Icon, NodeHierarchy, StateUnit, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
-import { useEffect, useState } from 'react';
+import { Component, createRef, useEffect, useRef, useState } from 'react';
 
 import styles from './styles.module.scss';
 
@@ -40,8 +42,15 @@ const findNode = (node: BaseNode, path: NodePath) => {
   let currentNode = node;
 
   for (let id of path) {
-    util.assert(isCollectionNode(currentNode));
+    if (!isCollectionNode(currentNode)) {
+      return null;
+    }
+
     currentNode = currentNode.nodes[id];
+
+    if (!currentNode) {
+      return null;
+    }
   }
 
   return currentNode;
@@ -85,7 +94,7 @@ export function isValueNode(node: BaseNode): node is ValueNode {
 
 
 export type ContainedValue = {
-  time: never;
+  time: number;
   value: {
     type: 'null';
   } | {
@@ -113,7 +122,7 @@ const namespace = ('devices' as UnitNamespace);
 
 function DeviceControlTab(props: GeneralTabComponentProps) {
   let executor = (props.host.state.executors[namespace] as ExecutorState);
-  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null, NodeId[] | null>(null, createSyncSessionStorageStore('deviceControl.hierarchyOpenEntries'), {
+  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null, NodeId[] | null>(null, createSyncSessionStorageStore('deviceControl.selectedEntry'), {
     deserialize: (serializedValue) => (serializedValue && List(serializedValue)),
     serialize: (value) => (value?.toJS() ?? null),
   });
@@ -179,7 +188,7 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
           <NodeHierarchy
             entries={createNodeEntriesFromNodes(Object.values(executor.root.nodes))}
             onSelectEntry={(entryPath) => void setSelectedNodePath(entryPath)}
-            store={createSyncSessionStorageStore('deviceControl.selectedEntry')}
+            store={createSyncSessionStorageStore('deviceControl.hierarchyOpenEntries')}
             /* [
             { type: 'node',
               id: 'a',
@@ -241,126 +250,302 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
 
           let nodePath = selectedNodePath;
           let node = findNode(executor.root, nodePath);
+
+          if (!node) {
+            setSelectedNodePath(null);
+            return null;
+          }
+
           let nodeState = nodeStates.get(nodePath)!;
 
-          let owner = nodeState.writable?.owner;
-          let owned = (owner?.type === 'client') && (owner.clientId === props.host.clientId);
-
           return (
-            <div className={styles.detailRoot} key={nodePath.join('.')}>
-              <div className={styles.detailContents}>
-                <div className={styles.detailHeaderRoot}>
-                  <div className={styles.detailHeaderTitle}>
-                    <h1 className={styles.detailHeaderLabel}>{node.label ?? node.id}</h1>
-                    <p className={styles.detailHeaderDescription}>{node.description ?? ' '}</p>
-                  </div>
-                  <div className={styles.detailHeaderActions}>
-                    {nodeState.writable && (
-                      <Button onClick={() => {
-                        props.app.pool.add(async () => {
-                          await props.host.client.request({
-                            type: 'requestExecutor',
-                            namespace,
-                            data: {
-                              type: (owned ? 'release' : 'claim'),
-                              nodePath: nodePath.toJS()
-                            }
-                          })
-                        });
-                      }}>{owned ? 'Release' : 'Claim'}</Button>
-                    )}
-                  </div>
-                </div>
-                <div className={styles.detailInfoRoot}>
-                  <div className={styles.detailInfoEntry}>
-                    <div className={styles.detailInfoLabel}>Full name</div>
-                    <div className={styles.detailInfoValue}>
-                      <code>{nodePath.join('.')}</code>
-                    </div>
-                  </div>
-                  <div className={styles.detailInfoEntry}>
-                    <div className={styles.detailInfoLabel}>Status</div>
-                    <div className={styles.detailInfoValue}>
-                      {nodeState.connected ? 'Connected' : 'Disconnected'}
-                    </div>
-                  </div>
-                  {nodeState.writable && (
-                    <div className={styles.detailInfoEntry}>
-                      <div className={styles.detailInfoLabel}>Current user</div>
-                      <div className={styles.detailInfoValue}>{(() => {
-                        if (!owner) {
-                          return '–';
-                        } if (owned) {
-                          return 'You';
-                        } if (owner.type === 'client') {
-                          return 'Another client';
-                        }
-
-                        return '[Unknown]';
-                      })()}</div>
-                    </div>
-                  )}
-                  {/* <div className={styles.detailConnectionRoot}>
-                    <div className={styles.detailConnectionStatus}>
-                      <Icon name="error" style="sharp" />
-                      <div>Disconnected</div>
-                    </div>
-                    <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
-                  </div> */}
-                </div>
-                <div className={styles.detailPlotRoot}>
-                  <div className={styles.detailPlotToolbar}>
-                    <div>Frequency: 50 Hz</div>
-                    <div>Window: 10 sec</div>
-                  </div>
-                  <div className={styles.detailPlotContents}></div>
-                </div>
-                {isValueNode(node) && (
-                  <div className={styles.detailValues}>
-                    <div className={styles.detailValueRoot}>
-                      <div className={styles.detailValueLabel}>{nodeState.connected ? 'Current value' : 'Last known value'}</div>
-                      <div className={styles.detailValueQuantity}>
-                        <div className={styles.detailValueMagnitude}>
-                          {(() => {
-                            let container = nodeState.value!;
-
-                            if (!container.value) {
-                              // The value is unknown.
-                              return '–';
-                            } if (container.value.type === 'null') {
-                              // The device is disabled.
-                              return '[disabled]';
-                            }
-
-                            switch (node.spec.type) {
-                              case 'numeric':
-                                return (container.value.value as { magnitude: number; }).magnitude.toFixed(2);
-                              default:
-                                return '[unknown]';
-                            }
-                          })()}
-                        </div>
-                        {(node.spec.type === 'numeric') && node.spec.unitFormatted && (nodeState.value!.value?.type === 'default') && <div className={styles.detailValueUnit}>{node.spec.unitFormatted}</div>}
-                      </div>
-                    </div>
-                    <div className={styles.detailValueRoot}>
-                      <div className={styles.detailValueLabel}>Target value</div>
-                      <div className={styles.detailValueQuantity}>
-                        <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
-                        <div className={styles.detailValueUnit}>ºC</div>
-                      </div>
-                      <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <NodeDetail
+              app={props.app}
+              executor={executor}
+              host={props.host}
+              node={node}
+              nodePath={nodePath}
+              nodeState={nodeState}
+              key={nodePath.join('.')} />
           );
         })()}
 
       </div>
     </>
   )
+}
+
+
+interface NodeDetailProps {
+  app: Application;
+  executor: ExecutorState;
+  host: Host;
+  node: BaseNode;
+  nodePath: NodePath;
+  nodeState: NodeState;
+}
+
+interface NodeDetailState {
+  chartReady: boolean;
+}
+
+class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
+  private chart: any;
+  private data: [number, number][] = [];
+  private chartRenderId: number | null = null;
+  private chartControlId: number | null = null;
+  private refChart = createRef<HTMLDivElement>();
+
+  private displayTimeWindow = 5e3;
+  private minSampleCount = 4;
+  private storageTimeWindow = 5e3;
+
+  constructor(props: NodeDetailProps) {
+    super(props);
+
+    this.state = {
+      chartReady: false
+    };
+
+    let xScale = d3.scaleLinear();
+    let yScale = d3.scaleLinear();
+
+    let series1 = fc
+      .seriesWebglLine()
+      .mainValue((d) => d[1])
+      .crossValue((d) => d[0])
+      .decorate((program, data) => {
+        fc.webglStrokeColor()
+          .value((_, i) => [0x00 / 0xff, 0x74 / 0xff, 0xd9 / 0xff, 1])
+          .data(data)(program);
+      });
+
+    this.chart = fc
+      .chartCartesian(xScale, yScale)
+      .webglPlotArea(
+        fc.seriesWebglMulti()
+          .series([series1])
+          .mapping((data, index, series) => data)
+      );
+
+    this.chart
+      .xDomain([-this.displayTimeWindow, 0])
+      .xTickFormat((value, index) => {
+        let minutes = Math.round(-value / 60e3);
+        let seconds = Math.round((-value - minutes * 60e3) / 1e3);
+
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      });
+  }
+
+  override componentDidMount() {
+    this.chartControlId = setInterval(() => {
+      this.controlChartRender();
+    }, 2e3);
+  }
+
+  override componentDidUpdate(prevProps: Readonly<NodeDetailProps>, prevState: Readonly<NodeDetailState>, snapshot?: any) {
+    // console.log(this.props.nodeState);
+
+    if (isValueNode(this.props.node) && (this.props.node.spec.type === 'numeric') && (this.props.nodeState.value?.value?.type === 'default')) {
+      let newTime = this.props.nodeState.value.time;
+      let newValue = this.props.nodeState.value.value.value.magnitude;
+
+      if ((this.data.length < 1) || (newTime !== this.data.at(-1)[0])) {
+        this.data.push([newTime, newValue]);
+
+        this.controlChartRender();
+      }
+    }
+
+    if (this.state.chartReady && !prevState.chartReady) {
+      let render = () => {
+        this.renderChart();
+        this.chartRenderId = requestAnimationFrame(render);
+      };
+
+      this.chartRenderId = requestAnimationFrame(render);
+    }
+  }
+
+  override componentWillUnmount() {
+    this.cancelChartRender();
+
+    if (this.chartControlId !== null) {
+      clearInterval(this.chartControlId);
+      this.chartControlId = null;
+    }
+  }
+
+  cancelChartRender() {
+    if (this.chartRenderId !== null) {
+      cancelAnimationFrame(this.chartRenderId);
+      this.chartRenderId = null;
+    }
+  }
+
+  controlChartRender() {
+    let now = Date.now();
+
+    let sliceIndex = this.data.findIndex(([time, value]) => time > (now - this.storageTimeWindow));
+    this.data.splice(0, (sliceIndex >= 0) ? (sliceIndex - 1) : this.data.length);
+
+    if (this.data.length >= this.minSampleCount) {
+      if (!this.state.chartReady) {
+        this.setState({ chartReady: true });
+      }
+    } else {
+      if (this.state.chartReady) {
+        this.setState({ chartReady: false });
+        this.cancelChartRender();
+      }
+    }
+  }
+
+  renderChart() {
+    let now = Date.now();
+    let data = this.data.map(([time, value]) => [(time - now), value]);
+    let allY = data.map(([x, y]) => y);
+
+    this.chart
+      .yDomain([
+        Math.min(...allY),
+        Math.max(...allY)
+      ])
+      // .yTickFormat((value, index) => `${value.toFixed(2)} MB`);
+
+    d3.select(this.refChart.current!)
+      .datum(data)
+      .call(this.chart);
+  }
+
+  override render() {
+    let { node, nodePath, nodeState } = this.props;
+
+    let owner = nodeState.writable?.owner;
+    let owned = (owner?.type === 'client') && (owner.clientId === this.props.host.clientId);
+
+    return (
+      <div className={styles.detailRoot} key={nodePath.join('.')}>
+        <div className={styles.detailContents}>
+          <div className={styles.detailHeaderRoot}>
+            <div className={styles.detailHeaderTitle}>
+              <h1 className={styles.detailHeaderLabel}>{node.label ?? node.id}</h1>
+              <p className={styles.detailHeaderDescription}>{node.description ?? ' '}</p>
+            </div>
+            <div className={styles.detailHeaderActions}>
+              {nodeState.writable && (
+                <Button onClick={() => {
+                  this.props.app.pool.add(async () => {
+                    await this.props.host.client.request({
+                      type: 'requestExecutor',
+                      namespace,
+                      data: {
+                        type: (owned ? 'release' : 'claim'),
+                        nodePath: nodePath.toJS()
+                      }
+                    })
+                  });
+                }}>{owned ? 'Release' : 'Claim'}</Button>
+              )}
+            </div>
+          </div>
+          <div className={styles.detailInfoRoot}>
+            <div className={styles.detailInfoEntry}>
+              <div className={styles.detailInfoLabel}>Full name</div>
+              <div className={styles.detailInfoValue}>
+                <code>{nodePath.join('.')}</code>
+              </div>
+            </div>
+            <div className={styles.detailInfoEntry}>
+              <div className={styles.detailInfoLabel}>Status</div>
+              <div className={styles.detailInfoValue}>
+                {nodeState.connected ? 'Connected' : 'Disconnected'}
+              </div>
+            </div>
+            {nodeState.writable && (
+              <div className={styles.detailInfoEntry}>
+                <div className={styles.detailInfoLabel}>Current user</div>
+                <div className={styles.detailInfoValue}>{(() => {
+                  if (!owner) {
+                    return '–';
+                  } if (owned) {
+                    return 'You';
+                  } if (owner.type === 'client') {
+                    return 'Another client';
+                  }
+
+                  return '[Unknown]';
+                })()}</div>
+              </div>
+            )}
+            {/* <div className={styles.detailConnectionRoot}>
+                      <div className={styles.detailConnectionStatus}>
+                        <Icon name="error" style="sharp" />
+                        <div>Disconnected</div>
+                      </div>
+                      <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
+                    </div> */}
+          </div>
+          <div className={styles.detailChartRoot}>
+            <div className={styles.detailChartToolbar}>
+              <div>Frequency: 50 Hz</div>
+              <div>Window: 10 sec</div>
+            </div>
+            <div className={styles.detailChartContainer}>
+              {this.state.chartReady
+                ? (
+                  <div className={styles.detailChartContents} ref={this.refChart} key={0} />
+                )
+                : (
+                  <div className={styles.detailChartPlaceholder} key={1}>
+                    <p>Gathering samples...</p>
+                  </div>
+                )}
+            </div>
+          </div>
+          {isValueNode(node) && (
+            <div className={styles.detailValues}>
+              <div className={styles.detailValueRoot}>
+                <div className={styles.detailValueLabel}>{nodeState.connected ? 'Current value' : 'Last known value'}</div>
+                <div className={styles.detailValueQuantity}>
+                  <div className={styles.detailValueMagnitude}>
+                    {(() => {
+                      let container = nodeState.value;
+
+                      if (!container?.value) {
+                        // The value is unknown.
+                        return '–';
+                      } if (container.value.type === 'null') {
+                        // The device is disabled.
+                        return '[disabled]';
+                      }
+
+                      switch (node.spec.type) {
+                        case 'numeric':
+                          return (container.value.value as { magnitude: number; }).magnitude.toFixed(2);
+                        default:
+                          return '[unknown]';
+                      }
+                    })()}
+                  </div>
+                  {(node.spec.type === 'numeric') && node.spec.unitFormatted && (nodeState.value?.value?.type === 'default') && <div className={styles.detailValueUnit}>{node.spec.unitFormatted}</div>}
+                </div>
+              </div>
+              <div className={styles.detailValueRoot}>
+                <div className={styles.detailValueLabel}>Target value</div>
+                <div className={styles.detailValueQuantity}>
+                  <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
+                  <div className={styles.detailValueUnit}>ºC</div>
+                </div>
+                <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 }
 
 
@@ -371,8 +556,8 @@ export default {
     let executor = context.host.state.executors[this.namespace] as ExecutorState;
 
     return state.values.map(([path, stateValue]) => {
-      let parentNode = findNode(executor.root, path.slice(0, -1));
-      let node = findNode(executor.root, path) as ValueNode;
+      let parentNode = findNode(executor.root, path.slice(0, -1))!;
+      let node = findNode(executor.root, path)! as ValueNode;
       let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
 
       let errors: Feature['error'][] = [];

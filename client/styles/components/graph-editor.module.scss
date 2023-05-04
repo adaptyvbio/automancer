@@ -197,8 +197,9 @@
   }
 
   &:global(._selected) {
-    background-color: lighten($app-blue, 56%);
+    // background-color: lighten($app-blue, 56%);
     border-color: $app-blue;
+    outline: 3px solid rgba($app-blue, 20%);
   }
 
   &:global(._context) {

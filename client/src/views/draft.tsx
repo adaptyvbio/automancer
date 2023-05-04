@@ -1,40 +1,33 @@
-import { Chip, ChipId, UnitNamespace } from 'pr1-shared';
+import { Chip, ChipId, ProtocolBlockPath, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
-import Split from 'react-split-grid';
 
 import editorStyles from '../../styles/components/editor.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
-import formStyles from '../../styles/components/form.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 import type { Application } from '../application';
-import { Icon } from '../components/icon';
-import { TextEditor } from '../components/text-editor';
-import { VisualEditor } from '../components/visual-editor';
-import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
-import { Host } from '../host';
-import { Pool } from '../util';
-import { BarNav } from '../components/bar-nav';
-import { SplitPanels } from '../components/split-panels';
-import { TitleBar } from '../components/title-bar';
-import { Button } from '../components/button';
-import * as util from '../util';
-import { DraftSummary } from '../components/draft-summary';
-import { GraphEditor } from '../components/graph-editor';
-import { TabNav } from '../components/tab-nav';
 import { BlockInspector } from '../components/block-inspector';
-import * as format from '../format';
-import { ProtocolBlockPath } from '../interfaces/protocol';
-import { StartProtocolModal } from '../components/modals/start-protocol';
-import { BaseUrl } from '../constants';
-import { ViewHashOptions, ViewProps } from '../interfaces/view';
-import { ViewDrafts } from './protocols';
-import { ViewExecution } from './execution';
+import { Button } from '../components/button';
 import { DiagnosticsReport } from '../components/diagnostics-report';
-import { FileTabNav } from '../components/file-tab-nav';
-import { TimeSensitive } from '../components/time-sensitive';
-import { UnitTools } from '../unit';
+import { DraftSummary } from '../components/draft-summary';
 import { ErrorBoundary } from '../components/error-boundary';
+import { FileTabNav } from '../components/file-tab-nav';
+import { GraphEditor } from '../components/graph-editor';
+import { StartProtocolModal } from '../components/modals/start-protocol';
+import { SplitPanels } from '../components/split-panels';
+import { TabNav } from '../components/tab-nav';
+import { TextEditor } from '../components/text-editor';
+import { TimeSensitive } from '../components/time-sensitive';
+import { TitleBar } from '../components/title-bar';
+import { BaseUrl } from '../constants';
+import { Draft, DraftCompilation, DraftId } from '../draft';
+import * as format from '../format';
+import { Host } from '../host';
+import { ViewHashOptions, ViewProps } from '../interfaces/view';
+import { UnitTools } from '../unit';
+import * as util from '../util';
+import { Pool } from '../util';
+import { ViewExecution } from './execution';
+import { ViewDrafts } from './protocols';
 
 
 export interface ViewDraftProps {
@@ -57,13 +50,12 @@ export interface ViewDraftState {
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
-  chipIdAwaitingRedirection: ChipId | null = null;
-  compilationController: AbortController | null = null;
-  compilationPromise: Promise<DraftCompilation> | null = null;
-  controller = new AbortController();
-  pool = new Pool();
-  refSplit = React.createRef<HTMLDivElement>();
-  refTitleBar = React.createRef<TitleBar>();
+  private chipIdAwaitingRedirection: ChipId | null = null;
+  private compilationController: AbortController | null = null;
+  private compilationPromise: Promise<DraftCompilation> | null = null;
+  private controller = new AbortController();
+  private pool = new Pool();
+  private refTitleBar = React.createRef<TitleBar>();
 
   constructor(props: ViewDraftProps) {
     super(props);
@@ -73,12 +65,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
       selectedBlockPath: null,
+      // selectedBlockPath: [0, 0, 0, 0, 0],
+      // selectedBlockPath: [0],
       startModalOpen: false,
 
       draggedTrack: null,
       graphOpen: true,
       inspectorEntryId: 'inspector',
-      inspectorOpen: false
+      inspectorOpen: true
     };
   }
 
@@ -280,7 +274,41 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       );
 
       component = (
-        <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
+        <div className={util.formatClass(viewStyles.contents, editorStyles.root)} tabIndex={-1} onKeyDown={(event) => {
+          switch (event.key) {
+            case 'Escape':
+              if (this.state.selectedBlockPath) {
+                this.setState({
+                  selectedBlockPath: null
+                });
+              } else if (this.state.inspectorOpen) {
+                this.setState({
+                  inspectorOpen: false
+                });
+              }
+
+              break;
+
+            case 'i':
+              this.setState({
+                inspectorEntryId: 'inspector',
+                inspectorOpen: true
+              });
+              break;
+
+            case 'r':
+              this.setState({
+                inspectorEntryId: 'report',
+                inspectorOpen: true
+              });
+              break;
+
+            default:
+              return;
+          }
+
+          event.stopPropagation();
+        }}>
           {this.state.startModalOpen && (
             <StartProtocolModal
               host={this.props.host}
@@ -397,11 +425,13 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                           contents: () => (
                             this.state.compilation?.protocol
                               ? (
-                                <BlockInspector
-                                  blockPath={this.state.selectedBlockPath}
-                                  host={this.props.host}
-                                  protocol={this.state.compilation!.protocol}
-                                  selectBlock={this.selectBlock.bind(this)} />
+                                <ErrorBoundary>
+                                  <BlockInspector
+                                    blockPath={this.state.selectedBlockPath}
+                                    host={this.props.host}
+                                    protocol={this.state.compilation!.protocol}
+                                    selectBlock={this.selectBlock.bind(this)} />
+                                </ErrorBoundary>
                               )
                               : <div />
                           ) },

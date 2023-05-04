@@ -1,8 +1,8 @@
 from .master2 import ProgramHandle, ProgramOwner
-from .parser import BaseBlock, BlockProgram
+from .parser import BaseBlock, BaseProgram
 
 
-class TransparentProgram(BlockProgram):
+class TransparentProgram(BaseProgram):
   def __init__(self, child: BaseBlock, handle: ProgramHandle):
     self._child = child
     self._handle = handle

@@ -11,9 +11,9 @@ from .eval import EvalStack
 from ..host import logger
 from ..error import Error
 from ..master.analysis import MasterAnalysis, MasterError
-from .process import Process, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
+from .process import BaseProcess, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
 from .langservice import Analysis
-from .parser import BaseBlock, BaseDefaultTransform, BaseLeadTransform, BlockProgram, BlockState, HeadProgram, Transforms
+from .parser import BaseBlock, BaseDefaultTransform, BaseLeadTransform, BaseProgram, BlockState, HeadProgram, Transforms
 from ..devices.claim import ClaimSymbol
 from ..reader import LocationArea
 from ..util.decorators import debug
@@ -114,7 +114,7 @@ class SegmentProgram(HeadProgram):
 
     self._mode: SegmentProgramMode
     self._point: Optional[SegmentProgramPoint]
-    self._process: Process
+    self._process: BaseProcess
 
     self._bypass_future: Optional[Future]
     self._pause_event: Optional[Event]

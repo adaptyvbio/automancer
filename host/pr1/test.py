@@ -2,6 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 from pprint import pprint
+import signal
 
 from .devices.claim import ClaimSymbol
 from .host import Host
@@ -31,7 +32,7 @@ logger = logging.getLogger("pr1.test")
 
 class Backend:
   def __init__(self) -> None:
-    self.data_dir = Path("tmp/test-host").resolve()
+    self.data_dir = Path("tmp/master-host").resolve()
     logger.debug(f"Storing data in '{self.data_dir}'")
 
 
@@ -60,21 +61,10 @@ async def main():
   document = Document.text("""
 name: Test
 
-shorthands:
-  foo:
-    Oko.setpoint: 37 degC
-    _priority: 1
-  bar:
-    repeat: 2
-    _priority: 0
-  x:
-    PLC.A1: ${{ arg }}
-    _priority: 0
-
 steps:
-  wait: 1 s
-  bar: 76
-  x: ${{ 3.0 * unit.msec }}
+  actions:
+    - wait: 2 sec
+    - wait: 2 sec
 """)
 
   draft = Draft(
@@ -89,11 +79,12 @@ steps:
     Parsers=host.manager.Parsers
   )
 
+  # print(parser.analysis)
 
   if parser.protocol:
     print(parser.protocol.root.format_hierarchy())
 
-  return
+  # return
 
   from .fiber.master2 import Master
 
@@ -111,8 +102,15 @@ steps:
       pass
 
     async def a():
+      done = asyncio.create_task(master.done())
+
+      loop = asyncio.get_event_loop()
+      loop.add_signal_handler(signal.SIGINT, master.halt)
+
       await master.run(update_callback)
-      await master.done()
+      await done
+
+      loop.remove_signal_handler(signal.SIGINT)
 
       # async for info in master.run():
       #   # continue
@@ -173,8 +171,8 @@ steps:
     print("--------")
     print()
 
-    await asyncio.gather(a(), b())
-    # await a()
+    # await asyncio.gather(a(), b())
+    await a()
 
 
 

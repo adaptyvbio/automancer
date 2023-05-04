@@ -382,17 +382,6 @@ class GlobalStateManager:
 
 
 @dataclass
-class StatePublisherBlock(BaseBlock):
-  child: BaseBlock
-
-  def __get_node_children__(self):
-    return [self.child]
-
-  def __get_node_name__(self):
-    return "State publisher"
-
-
-@dataclass
 class DemoStateLocation:
   value: int
 

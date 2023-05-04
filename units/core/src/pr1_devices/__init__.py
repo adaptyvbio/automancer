@@ -18,4 +18,4 @@ logger = parent_logger.getChild(namespace)
 
 from .executor import Executor
 from .parser import Parser
-from .runner import DevicesRunner as Runner
+from .runner import Runner

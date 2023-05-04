@@ -6,7 +6,7 @@ import functools
 from os import PathLike
 from pathlib import Path
 from traceback import StackSummary
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 import asyncio
 import traceback
 
@@ -18,7 +18,7 @@ from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
-from .parser import BaseBlock, BaseProgramPoint, BlockProgram, FiberProtocol, HeadProgram
+from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
 from ..chip import Chip
 from ..ureg import ureg
 
@@ -315,7 +315,7 @@ class ProgramHandle:
     self._children = dict[int, ProgramHandle]()
     self._id = id
     self._parent = parent
-    self._program: BlockProgram
+    self._program: BaseProgram
 
     self._analysis = MasterAnalysis()
     self._location: Optional[Exportable] = None
@@ -328,6 +328,19 @@ class ProgramHandle:
   @property
   def master(self) -> Master:
     return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
+
+  def ancestors(self, *, include_self: bool = False, same_type: bool = True):
+    reversed_ancestors = list[BaseProgram]()
+
+    if include_self:
+      reversed_ancestors.append(self._program)
+
+    while not isinstance(parent := self._parent, Master):
+      if (not same_type) or isinstance(parent, type(self._program)):
+        reversed_ancestors.insert(0, parent._program)
+
+    return reversed_ancestors[::-1]
+
 
   def collect_children(self):
     self.master.update_now()
@@ -413,7 +426,7 @@ class ProgramHandle:
       raise ValueError("Not locked")
 
 class ProgramOwner:
-  def __init__(self, handle: ProgramHandle, program: BlockProgram):
+  def __init__(self, handle: ProgramHandle, program: BaseProgram):
     self._handle = handle
     self._program = program
 

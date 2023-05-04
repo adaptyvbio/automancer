@@ -7,7 +7,7 @@ from pr1.fiber.expr import Evaluable
 from pr1.fiber.langservice import (Analysis, Attribute, IntType, PotentialExprType)
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer, BaseProgramPoint,
-                              BlockProgram,
+                              BaseProgram,
                               PassiveTransformerPreparationResult,
                               TransformerAdoptionResult)
 from pr1.fiber.process import ProgramExecEvent
@@ -74,7 +74,7 @@ class RepeatProgramPoint:
   iteration: int
 
 @debug
-class RepeatProgram(BlockProgram):
+class RepeatProgram(BaseProgram):
   def __init__(self, block: 'RepeatBlock', handle):
     self._block = block
     self._handle = handle

@@ -50,6 +50,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Key extends Ordina
   getChild?(block: Block, key: Key): ProtocolBlock;
   getClassLabel?(block: Block): string;
   getLabel?(block: Block): string;
+  // getSingleChild?(block: Block): ProtocolBlock;
 }
 
 export type UnknownPluginBlockImpl = PluginBlockImpl<any, OrdinaryId, any>;

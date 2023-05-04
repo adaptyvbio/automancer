@@ -23,13 +23,10 @@ $entry-height: 30px;
   display: grid;
   align-items: center;
   column-gap: 0.8rem;
-  grid-template-columns: auto minmax(0, 1fr) auto $icon-size;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
 
   height: $entry-height;
   padding: 0 2px;
-
-  // For the outline on hover
-  border-radius: 4px;
 
   &Disabled {
     opacity: 0.4;
@@ -61,11 +58,6 @@ $entry-height: 30px;
   grid-template-rows: 14px 16px;
 }
 
-.entry:has(button.body:hover) {
-  outline: 1px solid #ddd;
-  outline-offset: 2px;
-}
-
 .description {
   overflow-y: clip;
 
@@ -95,7 +87,7 @@ $entry-height: 30px;
 
 .action {
   display: flex;
-  padding: 3px;
+  padding: 1px;
 
   border: 1px solid transparent;
   border-radius: 4px;
@@ -108,12 +100,13 @@ $entry-height: 30px;
   }
 
   :global(.icon) {
-    font-size: 20px;
     font-variation-settings:
       'FILL' 1,
       'wght' 100,
       'GRAD' 200,
       'opsz' 20;
+
+    translate: 0 1px;
   }
 }
 

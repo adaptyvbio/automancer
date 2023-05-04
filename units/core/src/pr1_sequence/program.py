@@ -3,7 +3,7 @@ from enum import IntEnum
 from typing import Optional
 
 from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import BaseProgramPoint, BlockProgram
+from pr1.fiber.parser import BaseProgramPoint, BaseProgram
 from pr1.fiber.process import ProgramExecEvent
 from pr1.util.decorators import debug
 from pr1.util.misc import Exportable
@@ -31,7 +31,7 @@ class ProgramPoint:
   index: int
 
 @debug
-class Program(BlockProgram):
+class Program(BaseProgram):
   def __init__(self, block: Block, handle):
     self._block = block
     # self._block._children = [x.child for x in block._children]

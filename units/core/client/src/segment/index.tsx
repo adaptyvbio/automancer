@@ -184,7 +184,7 @@ export default {
               label: 'Process' }
           ]
         }];
-      },
+      }
     } satisfies PluginBlockImpl<Block, Key, Location>
   },
 

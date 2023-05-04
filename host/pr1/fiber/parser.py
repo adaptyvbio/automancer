@@ -138,7 +138,7 @@ class BlockUnitPreparationData:
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 ProtocolDetails = dict[str, ProtocolUnitDetails]
 
-class BlockProgram(ABC):
+class BaseProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
     pass
 
@@ -173,7 +173,7 @@ class BlockProgram(ABC):
   async def run(self, point: 'Optional[BaseProgramPoint]', stack: EvalStack):
     ...
 
-class HeadProgram(BlockProgram):
+class HeadProgram(BaseProgram):
   @abstractmethod
   async def pause(self) -> bool:
     ...
@@ -200,13 +200,14 @@ class BaseProgramPoint(ABC):
   pass
 
 class BaseBlock(ABC, HierarchyNode):
-  def create_program(self, handle: 'ProgramHandle') -> BlockProgram:
+  def create_program(self, handle: 'ProgramHandle') -> BaseProgram:
     ...
 
   @abstractmethod
   def import_point(self, data: Any, /) -> BaseProgramPoint:
     ...
 
+  @abstractmethod
   def export(self):
     ...
 

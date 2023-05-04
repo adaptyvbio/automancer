@@ -107,7 +107,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         onWillSaveState() {},
         onDidChangeStorage() {},
         onDidChangeValue() {}
-    }
+      }
     });
 
     // @ts-expect-error
@@ -480,7 +480,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   render() {
     return (
-      <div className={textEditorStyles.root}>
+      <div className={textEditorStyles.root} onKeyDown={(event) => {
+        if (this.editor.hasTextFocus()) {
+          event.stopPropagation();
+        }
+      }}>
         <div ref={this.ref} onKeyDown={!this.props.autoSave
           ? ((event) => {
             if ((event.key === 's') && (event.ctrlKey || event.metaKey) && !event.shiftKey) {

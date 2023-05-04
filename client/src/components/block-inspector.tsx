@@ -125,14 +125,14 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
             entry.features.map((feature, featureIndex) => (
               <div className={featureStyles.entry} key={featureIndex}>
                 <Icon name={feature.icon} className={featureStyles.icon} />
-                <button type="button" className={featureStyles.body}>
+                <div className={featureStyles.body}>
                   {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
                   <div className={featureStyles.label}>{feature.label}</div>
-                </button>
+                </div>
+                <Icon name="power_off" className={featureStyles.errorIcon} />
                 <button type="button" className={featureStyles.action}>
-                  <Icon name="pause" />
+                  <Icon name="expand_more" />
                 </button>
-                {/* <Icon name="power_off" className={featureStyles.errorIcon} /> */}
               </div>
             ))
           ))}

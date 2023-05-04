@@ -1,10 +1,10 @@
 import * as React from 'react';
 
+import styles from '../../styles/components/features.module.scss';
+
 import { Icon } from './icon';
 import { FeatureGroupDef, FeatureListDef } from '../interfaces/unit';
 import * as util from '../util';
-
-import styles from '../../styles/components/features.module.scss';
 
 
 export function SimpleFeatureList(props: {

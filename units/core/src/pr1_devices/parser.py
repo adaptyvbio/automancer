@@ -1,7 +1,7 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, final
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
@@ -9,23 +9,20 @@ from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
-from pr1.fiber.expr import Evaluable
+from pr1.fiber.expr import Evaluable, export_value
 from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType)
-from pr1.fiber.parser import (BaseParser, BasePassiveTransformer,
+from pr1.fiber.master2 import ProgramHandle
+from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer, BaseProgram, BaseProgramPoint,
                               BlockUnitState, FiberParser, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
 from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
                                       StaticAnalysisAnalysis)
 from pr1.reader import LocatedValue
-from pr1.state import StatePublisherBlock
 from pr1.util.decorators import debug
 
 from . import namespace
-
-if TYPE_CHECKING:
-  from .runner import DevicesRunner
 
 
 EXPR_DEPENDENCY_METADATA_NAME = f"{namespace}.dependencies"
@@ -85,6 +82,32 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
     }
 
 
+@dataclass
+@final
+class PublisherBlock(BaseBlock):
+  assignments: dict[NodePath, Evaluable[LocatedValue[Any]]]
+  child: BaseBlock
+
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State publisher"
+
+  def create_program(self, handle):
+    from .program import PublisherProgram
+    return PublisherProgram(self, handle)
+
+  def import_point(self, data, /):
+    return self.child.import_point(data)
+
+  def export(self):
+    return {
+      "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
+      "child": self.child.export()
+    }
+
+
 class Transformer(BasePassiveTransformer):
   priority = 100
 
@@ -129,7 +152,7 @@ class Transformer(BasePassiveTransformer):
       return analysis, None
 
   def execute(self, data: dict[NodePath, Evaluable[LocatedValue[Any]]], /, block):
-    return Analysis(), StatePublisherBlock(block)
+    return Analysis(), PublisherBlock(data, block)
 
 
 class Parser(BaseParser):

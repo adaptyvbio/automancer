@@ -1,4 +1,5 @@
-import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
+import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit, Plugin, createProcessBlockImpl } from 'pr1';
+import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface ProcessData {
@@ -16,35 +17,19 @@ export interface ProcessLocation {
 
 
 export default {
-  namespace: 'timer',
-
-  ProcessComponent(props) {
-    if (!props.location.duration) {
-      return null;
-    }
-
-    return (
-      <div>
-        <TimedProgressBar
-          duration={props.location.duration.value}
-          paused={props.location.paused}
-          time={props.time}
-          value={props.location.progress} />
-      </div>
-    );
-  },
-
-  createProcessFeatures(processData, location, options) {
-    return [{
-      icon: 'hourglass_empty',
-      label: (
-        location
-          ? (location.duration && formatDynamicValue(location.duration.quantity))
-          : (!((processData.duration.type === 'string') && (processData.duration.value === 'forever')) ? formatDynamicValue(processData.duration) : null)
-      ) ?? 'Foorever'
-    }];
-  },
-  getProcessLabel(data, context) {
-    return 'Wait';
+  namespace: ('timer' as PluginName),
+  blocks: {
+    ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
+      createFeatures(data, location) {
+        return [{
+          icon: 'hourglass_empty',
+          label: (
+            location
+              ? (location.duration && formatDynamicValue(location.duration.quantity))
+              : (!((data.duration.type === 'string') && (data.duration.value === 'forever')) ? formatDynamicValue(data.duration) : null)
+          ) ?? 'Forever'
+        }];
+      },
+    })
   }
-} satisfies ProcessUnit<ProcessData, ProcessLocation>
+} satisfies Plugin

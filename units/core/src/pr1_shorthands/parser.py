@@ -13,7 +13,7 @@ from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import (AnalysisContext, Attrs, BaseBlock,
                               BaseLeadTransformer, BaseParser,
                               BasePassiveTransformer, BaseProgramPoint,
-                              BlockData, BlockProgram, FiberParser, Layer,
+                              BlockData, BaseProgram, FiberParser, Layer,
                               LeadTransformerPreparationResult,
                               PassiveTransformerPreparationResult,
                               ProtocolUnitData, TransformerAdoptionResult)
@@ -306,7 +306,7 @@ class ShorthandProgramLocation:
   def export(self):
     return dict()
 
-class ShorthandProgram(BlockProgram):
+class ShorthandProgram(BaseProgram):
   def __init__(self, block: 'ShorthandBlock', handle):
     self._block = block
     self._handle = handle

@@ -278,7 +278,46 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let offsetY = this.state.offset.y;
 
     return (
-      <div className={graphEditorStyles.root} ref={this.refContainer}>
+      <div className={graphEditorStyles.root} ref={this.refContainer} /* tabIndex={-1} onKeyDown={(event) => {
+        if (!['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key)) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (this.props.selectedBlockPath) {
+          let currentBlock = this.props.tree!;
+          let lineBlocks: ProtocolBlock[] = [];
+
+          for (let key of this.props.selectedBlockPath) {
+            let currentBlockImpl = getBlockImpl(currentBlock);
+            currentBlock = currentBlockImpl.getChild!(currentBlock, key);
+            lineBlocks.push(currentBlock);
+          }
+
+          for (let [blockIndex, block] of lineBlocks.slice().reverse().entries()) {
+            let blockImpl = getBlockImpl(block);
+
+            let key: unknown;
+
+            switch (event.key) {
+              case 'ArrowDown':
+                key = blockImpl.getAdjacentBlockKey?.(block, 1) ?? null;
+                break;
+              case 'ArrowUp':
+                key = blockImpl.getAdjacentBlockKey?.(block, -1) ?? null;
+                break;
+            }
+
+            if (key !== null) {
+              this.props.selectBlock([...this.props.selectedBlockPath.slice(0, blockIndex), key]);
+
+              break;
+            }
+          }
+        }
+      }} */>
         <svg
           viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`}
           className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}

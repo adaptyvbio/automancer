@@ -10,7 +10,9 @@ $app-red: #ff4136;
 }
 
 .list {
-  overflow-y: auto;
+  height: 100%;
+  overflow-y: hidden;
+
   border-right: 1px solid #ddd;
 }
 

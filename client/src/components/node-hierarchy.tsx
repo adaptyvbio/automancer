@@ -8,6 +8,7 @@ import { formatClass } from '../util';
 import { Icon } from './icon';
 import { SyncObjectStore, useSyncObjectStore } from '../store';
 import * as util from '../util';
+import { ShadowScrollable } from './shadow-scrollable';
 
 
 export interface HierarchyNodeEntry<EntryId extends OrdinaryId> {
@@ -54,15 +55,42 @@ export function NodeHierarchy<HierarchyEntryId extends OrdinaryId>(props: NodeHi
 
   return (
     <div className={styles.root}>
-      {props.entries.map((entry) => (
-        <NodeHierarchyEntry
-          entry={entry}
-          entryPath={List([entry.id])}
-          onSelectEntry={props.onSelectEntry}
-          openEntryPaths={openEntryPaths}
-          setOpenEntryPaths={setOpenEntryPaths}
-          key={entry.id} />
-      ))}
+      <div className={styles.search}>
+        <input type="text" placeholder="Search..." autoCorrect="off" /> {/* ??? */}
+      </div>
+
+      <ShadowScrollable direction="vertical" className={styles.contentsContainer}>
+        <div className={styles.contentsRoot}>
+          <div className={styles.groupRoot}>
+            <div className={styles.groupHeader}>Saved devices</div>
+            <div className={styles.groupList}>
+              {props.entries.map((entry) => (
+                <NodeHierarchyEntry
+                  entry={entry}
+                  entryPath={List([entry.id])}
+                  onSelectEntry={props.onSelectEntry}
+                  openEntryPaths={openEntryPaths}
+                  setOpenEntryPaths={setOpenEntryPaths}
+                  key={entry.id} />
+              ))}
+            </div>
+          </div>
+          <div className={styles.groupRoot}>
+            <div className={styles.groupHeader}>All devices</div>
+            <div className={styles.groupList}>
+              {props.entries.map((entry) => (
+                <NodeHierarchyEntry
+                  entry={entry}
+                  entryPath={List([entry.id])}
+                  onSelectEntry={props.onSelectEntry}
+                  openEntryPaths={openEntryPaths}
+                  setOpenEntryPaths={setOpenEntryPaths}
+                  key={entry.id} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </ShadowScrollable>
     </div>
   )
 }

@@ -20,7 +20,7 @@
     "error-stack-parser": "^2.0.7",
     "idb-keyval": "^6.1.0",
     "immutable": "^4.0.0",
-    "material-symbols": "^0.2.8",
+    "material-symbols": "^0.5.5",
     "modern-websocket": "^0.1.0",
     "monaco-editor": "^0.34.0",
     "pr1-shared": "file:../app/shared",

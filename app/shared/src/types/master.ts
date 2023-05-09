@@ -1,17 +1,15 @@
 import type { DiagnosticReference } from './analysis';
+import type { Protocol } from './protocol';
 import type { UnitNamespace } from './unit';
 
 
-export interface Protocol {
-  name: string | null;
-  root: ProtocolBlock;
-}
-
+/** @deprecated */
 export interface ProtocolBlock {
   namespace: UnitNamespace;
   [key: string]: unknown;
 }
 
+/** @deprecated */
 export type ProtocolBlockPath = unknown[];
 
 export interface ProtocolProcess {

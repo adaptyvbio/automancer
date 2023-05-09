@@ -104,6 +104,9 @@ class ApplierBlock(BaseBlock):
 
   def export(self):
     return {
+      "namespace": namespace,
+      "name": "applier",
+
       "child": self.child.export()
     }
 
@@ -129,6 +132,9 @@ class PublisherBlock(BaseBlock):
 
   def export(self):
     return {
+      "namespace": namespace,
+      "name": "publisher",
+
       "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
       "child": self.child.export()
     }

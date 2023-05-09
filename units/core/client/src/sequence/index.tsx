@@ -1,5 +1,5 @@
 import { GraphLink, Host, MenuEntryPath, Plugin, PluginBlockImpl, Point as GeometryPoint, ProtocolBlockGraphRenderer, React } from 'pr1';
-import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { ExecutionRefId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -196,10 +196,14 @@ export default {
       getLabel(block) {
         return 'Sequence';
       },
-      renderEntries(block, location) {
-        return {
-          entries: []
-        };
+      getExecutionRefPaths(block, location, context) {
+        return [{
+          key: location.index,
+          id: 0
+        }];
+      },
+      getChildLocation(block, location, refId, context) {
+        return location.children[0];
       }
     } satisfies PluginBlockImpl<Block, Key, Location>
   }

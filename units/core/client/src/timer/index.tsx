@@ -20,6 +20,13 @@ export default {
   namespace: ('timer' as PluginName),
   blocks: {
     ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
+      Component(props) {
+        return (
+          <>
+            {JSON.stringify(props.location)}
+          </>
+        );
+      },
       createFeatures(data, location) {
         return [{
           icon: 'hourglass_empty',
@@ -32,7 +39,7 @@ export default {
       },
       getLabel(data) {
         return 'Wait';
-      },
+      }
     })
   }
 } satisfies Plugin

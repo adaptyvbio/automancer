@@ -198,7 +198,7 @@ class ProcessProgramLocation:
 
   def export(self):
     return {
-      "mode": self.mode,
+      "mode": self.mode.export(),
       "pausable": self.pausable,
       "process": self.process and self.process.export(),
       "time": self.time * 1000.0

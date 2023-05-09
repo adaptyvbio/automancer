@@ -1,4 +1,4 @@
-import { Chip, ChipId, UnitNamespace } from 'pr1-shared';
+import { Chip, ChipId, ExecutionRefPath, PluginName, ProtocolBlock, ProtocolBlockPath, ProtocolLocation } from 'pr1-shared';
 import * as React from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
@@ -10,7 +10,6 @@ import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { Host } from '../host';
-import { ProtocolBlock, ProtocolBlockPath } from '../interfaces/protocol';
 import { MetadataTools, UnitTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
@@ -19,6 +18,8 @@ import { BaseUrl } from '../constants';
 import { ViewChips } from './chips';
 import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
+import { getBlockImpl } from '../protocol';
+import { PluginContext } from '../interfaces/plugin';
 
 
 export interface ViewExecutionRoute {
@@ -111,33 +112,28 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
       return null;
     }
 
-    let metadataTools = this.props.host.units['metadata' as UnitNamespace] as unknown as MetadataTools;
-    let metadata = metadataTools.getChipMetadata(this.chip);
-
-    // let block = this.master.protocol.root;
-    // let getExecutionInfo = (block: ProtocolBlock, state: unknown) => {
-    //   let unit = this.props.host.units[block.namespace];
-    //   return unit.getExecutionInfo(block, state, { getExecutionInfo });
-    // };
-
-    let getActiveBlockPaths = (block: ProtocolBlock, location: unknown, path: ProtocolBlockPath): ProtocolBlockPath[] => {
-      let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-      let refs = unit.getChildrenExecutionRefs(block, location);
-
-      return refs
-        ? refs.flatMap((ref) => getActiveBlockPaths(
-            unit.getChildBlock!(block, ref.blockKey),
-            unit.getActiveChildLocation!(location, ref.executionId),
-            [...path, ref.blockKey]
-          ))
-        : [path];
+    let context: PluginContext = {
+      host: this.props.host
     };
 
-    let activeBlockPaths = getActiveBlockPaths(this.master.protocol.root, this.master.location, []);
+    let metadataTools = this.props.host.plugins['metadata' as PluginName] as unknown as MetadataTools;
+    let metadata = metadataTools.getChipMetadata(this.chip);
 
-    let selectedActiveBlockPathIndex = this.state.selectedBlockPath
-      ? activeBlockPaths.findIndex((path) => util.deepEqual(path, this.state.selectedBlockPath))
-      : -1;
+    let getRefPaths = (block: ProtocolBlock, location: unknown): ExecutionRefPath[] => {
+      let blockImpl = getBlockImpl(block, { host: this.props.host });
+      let refs = blockImpl.getExecutionRefPaths?.(block, location, context);
+
+      return refs
+        ? refs.flatMap((ref) => getRefPaths(
+          blockImpl.getChild!(block, ref.key),
+          blockImpl.getChildLocation!(block, location, ref.id, context)
+        ).map((refPath) => [ref, ...refPath]))
+        : [[]];
+    };
+
+    let activeRefPaths = getRefPaths(this.master.protocol.root, this.master.location);
+
+    // return null;
 
     return (
       <main className={viewStyles.root}>
@@ -162,10 +158,10 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                   <GraphEditor
                     execution={this}
                     host={this.props.host}
+                    // location={this.master.location}
+                    protocol={this.master.protocol}
                     selectBlock={this.selectBlock.bind(this)}
-                    selectedBlockPath={this.state.selectedBlockPath}
-                    location={this.master.location}
-                    tree={this.master.protocol.root} />
+                    selectedBlockPath={this.state.selectedBlockPath} />
                 )
               },
               { nominalSize: CSSNumericValue.parse('400px'),
@@ -192,7 +188,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                             )
                             : (
                               <ExecutionInspector
-                                activeBlockPaths={activeBlockPaths}
+                                refPaths={activeRefPaths}
                                 chip={this.chip}
                                 host={this.props.host}
                                 location={this.master.location}

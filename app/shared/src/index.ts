@@ -5,6 +5,7 @@ export * from './error';
 export * from './misc';
 export * from './types/analysis';
 export * from './types/communication';
+export * from './types/execution';
 export * from './types/host';
 export * from './types/plugin';
 export * from './types/protocol';

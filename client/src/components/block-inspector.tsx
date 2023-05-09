@@ -12,7 +12,7 @@ import { UnitContext } from '../interfaces/unit';
 import { UnitTools } from '../unit';
 import * as util from '../util';
 import { Icon } from './icon';
-import { analyzeBlockPath } from '../protocol';
+import { analyzeBlockPath, getBlockImpl } from '../protocol';
 
 
 export interface PluginBlockEntryInfos {
@@ -48,15 +48,17 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       );
     }
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.blockPath, { host: this.props.host });
+    let context: PluginContext = {
+      host: this.props.host
+    };
 
-    let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.blockPath, { host: this.props.host });
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
     let leafBlock = blockAnalysis.blocks.at(-1);
-    let leafBlockImpl = getBlockImpl(leafBlock);
+    let leafBlockImpl = getBlockImpl(leafBlock, context);
 
     // console.log(blockAnalysis);
 
@@ -84,7 +86,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
         {blockAnalysis.isLeafBlockTerminal && (
           <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
-            {leafBlockImpl.createEntries?.(leafBlock, null).map((entry) => (
+            {leafBlockImpl.createEntries?.(leafBlock, null, context).map((entry) => (
               entry.features.map((feature, featureIndex) => (
                 <div className={util.formatClass(featureStyles.entry, featureStyles.entryAccent)} key={featureIndex}>
                   <Icon name={feature.icon} className={featureStyles.icon} />
@@ -101,8 +103,8 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
           {blockAnalysis.groups.slice().reverse().map((group) =>
             group.blocks.slice().reverse().map((block) => {
-              let blockImpl = getBlockImpl(block);
-              return blockImpl.createEntries?.(block, null).map((entry) => (
+              let blockImpl = getBlockImpl(block, context);
+              return blockImpl.createEntries?.(block, null, context).map((entry) => (
                 entry.features.map((feature, featureIndex) => (
                   <div className={featureStyles.entry} key={featureIndex}>
                     <Icon name={feature.icon} className={featureStyles.icon} />

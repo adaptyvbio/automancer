@@ -1,12 +1,12 @@
-import { Chip, UnitNamespace } from 'pr1-shared';
+import { Chip, ExecutionRefPath, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
+import { Fragment } from 'react';
 
 import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Icon } from './icon';
 import * as util from '../util';
-import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
 import { getBlockAggregates, UnitTools } from '../unit';
 import { FeatureList } from './features';
@@ -14,11 +14,13 @@ import { ContextMenuArea } from './context-menu-area';
 import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
-import { UnitContext } from '../interfaces/unit';
+import { PluginContext } from '../interfaces/plugin';
+import { Pool } from '../util';
+import { analyzeBlockPath, getBlockImpl } from '../protocol';
 
 
 export interface ExecutionInspectorProps {
-  activeBlockPaths: ProtocolBlockPath[];
+  refPaths: ExecutionRefPath[];
   chip: Chip;
   host: Host;
   location: unknown;
@@ -27,86 +29,58 @@ export interface ExecutionInspectorProps {
 }
 
 export interface ExecutionInspectorState {
-  activeBlockPathIndex: number;
-  hoveredAggregateIndex: number | null;
+  selectedRefPathIndex: number;
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
-  pool = new util.Pool();
+  pool = new Pool();
 
   constructor(props: ExecutionInspectorProps) {
     super(props);
 
     this.state = {
-      activeBlockPathIndex: 0,
-      hoveredAggregateIndex: null
+      selectedRefPathIndex: 0
     };
   }
 
   render() {
-    let context = {
+    let context: PluginContext = {
       host: this.props.host
-    } satisfies UnitContext;
-    let units = this.props.host.units;
+    };
 
-    let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
-    let activeExecPath: number[] = [];
+    let refPath = this.props.refPaths[this.state.selectedRefPathIndex];
+    let blockPath = refPath.map((ref) => ref.key);
 
-    let lineBlocks = [this.props.protocol.root];
-    let lineLocations = [this.props.location];
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, blockPath, { host: this.props.host });
+    console.log(blockAnalysis);
 
-    for (let key of activeBlockPath) {
-      let parentBlock = lineBlocks.at(-1);
-      let parentLocation = lineLocations.at(-1);
+    let ancestorGroups = blockAnalysis.groups.slice(0, -1);
+    let leafGroup = blockAnalysis.groups.at(-1);
 
-      let unit = UnitTools.asBlockUnit(units[parentBlock.namespace])!;
-      let refs = unit.getChildrenExecutionRefs(parentBlock, parentLocation)!;
-      let ref = refs.find((ref) => ref.blockKey === key)!;
+    let leafBlock = blockAnalysis.blocks.at(-1);
+    let leafBlockImpl = getBlockImpl(leafBlock, context);
 
-      activeExecPath.push(ref.executionId);
-
-      let block = unit.getChildBlock!(parentBlock, key);
-      let location = unit.getActiveChildLocation!(parentLocation, ref.executionId);
-
-      lineBlocks.push(block);
-      lineLocations.push(location);
-    }
-
-    let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, lineLocations, this.props.protocol.name, context);
-
-    let pausedAggregateIndexRaw = aggregates.findIndex((aggregate) => {
-      if (!aggregate.state) {
-        return false;
-      }
-
-      let block = aggregate.blocks[0];
-      let location = lineLocations[aggregate.offset];
-      let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-      return unit.isBlockPaused?.(block, location, context) ?? false;
-    });
-
-    let pausedAggregateIndex = (pausedAggregateIndexRaw >= 0) ? pausedAggregateIndexRaw : null;
-
-    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace])!;
-    let HeadComponent = headUnit.HeadComponent;
-
-    if (pausedAggregateIndex === null) {
-      let block = lineBlocks.at(-1);
-      let location = lineLocations.at(-1);
-
-      if (headUnit.isBlockPaused?.(block, location, context)) {
-        pausedAggregateIndex = aggregates.length;
-      }
-    }
+    // return null;
 
     return (
       <div className={spotlightStyles.root}>
         <div className={spotlightStyles.contents}>
           {(
             <div className={spotlightStyles.breadcrumbRoot}>
-              {aggregateLabelItems /* .slice(0, -1) */ .map((item, index, arr) => {
+              {ancestorGroups.map((group, groupIndex, arr) => {
+                let last = groupIndex === (arr.length - 1);
+
+                return (
+                  <Fragment key={groupIndex}>
+                    <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
+                      this.props.selectBlock(group.path);
+                    }}>{group.name ?? <i>Untitled</i>}</button>
+                    {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
+                  </Fragment>
+                );
+              })}
+
+              {/* {aggregateLabelItems .map((item, index, arr) => {
                 let last = index === (arr.length - 1);
 
                 return (
@@ -159,31 +133,31 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                     {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
                   </React.Fragment>
                 );
-              })}
+              })} */}
             </div>
           )}
           <div className={spotlightStyles.header}>
-            <h2 className={spotlightStyles.title}>{renderLabel(UnitTools.getBlockLabel(lineBlocks.at(-1), lineLocations.at(-1), this.props.host))}</h2>
+            <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafBlock) ?? 'Untitled'}</i>}</h2>
             <div className={spotlightStyles.navigationRoot}>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === 0}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedRefPathIndex === 0}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
               </button>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === (this.props.activeBlockPaths.length - 1)}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedRefPathIndex === (this.props.refPaths.length - 1)}>
                 <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
               </button>
             </div>
           </div>
 
-          {HeadComponent && (
+          {leafBlockImpl.Component && (
             <ErrorBoundary>
-              <HeadComponent
-                block={lineBlocks.at(-1)}
+              <leafBlockImpl.Component
+                block={leafBlock}
                 context={context}
-                location={lineLocations.at(-1)} />
+                location={null} />
             </ErrorBoundary>
           )}
 
-          <FeatureList
+          {/* <FeatureList
             indexOffset={aggregates.findIndex((aggregate) => aggregate.state)}
             hoveredGroupIndex={this.state.hoveredAggregateIndex}
             pausedGroupIndex={pausedAggregateIndex}
@@ -254,9 +228,9 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                   });
                 }
               });
-            }} />
+            }} /> */}
         </div>
-        <div className={spotlightStyles.footerRoot}>
+        {/* <div className={spotlightStyles.footerRoot}>
           <div className={formStyles.actions}>
             <Button onClick={() => {
               this.pool.add(async () => {
@@ -289,9 +263,9 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             }}>Skip</Button>
           </div>
           <div>
-            {/* <div className={spotlightStyles.footerStatus}>Pausing</div> */}
+            {/* <div className={spotlightStyles.footerStatus}>Pausing</div>
           </div>
-        </div>
+        </div> */}
       </div>
     );
   }

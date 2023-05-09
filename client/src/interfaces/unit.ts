@@ -58,10 +58,12 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
 }
 
 
+/** @deprecated */
 export interface UnitContext {
   host: Host;
 }
 
+/** @deprecated */
 export interface OptionsComponentProps {
   app: Application;
   baseUrl: string;
@@ -69,6 +71,7 @@ export interface OptionsComponentProps {
   pathname: string;
 }
 
+/** @deprecated */
 export interface BaseUnit {
   OptionsComponent?: React.ComponentType<OptionsComponentProps>;
   namespace: UnitNamespace;
@@ -85,6 +88,7 @@ export interface BaseUnit {
 }
 
 
+/** @deprecated */
 export interface ProcessComponentProps<Data, Location> {
   context: UnitContext;
   data: Data;
@@ -92,35 +96,43 @@ export interface ProcessComponentProps<Data, Location> {
   time: number;
 }
 
+/** @deprecated */
 export interface ProcessUnit<Data, Location> extends BaseUnit {
   ProcessComponent?: React.ComponentType<ProcessComponentProps<Data, Location>>;
   createProcessFeatures(data: Data, location: Location | null, context: UnitContext): FeatureGroupDef;
   getProcessLabel(data: Data, context: UnitContext): string | null;
 }
 
+/** @deprecated */
 export type UnknownProcessUnit = ProcessUnit<unknown, unknown>;
 
 
+/** @deprecated */
 export interface StateUnit<State, Location> extends BaseUnit {
   createStateFeatures(state: State, ancestorStates: State[] | null, location: Location | null, context: UnitContext): FeatureGroupDef;
 }
 
+/** @deprecated */
 export type UnknownStateUnit = StateUnit<unknown, unknown>;
 
 
+/** @deprecated */
 export interface HeadComponentProps<Block, Location> {
   block: Block;
   context: UnitContext;
   location: Location | null;
 }
 
+/** @deprecated */
 export interface HeadUnit<Block extends ProtocolBlock, Location> extends BlockUnit<Block, unknown, Location, unknown> {
   HeadComponent: React.ComponentType<HeadComponentProps<Block, Location>>;
 }
 
+/** @deprecated */
 export type UnknownHeadUnit = HeadUnit<ProtocolBlock | never, unknown>;
 
 
+/** @deprecated */
 export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, Key> extends BaseUnit {
   graphRenderer: ProtocolBlockGraphRenderer<Block, BlockMetrics, Location>;
 
@@ -137,12 +149,15 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 }
 
+/** @deprecated */
 export type UnknownBlockUnit = BlockUnit<ProtocolBlock | never, unknown, unknown, unknown>;
 
 
+/** @deprecated */
 export type UnknownUnit = BaseUnit
   & (UnknownBlockUnit | {})
   & (UnknownProcessUnit | {})
   & (UnknownStateUnit | {});
 
+/** @deprecated */
 export type Units = Record<UnitNamespace, UnknownUnit>;

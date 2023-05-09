@@ -1,4 +1,5 @@
-import { CreateFeaturesOptions, DynamicValue, Feature, formatDynamicValue, MasterStateLocation, ProtocolState, StateUnit, util } from 'pr1';
+import { CreateFeaturesOptions, DynamicValue, Feature, formatDynamicValue, MasterStateLocation, Plugin, PluginBlockImpl, ProtocolState, StateUnit, util } from 'pr1';
+import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 
 export type NodePath = string[];
@@ -75,73 +76,59 @@ export interface Location {
 }
 
 
+export interface ApplierBlock extends ProtocolBlock {
+  child: ProtocolBlock;
+}
+
+export interface ApplierLocation {
+  children: { 0: unknown };
+}
+
+
+export interface PublisherBlock extends ProtocolBlock {
+  assignments: [NodePath, DynamicValue][];
+  child: ProtocolBlock;
+}
+
+export const namespace = ('devices' as PluginName);
+
 export default {
-  namespace: 'devices',
+  namespace,
+  blocks: {
+    ['applier' as ProtocolBlockName]: {
+      getChild(block, key) {
+        return block.child;
+      },
+      getChildLocation(block, location, refId, context) {
+        return location.children[0];
+      },
+      getExecutionRefPaths(block, location, context) {
+        return [{
+          key: 0,
+          id: 0
+        }];
+      },
+    } satisfies PluginBlockImpl<ApplierBlock, 0, ApplierLocation>,
+    ['publisher' as ProtocolBlockName]: {
+      getChild(block, key) {
+        return block.child;
+      },
+      createEntries(block, location, context) {
+        let executor = context.host.state.executors[namespace] as ExecutorState;
 
-  createStateFeatures(state, descendantStates, location, context) {
-    let executor = context.host.state.executors[this.namespace] as ExecutorState;
+        return [{
+          features: block.assignments.map(([path, value]) => {
+            let parentNode = findNode(executor.root, path.slice(0, -1));
+            let node = findNode(executor.root, path) as ValueNode;
 
-    return state.values.map(([path, stateValue]) => {
-      let parentNode = findNode(executor.root, path.slice(0, -1));
-      let node = findNode(executor.root, path) as ValueNode;
-      let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
-
-      let errors: Feature['error'][] = [];
-
-      if (nodeLocation?.errors.disconnected) {
-        errors.push({ kind: 'power', message: 'Disconnected' });
-      } if (nodeLocation?.errors.unclaimable) {
-        errors.push({ kind: 'shield', message: 'Unclaimable' });
-      } if (nodeLocation?.errors.evaluation) {
-        errors.push({ kind: 'error', message: 'Expression evaluation error' });
-      }
-
-      let label: JSX.Element | string;
-
-      let currentValue = nodeLocation
-        ? nodeLocation.value
-        : stateValue;
-
-      if (currentValue.type === 'expression') {
-        label = formatDynamicValue(currentValue);
-      } else if (currentValue.type === 'none') {
-        label = '[Disabled]';
-      } else {
-        switch (node.value.type) {
-          case 'boolean': {
-            label = formatDynamicValue(currentValue);
-            break;
-          }
-
-          case 'enum': {
-            util.assert((currentValue.type === 'number') || (currentValue.type === 'string'));
-            let innerValue = currentValue.value;
-            let enumCase = node.value.cases.find((enumCase) => (enumCase.id === innerValue))!;
-            label = (enumCase.label ?? enumCase.id.toString());
-
-            break;
-          }
-
-          case 'numeric': {
-            util.assert(currentValue.type === 'quantity');
-            label = formatDynamicValue(currentValue);
-            break;
-          }
-
-          default:
-            throw new Error();
-        }
-      }
-
-      return {
-        disabled: descendantStates?.some((descendantState) => {
-          return descendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
-        }),
-        description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
-        error: errors[0] ?? null,
-        icon: node.icon ?? 'settings_input_hdmi',
-        label
-      };
-    }) ?? [];
+            return {
+              description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
+              icon: (node.icon ?? 'settings_input_hdmi'),
+              label: formatDynamicValue(value)
+            };
+          })
+        }];
+      },
+    } satisfies PluginBlockImpl<PublisherBlock, 0, never>
   }
-} satisfies StateUnit<State, Location>
+} satisfies Plugin

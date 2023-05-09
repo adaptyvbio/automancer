@@ -1,15 +1,16 @@
-import { PluginName, ProtocolBlock, ProtocolBlockName, ProtocolBlockPath } from 'pr1-shared';
+import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
 import { GraphNode } from './components/graph-editor';
 import { FeatureGroupDef } from './interfaces/feature';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
-import { PluginBlockImpl } from './interfaces/plugin';
+import { PluginBlockImpl, PluginBlockImplComponentProps, PluginContext } from './interfaces/plugin';
+import { ComponentType, ReactElement } from 'react';
 
 
-const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, never, Location> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, never, unknown> = (block, path, ancestors, location, options, context) => {
   let impl = context.host.plugins[block.namespace].blocks[block.name];
-  let features = impl.createEntries!(block, null)[0].features;
+  let features = impl.createEntries!(block, null, context)[0].features;
 
   let name: string | null = null;
 
@@ -93,13 +94,33 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, never, Location> =
   };
 };
 
+
+export interface ProcessBlock<Data> extends ProtocolBlock {
+  data: Data;
+}
+
 export function createProcessBlockImpl<Data, Location>(options: {
+  Component?: ComponentType<{
+    context: PluginContext;
+    data: Data;
+    location: Location;
+  }>;
   createFeatures?(data: Data, location: Location | null): FeatureGroupDef;
   getLabel?(data: Data): string | null;
-}): PluginBlockImpl<ProtocolBlock & {
-  data: Data;
-}, never, Location> {
+}): PluginBlockImpl<ProcessBlock<Data>, never, Location> {
   return {
+    ...(options.Component && {
+      Component(props: PluginBlockImplComponentProps<ProcessBlock<Data>, Location>) {
+        let Component = options.Component!;
+
+        return (
+          <Component
+            data={props.block.data}
+            context={props.context}
+            location={props.location} />
+        );
+      }
+    }),
     computeGraph,
     createEntries(block, location) {
       return [{
@@ -111,6 +132,6 @@ export function createProcessBlockImpl<Data, Location>(options: {
     },
     getLabel(block) {
       return options.getLabel?.(block.data) ?? null;
-    },
+    }
   };
 }

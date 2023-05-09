@@ -42,6 +42,7 @@ export * from './components/progress-bar';
 export * from './components/timed-progress-bar';
 export * from './components/item-list';
 export * from './components/selector';
+export * from './components/time-sensitive';
 export * from './unit';
 
 export * from './interfaces/host';

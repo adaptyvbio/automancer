@@ -20,6 +20,7 @@ import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { getBlockImpl } from '../protocol';
 import { PluginContext } from '../interfaces/plugin';
+import { ErrorBoundary } from '../components/error-boundary';
 
 
 export interface ViewExecutionRoute {
@@ -119,21 +120,22 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     let metadataTools = this.props.host.plugins['metadata' as PluginName] as unknown as MetadataTools;
     let metadata = metadataTools.getChipMetadata(this.chip);
 
-    let getRefPaths = (block: ProtocolBlock, location: unknown): ExecutionRefPath[] => {
-      let blockImpl = getBlockImpl(block, { host: this.props.host });
-      let refs = blockImpl.getExecutionRefPaths?.(block, location, context);
+    let getRefPaths = (block: ProtocolBlock, location: unknown): ProtocolBlockPath[] => {
+      let blockImpl = getBlockImpl(block, context);
+      let children = blockImpl.getChildren?.(block, context);
 
-      return refs
-        ? refs.flatMap((ref) => getRefPaths(
-          blockImpl.getChild!(block, ref.key),
-          blockImpl.getChildLocation!(block, location, ref.id, context)
-        ).map((refPath) => [ref, ...refPath]))
-        : [[]];
+      if (!children) {
+        return [[]];
+      }
+
+      return Array.from(blockImpl.getChildrenExecution!(block, location, context).entries())
+        .filter(([key, ref]) => ref)
+        .flatMap(([key, ref]) =>
+          getRefPaths(children![key], ref!.location).map((path) => [key, ...path])
+        );
     };
 
-    let activeRefPaths = getRefPaths(this.master.protocol.root, this.master.location);
-
-    // return null;
+    let activeBlockPaths = getRefPaths(this.master.protocol.root, this.master.location);
 
     return (
       <main className={viewStyles.root}>
@@ -155,13 +157,15 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
             panels={[
               {
                 component: (
-                  <GraphEditor
-                    execution={this}
-                    host={this.props.host}
-                    // location={this.master.location}
-                    protocol={this.master.protocol}
-                    selectBlock={this.selectBlock.bind(this)}
-                    selectedBlockPath={this.state.selectedBlockPath} />
+                  <ErrorBoundary>
+                    <GraphEditor
+                      execution={this}
+                      host={this.props.host}
+                      // location={this.master.location}
+                      protocol={this.master.protocol}
+                      selectBlock={this.selectBlock.bind(this)}
+                      selectedBlockPath={this.state.selectedBlockPath} />
+                  </ErrorBoundary>
                 )
               },
               { nominalSize: CSSNumericValue.parse('400px'),
@@ -187,13 +191,15 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                                 selectBlock={this.selectBlock.bind(this)} />
                             )
                             : (
-                              <ExecutionInspector
-                                refPaths={activeRefPaths}
-                                chip={this.chip}
-                                host={this.props.host}
-                                location={this.master.location}
-                                protocol={this.master.protocol}
-                                selectBlock={this.selectBlock.bind(this)} />
+                              <ErrorBoundary>
+                                <ExecutionInspector
+                                  activeBlockPaths={activeBlockPaths}
+                                  chip={this.chip}
+                                  host={this.props.host}
+                                  location={this.master.location}
+                                  protocol={this.master.protocol}
+                                  selectBlock={this.selectBlock.bind(this)} />
+                              </ErrorBoundary>
                             )
                         };
                       })(),

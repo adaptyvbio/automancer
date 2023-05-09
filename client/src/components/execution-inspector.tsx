@@ -1,4 +1,4 @@
-import { Chip, ExecutionRefPath, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Chip, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 import { Fragment } from 'react';
 
@@ -20,7 +20,7 @@ import { analyzeBlockPath, getBlockImpl } from '../protocol';
 
 
 export interface ExecutionInspectorProps {
-  refPaths: ExecutionRefPath[];
+  activeBlockPaths: ProtocolBlockPath[];
   chip: Chip;
   host: Host;
   location: unknown;
@@ -29,7 +29,7 @@ export interface ExecutionInspectorProps {
 }
 
 export interface ExecutionInspectorState {
-  selectedRefPathIndex: number;
+  selectedBlockPathIndex: number;
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
@@ -39,7 +39,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     super(props);
 
     this.state = {
-      selectedRefPathIndex: 0
+      selectedBlockPathIndex: 0
     };
   }
 
@@ -48,19 +48,15 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
       host: this.props.host
     };
 
-    let refPath = this.props.refPaths[this.state.selectedRefPathIndex];
-    let blockPath = refPath.map((ref) => ref.key);
+    let blockPath = this.props.activeBlockPaths[this.state.selectedBlockPathIndex];
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, blockPath, { host: this.props.host });
-    console.log(blockAnalysis);
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, { host: this.props.host });
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
-    let leafBlock = blockAnalysis.blocks.at(-1);
-    let leafBlockImpl = getBlockImpl(leafBlock, context);
-
-    // return null;
+    let leafPair = blockAnalysis.pairs.at(-1);
+    let leafBlockImpl = getBlockImpl(leafPair.block, context);
 
     return (
       <div className={spotlightStyles.root}>
@@ -137,12 +133,12 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             </div>
           )}
           <div className={spotlightStyles.header}>
-            <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafBlock) ?? 'Untitled'}</i>}</h2>
+            <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafPair.block) ?? 'Untitled'}</i>}</h2>
             <div className={spotlightStyles.navigationRoot}>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedRefPathIndex === 0}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === 0}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
               </button>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedRefPathIndex === (this.props.refPaths.length - 1)}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === (this.props.activeBlockPaths.length - 1)}>
                 <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
               </button>
             </div>
@@ -151,9 +147,9 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           {leafBlockImpl.Component && (
             <ErrorBoundary>
               <leafBlockImpl.Component
-                block={leafBlock}
+                block={leafPair.block}
                 context={context}
-                location={null} />
+                location={leafPair.location} />
             </ErrorBoundary>
           )}
 

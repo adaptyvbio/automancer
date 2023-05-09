@@ -8,7 +8,7 @@ import { PluginBlockImpl, PluginBlockImplComponentProps, PluginContext } from '.
 import { ComponentType, ReactElement } from 'react';
 
 
-const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, never, unknown> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block, path, ancestors, location, options, context) => {
   let impl = context.host.plugins[block.namespace].blocks[block.name];
   let features = impl.createEntries!(block, null, context)[0].features;
 
@@ -99,32 +99,46 @@ export interface ProcessBlock<Data> extends ProtocolBlock {
   data: Data;
 }
 
+export interface ProcessLocation<Location> {
+  children: {};
+  mode: ProcessLocationMode;
+  pausable: boolean;
+  process: Location;
+  time: number;
+}
+
+export enum ProcessLocationMode {
+
+}
+
 export function createProcessBlockImpl<Data, Location>(options: {
   Component?: ComponentType<{
     context: PluginContext;
     data: Data;
+    date: number;
     location: Location;
   }>;
   createFeatures?(data: Data, location: Location | null): FeatureGroupDef;
   getLabel?(data: Data): string | null;
-}): PluginBlockImpl<ProcessBlock<Data>, never, Location> {
+}): PluginBlockImpl<ProcessBlock<Data>, ProcessLocation<Location>> {
   return {
     ...(options.Component && {
-      Component(props: PluginBlockImplComponentProps<ProcessBlock<Data>, Location>) {
+      Component(props) {
         let Component = options.Component!;
 
         return (
           <Component
             data={props.block.data}
+            date={props.location.time}
             context={props.context}
-            location={props.location} />
+            location={props.location.process} />
         );
       }
     }),
     computeGraph,
     createEntries(block, location) {
       return [{
-        features: options.createFeatures?.(block.data, location) ?? [
+        features: options.createFeatures?.(block.data, location?.process ?? null) ?? [
           { icon: 'not_listed_location',
             label: 'Process' }
         ]

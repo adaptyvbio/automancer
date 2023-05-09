@@ -14,7 +14,7 @@ export interface ProtocolBlock {
 }
 
 export type ProtocolBlockName = Brand<string, 'ProtocolBlockName'>;
-export type ProtocolBlockPath = OrdinaryId[];
+export type ProtocolBlockPath = number[];
 
 export interface ProtocolProcess {
   data: unknown;

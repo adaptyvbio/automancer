@@ -1,11 +1,8 @@
 .root {
   display: flex;
-  background-color: #ff413633;
+  min-height: 4rem;
 
-  &Wide {
-    min-height: 220px;
-    margin: 2rem 0;
-  }
+  background-color: #ff413633;
 
   p {
     margin: auto;

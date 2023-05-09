@@ -1,5 +1,5 @@
 import { GraphLink, Host, MenuEntryPath, Plugin, PluginBlockImpl, Point as GeometryPoint, ProtocolBlockGraphRenderer, React } from 'pr1';
-import { ExecutionRefId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -12,8 +12,6 @@ export interface Location {
   interrupting: boolean;
 }
 
-export type Key = number;
-
 export interface Point {
   child: unknown | null;
   index: number;
@@ -25,7 +23,7 @@ const verticalCellGap = 1;
 
 const namespace = ('sequence' as PluginName);
 
-const computeGraph: ProtocolBlockGraphRenderer<Block, Key, Location> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, ancestors, location, options, context) => {
   let vertical = options.settings.vertical;
   let verticalFlag = vertical ? 1 : 0;
 
@@ -190,21 +188,19 @@ export default {
   blocks: {
     ['_' as ProtocolBlockName]: {
       computeGraph,
-      getChild(block, key) {
-        return block.children[key];
+      getChildren(block, context) {
+        return block.children;
+      },
+      getChildrenExecution(block, location, context) {
+        return [
+          ...(new Array(location.index).fill(null)),
+          { location: location.children[0] },
+          ...(new Array(block.children.length - location.index - 1).fill(null))
+        ];
       },
       getLabel(block) {
         return 'Sequence';
-      },
-      getExecutionRefPaths(block, location, context) {
-        return [{
-          key: location.index,
-          id: 0
-        }];
-      },
-      getChildLocation(block, location, refId, context) {
-        return location.children[0];
       }
-    } satisfies PluginBlockImpl<Block, Key, Location>
+    } satisfies PluginBlockImpl<Block, Location>
   }
 } satisfies Plugin;

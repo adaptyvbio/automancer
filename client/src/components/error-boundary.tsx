@@ -7,7 +7,6 @@ import styles from '../../styles/components/error-boundary.module.scss';
 
 export type ErrorBoundaryProps = React.PropsWithChildren<{
   getErrorMessage?(): JSX.Element;
-  wide?: unknown;
 }>;
 
 export interface ErrorBoundaryState {
@@ -22,10 +21,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       return (
-        <div className={util.formatClass(styles.root, { [styles.rootWide]: this.props.wide })}>
-          <p>{this.props.getErrorMessage?.() ?? 'An error occured.'} <button type="button" onClick={() => {
+        <div className={styles.root}>
+          <p>{this.props.getErrorMessage?.() ?? 'An error has occured.'} <button type="button" onClick={() => {
             this.setState({ hasError: false });
-          }}>Retry</button></p>
+          }}>Reload</button></p>
         </div>
       );
     }

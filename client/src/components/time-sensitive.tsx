@@ -1,21 +1,24 @@
 import * as React from 'react';
+import { ReactNode } from 'react';
+
+import { useForceUpdate } from '../util';
 
 
-export function TimeSensitive(props: React.PropsWithChildren<{
-  child(): React.ReactNode;
-  interval?: number;
-}>) {
-  const [_, forceUpdate] = React.useReducer((x) => x + 1, 0);
+export function TimeSensitive(props: {
+  contents(): ReactNode;
+  interval: number | null;
+}) {
+  let forceUpdate = useForceUpdate();
 
   React.useEffect(() => {
-    let interval = setInterval(() => {
-      forceUpdate();
-    }, props.interval ?? 1000);
+    if (props.interval !== null) {
+      let interval = setInterval(() => void forceUpdate(), Math.max(props.interval, 30));
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, []);
+      return () => void clearInterval(interval);
+    }
+  }, [props.interval]);
 
-  return <>{props.child()}</>;
+  return (
+    <>{props.contents()}</>
+  );
 }

@@ -5,10 +5,20 @@ import { PluginContext } from './interfaces/plugin';
 
 
 export interface BlockGroup {
-  blocks: ProtocolBlock[];
   name: string | null;
+  pairs: BlockPair[];
   path: ProtocolBlockPath;
 }
+
+export interface BlockPair {
+  block: ProtocolBlock;
+  location: unknown | null;
+}
+
+// export interface BlockPairWithOptionalLocation {
+//   block: ProtocolBlock;
+//   location: unknown | null;
+// }
 
 
 export function getBlockImpl(block: ProtocolBlock, context: PluginContext) {
@@ -32,11 +42,20 @@ export function getBlockName(block: ProtocolBlock) {
  *  3. A block is _terminal_ if it contains no children, regardless of whether the target block is that block or one its children.
  *  4. The leaf block is the target block, as specified by the path provided as an argument.
  */
-export function analyzeBlockPath(protocol: Protocol, blockPath: ProtocolBlockPath, context: PluginContext) {
-  let blocks: ProtocolBlock[] = [protocol.root];
+export function analyzeBlockPath(
+  protocol: Protocol,
+  rootLocation: unknown | null,
+  blockPath: ProtocolBlockPath,
+  context: PluginContext
+) {
+  let pairs: BlockPair[] = [{
+    block: protocol.root,
+    location: rootLocation
+  }];
+
   let groups: BlockGroup[] = [{
-    blocks: [],
     name: protocol.name,
+    pairs: [],
     path: []
   }];
 
@@ -44,29 +63,36 @@ export function analyzeBlockPath(protocol: Protocol, blockPath: ProtocolBlockPat
 
 
   let currentBlock = protocol.root;
+  let currentLocation = rootLocation;
 
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
-    currentBlock = currentBlockImpl.getChild!(currentBlock, key);
-    blocks.push(currentBlock);
+
+    currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)[key]?.location ?? null);
+    currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
+
+    pairs.push({
+      block: currentBlock,
+      location: currentLocation
+    });
   }
 
-  for (let [blockIndex, block] of blocks.entries()) {
-    let isBlockLeaf = (blockIndex === (blocks.length - 1));
+  for (let [blockIndex, { block, location }] of pairs.entries()) {
+    let isBlockLeaf = (blockIndex === (pairs.length - 1));
 
     let group = groups.at(-1);
     let blockName = getBlockName(block);
     let blockImpl = getBlockImpl(block, context);
 
-    if (isBlockLeaf && !blockImpl.getChild) {
+    if (isBlockLeaf && !blockImpl.getChildren) {
       isLeafBlockTerminal = true;
       continue;
     }
 
     if (blockImpl.computeGraph || (blockName && group.name)) {
       group = {
-        blocks: [],
         name: null,
+        pairs: [],
         path: []
       };
 
@@ -77,7 +103,10 @@ export function analyzeBlockPath(protocol: Protocol, blockPath: ProtocolBlockPat
       group.name = blockName;
     }
 
-    group.blocks.push(block);
+    group.pairs.push({
+      block,
+      location
+    });
 
     if (blockIndex > 0) {
       group.path.push(blockPath[blockIndex]);
@@ -85,8 +114,8 @@ export function analyzeBlockPath(protocol: Protocol, blockPath: ProtocolBlockPat
   }
 
   return {
-    blocks,
     groups,
-    isLeafBlockTerminal
+    isLeafBlockTerminal,
+    pairs
   };
 }

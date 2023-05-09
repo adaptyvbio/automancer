@@ -1,4 +1,4 @@
-import type { ExecutionRef, ExecutionRefId, ExecutionRefPath, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName, UnitNamespace } from 'pr1-shared';
+import type { OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName, UnitNamespace } from 'pr1-shared';
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 
 import type { Application } from '../application';
@@ -41,17 +41,19 @@ export interface PluginBlockImplComponentProps<Block extends ProtocolBlock, Loca
   location: Location;
 }
 
-export interface PluginBlockImpl<Block extends ProtocolBlock, Key extends OrdinaryId, Location> {
+export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   Component?: ComponentType<PluginBlockImplComponentProps<Block, Location>>;
 
-  computeGraph?: ProtocolBlockGraphRenderer<Block, Key, Location>;
+  computeGraph?: ProtocolBlockGraphRenderer<Block, Location>;
   createEntries?(block: Block, location: Location | null, context: PluginContext): PluginBlockEntry[];
   createEntryMenu?(block: Block, entryId: OrdinaryId): MenuDef;
-  getChild?(block: Block, key: Key): ProtocolBlock;
-  getChildLocation?(block: Block, location: Location, refId: ExecutionRefId, context: PluginContext): unknown;
-  getClassLabel?(block: Block): string;
-  getExecutionRefPaths?(block: Block, location: Location, context: PluginContext): ExecutionRef[] | null;
+  getChildren?(block: Block, context: PluginContext): ProtocolBlock[];
+  getChildrenExecution?(block: Block, location: Location, context: PluginContext): (PluginBlockExecutionRef | null)[];
   getLabel?(block: Block): ReactNode | null;
 }
 
-export type UnknownPluginBlockImpl = PluginBlockImpl<any, OrdinaryId, any>;
+export interface PluginBlockExecutionRef {
+  location: unknown;
+}
+
+export type UnknownPluginBlockImpl = PluginBlockImpl<any, any>;

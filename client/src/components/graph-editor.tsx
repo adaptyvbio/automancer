@@ -201,7 +201,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           groupBlocks.push(currentBlock);
 
           let key = 0;
-          currentBlock = currentBlockImpl.getChild!(currentBlock, key);
+          currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
           currentBlockPath.push(key);
         }
 
@@ -223,7 +223,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], location, {
           settings,
           computeMetrics: (key, childLocation: unknown | null) => {
-            let childBlock = currentBlockImpl.getChild!(currentBlock, key);
+            let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
             return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
           }
         }, context);

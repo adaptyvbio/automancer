@@ -1,4 +1,4 @@
-import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit, Plugin, createProcessBlockImpl } from 'pr1';
+import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit, Plugin, createProcessBlockImpl, TimeSensitive } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
@@ -13,6 +13,7 @@ export interface ProcessLocation {
   } | null;
   paused: boolean;
   progress: number;
+  startDate: number;
 }
 
 
@@ -21,10 +22,22 @@ export default {
   blocks: {
     ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
       Component(props) {
+        if (props.location.duration === null) {
+          return (
+            <TimeSensitive
+              contents={() => (
+                <p>Time elapsed: {new Date().toString()}</p>
+              )}
+              interval={1000} />
+          );
+        }
+
         return (
-          <>
-            {JSON.stringify(props.location)}
-          </>
+          <TimedProgressBar
+            date={props.date}
+            duration={props.location.duration.value}
+            paused={props.location.paused}
+            value={props.location.progress} />
         );
       },
       createFeatures(data, location) {

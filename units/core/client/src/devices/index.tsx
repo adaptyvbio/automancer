@@ -95,23 +95,17 @@ export const namespace = ('devices' as PluginName);
 export default {
   namespace,
   blocks: {
-    ['applier' as ProtocolBlockName]: {
-      getChild(block, key) {
-        return block.child;
+    ['applier' as ProtocolBlockName]: ({
+      getChildren(block, context) {
+        return [block.child];
       },
-      getChildLocation(block, location, refId, context) {
-        return location.children[0];
-      },
-      getExecutionRefPaths(block, location, context) {
-        return [{
-          key: 0,
-          id: 0
-        }];
-      },
-    } satisfies PluginBlockImpl<ApplierBlock, 0, ApplierLocation>,
+      getChildrenExecution(block, location, context) {
+        return [{ location: location.children[0] }];
+      }
+    } satisfies PluginBlockImpl<ApplierBlock, ApplierLocation>),
     ['publisher' as ProtocolBlockName]: {
-      getChild(block, key) {
-        return block.child;
+      getChildren(block, context) {
+        return [block.child];
       },
       createEntries(block, location, context) {
         let executor = context.host.state.executors[namespace] as ExecutorState;
@@ -129,6 +123,6 @@ export default {
           })
         }];
       },
-    } satisfies PluginBlockImpl<PublisherBlock, 0, never>
+    } satisfies PluginBlockImpl<PublisherBlock, never>
   }
 } satisfies Plugin

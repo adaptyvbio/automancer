@@ -1,9 +1,9 @@
 import * as React from 'react';
 
-import * as util from '../util';
-import { UnstableText } from './unstable-text';
-
 import styles from '../../styles/components/progress-bar.module.scss';
+
+import * as util from '../util';
+import { TimeSensitive } from './time-sensitive';
 
 
 export type ProgressBarProps = {
@@ -66,19 +66,19 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
           )}
         </div>
         <div className={styles.text}>
-          <UnstableText
-            interval={
-              (('textUpdateInterval' in this.props) && (this.props.textUpdateInterval !== undefined)) && !this.props.paused
-                ? this.props.textUpdateInterval
-                : null
-            }
+          <TimeSensitive
             contents={() => {
               let currentValue = this.getValue();
 
               return (
                 <>{((this.state.selectValue ?? currentValue) * 100).toFixed(0)}%</>
               );
-            }} />
+            }}
+            interval={
+              (('textUpdateInterval' in this.props) && (this.props.textUpdateInterval !== undefined)) && !this.props.paused
+                ? this.props.textUpdateInterval
+                : null
+            } />
         </div>
       </div>
     )

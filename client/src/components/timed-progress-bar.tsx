@@ -1,14 +1,14 @@
 import * as React from 'react';
 
-import { ProgressBar, ProgressBarProps } from './progress-bar';
+import { ProgressBar } from './progress-bar';
 
 
 export interface TimedProgressBarProps {
+  date: number;
   duration: number;
   paused?: unknown;
   setValue?(newValue: number): void;
   value: number;
-  time: number;
 }
 
 export interface TimedProgressBarState {
@@ -21,10 +21,6 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
 
   constructor(props: TimedProgressBarProps) {
     super(props);
-
-    this.state = {};
-
-    this.getValue = this.getValue.bind(this);
   }
 
   componentDidMount() {
@@ -38,14 +34,14 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
   }
 
   private getStats() {
-    let deltaTime = Date.now() - this.props.time;
+    let deltaTime = Date.now() - this.props.date;
     let currentValue = Math.min(1, this.props.value + (!this.props.paused ? (deltaTime / this.props.duration) : 0));
     let remainingTime = this.props.duration * (1 - this.props.value) - deltaTime;
 
     return { currentValue, remainingTime };
   }
 
-  private getValue() {
+  private getValue = () => {
     return this.getStats().currentValue;
   }
 

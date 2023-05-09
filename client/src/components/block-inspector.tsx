@@ -52,12 +52,12 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       host: this.props.host
     };
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.blockPath, { host: this.props.host });
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, null, this.props.blockPath, { host: this.props.host });
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
-    let leafBlock = blockAnalysis.blocks.at(-1);
+    let leafBlock = blockAnalysis.pairs.at(-1).block;
     let leafBlockImpl = getBlockImpl(leafBlock, context);
 
     // console.log(blockAnalysis);
@@ -102,7 +102,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
         <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
           {blockAnalysis.groups.slice().reverse().map((group) =>
-            group.blocks.slice().reverse().map((block) => {
+            group.pairs.slice().reverse().map(({ block }) => {
               let blockImpl = getBlockImpl(block, context);
               return blockImpl.createEntries?.(block, null, context).map((entry) => (
                 entry.features.map((feature, featureIndex) => (

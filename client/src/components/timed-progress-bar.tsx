@@ -90,7 +90,7 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
                 );
           }
         }}
-        endDate={endDate}
+        endDate={!this.props.paused ? endDate : null}
         paused={this.props.paused}
         setValue={this.props.setValue}
         value={currentValue} />

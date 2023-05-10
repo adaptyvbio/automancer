@@ -7,7 +7,7 @@ export interface Block extends ProtocolBlock {
 }
 
 export interface Location {
-  children: { 0: unknown; };
+  children: Record<number, unknown>;
   index: number;
   interrupting: boolean;
 }
@@ -27,7 +27,7 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
   let vertical = options.settings.vertical;
   let verticalFlag = vertical ? 1 : 0;
 
-  let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex, location?.children[0]));
+  let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex, location?.children[location.index]));
   let linksCompact: boolean[] = [];
 
   let inlineDirSize = Math.max(...childrenMetrics.map(({ size }) => vertical ? size.width : size.height));
@@ -146,42 +146,6 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
   };
 };
 
-function getChildBlock(block: Block, key: number) {
-  return block.children[key];
-}
-
-function getActiveChildLocation(location: Location, _key: number) {
-  return location.children[0];
-}
-
-function getChildrenExecutionRefs(block: Block, location: Location) {
-  return [{ blockKey: location.index, executionId: 0 }];
-}
-
-function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
-  return [
-    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: false },
-    { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
-  ];
-}
-
-function createDefaultPoint(block: Block, key: number, getChildPoint: (block: ProtocolBlock) => unknown) {
-  return {
-    child: getChildPoint(block.children[key]),
-    index: key
-  };
-}
-
-function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
-  switch (path.first()) {
-    case 'halt':
-      return { type: 'halt' };
-    case 'interrupt':
-      return { type: 'setInterrupt', value: !location.interrupting }
-  }
-}
-
-
 export default {
   namespace,
 
@@ -194,7 +158,7 @@ export default {
       getChildrenExecution(block, location, context) {
         return [
           ...(new Array(location.index).fill(null)),
-          { location: location.children[0] },
+          { location: location.children[location.index] },
           ...(new Array(block.children.length - location.index - 1).fill(null))
         ];
       },

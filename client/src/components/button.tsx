@@ -25,8 +25,6 @@ export function Button(props: React.PropsWithChildren<{
       let segments = shortcutSegments!;
 
       document.body.addEventListener('keydown', (event) => {
-        event.stopImmediatePropagation();
-
         if (
           (!segments.includes('Meta') || !isMac || event.metaKey) &&
           (!segments.includes('Meta') || isMac || event.ctrlKey) &&
@@ -34,13 +32,15 @@ export function Button(props: React.PropsWithChildren<{
           (event.key.toLowerCase() === segments.at(-1).toLowerCase())
         ) {
           event.preventDefault();
+          event.stopImmediatePropagation();
+
           props.onClick?.();
         }
       }, { signal: controller.signal });
 
       return () => void controller.abort();
     }
-  }, [props.shortcut]);
+  }, [props.onClick, props.shortcut]);
 
   return (
     <button

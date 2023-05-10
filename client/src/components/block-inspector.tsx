@@ -10,6 +10,7 @@ import { GlobalContext } from '../interfaces/plugin';
 import * as util from '../util';
 import { Icon } from './icon';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
+import { FeatureEntry, FeatureList } from './features';
 
 
 export interface BlockInspectorProps {
@@ -79,40 +80,23 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
         </div>
 
         {blockAnalysis.isLeafBlockTerminal && (
-          <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
-            {leafBlockImpl.createEntries?.(leafBlock, null, context).map((entry) => (
-              entry.features.map((feature, featureIndex) => (
-                <div className={util.formatClass(featureStyles.entry, featureStyles.entryAccent)} key={featureIndex}>
-                  <Icon name={feature.icon} className={featureStyles.icon} />
-                  <div className={featureStyles.body}>
-                    {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
-                    <div className={featureStyles.label}>{feature.label}</div>
-                  </div>
-                </div>
-              ))
-            ))}
-          </div>
+          <FeatureList features={leafBlockImpl.createFeatures!(leafBlock, null, context)} />
         )}
 
-        <div className={util.formatClass(featureStyles.list, featureStyles.group)}>
+        <div className={featureStyles.root}>
           {blockAnalysis.groups.slice().reverse().map((group) =>
-            group.pairs.slice().reverse().map(({ block }) => {
-              let blockImpl = getBlockImpl(block, context);
-              return blockImpl.createEntries?.(block, null, context).map((entry) => (
-                entry.features.map((feature, featureIndex) => (
-                  <div className={featureStyles.entry} key={featureIndex}>
-                    <Icon name={feature.icon} className={featureStyles.icon} />
-                    <div className={featureStyles.body}>
-                      {feature.description && <div className={featureStyles.description}>{feature.description}</div>}
-                      <div className={featureStyles.label}>{feature.label}</div>
-                    </div>
-                    {/* <Icon name="power_off" className={featureStyles.errorIcon} />
-                <button type="button" className={featureStyles.action}>
-                  <Icon name="expand_more" />
-                </button> */}
-                  </div>
-                ))
-              ))
+            group.pairs.slice().reverse().map((pair, pairIndex) => {
+              let blockImpl = getBlockImpl(pair.block, context);
+
+              if (!blockImpl.createFeatures) {
+                return null;
+              }
+
+              return (
+                <FeatureEntry
+                  features={blockImpl.createFeatures(pair.block, pair.location, context)}
+                  key={pairIndex} />
+              );
             })
           )}
         </div>

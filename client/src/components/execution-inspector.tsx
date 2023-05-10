@@ -12,7 +12,7 @@ import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
 import { BlockContext, GlobalContext } from '../interfaces/plugin';
 import { Pool } from '../util';
-import { analyzeBlockPath, getBlockImpl } from '../protocol';
+import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
 import { FeatureEntry, FeatureList } from './features';
 
 
@@ -46,19 +46,6 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
       pool: this.pool
     };
 
-    let createBlockContext = (blockPath: ProtocolBlockPath): BlockContext => ({
-      ...context,
-      sendMessage: async (message) => {
-        return await this.props.host.client.request({
-          type: 'sendMessageToActiveBlock',
-          chipId: this.props.chip.id,
-          path: blockPath,
-          message
-        });
-      },
-    });
-
-
     let blockPath = this.props.activeBlockPaths[this.state.selectedBlockPathIndex];
 
     let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, context);
@@ -68,7 +55,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
     let leafPair = blockAnalysis.pairs.at(-1);
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
-    let leafBlockContext = createBlockContext(blockPath);
+    let leafBlockContext = createBlockContext(blockPath, this.props.chip.id, context);
 
     return (
       <div className={spotlightStyles.root}>
@@ -87,61 +74,6 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                   </Fragment>
                 );
               })}
-
-              {/* {aggregateLabelItems .map((item, index, arr) => {
-                let last = index === (arr.length - 1);
-
-                return (
-                  <React.Fragment key={index}>
-                    <ContextMenuArea
-                      createMenu={() => item.blocks.flatMap((block, blockRelIndex, arr) => {
-                        let blockIndex = item.aggregate.offset + blockRelIndex;
-                        let location = lineLocations[blockIndex];
-                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-                        let menu = (unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? []).map((entry) => ({
-                          ...entry,
-                          id: [blockRelIndex, ...[entry.id].flat()]
-                        }));
-
-                        return (menu.length > 0)
-                          ? [
-                            { id: [blockRelIndex, 'header'], name: unit.getBlockClassLabel?.(block, context) ?? block.namespace, type: 'header' },
-                            ...menu
-                          ]
-                          : [];
-                      })}
-                      onSelect={(path) => {
-                        let blockRelIndex = path.first() as number;
-                        let block = item.blocks[blockRelIndex];
-
-                        let blockIndex = item.aggregate.offset + blockRelIndex;
-                        let blockPath = activeBlockPath.slice(0, blockIndex);
-                        let execPath = activeExecPath.slice(0, blockIndex);
-
-                        let location = lineLocations[blockIndex];
-                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-                        let message = unit.onSelectBlockMenu?.(block, location, path.slice(1));
-
-                        if (message) {
-                          this.pool.add(async () => {
-                            await this.props.host.client.request({
-                              type: 'sendMessageToActiveBlock',
-                              chipId: this.props.chip.id,
-                              path: execPath, message
-                            });
-                          });
-                        }
-                      }}>
-                      <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                        this.props.selectBlock(activeBlockPath.slice(0, item.offset));
-                      }}>{renderLabel(item.label)}</button>
-                    </ContextMenuArea>
-                    {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
-                  </React.Fragment>
-                );
-              })} */}
             </div>
           )}
           <div className={spotlightStyles.header}>
@@ -158,7 +90,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           </div>
 
           {blockAnalysis.isLeafBlockTerminal && (
-            <FeatureList features={leafBlockImpl.createFeatures?.(leafPair.block, leafPair.location, context)} />
+            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, context)} />
           )}
 
           {leafBlockImpl.Component && (
@@ -177,7 +109,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 let blockPath = (pairIndex > 0)
                   ? group.path.slice(0, -pairIndex)
                   : group.path;
-                let blockContext = createBlockContext(blockPath);
+                let blockContext = createBlockContext(blockPath, this.props.chip.id, context);
 
                 // console.log(group.path, pair, pairIndex, blockPath);
 
@@ -226,7 +158,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           <div className={spotlightStyles.footerActions}>
             {leafBlockImpl.createCommands?.(leafPair.block, leafPair.location, leafBlockContext).map((command) => (
               <Button
-                onClick={() => void command.onTrigger()}
+                onClick={() => command.onTrigger()}
                 shortcut={command.shortcut}
                 key={command.id}>
                 {command.label}

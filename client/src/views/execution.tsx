@@ -115,7 +115,13 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
         return [[]];
       }
 
-      return Array.from(blockImpl.getChildrenExecution!(block, location, context).entries())
+      let refs = blockImpl.getChildrenExecution!(block, location, context);
+
+      if (!refs) {
+        return [[]];
+      }
+
+      return Array.from(refs.entries())
         .filter(([key, ref]) => ref)
         .flatMap(([key, ref]) =>
           getRefPaths(children![key], ref!.location).map((path) => [key, ...path])

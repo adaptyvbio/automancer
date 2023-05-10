@@ -7,8 +7,6 @@ export interface Block extends ProtocolBlock {
   value: string;
 }
 
-export type Key = never;
-
 export interface Location {
 
 }
@@ -18,9 +16,9 @@ export default {
   namespace: ('name' as PluginName),
   blocks: {
     ['_' as ProtocolBlockName]: {
-      getChild(block, key) {
-        return block.child;
+      getChildren(block, key) {
+        return [block.child];
       },
-    } satisfies PluginBlockImpl<Block, Key, Location>
+    } satisfies PluginBlockImpl<Block, Location>
   }
 } satisfies Plugin

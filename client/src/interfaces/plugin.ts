@@ -58,7 +58,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   // createFeatureMenu?(block: Block, location: Location, context: GlobalContext): never;
   createFeatures?(block: Block, location: Location | null, context: GlobalContext): FeatureDef[];
   getChildren?(block: Block, context: GlobalContext): ProtocolBlock[];
-  getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[];
+  getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[] | null;
   getLabel?(block: Block): ReactNode | null;
 }
 

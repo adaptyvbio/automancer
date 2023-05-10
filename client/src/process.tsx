@@ -150,8 +150,6 @@ export function createProcessBlockImpl<Data, Location>(options: {
           label: 'Pause',
           shortcut: 'P',
           onTrigger() {
-            console.log('Pause');
-
             context.pool.add(async () => {
               await context.sendMessage({ type: 'pause' });
             });
@@ -166,7 +164,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
           shortcut: 'P',
           onTrigger() {
             context.pool.add(async () => {
-              await context.sendMessage({ type: 'pause' });
+              await context.sendMessage({ type: 'resume' });
             });
           }
         }];

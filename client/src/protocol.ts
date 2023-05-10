@@ -1,7 +1,7 @@
-import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { ChipId, Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 
 import { Host } from './host';
-import { GlobalContext } from './interfaces/plugin';
+import { BlockContext, GlobalContext } from './interfaces/plugin';
 
 
 export interface BlockGroup {
@@ -15,10 +15,21 @@ export interface BlockPair {
   location: unknown | null;
 }
 
-// export interface BlockPairWithOptionalLocation {
-//   block: ProtocolBlock;
-//   location: unknown | null;
-// }
+
+export function createBlockContext(blockPath: ProtocolBlockPath, chipId: ChipId, context: GlobalContext): BlockContext {
+  return {
+    ...context,
+    sendMessage: async (message) => {
+      return await context.host.client.request({
+        type: 'sendMessageToActiveBlock',
+        chipId,
+        path: blockPath,
+        message
+      });
+    },
+  };
+}
+
 
 
 export function getBlockImpl(block: ProtocolBlock, context: GlobalContext) {

@@ -6,10 +6,38 @@ import formStyles from '../../styles/components/form.module.scss';
 import * as util from '../util';
 
 
-// const isMac = navigator.platform.startsWith('Mac');
-
 // @ts-expect-error
-const isMac = (navigator.userAgentData.platform === 'macOS');
+const IS_MAC = (navigator.userAgentData.platform === 'macOS');
+
+
+const KEY_DISPLAY_MAP: Record<string, string> = {
+  'Alt': '⌥',
+  'ArrowDown': '↓',
+  'ArrowLeft': '←',
+  'ArrowRight': '→',
+  'ArrowUp': '↑',
+  'Backspace': '⌫',
+  'Enter': '↵',
+  'Escape': 'Esc',
+  'Meta': (IS_MAC ? '⌘' : 'Ctrl'),
+  'Shift': '⇧',
+  'Space': '␣',
+  'Tab': '↹'
+};
+
+const KEY_DISPLAY_MAP_ADVANCED: Record<string, string> = {
+  ...KEY_DISPLAY_MAP,
+  'Ctrl': '⎈',
+  'Escape': '⎋',
+  'Meta': (IS_MAC ? '⌘' : '⎈')
+}
+
+const KEY_CODE_MAP: Record<string, string> = {
+  'Space': ' '
+};
+
+
+// const isMac = navigator.platform.startsWith('Mac');
 
 export function Button(props: React.PropsWithChildren<{
   className?: string;
@@ -24,12 +52,16 @@ export function Button(props: React.PropsWithChildren<{
       let controller = new AbortController();
       let segments = shortcutSegments!;
 
+      let rawTargetKey = segments.at(-1).toLowerCase();
+      let targetKey = KEY_CODE_MAP[rawTargetKey] ?? rawTargetKey;
+
       document.body.addEventListener('keydown', (event) => {
         if (
-          (!segments.includes('Meta') || !isMac || event.metaKey) &&
-          (!segments.includes('Meta') || isMac || event.ctrlKey) &&
+          (!segments.includes('Alt') || event.altKey) &&
+          (!segments.includes('Meta') || !IS_MAC || event.metaKey) &&
+          (!segments.includes('Meta') || IS_MAC || event.ctrlKey) &&
           (!segments.includes('Shift') || event.shiftKey) &&
-          (event.key.toLowerCase() === segments.at(-1).toLowerCase())
+          (event.key.toLowerCase() === targetKey)
         ) {
           event.preventDefault();
           event.stopImmediatePropagation();
@@ -49,14 +81,14 @@ export function Button(props: React.PropsWithChildren<{
       onClick={props.onClick}>
       <div>{props.children}</div>
       {displayShortcuts && shortcutSegments && (() => {
+        let rawKeySegment = shortcutSegments.at(-1);
+        let keySegment = KEY_DISPLAY_MAP[rawKeySegment] ?? rawKeySegment;
+
         let displayedSegments = [
-          ...(shortcutSegments.includes('Meta')
-            ? [isMac ? '⌘' : 'Ctrl']
-            : []),
-          ...(shortcutSegments.includes('Shift')
-            ? ['⇧']
-            : []),
-          shortcutSegments.at(-1)
+          ...['Alt', 'Meta', 'Shift']
+            .filter((modifier) => shortcutSegments!.includes(modifier))
+            .map((modifier) => KEY_DISPLAY_MAP[modifier]),
+          keySegment
         ];
 
         return (

@@ -14,11 +14,16 @@ export interface BlockMetrics extends ProtocolBlockGraphRendererMetrics {
 
 export interface Location {
   children: { 0: unknown; };
-  count: number;
-  iteration: number;
+  count: number | null;
+  iteration: number | null;
+  mode: LocationMode;
 }
 
-export type Key = 0;
+export enum LocationMode {
+  Failed = 0,
+  Halting = 1,
+  Normal = 2
+}
 
 export interface Point {
   child: unknown | null;
@@ -31,7 +36,14 @@ export default {
 
   blocks: {
     ['_' as ProtocolBlockName]: {
-      createEntries(block, location) {
+      Component(props) {
+        return (
+          <div>
+            Mode: {LocationMode[props.location.mode]}
+          </div>
+        );
+      },
+      createFeatures(block, location, context) {
         let numericCount = location?.count ?? (
           (block.count.type === 'number')
             ? block.count.value
@@ -50,19 +62,27 @@ export default {
           ]
           : [null, 'Skip'];
 
+        if ((location?.mode === LocationMode.Normal) && ((numericCount === null) || (numericCount >= 2))) {
+          label += ` (${location.iteration! + 1}`;
+
+          if (numericCount !== null) {
+            label += `/${numericCount}`;
+          }
+
+          label += ')';
+        }
+
         return [{
-          features: [{
-            description,
-            icon: 'replay',
-            label
-          }]
+          description,
+          icon: 'replay',
+          label
         }];
       },
-      getChild(block, key) {
-        return block.child;
+      getChildren(block, context) {
+        return [block.child];
       },
-      getClassLabel(block) {
-        return 'Repeat';
+      getChildrenExecution(block, location, context) {
+        return [{ location: location.children[0] }];
       },
       getLabel(block) {
         let numericCount = (block.count.type === 'number')
@@ -80,7 +100,7 @@ export default {
           );
         }
       },
-    } satisfies PluginBlockImpl<Block, Key, Location>
+    } satisfies PluginBlockImpl<Block, Location>
   }
 } satisfies Plugin;
 

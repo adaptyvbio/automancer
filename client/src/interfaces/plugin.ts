@@ -41,6 +41,13 @@ export interface PluginBlockImplComponentProps<Block extends ProtocolBlock, Loca
   location: Location;
 }
 
+export interface PluginBlockImplAction {
+  id: OrdinaryId;
+  icon: string;
+  label?: string;
+  onTrigger(): void;
+}
+
 export interface PluginBlockImplCommand {
   id: OrdinaryId;
   disabled?: unknown;
@@ -54,8 +61,8 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   Component?: ComponentType<PluginBlockImplComponentProps<Block, Location>>;
 
   computeGraph?: ProtocolBlockGraphRenderer<Block, Location>;
+  createActions?(block: Block, location: Location, context: BlockContext): PluginBlockImplAction[];
   createCommands?(block: Block, location: Location, context: BlockContext): PluginBlockImplCommand[];
-  // createFeatureMenu?(block: Block, location: Location, context: GlobalContext): never;
   createFeatures?(block: Block, location: Location | null, context: GlobalContext): FeatureDef[];
   getChildren?(block: Block, context: GlobalContext): ProtocolBlock[];
   getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[] | null;

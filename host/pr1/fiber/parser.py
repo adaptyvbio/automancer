@@ -153,7 +153,7 @@ class BaseProgram(ABC):
   def halt(self):
     ...
 
-  def receive(self, message: Any) -> None:
+  def receive(self, message: Any, /) -> None:
     match message["type"]:
       case "halt":
         self.halt()
@@ -184,11 +184,6 @@ class HeadProgram(BaseProgram):
 
   def stable(self):
     return False
-
-  def receive(self, message, /):
-    match message["type"]:
-      case "halt":
-        self.halt()
 
 class BaseProgramPoint(ABC):
   pass

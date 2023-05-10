@@ -159,7 +159,7 @@ class ProcessProgramMode:
 
   @dataclass
   class Pausing:
-    event: Event = field(default_factory=Event)
+    event: Event = field(default_factory=Event, repr=False)
 
     def export(self):
       return 3
@@ -170,8 +170,8 @@ class ProcessProgramMode:
       return 4
 
   @dataclass
-  class ResumingProcess():
-    event: Event = field(default_factory=Event)
+  class Resuming():
+    event: Event = field(default_factory=Event, repr=False)
 
     def export(self):
       return 5
@@ -186,7 +186,7 @@ class ProcessProgramMode:
     def export(self):
       return 7
 
-  Any = Broken | Halting | Normal | Paused | Pausing | ResumingProcess | Starting | Terminated
+  Any = Broken | Halting | Normal | Paused | Pausing | Resuming | Starting | Terminated
 
 
 @dataclass(kw_only=True)
@@ -233,7 +233,15 @@ class ProcessProgram(HeadProgram):
           return False
 
         self._mode = ProcessProgramMode.Pausing()
-        self._handle.send(ProgramExecEvent(location=self._process_location))
+        self._handle.send(ProgramExecEvent(
+          location=ProcessProgramLocation(
+            mode=self._mode,
+            pausable=self._process_pausable,
+            process=self._process_location,
+            time=time.time()
+          )
+        ))
+
         self._process.pause()
 
         await self._mode.event.wait()
@@ -245,12 +253,38 @@ class ProcessProgram(HeadProgram):
         return False
 
   async def resume(self):
-    pass
+    match self._mode:
+      case ProcessProgramMode.Normal():
+        return True
+      case ProcessProgramMode.Paused():
+        self._mode = ProcessProgramMode.Resuming()
+        self._handle.send(ProgramExecEvent(
+          location=ProcessProgramLocation(
+            mode=self._mode,
+            pausable=self._process_pausable,
+            process=self._process_location,
+            time=time.time()
+          )
+        ))
+
+        self._process.resume()
+
+        await self._mode.event.wait()
+        return True
+      case ProcessProgramMode.Resuming(event):
+        await event.wait()
+        return True
+      case _:
+        return False
 
   def receive(self, message, /):
     match message["type"]:
       case "jump":
         self.jump(self._block.import_point(message["value"]))
+      case "pause":
+        self._handle.master.pool.start_soon(self.pause())
+      case "resume":
+        self._handle.master.pool.start_soon(self.resume())
       case _:
         return super().receive(message)
 
@@ -303,22 +337,22 @@ class ProcessProgram(HeadProgram):
             case (Mode.Normal(), ProcessExecEvent()):
               pass
 
-            case (Mode.ResumingProcess(resuming_event), ProcessExecEvent()):
+            case (Mode.Resuming(resuming_event), ProcessExecEvent()):
                 resuming_event.set()
                 self._mode = Mode.Normal()
 
             case (
-              Mode.Halting() | Mode.Normal() | Mode.Pausing() | Mode.Paused() | Mode.ResumingProcess() | Mode.Starting(),
+              Mode.Halting() | Mode.Normal() | Mode.Pausing() | Mode.Paused() | Mode.Resuming() | Mode.Starting(),
               ProcessFailureEvent()
             ):
               self._mode = Mode.Broken()
 
             case (Mode.Pausing(pausing_event), ProcessPauseEvent()):
               pausing_event.set()
-              self._mode = Mode.Pausing()
+              self._mode = Mode.Paused()
 
             case (
-              Mode.Halting() | Mode.Normal() | Mode.Paused() | Mode.ResumingProcess() | Mode.Starting(),
+              Mode.Halting() | Mode.Normal() | Mode.Paused() | Mode.Resuming() | Mode.Starting(),
               ProcessTerminationEvent()
             ):
               self._mode = Mode.Terminated()

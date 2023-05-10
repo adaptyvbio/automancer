@@ -2,6 +2,7 @@ import asyncio
 import bisect
 from asyncio import Event, Task
 from dataclasses import KW_ONLY, dataclass, field
+from logging import Logger
 from types import EllipsisType
 from typing import Any, Callable, Optional, Self
 
@@ -19,7 +20,9 @@ from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
 from pr1.units.base import BaseRunner
 from pr1.util.asyncio import race, run_anonymous, wait_all
+from pr1.util.decorators import provide_logger
 
+from . import logger
 from .program import PublisherProgram
 
 
@@ -33,12 +36,8 @@ class Declaration:
   stable: bool = False
 
   def __lt__(self, other: Self):
-    return len(self.assignments) < len(other.assignments)
+    return len(self.trace) < len(other.trace)
 
-
-# @dataclass
-# class Candidate:
-#   value: Any
 
 @dataclass
 class NodeInfo:
@@ -49,6 +48,8 @@ class NodeInfo:
   update_event: Event = field(default_factory=Event)
   worker_task: Optional[Task[None]] = None
 
+
+@provide_logger(logger)
 class Runner(BaseRunner):
   def __init__(self, chip, *, host: Host):
     self._chip = chip
@@ -57,6 +58,7 @@ class Runner(BaseRunner):
     self._declarations = list[Declaration]()
     self._node_infos = dict[ValueNode, NodeInfo]()
 
+    self._logger: Logger
     self._master: Master
 
   def add(self, trace: PublisherTrace, assignments: dict[ValueNode, Any]):
@@ -85,7 +87,7 @@ class Runner(BaseRunner):
           node_info.worker_task.cancel()
 
 
-  def apply(self):
+  def update(self):
     for node, node_info in self._node_infos.items():
       node_declaration = next((declaration for declaration in self._declarations if declaration.active and (node in declaration.assignments)), None)
 
@@ -102,6 +104,8 @@ class Runner(BaseRunner):
 
 
   async def _node_worker(self, node: ValueNode, node_info: NodeInfo):
+    self._logger.debug(f"Launching worker of node with id '{node.id}'")
+
     # assert node_info.claim
     assert node_info.update_event
 
@@ -156,3 +160,5 @@ class Runner(BaseRunner):
     finally:
       node_info.claim.destroy()
       node_info.claim = None
+
+      self._logger.debug(f"Removing worker of node with id '{node.id}'")

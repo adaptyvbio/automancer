@@ -111,15 +111,16 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                   : group.path;
                 let blockContext = createBlockContext(blockPath, this.props.chip.id, context);
 
-                // console.log(group.path, pair, pairIndex, blockPath);
-
                 if (!blockImpl.createFeatures) {
                   return null;
                 }
 
+                let actions = (blockImpl.createActions?.(pair.block, pair.location, blockContext) ?? []);
+
                 return (
                   <FeatureEntry
                     actions={[
+                      ...actions,
                       { id: '_halt',
                         icon: 'skip_next' }
                     ]}
@@ -145,7 +146,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                           });
                         });
                       } else {
-                        // ...
+                        actions.find((action) => (action.id === actionId))?.onTrigger();
                       }
                     }}
                     key={pairIndex} />
@@ -166,7 +167,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             ))}
           </div>
           <div className={spotlightStyles.footerActions}>
-            <Button shortcut="S" onClick={() => {
+            <Button shortcut="Alt+ArrowRight" onClick={() => {
               this.pool.add(async () => {
                 await leafBlockContext.sendMessage({ type: 'halt' });
               });

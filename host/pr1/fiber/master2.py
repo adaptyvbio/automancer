@@ -1,4 +1,5 @@
 from asyncio import Event, Future, Lock, Task
+from logging import Logger
 from pprint import pprint
 from collections import deque
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from typing import TYPE_CHECKING, Any, Optional, TypeVar
 import asyncio
 import traceback
 
+from ..host import logger
+from ..util.decorators import provide_logger
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
@@ -26,6 +29,7 @@ if TYPE_CHECKING:
   from ..host import Host
 
 
+@provide_logger(logger)
 class Master:
   def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
     self.chip = chip
@@ -43,6 +47,7 @@ class Master:
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._location: Optional[ProgramHandleEventEntry] = None
+    self._logger: Logger
     self._owner: ProgramOwner
     self._pool = Pool()
     self._update_callback: Optional[SimpleCallbackFunction] = None
@@ -50,6 +55,9 @@ class Master:
     self._update_handle: Optional[asyncio.Handle] = None
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
+
+    for line in self.protocol.root.format_hierarchy().splitlines():
+      self._logger.debug(line)
 
   @property
   def pool(self):

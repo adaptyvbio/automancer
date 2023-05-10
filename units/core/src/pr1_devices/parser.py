@@ -10,7 +10,7 @@ from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, export_value
-from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
+from pr1.fiber.langservice import (Analysis, AnyType, Attribute, BoolType, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType)
 from pr1.fiber.master2 import ProgramHandle
@@ -116,6 +116,7 @@ class ApplierBlock(BaseBlock):
 class PublisherBlock(BaseBlock):
   assignments: dict[NodePath, Evaluable[LocatedValue[Any]]]
   child: BaseBlock
+  stable: bool
 
   def __get_node_children__(self):
     return [self.child]
@@ -136,7 +137,8 @@ class PublisherBlock(BaseBlock):
       "name": "publisher",
 
       "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
-      "child": self.child.export()
+      "child": self.child.export(),
+      "stable": self.stable
     }
 
 
@@ -159,19 +161,31 @@ class PublisherTransformer(BasePassiveTransformer):
         case _:
           return AnyType()
 
-    return { key: Attribute(
-      description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
-      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
-      label=node.label,
-      optional=True,
-      type=PotentialExprType(get_type(node))
-    ) for key, (node, path) in self._parser.node_map.items() }
+    return {
+      key: Attribute(
+        description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
+        documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
+        label=node.label,
+        optional=True,
+        type=PotentialExprType(get_type(node))
+      ) for key, (node, path) in self._parser.node_map.items()
+    } | {
+      'stable': Attribute(
+        optional=True,
+        type=BoolType()
+      )
+    }
 
   def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
     analysis = Analysis()
     values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
 
+    stable = data['stable'].value if ('stable' in data) else False # type: ignore
+
     for key, value in data.items():
+      if key == 'stable':
+        continue
+
       node, path = self._parser.node_map[key]
       value = analysis.add(value.eval(EvalContext(adoption_stack), final=False))
 
@@ -179,12 +193,13 @@ class PublisherTransformer(BasePassiveTransformer):
         values[path] = value
 
     if values:
-      return analysis, TransformerAdoptionResult(values)
+      return analysis, TransformerAdoptionResult((values, stable))
     else:
       return analysis, None
 
-  def execute(self, data: dict[NodePath, Evaluable[LocatedValue[Any]]], /, block):
-    return Analysis(), PublisherBlock(data, block)
+  def execute(self, data: tuple[dict[NodePath, Evaluable[LocatedValue[Any]]], bool], /, block):
+    values, stable = data
+    return Analysis(), PublisherBlock(values, block, stable=stable)
 
 
 class ApplierTransformer(BasePartialPassiveTransformer):

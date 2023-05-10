@@ -28,6 +28,7 @@
 
   color: #666;
   font-size: 0.95rem;
+  text-align: center;
 
   &:not(:global(._active)):hover {
     color: #333;
@@ -41,7 +42,7 @@
     box-shadow: $highlight-shadow;
   }
 
-  &:global(._active) {
+  &:global(._active), > :global(._expanded) {
     font-weight: 600;
   }
 

@@ -460,14 +460,16 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         let lastModified = this.props.draft.lastModified;
 
         subtitle = (
-          <TimeSensitive child={() => {
-            let delta = (Date.now() - lastModified);
+          <TimeSensitive
+            contents={() => {
+              let delta = (Date.now() - lastModified);
 
-            return (delta < 5e3)
-              ? 'Just saved'
-              : `Last saved ${format.formatRelativeDate(lastModified)}`;
+              return (delta < 5e3)
+                ? 'Just saved'
+                : `Last saved ${format.formatRelativeDate(lastModified)}`;
+              }
             }
-          } interval={1e3} />
+            interval={1e3} />
         );
       } else {
         subtitle = null;

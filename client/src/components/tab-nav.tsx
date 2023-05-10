@@ -54,7 +54,7 @@ export class TabNav extends React.Component<TabNavProps, TabNavState> {
                 }
               }}
               key={entry.id}>
-              <ExpandableText value={entry.label} />
+              <ExpandableText>{entry.label}</ExpandableText>
             </button>
           ))}
         </nav>

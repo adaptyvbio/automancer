@@ -1,26 +1,30 @@
 import * as React from 'react';
+import { ReactNode, createRef } from 'react';
 
 import styles from '../../styles/components/progress-bar.module.scss';
 
 import * as util from '../util';
-import { TimeSensitive } from './time-sensitive';
 
 
-export type ProgressBarProps = {
+export interface ProgressBarProps {
+  description?(selectValue: number | null): ReactNode;
+  endDate?: number | null;
   paused?: unknown;
-  progressRef?: React.RefObject<HTMLDivElement>;
   setValue?(newValue: number): void;
-} & (
-  { value: number; } |
-  { getValue(): number;
-    textUpdateInterval?: number; }
-);
+  value: number;
+}
 
 export interface ProgressBarState {
   selectValue: number | null;
 }
 
 export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
+  private animation: {
+    obj: Animation;
+    startDate: number;
+  } | null = null;
+  private ref = createRef<HTMLDivElement>();
+
   constructor(props: ProgressBarProps) {
     super(props);
 
@@ -29,15 +33,49 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
     };
   }
 
-  private getValue() {
-    return 'value' in this.props
-      ? this.props.value
-      : this.props.getValue();
+  override componentDidMount() {
+    this.updateAnimation();
   }
 
-  render() {
-    let currentValue = this.getValue();
+  override componentDidUpdate(prevProps: Readonly<ProgressBarProps>, prevState: Readonly<ProgressBarState>, snapshot?: any) {
+    if (this.props.endDate !== prevProps.endDate) {
+      // if (prevProps.endDate && this.animation && (prevProps !== this.props)) {
+      if (false) {
+        // this.updateAnimation(prevProps.value + (1 - prevProps.value) * (Date.now() - this.animation.startDate) / (prevProps.endDate - this.animation.startDate));
+      } else {
+        this.updateAnimation();
+      }
+    }
+  }
 
+  private updateAnimation(currentValue?: number) {
+    if (this.animation) {
+      this.animation.obj.cancel();
+      this.animation = null;
+    }
+
+    if (this.props.endDate != null) {
+      let nowDate = Date.now();
+      let duration = (this.props.endDate - nowDate);
+
+      if (duration > 0) {
+        let obj = this.ref.current!.animate([
+          { width: `${(currentValue ?? this.props.value) * 100}%` },
+          { width: '100%' }
+        ], {
+          duration,
+          fill: 'forwards'
+        });
+
+        this.animation = {
+          obj,
+          startDate: nowDate
+        };
+      }
+    }
+  }
+
+  override render() {
     return (
       <div className={util.formatClass(styles.root, {
         '_paused': this.props.paused,
@@ -60,26 +98,12 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
             this.props.setValue!(this.state.selectValue!);
           })}>
           <div className={styles.inner} />
-          <div className={styles.progress} style={{ width: `${currentValue * 100}%` }} ref={this.props.progressRef} />
+          <div className={styles.progress} style={{ width: `${this.props.value * 100}%` }} ref={this.ref} />
           {(this.state.selectValue !== null) && (
             <div className={styles.select} style={{ width: `${this.state.selectValue * 100}%` }} />
           )}
         </div>
-        <div className={styles.text}>
-          <TimeSensitive
-            contents={() => {
-              let currentValue = this.getValue();
-
-              return (
-                <>{((this.state.selectValue ?? currentValue) * 100).toFixed(0)}%</>
-              );
-            }}
-            interval={
-              (('textUpdateInterval' in this.props) && (this.props.textUpdateInterval !== undefined)) && !this.props.paused
-                ? this.props.textUpdateInterval
-                : null
-            } />
-        </div>
+        {this.props.description?.(this.state.selectValue)}
       </div>
     )
   }

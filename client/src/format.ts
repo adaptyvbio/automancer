@@ -1,4 +1,11 @@
-const TIME_UNITS = [
+export interface TimeUnit {
+  factor: number;
+  narrow: string;
+  short: string;
+  long: string;
+}
+
+export const TIME_UNITS: TimeUnit[] = [
   { factor: 1, narrow: 'ms', short: 'msec', long: 'millisecond' },
   { factor: 1000, narrow: 's', short: 'sec', long: 'second' },
   { factor: 60e3, narrow: 'm', short: 'min', long: 'minute' },
@@ -7,32 +14,55 @@ const TIME_UNITS = [
   { factor: 3600e3 * 24 * 7, narrow: 'w', short: 'week', long: 'week' }
 ];
 
+
 /**
  * Formats a duration.
  *
  * To be replaced with [`Intl.DurationFormat`](https://github.com/tc39/proposal-intl-duration-format) once stable.
  *
  * @param input The duration, in milliseconds.
- * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`) or `narrow` (`1h 40m`).
+ * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`), `narrow` (`1h 40m`) or `numeric` (`01:40`).
  */
-export function formatDuration(input: number, options?: { style: ('long' | 'narrow' | 'short'); }) {
-  let style = options?.style ?? 'short';
+export function formatDuration(input: number, options?: {
+  range?: number;
+  style?: ('long' | 'narrow' | 'numeric' | 'short');
+}) {
+  let range = (options?.range ?? input);
+  let style = (options?.style ?? 'short');
+
+  let inputRest = Math.round(input);
+  let rangeRest = Math.round(range);
+
+  let units = (style !== 'numeric')
+    ? TIME_UNITS.slice()
+    : TIME_UNITS.slice(1, 4);
 
   let segments: string[] = [];
-  let rest = Math.round(input);
 
-  for (let unit of Array.from(TIME_UNITS).reverse()) {
-    let unitValue = Math.floor(rest / unit.factor);
-    rest = rest % unit.factor;
+  for (let unit of units.reverse()) {
+    let unitInputValue = Math.floor(inputRest / unit.factor);
+    let unitRangeValue = Math.floor(rangeRest / unit.factor);
 
-    if (unitValue > 0) {
-      segments.push(unitValue.toFixed(0) + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitValue > 1)) ? 's' : ''));
+    inputRest %= unit.factor;
+    rangeRest %= unit.factor;
+
+    if ((unitRangeValue > 0) || ((style === 'numeric') && TIME_UNITS.slice(1, 3).includes(unit))) {
+      if (style !== 'numeric') {
+        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitInputValue > 1)) ? 's' : ''));
+      } else {
+        segments.push(unitInputValue.toFixed().padStart(2, '0'));
+      }
     }
   }
 
-  return new Intl.ListFormat('en', (style !== 'long')
-    ? { style: 'narrow', type: 'unit' }
-    : { style: 'long', type: 'conjunction' }).format(segments);
+  switch (style) {
+    case 'numeric':
+      return segments.join(':');
+    case 'long':
+      return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments);
+    default:
+      return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments);
+  }
 }
 
 

@@ -2,21 +2,18 @@ import { Chip, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 import { Fragment } from 'react';
 
-import formStyles from '../../styles/components/form.module.scss';
+import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Icon } from './icon';
-import * as util from '../util';
 import { Host } from '../host';
-import { getBlockAggregates, UnitTools } from '../unit';
-import { FeatureList } from './features';
 import { ContextMenuArea } from './context-menu-area';
-import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
 import { PluginContext } from '../interfaces/plugin';
 import { Pool } from '../util';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
+import { FeatureEntry, FeatureList } from './features';
 
 
 export interface ExecutionInspectorProps {
@@ -134,6 +131,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
           )}
           <div className={spotlightStyles.header}>
             <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafPair.block) ?? 'Untitled'}</i>}</h2>
+
             <div className={spotlightStyles.navigationRoot}>
               <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === 0}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
@@ -144,6 +142,10 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             </div>
           </div>
 
+          {blockAnalysis.isLeafBlockTerminal && (
+            <FeatureList features={leafBlockImpl.createFeatures?.(leafPair.block, leafPair.location, context)} />
+          )}
+
           {leafBlockImpl.Component && (
             <ErrorBoundary>
               <leafBlockImpl.Component
@@ -152,6 +154,33 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 location={leafPair.location} />
             </ErrorBoundary>
           )}
+
+          <div className={featureStyles.root}>
+            {blockAnalysis.groups.slice().reverse().map((group) =>
+              group.pairs.slice().reverse().map((pair) => {
+                let blockImpl = getBlockImpl(pair.block, context);
+
+                if (!blockImpl.createFeatures) {
+                  return null;
+                }
+
+                return (
+                  <FeatureEntry
+                    detail={blockImpl.Component && (() => {
+                      let Component = blockImpl.Component!;
+
+                      return (
+                        <Component
+                          block={pair.block}
+                          context={context}
+                          location={pair.location} />
+                      );
+                    })}
+                    features={blockImpl.createFeatures(pair.block, pair.location, context)} />
+                );
+              })
+            )}
+          </div>
 
           {/* <FeatureList
             indexOffset={aggregates.findIndex((aggregate) => aggregate.state)}

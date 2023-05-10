@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 
+/** @deprecated */
 export interface Feature {
   accent?: unknown;
   description?: string | null;
@@ -12,6 +13,3 @@ export interface Feature {
   icon: string;
   label: ReactNode;
 }
-
-export type FeatureGroupDef = Feature[];
-export type FeatureListDef = FeatureGroupDef[];

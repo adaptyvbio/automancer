@@ -20,9 +20,9 @@ export function ExpandableText(props: PropsWithChildren<{
 
   return (!prevExpandedValue || (expandedValue !== prevExpandedValue))
     ? (
-      <div className="_expanded" ref={ref}>{expandedValue}</div>
+      <span className="_expanded" style={{ display: 'inline-block' }} ref={ref}>{expandedValue}</span>
     )
     : (
-      <div style={{ width: `${width}px` }}>{props.children}</div>
+      <span style={{ display: 'inline-block', width: `${width}px` }}>{props.children}</span>
     );
 }

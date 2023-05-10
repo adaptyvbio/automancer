@@ -107,21 +107,19 @@ export default {
       getChildren(block, context) {
         return [block.child];
       },
-      createEntries(block, location, context) {
+      createFeatures(block, location, context) {
         let executor = context.host.state.executors[namespace] as ExecutorState;
 
-        return [{
-          features: block.assignments.map(([path, value]) => {
-            let parentNode = findNode(executor.root, path.slice(0, -1));
-            let node = findNode(executor.root, path) as ValueNode;
+        return block.assignments.map(([path, value]) => {
+          let parentNode = findNode(executor.root, path.slice(0, -1));
+          let node = findNode(executor.root, path) as ValueNode;
 
-            return {
-              description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
-              icon: (node.icon ?? 'settings_input_hdmi'),
-              label: formatDynamicValue(value)
-            };
-          })
-        }];
+          return {
+            description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
+            icon: (node.icon ?? 'settings_input_hdmi'),
+            label: formatDynamicValue(value)
+          };
+        });
       },
     } satisfies PluginBlockImpl<PublisherBlock, never>
   }

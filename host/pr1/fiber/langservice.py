@@ -1057,7 +1057,7 @@ class IntType(Type):
     elif (result.value == 0) and (self._mode == 'positive'):
       return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
     else:
-      return Analysis(), ValueAsPythonExpr(result, depth=context.eval_depth)
+      return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
 class StrType(PrimitiveType):
   def __init__(self):

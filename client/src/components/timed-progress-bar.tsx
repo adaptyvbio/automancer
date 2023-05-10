@@ -45,19 +45,22 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
           switch (this.state.displayMode) {
             case ProgressDisplayMode.Fraction:
               return (
-                <ExpandableText expandedValue="100%">
-                  {(selectValue !== null)
-                    ? (
-                      <>{(selectValue * 100).toFixed()}%</>
-                    )
-                    : (
-                      <TimeSensitive
-                        contents={() => (
-                          <>{(this.getStats().currentValue * 100).toFixed()}%</>
-                        )}
-                        interval={remainingDuration / (1 - currentValue) / 100} />
-                    )}
-                </ExpandableText>
+                <div>
+                  <ExpandableText expandedValue="100">
+                    {(selectValue !== null)
+                      ? (
+                        <>{(selectValue * 100).toFixed()}</>
+                      )
+                      : (
+                        <TimeSensitive
+                          contents={() => (
+                            <>{(this.getStats().currentValue * 100).toFixed()}</>
+                          )}
+                          interval={remainingDuration / (1 - currentValue) / 100} />
+                      )}
+                  </ExpandableText>
+                  &thinsp;%
+                </div>
               );
 
               case ProgressDisplayMode.TimeElapsed:

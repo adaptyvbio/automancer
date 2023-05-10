@@ -3,19 +3,19 @@ import * as React from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
 
-import { FeatureGroup } from '../components/features';
+import { FeatureList } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
 import { Point, SideValues, Size } from '../geometry';
 import { Host } from '../host';
 import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { UnknownPluginBlockImpl } from '../interfaces/plugin';
 import { FeatureGroupDef } from '../interfaces/unit';
+import { getBlockName } from '../protocol';
 import * as util from '../util';
 import { ViewExecution } from '../views/execution';
 import { MenuDef, MenuEntryPath } from './context-menu';
 import { ContextMenuArea } from './context-menu-area';
 import { Icon } from './icon';
-import { getBlockName } from '../protocol';
 
 
 export interface GraphEditorProps {
@@ -430,7 +430,7 @@ export function GraphNode(props: {
               </div>
             )}
             <div className={graphEditorStyles.body}>
-              <FeatureGroup group={node.features} />
+              <FeatureList features={node.features} />
             </div>
           </div>
         </ContextMenuArea>

@@ -45,8 +45,8 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   Component?: ComponentType<PluginBlockImplComponentProps<Block, Location>>;
 
   computeGraph?: ProtocolBlockGraphRenderer<Block, Location>;
-  createEntries?(block: Block, location: Location | null, context: PluginContext): PluginBlockEntry[];
-  createEntryMenu?(block: Block, entryId: OrdinaryId): MenuDef;
+  createFeatureMenu?(block: Block, location: Location, context: PluginContext): never;
+  createFeatures?(block: Block, location: Location | null, context: PluginContext): Feature[];
   getChildren?(block: Block, context: PluginContext): ProtocolBlock[];
   getChildrenExecution?(block: Block, location: Location, context: PluginContext): (PluginBlockExecutionRef | null)[];
   getLabel?(block: Block): ReactNode | null;

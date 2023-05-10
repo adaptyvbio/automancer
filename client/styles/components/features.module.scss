@@ -6,17 +6,35 @@ $divider-height: 20px;
 $entry-height: 30px;
 
 
-.list {
+/**
+
+.root
+  .entry [+]
+    .features
+      .feature [+]
+        .icon
+        .body
+          .description
+          .label
+        .errorIcon
+        .action [+]
+          :global(.icon)
+    .detail
+
+*/
+
+
+.root {
   margin: 1rem 0;
 }
 
-.group {
+.root, .features {
   display: flex;
   flex-direction: column;
   row-gap: 0.4rem;
 }
 
-.entry {
+.feature {
   display: grid;
   align-items: center;
   column-gap: 0.8rem;
@@ -46,7 +64,7 @@ $entry-height: 30px;
     'opsz' 20;
 }
 
-.entryAccent .icon {
+.featureAccent .icon {
   background-color: $app-blue;
 }
 
@@ -114,4 +132,9 @@ $entry-height: 30px;
     'wght' 100,
     'GRAD' 200,
     'opsz' 20;
+}
+
+
+.detail {
+  padding: 1rem 1.2rem 1.6rem 1.2rem;
 }

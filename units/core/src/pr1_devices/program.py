@@ -57,7 +57,7 @@ class PublisherProgramPoint(BaseProgramPoint):
 
 @final
 class PublisherProgram(BaseProgram):
-  def __init__(self, block: PublisherBlock, handle: ProgramHandle):
+  def __init__(self, block: PublisherBlock, handle):
     from .runner import Runner
 
     self._block = block
@@ -75,7 +75,7 @@ class PublisherProgram(BaseProgram):
 
     self._mode = PublisherProgramMode.Halting()
 
-  async def run(self, point: PublisherProgramPoint, stack):
+  async def run(self, point: Optional[PublisherProgramPoint], stack):
     # if isinstance(parent, Self):  ????
 
     trace = cast(list[PublisherProgram], self._handle.ancestors(include_self=True))

@@ -1,130 +1,130 @@
+import { OrdinaryId } from 'pr1-shared';
 import * as React from 'react';
+import { ReactNode, memo, useState } from 'react';
 
 import styles from '../../styles/components/features.module.scss';
 
+import { formatClass } from '../util';
 import { Icon } from './icon';
-import { FeatureGroupDef, FeatureListDef } from '../interfaces/unit';
-import * as util from '../util';
 
 
-export function SimpleFeatureList(props: {
-  list: FeatureListDef;
-}) {
+
+export interface FeatureDef {
+  id?: OrdinaryId;
+  accent?: unknown;
+  actions?: FeatureActionDef[];
+  description?: string | null;
+  disabled?: unknown;
+  error?: {
+    kind: 'emergency' | 'error' | 'power' | 'shield' | 'warning';
+    message: string;
+  } | null;
+  icon: string;
+  label: ReactNode;
+}
+
+export interface FeatureActionDef {
+  id: OrdinaryId;
+  disabled?: unknown;
+  icon: string;
+  label?: string;
+}
+
+
+export const Feature = memo(({ feature, onAction }: {
+  feature: FeatureDef;
+  onAction?(actionId: OrdinaryId): void;
+}) => {
   return (
-    <div className={util.formatClass(styles.list, styles.listSimple)}>
-      {props.list.reverse().map((group, index) => (
-        <FeatureGroup group={group} key={index} />
+    <div className={formatClass(styles.feature, { [styles.featureAccent]: feature.accent })}>
+      <Icon name={feature.icon} className={styles.icon} />
+      <div className={styles.body}>
+        {feature.description && <div className={styles.description}>{feature.description}</div>}
+        <div className={styles.label}>{feature.label}</div>
+      </div>
+      {feature.error && (
+        <Icon
+          className={styles.errorIcon}
+          name={{
+            emergency: 'emergency_home',
+            error: 'error',
+            power: 'power_off',
+            shield: 'gpp_maybe',
+            warning: 'warning'
+          }[feature.error.kind]}
+          title={feature.error.message} />
+      )}
+      {feature.actions?.map((action) => (
+        <button type="button" disabled={!!action.disabled} title={action.label} className={styles.action} key={action.id} onClick={() => void onAction!(action.id)}>
+          <Icon name={action.icon} />
+        </button>
       ))}
     </div>
   );
-}
+});
 
-export function FeatureList(props: {
-  hoveredGroupIndex: number | null;
-  indexOffset?: number;
-  list: FeatureListDef;
-  pausedGroupIndex: number | null;
-  setHoveredGroupIndex(value: number | null): void;
-  setPausedGroupIndex(value: number | null): void;
-}) {
-  let indexOffset = (props.indexOffset ?? 0);
-  let groupHovered = (props.hoveredGroupIndex !== null);
 
-  let topIndex = indexOffset + props.list.length;
+export const FeatureEntry = memo((props: {
+  detail?(): ReactNode;
+  features: FeatureDef[];
+  onAction?(featureId: OrdinaryId, actionId: OrdinaryId): void;
+}) => {
+  let [detailOpen, setDetailOpen] = useState(false);
 
   return (
-    <div className={styles.list}>
-      <FeatureListDivider
-        freezable={true}
-        hovered={props.hoveredGroupIndex === topIndex}
-        paused={props.pausedGroupIndex === topIndex}
-        setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? topIndex : null)}
-        setPaused={(paused) => void props.setPausedGroupIndex(paused ? topIndex : null)} />
-      {Array.from(props.list.entries()).reverse().map(([index, group]) => {
-        index += indexOffset;
-
-        let hovered = (props.hoveredGroupIndex === index);
-
-        return (
-          <React.Fragment key={index}>
-            <FeatureGroup group={group} />
-            <FeatureListDivider
-              hovered={hovered}
-              paused={(!groupHovered || hovered) && (props.pausedGroupIndex === index)}
-              setHovered={(hovered) => void props.setHoveredGroupIndex(hovered ? index : null)}
-              setPaused={(paused) => void props.setPausedGroupIndex(paused ? index : null)} />
-          </React.Fragment>
-        );
-      })}
+    <div className={styles.entry}>
+      <div className={styles.features}>
+        {props.features.map((feature, featureIndex) => (
+          <Feature
+            feature={{
+              ...feature,
+              actions: [
+                ...(feature.actions ?? []),
+                ...(
+                  props.detail
+                    ? detailOpen
+                      ? [{
+                        id: '_toggle',
+                        label: 'Collapse',
+                        icon: 'expand_less'
+                      }]
+                      : [{
+                        id: '_toggle',
+                        label: 'Expand',
+                        icon: 'expand_more'
+                      }]
+                    : []
+                )
+              ]
+            }}
+            onAction={(actionId) => {
+              if (actionId === '_toggle') {
+                setDetailOpen((open) => !open);
+              } else {
+                props.onAction!((feature.id ?? featureIndex), actionId);
+              }
+            }}
+            key={feature.id ?? featureIndex} />
+        ))}
+      </div>
+      {detailOpen && props.detail && (
+        <div className={styles.detail}>
+          {props.detail()}
+        </div>
+      )}
     </div>
   );
-}
+});
 
 
-export function FeatureListDivider(props: {
-  freezable?: unknown;
-  hovered: unknown;
-  paused: unknown;
-  setHovered(value: boolean): void;
-  setPaused(value: boolean): void;
+export function FeatureList(props: {
+  features: FeatureDef[];
 }) {
   return (
-    <button
-      type="button"
-      className={util.formatClass(styles.dividerRoot, {
-        '_active': props.paused,
-        '_alternate': (props.paused && !props.hovered)
-      })}
-      onClick={() => void props.setPaused(!props.paused)}
-      onMouseEnter={() => void props.setHovered(true)}
-      onMouseLeave={() => void props.setHovered(false)}>
-      <div />
-      <div className={styles.dividerLabel}>
-        {props.paused
-          ? (props.hovered ? 'Resume' : (props.freezable ? 'Frozen' : 'Paused'))
-          : (props.freezable ? 'Freeze' : 'Pause')}
-      </div>
-      <div />
-    </button>
-  );
-}
-
-
-export function FeatureGroup(props: {
-  group: FeatureGroupDef;
-}) {
-  return (
-    <div className={styles.group}>
-      {(props.group.length > 0)
-        ? props.group.map((feature, index) => (
-          <div className={util.formatClass(styles.entry, {
-            [styles.entryAccent]: feature.accent,
-            [styles.entryDisabled]: feature.disabled
-          })} key={index}>
-            <Icon name={feature.icon} className={styles.icon} />
-            <div className={styles.body}>
-              {feature.description && <div className={styles.description}>{feature.description}</div>}
-              <div className={styles.label}>{feature.label}</div>
-            </div>
-            {feature.error && (
-              <Icon
-                className={styles.errorIcon}
-                name={{
-                  emergency: 'emergency_home',
-                  error: 'error',
-                  power: 'power_off',
-                  shield: 'gpp_maybe',
-                  warning: 'warning'
-                }[feature.error.kind]}
-                title={feature.error.message} />
-            )}
-          </div>
-        ))
-        : (
-          <div className={styles.blankOuter}>
-            <div className={styles.blankInner}>No change</div>
-          </div>
-        )}
+    <div className={styles.list}>
+      {props.features.map((feature) => (
+        <Feature feature={feature} />
+      ))}
     </div>
   );
 }

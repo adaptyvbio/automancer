@@ -2,15 +2,15 @@ import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
 import { GraphNode } from './components/graph-editor';
-import { FeatureGroupDef } from './interfaces/feature';
+import { Feature } from './interfaces/feature';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
-import { PluginBlockImpl, PluginBlockImplComponentProps, PluginContext } from './interfaces/plugin';
-import { ComponentType, ReactElement } from 'react';
+import { PluginBlockImpl, PluginContext } from './interfaces/plugin';
+import { ComponentType } from 'react';
 
 
 const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block, path, ancestors, location, options, context) => {
   let impl = context.host.plugins[block.namespace].blocks[block.name];
-  let features = impl.createEntries!(block, null, context)[0].features;
+  let features = impl.createFeatures!(block, null, context);
 
   let name: string | null = null;
 
@@ -118,7 +118,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
     date: number;
     location: Location;
   }>;
-  createFeatures?(data: Data, location: Location | null): FeatureGroupDef;
+  createFeatures?(data: Data, location: Location | null): Feature[];
   getLabel?(data: Data): string | null;
 }): PluginBlockImpl<ProcessBlock<Data>, ProcessLocation<Location>> {
   return {
@@ -136,13 +136,11 @@ export function createProcessBlockImpl<Data, Location>(options: {
       }
     }),
     computeGraph,
-    createEntries(block, location) {
-      return [{
-        features: options.createFeatures?.(block.data, location?.process ?? null) ?? [
-          { icon: 'not_listed_location',
-            label: 'Process' }
-        ]
-      }];
+    createFeatures(block, location) {
+      return options.createFeatures?.(block.data, location?.process ?? null) ?? [
+        { icon: 'not_listed_location',
+          label: 'Process' }
+      ];
     },
     getLabel(block) {
       return options.getLabel?.(block.data) ?? null;

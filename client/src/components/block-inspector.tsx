@@ -6,19 +6,10 @@ import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Host } from '../host';
-import { PluginBlockEntry, PluginContext } from '../interfaces/plugin';
-import { ProtocolBlockAggregate } from '../interfaces/protocol';
-import { UnitContext } from '../interfaces/unit';
-import { UnitTools } from '../unit';
+import { GlobalContext } from '../interfaces/plugin';
 import * as util from '../util';
 import { Icon } from './icon';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
-
-
-export interface PluginBlockEntryInfos {
-  block: ProtocolBlock;
-  entry: PluginBlockEntry;
-}
 
 
 export interface BlockInspectorProps {
@@ -33,6 +24,8 @@ export interface BlockInspectorState {
 }
 
 export class BlockInspector extends React.Component<BlockInspectorProps, BlockInspectorState> {
+  private pool = new util.Pool();
+
   constructor(props: BlockInspectorProps) {
     super(props);
 
@@ -48,11 +41,12 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
       );
     }
 
-    let context: PluginContext = {
-      host: this.props.host
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
     };
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, null, this.props.blockPath, { host: this.props.host });
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, null, this.props.blockPath, context);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);

@@ -1,7 +1,7 @@
 import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 
 import { Host } from './host';
-import { PluginContext } from './interfaces/plugin';
+import { GlobalContext } from './interfaces/plugin';
 
 
 export interface BlockGroup {
@@ -21,7 +21,7 @@ export interface BlockPair {
 // }
 
 
-export function getBlockImpl(block: ProtocolBlock, context: PluginContext) {
+export function getBlockImpl(block: ProtocolBlock, context: GlobalContext) {
   return context.host.plugins[block.namespace].blocks[block.name];
 }
 
@@ -46,7 +46,7 @@ export function analyzeBlockPath(
   protocol: Protocol,
   rootLocation: unknown | null,
   blockPath: ProtocolBlockPath,
-  context: PluginContext
+  context: GlobalContext
 ) {
   let pairs: BlockPair[] = [{
     block: protocol.root,

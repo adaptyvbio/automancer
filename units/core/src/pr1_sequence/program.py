@@ -73,7 +73,7 @@ class Program(BaseProgram):
 
       child_block = self._block.children[self._child_index]
 
-      self._child_program = self._handle.create_child(child_block)
+      self._child_program = self._handle.create_child(child_block, id=self._child_index)
       self._handle.send(ProgramExecEvent(location=ProgramLocation(index=self._child_index)))
 
       current_point = self._point

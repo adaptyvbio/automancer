@@ -19,7 +19,7 @@ import { ViewChips } from './chips';
 import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { getBlockImpl } from '../protocol';
-import { PluginContext } from '../interfaces/plugin';
+import { GlobalContext } from '../interfaces/plugin';
 import { ErrorBoundary } from '../components/error-boundary';
 
 
@@ -80,20 +80,6 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     this.componentDidRender();
   }
 
-  jump(point: unknown) {
-    this.pool.add(async () => {
-      await this.props.host.client.request({
-        type: 'sendMessageToActiveBlock',
-        chipId: this.chip.id,
-        path: [],
-        message: {
-          type: 'jump',
-          point
-        }
-      });
-    });
-  }
-
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
     this.setState({
       selectedBlockPath: path,
@@ -113,8 +99,9 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
       return null;
     }
 
-    let context: PluginContext = {
-      host: this.props.host
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
     };
 
     let metadataTools = this.props.host.plugins['metadata' as PluginName] as unknown as MetadataTools;

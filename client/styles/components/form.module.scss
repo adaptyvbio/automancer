@@ -252,6 +252,10 @@ $field-hgap: 0.8rem;
 
 
 .btn {
+  display: flex;
+  align-items: center;
+  column-gap: 0.4rem;
+
   height: $height;
   padding: 0 $hor-padding * 1.4;
 
@@ -277,5 +281,14 @@ $field-hgap: 0.8rem;
   &:focus-visible {
     border-color: $highlight-blue;
     box-shadow: $highlight-shadow;
+  }
+
+  kbd {
+    padding: 0.12rem 0.2rem;
+
+    background-color: #aaa3;
+    border-radius: 4px;
+
+    font-size: 0.7rem;
   }
 }

@@ -2,10 +2,10 @@ import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
 import { GraphNode } from './components/graph-editor';
-import { Feature } from './interfaces/feature';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
-import { PluginBlockImpl, PluginContext } from './interfaces/plugin';
+import { PluginBlockImpl, BlockContext } from './interfaces/plugin';
 import { ComponentType } from 'react';
+import { FeatureDef } from './components/features';
 
 
 const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block, path, ancestors, location, options, context) => {
@@ -108,17 +108,24 @@ export interface ProcessLocation<Location> {
 }
 
 export enum ProcessLocationMode {
-
+  Broken = 0,
+  Halting = 1,
+  Normal = 2,
+  Pausing = 3,
+  Paused = 4,
+  ResumingProcess = 5,
+  Starting = 6,
+  Terminated = 7
 }
 
 export function createProcessBlockImpl<Data, Location>(options: {
   Component?: ComponentType<{
-    context: PluginContext;
+    context: BlockContext;
     data: Data;
     date: number;
     location: Location;
   }>;
-  createFeatures?(data: Data, location: Location | null): Feature[];
+  createFeatures?(data: Data, location: Location | null): FeatureDef[];
   getLabel?(data: Data): string | null;
 }): PluginBlockImpl<ProcessBlock<Data>, ProcessLocation<Location>> {
   return {
@@ -136,6 +143,37 @@ export function createProcessBlockImpl<Data, Location>(options: {
       }
     }),
     computeGraph,
+    createCommands(block, location, context) {
+      if ((location.mode === ProcessLocationMode.Normal) && location.pausable) {
+        return [{
+          id: 'pause',
+          label: 'Pause',
+          shortcut: 'P',
+          onTrigger() {
+            console.log('Pause');
+
+            context.pool.add(async () => {
+              await context.sendMessage({ type: 'pause' });
+            });
+          }
+        }];
+      }
+
+      if ((location.mode === ProcessLocationMode.Paused)) {
+        return [{
+          id: 'resume',
+          label: 'Resume',
+          shortcut: 'P',
+          onTrigger() {
+            context.pool.add(async () => {
+              await context.sendMessage({ type: 'pause' });
+            });
+          }
+        }];
+      }
+
+      return [];
+    },
     createFeatures(block, location) {
       return options.createFeatures?.(block.data, location?.process ?? null) ?? [
         { icon: 'not_listed_location',

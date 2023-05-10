@@ -37,6 +37,16 @@ export default {
             date={props.date}
             duration={props.location.duration.value}
             paused={props.location.paused}
+            setValue={(progress) => {
+              props.context.pool.add(async () => {
+                await props.context.sendMessage({
+                  type: 'jump',
+                  value: {
+                    progress
+                  }
+                });
+              });
+            }}
             value={props.location.progress} />
         );
       },

@@ -91,8 +91,8 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   def halt(self) -> Optional[bool]:
     return None
 
-  def jump(self, point: S_ProcessPoint, /):
-    ...
+  def jump(self, point: S_ProcessPoint, /) -> bool:
+    return False
 
   def pause(self):
     ...
@@ -174,7 +174,7 @@ class ProcessProgramMode:
     event: Event = field(default_factory=Event)
 
     def export(self):
-      return 9
+      return 5
 
   @dataclass
   class Starting():
@@ -246,6 +246,13 @@ class ProcessProgram(HeadProgram):
 
   async def resume(self):
     pass
+
+  def receive(self, message, /):
+    match message["type"]:
+      case "jump":
+        self.jump(self._block.import_point(message["value"]))
+      case _:
+        return super().receive(message)
 
   async def run(self, point, stack):
     global ProcessProgramMode

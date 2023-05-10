@@ -185,16 +185,10 @@ class HeadProgram(BaseProgram):
   def stable(self):
     return False
 
-  def receive(self, message):
+  def receive(self, message, /):
     match message["type"]:
       case "halt":
         self.halt()
-      case "pause":
-        run_anonymous(self.pause())
-      case "resume":
-        run_anonymous(self.resume(loose=False))
-      case _:
-        super().receive(message)
 
 class BaseProgramPoint(ABC):
   pass

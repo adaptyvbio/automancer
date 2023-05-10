@@ -3,14 +3,14 @@ import * as React from 'react';
 import { Fragment } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
+import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Icon } from './icon';
 import { Host } from '../host';
-import { ContextMenuArea } from './context-menu-area';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
-import { PluginContext } from '../interfaces/plugin';
+import { BlockContext, GlobalContext } from '../interfaces/plugin';
 import { Pool } from '../util';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
 import { FeatureEntry, FeatureList } from './features';
@@ -40,20 +40,35 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     };
   }
 
-  render() {
-    let context: PluginContext = {
-      host: this.props.host
+  override render() {
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
     };
+
+    let createBlockContext = (blockPath: ProtocolBlockPath): BlockContext => ({
+      ...context,
+      sendMessage: async (message) => {
+        return await this.props.host.client.request({
+          type: 'sendMessageToActiveBlock',
+          chipId: this.props.chip.id,
+          path: blockPath,
+          message
+        });
+      },
+    });
+
 
     let blockPath = this.props.activeBlockPaths[this.state.selectedBlockPathIndex];
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, { host: this.props.host });
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, context);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
     let leafPair = blockAnalysis.pairs.at(-1);
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
+    let leafBlockContext = createBlockContext(blockPath);
 
     return (
       <div className={spotlightStyles.root}>
@@ -150,15 +165,21 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             <ErrorBoundary>
               <leafBlockImpl.Component
                 block={leafPair.block}
-                context={context}
+                context={leafBlockContext}
                 location={leafPair.location} />
             </ErrorBoundary>
           )}
 
           <div className={featureStyles.root}>
             {blockAnalysis.groups.slice().reverse().map((group) =>
-              group.pairs.slice().reverse().map((pair) => {
+              group.pairs.slice().reverse().map((pair, pairIndex) => {
                 let blockImpl = getBlockImpl(pair.block, context);
+                let blockPath = (pairIndex > 0)
+                  ? group.path.slice(0, -pairIndex)
+                  : group.path;
+                let blockContext = createBlockContext(blockPath);
+
+                // console.log(group.path, pair, pairIndex, blockPath);
 
                 if (!blockImpl.createFeatures) {
                   return null;
@@ -166,131 +187,63 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
                 return (
                   <FeatureEntry
+                    actions={[
+                      { id: '_halt',
+                        icon: 'skip_next' }
+                    ]}
                     detail={blockImpl.Component && (() => {
                       let Component = blockImpl.Component!;
 
                       return (
                         <Component
                           block={pair.block}
-                          context={context}
+                          context={blockContext}
                           location={pair.location} />
                       );
                     })}
-                    features={blockImpl.createFeatures(pair.block, pair.location, context)} />
+                    features={blockImpl.createFeatures(pair.block, pair.location, context)}
+                    onAction={(actionId) => {
+                      if (actionId === '_halt') {
+                        this.pool.add(async () => {
+                          await this.props.host.client.request({
+                            type: 'sendMessageToActiveBlock',
+                            chipId: this.props.chip.id,
+                            path: blockPath,
+                            message: { type: 'halt' }
+                          });
+                        });
+                      } else {
+                        // ...
+                      }
+                    }}
+                    key={pairIndex} />
                 );
               })
             )}
           </div>
-
-          {/* <FeatureList
-            indexOffset={aggregates.findIndex((aggregate) => aggregate.state)}
-            hoveredGroupIndex={this.state.hoveredAggregateIndex}
-            pausedGroupIndex={pausedAggregateIndex}
-            list={
-              Array.from(aggregates.entries())
-                .filter(([_aggregateIndex, aggregate]) => aggregate.state)
-                .map(([aggregateIndex, aggregate]) => {
-                  let blockIndex = aggregate.offset;
-                  let location = lineLocations[blockIndex] as {
-                    state: Record<UnitNamespace, {
-                      location: unknown;
-                      settled: boolean;
-                    }> | null;
-                  };
-
-                  let disabled = (this.state.hoveredAggregateIndex !== null)
-                    ? (aggregateIndex >= this.state.hoveredAggregateIndex)
-                    : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
-
-                  let ancestorStates = aggregates
-                    .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? pausedAggregateIndex ?? aggregates.length)
-                    .map((aggregate) => aggregate.state!);
-
-                  return Object.values(units).flatMap((unit) => {
-                    return (unit.namespace in aggregate.state!)
-                      ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                        aggregate.state![unit.namespace],
-                        ancestorStates.map((state) => state[unit.namespace]),
-                        location.state?.[unit.namespace].location,
-                        context
-                      ) ?? []
-                      : [];
-                  }).map((feature) => ({
-                    ...feature,
-                    disabled: (disabled || feature.disabled)
-                  }));
-                })
-            }
-            setHoveredGroupIndex={(hoveredAggregateIndex) => void this.setState({ hoveredAggregateIndex })}
-            setPausedGroupIndex={(aggregateIndex) => {
-              this.pool.add(async () => {
-                if (aggregateIndex !== null) {
-                  if ((pausedAggregateIndex !== null) && (pausedAggregateIndex < aggregateIndex)) {
-                    let prevAggregate = aggregates[aggregateIndex - 1];
-                    await this.props.host.client.request({
-                      type: 'sendMessageToActiveBlock',
-                      chipId: this.props.chip.id,
-                      path: activeExecPath.slice(0, prevAggregate.offset),
-                      message: { type: 'resume' }
-                    });
-                  } else {
-                    let aggregate = aggregates[aggregateIndex];
-                    let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
-
-                    await this.props.host.client.request({
-                      type: 'sendMessageToActiveBlock',
-                      chipId: this.props.chip.id,
-                      path: activeExecPath.slice(0, blockIndex),
-                      message: { type: 'pause' }
-                    });
-                  }
-                } else {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath,
-                    message: { type: 'resume' }
-                  });
-                }
-              });
-            }} /> */}
         </div>
-        {/* <div className={spotlightStyles.footerRoot}>
-          <div className={formStyles.actions}>
-            <Button onClick={() => {
+        <div className={spotlightStyles.footerRoot}>
+          <div className={spotlightStyles.footerActions}>
+            {leafBlockImpl.createCommands?.(leafPair.block, leafPair.location, leafBlockContext).map((command) => (
+              <Button
+                onClick={() => void command.onTrigger()}
+                shortcut={command.shortcut}
+                key={command.id}>
+                {command.label}
+              </Button>
+            ))}
+          </div>
+          <div className={spotlightStyles.footerActions}>
+            <Button shortcut="S" onClick={() => {
               this.pool.add(async () => {
-                if (pausedAggregateIndex !== null) {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath,
-                    message: { type: 'resume' }
-                  });
-                } else {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath.slice(0, aggregates.at(-1).offset),
-                    message: { type: 'pause' }
-                  });
-                }
-              });
-            }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>
-            <Button onClick={() => {
-              this.pool.add(async () => {
-                await this.props.host.client.request({
-                  type: 'sendMessageToActiveBlock',
-                  chipId: this.props.chip.id,
-                  path: activeExecPath,
-                  message: { type: 'halt' }
-                });
+                await leafBlockContext.sendMessage({ type: 'halt' });
               });
             }}>Skip</Button>
           </div>
-          <div>
-            {/* <div className={spotlightStyles.footerStatus}>Pausing</div>
-          </div>
-        </div> */}
+          {/* <div>
+            <div className={spotlightStyles.footerStatus}>Pausing</div>
+          </div> */}
+        </div>
       </div>
     );
   }

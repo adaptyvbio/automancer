@@ -1,5 +1,5 @@
-import { Chip, ChipId, HostIdentifier, HostState } from './host';
-import { ProtocolBlockPath } from './master';
+import { ChipId, HostIdentifier, HostState } from './host';
+import { ProtocolBlockPath } from './protocol';
 import { UnitNamespace } from './unit';
 import { UnionToIntersection } from './util';
 

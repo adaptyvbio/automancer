@@ -55,8 +55,14 @@ export const Feature = memo(({ feature, onAction }: {
           title={feature.error.message} />
       )}
       {feature.actions?.map((action) => (
-        <button type="button" disabled={!!action.disabled} title={action.label} className={styles.action} key={action.id} onClick={() => void onAction!(action.id)}>
-          <Icon name={action.icon} />
+        <button
+          type="button"
+          disabled={!!action.disabled}
+          title={action.label}
+          className={styles.action}
+          key={action.id}
+          onClick={() => void onAction!(action.id)}>
+          <Icon name={action.icon} style="sharp" />
         </button>
       ))}
     </div>
@@ -65,9 +71,10 @@ export const Feature = memo(({ feature, onAction }: {
 
 
 export const FeatureEntry = memo((props: {
+  actions?: FeatureActionDef[];
   detail?(): ReactNode;
   features: FeatureDef[];
-  onAction?(featureId: OrdinaryId, actionId: OrdinaryId): void;
+  onAction?(actionId: OrdinaryId): void;
 }) => {
   let [detailOpen, setDetailOpen] = useState(false);
 
@@ -78,30 +85,32 @@ export const FeatureEntry = memo((props: {
           <Feature
             feature={{
               ...feature,
-              actions: [
-                ...(feature.actions ?? []),
-                ...(
-                  props.detail
-                    ? detailOpen
-                      ? [{
-                        id: '_toggle',
-                        label: 'Collapse',
-                        icon: 'expand_less'
-                      }]
-                      : [{
-                        id: '_toggle',
-                        label: 'Expand',
-                        icon: 'expand_more'
-                      }]
-                    : []
-                )
-              ]
+              actions: (featureIndex === 0)
+                ? [
+                  ...(props.actions ?? []),
+                  ...(
+                    props.detail
+                      ? detailOpen
+                        ? [{
+                          id: '_toggle',
+                          label: 'Collapse',
+                          icon: 'expand_less'
+                        }]
+                        : [{
+                          id: '_toggle',
+                          label: 'Expand',
+                          icon: 'expand_more'
+                        }]
+                      : []
+                  )
+                ]
+                : []
             }}
             onAction={(actionId) => {
               if (actionId === '_toggle') {
                 setDetailOpen((open) => !open);
               } else {
-                props.onAction!((feature.id ?? featureIndex), actionId);
+                props.onAction!(actionId);
               }
             }}
             key={feature.id ?? featureIndex} />
@@ -122,8 +131,8 @@ export function FeatureList(props: {
 }) {
   return (
     <div className={styles.list}>
-      {props.features.map((feature) => (
-        <Feature feature={feature} />
+      {props.features.map((feature, featureIndex) => (
+        <Feature feature={feature} key={featureIndex} />
       ))}
     </div>
   );

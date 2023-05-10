@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import type { Point, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
-import type { PluginContext } from './plugin';
+import type { GlobalContext } from './plugin';
 
 
 export interface ProtocolBlockGraphRendererMetrics {
@@ -30,5 +30,5 @@ export type ProtocolBlockGraphRenderer<Block extends ProtocolBlock, Location = n
     computeMetrics(index: number, location: unknown | null): ProtocolBlockGraphRendererMetrics;
     settings: GraphRenderSettings;
   },
-  context: PluginContext
+  context: GlobalContext
 ) => ProtocolBlockGraphRendererMetrics;

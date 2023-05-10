@@ -63,6 +63,8 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
     if self._task:
       self._task.cancel()
 
+    return True
+
   def pause(self):
     assert self._task
 

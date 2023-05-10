@@ -175,6 +175,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                         return {
                           id: 'inspector',
                           label: (showDefaultInspector ? 'Inspector' : 'Execution inspector'),
+                          shortcut: 'I',
                           contents: () => showDefaultInspector
                             ? (
                               <BlockInspector
@@ -199,6 +200,7 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                       {
                         id: 'report',
                         label: 'Report',
+                        shortcut: 'R',
                         contents: () => (
                           <ExecutionDiagnosticsReport analysis={this.master.analysis} />
                         )

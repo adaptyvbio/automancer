@@ -1,0 +1,19 @@
+.root {
+  display: flex;
+  align-items: center;
+  column-gap: 0.4rem;
+  justify-content: center;
+}
+
+.shortcut {
+  text-transform: initial;
+
+  kbd {
+    padding: 0.12rem 0.2rem;
+
+    background-color: #aaa3;
+    border-radius: 4px;
+
+    font-size: 0.7rem;
+  }
+}

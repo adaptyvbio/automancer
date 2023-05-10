@@ -149,7 +149,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                         actions.find((action) => (action.id === actionId))?.onTrigger();
                       }
                     }}
-                    key={pairIndex} />
+                    key={blockPath.at(-1) ?? -1} />
                 );
               })
             )}

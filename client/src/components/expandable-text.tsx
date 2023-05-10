@@ -1,28 +1,23 @@
 import * as React from 'react';
 import { PropsWithChildren, ReactNode, useEffect, useRef, useState } from 'react';
 
-import { usePrevious } from '../util';
-
 
 export function ExpandableText(props: PropsWithChildren<{
   expandedValue?: ReactNode;
 }>) {
-  let expandedValue = (props.expandedValue ?? props.children);
-  let prevExpandedValue = usePrevious(expandedValue);
-
   let [width, setWidth] = useState<number | null>(null);
   let ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let rect = ref.current!.getBoundingClientRect();
     setWidth(rect.width);
-  }, [expandedValue]);
+  }, []);
 
-  return (!prevExpandedValue || (expandedValue !== prevExpandedValue))
+  return !width
     ? (
-      <span className="_expanded" style={{ display: 'inline-block' }} ref={ref}>{expandedValue}</span>
+      <div className="_expanded" style={{ display: 'inline-block' }} ref={ref}>{props.expandedValue ?? props.children}</div>
     )
     : (
-      <span style={{ display: 'inline-block', width: `${width}px` }}>{props.children}</span>
+      <div style={{ display: 'inline-block', width: `${width}px` }}>{props.children}</div>
     );
 }

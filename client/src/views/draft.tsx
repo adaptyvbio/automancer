@@ -95,18 +95,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         await this.getCompilation();
       }
     });
-
-    // this.updateInspectorOpen();
-
-    document.body.addEventListener('keydown', (event) => {
-      if ((event.key === 's') && (event.ctrlKey || event.metaKey) && event.shiftKey) {
-        event.preventDefault();
-
-        if (!this.state.compiling && this.state.compilation?.valid) {
-          this.setState({ startModalOpen: true });
-        }
-      }
-    }, { signal: this.controller.signal });
   }
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
@@ -285,20 +273,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
 
               break;
 
-            case 'i':
-              this.setState({
-                inspectorEntryId: 'inspector',
-                inspectorOpen: true
-              });
-              break;
-
-            case 'r':
-              this.setState({
-                inspectorEntryId: 'report',
-                inspectorOpen: true
-              });
-              break;
-
             default:
               return;
           }
@@ -418,6 +392,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                       entries={[
                         { id: 'inspector',
                           label: 'Inspector',
+                          shortcut: 'I',
                           contents: () => (
                             this.state.compilation?.protocol
                               ? (
@@ -433,6 +408,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                           ) },
                         { id: 'report',
                           label: 'Report',
+                          shortcut: 'R',
                           contents: () => (
                             <DiagnosticsReport
                               analysis={this.state.compilation?.analysis ?? null} />

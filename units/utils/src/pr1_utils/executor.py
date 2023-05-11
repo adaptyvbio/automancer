@@ -5,7 +5,7 @@ from typing import Any
 
 import psutil
 from pr1.devices.nodes.collection import DeviceNode
-from pr1.devices.nodes.common import ConfigurableNode, NodeId
+from pr1.devices.nodes.common import NodeId
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.devices.nodes.value import NullType
@@ -13,40 +13,43 @@ from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
 
 from pr1.host import Host
+from pr1.util.pool import Pool
 
 from . import namespace
 
 
 class SystemNode(DeviceNode):
-  connected = True
-  description = None
-  id = NodeId("System")
-  label = "System device"
-  model = "System"
   owner = namespace
 
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__()
 
-    self.nodes: dict[str, ConfigurableNode] = {
+    self.connected = True
+    self.description = None
+    self.id = NodeId("System")
+    self.label = "System device"
+
+    self.nodes = {
       node.id: node for node in {
-        EpochNode(),
-        ProcessMemoryUsageNode(),
-        RandomNode(),
-        WaitNode()
+        EpochNode(pool=pool),
+        ProcessMemoryUsageNode(pool=pool),
+        RandomNode(pool=pool),
+        WaitNode(pool=pool)
       }
     }
 
 class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__(
-      readable=True,
       dtype='u4',
-      min_interval=0.3,
-      unit=ureg.byte
+      interval=0.3,
+      pool=pool,
+      readable=True,
+      unit=ureg.MB
     )
 
     self.connected = True
+    self.icon = "memory_alt"
     self.id = NodeId('memory')
     self.label = "Process memory usage"
 
@@ -57,15 +60,17 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
     return memory_info.rss * ureg.byte
 
 class EpochNode(PollableReadableNode, NumericNode):
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__(
-      readable=True,
       dtype='u8',
-      min_interval=0.3,
-      unit=ureg.sec
+      interval=0.3,
+      pool=pool,
+      readable=True,
+      unit=ureg.year
     )
 
     self.connected = True
+    self.description = "Time since Jan 1st, 1970"
     self.id = NodeId('epoch')
     self.label = "Unix epoch"
 
@@ -73,11 +78,12 @@ class EpochNode(PollableReadableNode, NumericNode):
     return time.time() * ureg.sec
 
 class RandomNode(PollableReadableNode, NumericNode):
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__(
-      readable=True,
       dtype='f4',
-      min_interval=0.2
+      interval=0.2,
+      pool=pool,
+      readable=True
     )
 
     self.connected = True
@@ -88,8 +94,9 @@ class RandomNode(PollableReadableNode, NumericNode):
     return random.random()
 
 class WaitNode(NumericNode):
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__(
+      pool=pool,
       unit=ureg.sec,
       writable=True
     )
@@ -106,13 +113,5 @@ class WaitNode(NumericNode):
 
 class Executor(BaseExecutor):
   def __init__(self, conf: Any, *, host: Host):
-    self._device = SystemNode()
+    self._device = SystemNode(pool=host.pool)
     host.devices[self._device.id] = self._device
-
-  async def initialize(self):
-    for node in self._device.nodes.values():
-      await node._configure()
-
-  async def destroy(self):
-    for node in self._device.nodes.values():
-      await node._unconfigure()

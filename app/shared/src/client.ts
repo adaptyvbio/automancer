@@ -1,7 +1,24 @@
 import { Deferred, defer } from './defer';
 import { createErrorWithCode } from './error';
+import { Brand } from './types/util';
 import { HostIdentifier, HostState } from './types/host';
 import { ClientProtocol, RequestFunc, ServerProtocol } from './types/protocol';
+
+
+export type ClientId = Brand<string, 'ClientId'>;
+
+
+export type ChannelId = Brand<number, 'ChannelId'>;
+
+export interface ChannelData {
+  deferred: Deferred<void> | null;
+  queue: unknown[];
+}
+
+export interface Channel<InboundMessage, OutboundMessage> extends AsyncIterable<InboundMessage> {
+  close(): void;
+  send(data: OutboundMessage): void;
+}
 
 
 export interface ClientBackend {
@@ -12,6 +29,7 @@ export interface ClientBackend {
 }
 
 export class Client {
+  private channels = new Map<ChannelId, ChannelData>;
   private closedDeferred = defer<void>();
   private messageCallback: ((message: ServerProtocol.Message) => void) | null = null;
   private nextRequestId = 0x10000;
@@ -19,9 +37,23 @@ export class Client {
   private userClose: (() => Promise<void>) | null;
   private userClosing = false;
 
-  identifier: HostIdentifier | null = null;
+  info: {
+    clientId: ClientId;
+    identifier: HostIdentifier | null,
+    staticUrl: string | null,
+    version: number | null
+  } | null = null;
+
+  initializationData: Omit<ServerProtocol.InitializationMessage, 'type'> | null = null;
   state: HostState | null = null;
+
+  /** @deprecated */
+  identifier: HostIdentifier | null = null;
+
+  /** @deprecated */
   staticUrl: string | null = null;
+
+  /** @deprecated */
   version: number | null = null;
 
   constructor(private backend: ClientBackend, options?: {
@@ -50,6 +82,45 @@ export class Client {
         await this.closedDeferred.promise;
       }
     })();
+  }
+
+  listen<InboundMessage, OutboundMessage>(channelId: ChannelId): Channel<InboundMessage, OutboundMessage> {
+    if (this.channels.has(channelId)) {
+      throw new Error(`Already listening on channel ${channelId}`);
+    }
+
+    let channelData: ChannelData = {
+      deferred: null,
+      queue: []
+    };
+
+    this.channels.set(channelId, channelData);
+
+    return {
+      async * [Symbol.asyncIterator]() {
+        while (true) {
+          if (channelData.queue.length < 1) {
+            if (!channelData.deferred) {
+              channelData.deferred = defer();
+            }
+
+            await channelData.deferred.promise;
+          }
+
+          yield channelData.queue.pop() as InboundMessage;
+        }
+      },
+      close: () => {
+        this.channels.delete(channelId);
+      },
+      send: (data: OutboundMessage) => {
+        this.backend.send({
+          type: 'channel',
+          id: channelId,
+          data
+        });
+      }
+    };
   }
 
   async initialize() {
@@ -87,10 +158,15 @@ export class Client {
       }
     }
 
-    this.identifier = initializationMessage.identifier;
+    this.info = {
+      clientId: initializationMessage.clientId,
+      identifier: initializationMessage.identifier,
+      staticUrl: initializationMessage.staticUrl,
+      version: initializationMessage.version
+    };
+
+    this.initializationData = initializationMessage;
     this.state = stateMessage.data;
-    this.staticUrl = initializationMessage.staticUrl;
-    this.version = initializationMessage.version;
 
     return {
       ok: true,
@@ -112,8 +188,8 @@ export class Client {
     this.requests.set(requestId, deferred);
 
     this.backend.send({
-      id: requestId,
       type: 'request',
+      id: requestId,
       data
     });
 
@@ -128,6 +204,21 @@ export class Client {
     try {
       for await (let message of { [Symbol.asyncIterator]: () => this.backend.messages }) {
         switch (message.type) {
+          case 'channel': {
+            let channelData = this.channels.get(message.id);
+
+            if (channelData) {
+              channelData.queue.push(message.data);
+
+              if (channelData.deferred) {
+                channelData.deferred.resolve();
+                channelData.deferred = null;
+              }
+            }
+
+            break;
+          }
+
           case 'response': {
             let request = this.requests.get(message.id);
 

@@ -1,18 +1,17 @@
-import { Set as ImSet, removeIn, setIn } from 'immutable';
+import { Set as ImSet } from 'immutable';
 import { Client, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
-import type { AppBackend, DraftItem } from './app-backends/base';
-import type { Chip, ChipId } from './backends/common';
+import type { AppBackend } from './app-backends/base';
 import { Sidebar } from './components/sidebar';
-import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftsRecord } from './draft';
 import type { Host } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
-import { ViewDraft, ViewDraftWrapper } from './views/draft';
+import { ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
 import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
@@ -22,9 +21,12 @@ import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
+import { ViewUnitTab } from './views/unit-tab';
+import { StoreManager } from './store/store-manager';
+import { PersistentStoreDefaults, PersistentStoreManagerHook, SessionStoreManagerHook } from './store/values';
 
 
-const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution];
+const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
 
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({
@@ -62,6 +64,12 @@ function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch
 }
 
 
+export interface ApplicationStore {
+  usePersistent: PersistentStoreManagerHook;
+  useSession: SessionStoreManagerHook;
+}
+
+
 export interface ApplicationProps {
   appBackend: AppBackend;
   client: Client;
@@ -85,6 +93,10 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   pool = new Pool();
   unsavedDataCallback: UnsavedDataCallback | null = null;
 
+  persistentStoreManager: StoreManager;
+  sessionStoreManager: StoreManager;
+  store: ApplicationStore;
+
   constructor(props: ApplicationProps) {
     super(props);
 
@@ -95,6 +107,15 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       openDraftIds: ImSet(),
 
       currentRouteData: null
+    };
+
+
+    this.persistentStoreManager = new StoreManager(this.appBackend.persistentStore);
+    this.sessionStoreManager = new StoreManager(this.appBackend.sessionStore);
+
+    this.store = {
+      usePersistent: (this.persistentStoreManager.useEntry as unknown as PersistentStoreManagerHook),
+      useSession: (this.sessionStoreManager.useEntry as unknown as SessionStoreManagerHook)
     };
   }
 
@@ -130,9 +151,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     let host: Host = {
       client,
-      id: client.state!.info.id,
+      clientId: client.info!.clientId,
       state: client.state!,
-      staticUrl: client.staticUrl,
+      staticUrl: client.info!.staticUrl,
       units: (null as unknown as Host['units'])
     };
 
@@ -144,7 +165,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
     client.closed
       .catch((err) => {
-        console.error(`Backend of host '${host.id}' terminated with error: ${err.message ?? err}`);
+        console.error(`Backend of host terminated with error: ${err.message ?? err}`);
         console.error(err);
       })
       .finally(() => {
@@ -293,6 +314,16 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       // Initialize the app backend
 
       await this.appBackend.initialize();
+
+
+      // Initialize stores
+
+      await this.persistentStoreManager.initialize();
+      await this.sessionStoreManager.initialize();
+
+      for (let [key, value] of PersistentStoreDefaults) {
+        this.persistentStoreManager.initializeEntry(key, value);
+      }
 
 
       // Initialize the host communication

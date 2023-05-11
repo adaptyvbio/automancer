@@ -1,4 +1,5 @@
 from abc import ABC
+import time
 from typing import Optional
 
 from pint import Measurement, Quantity, Unit, UnitRegistry
@@ -34,20 +35,21 @@ class NumericNode(ValueNode[Quantity], ABC):
   async def _read(self):
     old_value = self.value
     raw_value = await self._read_value()
+    current_time = time.time()
 
     match raw_value:
       case Quantity():
         self.error = None
-        self.value = raw_value
+        self.value = (current_time, raw_value)
       case Measurement(error=error, value=value):
         self.error = error
         self.value = value
       case float() | int():
-        self.value = raw_value * self._factor * self.unit
+        self.value = (current_time, raw_value * self._factor * self.unit)
       case _:
         raise ValueError("Invalid read value")
 
-    return self.value != old_value
+    return (old_value is None) or (self.value[1] != old_value[1])
 
   async def _read_value(self) -> Measurement | Quantity | float | int:
     raise NotImplementedError
@@ -71,13 +73,14 @@ class NumericNode(ValueNode[Quantity], ABC):
 
       await self.write(Null)
 
-  def export(self):
-    exported = super().export()
-
+  def _export_spec(self):
     return {
-      **exported,
-      "value": {
-        **exported["value"],
-        "type": "numeric"
-      }
+      "type": "numeric",
+      "dimensionality": dict(self.unit.dimensionality), # type: ignore
+      "unitFormatted": (f"{self.unit:~H}" or None)
+    }
+
+  def _export_value(self, value: Quantity, /):
+    return {
+      "magnitude": value.m_as(self.unit)
     }

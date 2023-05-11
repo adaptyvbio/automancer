@@ -1,4 +1,5 @@
-import { React, TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
+import { TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
+import { UnitNamespace } from 'pr1-shared';
 
 
 export interface ProcessData {
@@ -16,7 +17,7 @@ export interface ProcessLocation {
 
 
 export default {
-  namespace: 'timer',
+  namespace: ('timer' as UnitNamespace),
 
   ProcessComponent(props) {
     if (!props.location.duration) {

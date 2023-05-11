@@ -1,4 +1,4 @@
-import { GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, ProtocolBlockPath, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue } from 'pr1';
+import { GraphRendererDefaultMetrics, GraphRenderer, NodeContainer, ProtocolBlock, UnitTools, BlockUnit, formatDynamicValue, DynamicValue } from 'pr1';
 import { UnitNamespace } from 'pr1-shared';
 
 

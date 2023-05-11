@@ -1,5 +1,5 @@
 declare module '*.module.scss' {
-  const content: Record<string, string>;
+  const content: any;
   export default content;
 }
 

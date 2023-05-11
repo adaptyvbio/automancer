@@ -11,7 +11,8 @@ import sys
 import traceback
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+from .agent import Agent
 
 import zeroconf
 from pr1 import Host
@@ -226,6 +227,7 @@ class App:
         #   agent.export() for agent in self.auth_agents
         # ] if requires_auth else None,
         # "features": {},
+        "clientId": client.id,
         "identifier": self.conf.identifier,
         "staticUrl": (self.static_server.url if self.static_server else None),
         "version": self.conf.version
@@ -249,44 +251,50 @@ class App:
         "data": self.host.get_state()
       })
 
-      async for message in client:
-        match message["type"]:
-          case "exit":
-            logger.info("Exiting after receiving an exit message")
-
-            assert self._pool
-            self._pool.close()
-          case "request":
-            response_data = await self.process_request(client, message["data"])
-
-            await client.send({
-              "type": "response",
-              "id": message["id"],
-              "data": response_data
-            })
-    except ClientClosed:
+      async with Pool.open(forever=True) as pool:
+        agent = Agent(client, pool=pool)
+        agent.pool.start_soon(self.handle_client_messages(agent))
+    except* ClientClosed:
       logger.debug(f"Disconnected client '{client.id}'")
-    except asyncio.CancelledError:
-      pass
-    except Exception:
-      traceback.print_exc()
     finally:
       del self.clients[client.id]
       logger.debug(f"Removed client '{client.id}'")
 
-  async def broadcast(self, message):
+  async def handle_client_message(self, message: Any, agent: Agent):
+    match message["type"]:
+      case "channel":
+        await agent.receive(message["data"], channel_id=message["id"])
+      case "exit":
+        logger.info("Exiting after receiving an exit message")
+
+        assert self._pool
+        self._pool.close()
+      case "request":
+        response_data = await self.process_request(message["data"], agent=agent)
+
+        await agent.client.send({
+          "type": "response",
+          "id": message["id"],
+          "data": response_data
+        })
+
+  async def handle_client_messages(self, agent: Agent):
+    async for message in agent.client:
+      agent.pool.start_soon(self.handle_client_message(message, agent))
+
+  async def broadcast(self, message: Any):
     for client in list(self.clients.values()):
       try:
         await client.send(message)
       except ClientClosed:
         pass
 
-  async def process_request(self, client, request):
+  async def process_request(self, request: Any, *, agent: Agent) -> Any:
     match request["type"]:
       case "isBusy":
-        return (len(self.clients) >= 2) or self.host.busy()
+        return (len(self.clients) > 1) or self.host.busy()
       case _:
-        return await self.host.process_request(request, client=client)
+        return await self.host.process_request(request, agent=agent)
 
   def update(self):
     if not self.updating:
@@ -308,61 +316,59 @@ class App:
 
   async def start(self):
     try:
-      await self.host.initialize()
+      async with Pool.open() as pool:
+        self._pool = pool
+        pool.start_soon(self.host.pool.wait(forever=True))
 
-      try:
-        async with Pool.open() as pool:
-          self._pool = pool
+        await self.host.initialize()
 
-          def handle_sigint():
-            print("\r", end="", file=sys.stderr)
-            logger.info("Exiting after receiving a SIGINT signal")
+        def handle_sigint():
+          print("\r", end="", file=sys.stderr)
+          logger.info("Exiting after receiving a SIGINT signal")
 
-            pool.close()
+          pool.close()
 
-          loop = asyncio.get_event_loop()
+        loop = asyncio.get_event_loop()
 
-          try:
-            loop.add_signal_handler(signal.SIGINT, handle_sigint)
-          except NotImplementedError: # For Windows
-            pass
+        try:
+          loop.add_signal_handler(signal.SIGINT, handle_sigint)
+        except NotImplementedError: # For Windows
+          pass
 
-          ready_count = 0
-          ready_event = asyncio.Event()
+        ready_count = 0
+        ready_event = asyncio.Event()
 
-          def item_ready():
-            nonlocal ready_count
-            ready_count += 1
+        def item_ready():
+          nonlocal ready_count
+          ready_count += 1
 
-            if ready_count == (len(self.bridges) + (1 if self.static_server else 0)):
-              ready_event.set()
+          if ready_count == (len(self.bridges) + (1 if self.static_server else 0)):
+            ready_event.set()
 
 
-          for bridge in self.bridges:
-            pool.start_soon(bridge.start(self.handle_client, item_ready))
+        for bridge in self.bridges:
+          pool.start_soon(bridge.start(self.handle_client, item_ready))
 
-          if self.static_server:
-            pool.start_soon(self.static_server.start(item_ready))
+        if self.static_server:
+          pool.start_soon(self.static_server.start(item_ready))
 
-          pool.start_soon(self.host.start(), critical=True)
+        pool.start_soon(self.host.start(), critical=True)
 
-          logger.debug("Starting")
+        logger.debug("Starting")
 
-          async def ready_seq():
-            await ready_event.wait()
-            pool.start_soon(self.advertise())
+        async def ready_seq():
+          await ready_event.wait()
+          pool.start_soon(self.advertise())
 
-            logger.debug("Started")
+          logger.debug("Started")
 
-            bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+          bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
 
-            if self.args.local:
-              sys.stdout.write(json.dumps(bridge_infos) + "\n")
-              sys.stdout.flush()
+          if self.args.local:
+            sys.stdout.write(json.dumps(bridge_infos) + "\n")
+            sys.stdout.flush()
 
-          pool.start_soon(ready_seq())
-      finally:
-        logger.debug("Deinitializing")
+        pool.start_soon(ready_seq())
     except Exception:
       logger.error("Error")
       log_exception(logger)

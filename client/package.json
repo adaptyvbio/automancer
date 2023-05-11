@@ -4,14 +4,15 @@
   "main": "dist/index.js",
   "types": "lib/types/index.d.ts",
   "scripts": {
-    "build": "npm run build:css && npm run build:js && (npm run build:types || true)",
-    "build:js": "node build.js",
+    "build": "npm run build:css && npm run build:js && npm run build:html && (npm run build:types || true)",
+    "build:html": "node scripts/generate-html.js",
+    "build:js": "node scripts/build.js",
     "build:js:watch": "node build.js --watch",
     "build:css": "sass styles/main.scss:lib/styles/index.css --no-source-map",
     "build:css:watch": "sass styles/main.scss:lib/styles/index.css --watch",
     "build:types": "tsc",
     "madge": "madge src/index.tsx --ts-config tsconfig.json --image graph.svg --circular",
-    "serve": "superstatic . --port 8080"
+    "serve": "superstatic --config superstatic.json dist --port 8080"
   },
   "dependencies": {
     "@floating-ui/react-dom-interactions": "^0.6.3",
@@ -19,7 +20,7 @@
     "error-stack-parser": "^2.0.7",
     "idb-keyval": "^6.1.0",
     "immutable": "^4.0.0",
-    "material-symbols": "^0.2.8",
+    "material-symbols": "^0.5.5",
     "modern-websocket": "^0.1.0",
     "monaco-editor": "^0.34.0",
     "pr1-shared": "file:../app/shared",
@@ -33,16 +34,15 @@
     "@types/react": "^18.0.14",
     "@types/react-dom": "^18.0.5",
     "@types/wicg-file-system-access": "^2020.9.5",
-    "esbuild": "~0.16.0",
-    "esbuild-sass-plugin": "~2.5.0",
+    "esbuild": "~0.17.0",
+    "esbuild-sass-plugin": "^2.9.0",
     "madge": "^5.0.1",
-    "minimist": "^1.2.6",
     "postcss": "^8.4.16",
     "postcss-modules": "^5.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "sass": "^1.52.0",
     "superstatic": "^9.0.2",
-    "typescript": "~4.9.0"
+    "typescript": "~5.0.0"
   }
 }

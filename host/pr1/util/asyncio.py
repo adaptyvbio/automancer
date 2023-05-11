@@ -5,12 +5,18 @@ from queue import Queue
 import sys
 from threading import Thread
 import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, TypeVar, cast
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar, cast
+
+from .types import SimpleAsyncCallbackFunction, SimpleCallbackFunction
 
 
 @dataclass
+class Cancelable:
+  cancel: SimpleCallbackFunction
+
+@dataclass
 class AsyncCancelable:
-  cancel: Callable[[], Awaitable[None]]
+  cancel: SimpleAsyncCallbackFunction
 
 
 T = TypeVar('T')
@@ -110,6 +116,12 @@ class DualEvent:
     self._set_event.clear()
     self._unset_event.set()
 
+  def toggle(self, value: bool, /):
+    if value:
+      self.set()
+    else:
+      self.unset()
+
   async def wait_set(self):
     await self._set_event.wait()
 
@@ -131,7 +143,7 @@ async def cancel_task(task: Optional[Task], /):
     try:
       await task
     except asyncio.CancelledError:
-      pass
+      task.uncancel()
 
 
 async def race(*awaitables: Awaitable):
@@ -156,6 +168,28 @@ async def race(*awaitables: Awaitable):
   return tasks.index(done_task), done_task.result()
 
 
+U = TypeVar('U', AsyncCancelable, Cancelable)
+
+async def register_all(awaitables: Sequence[Awaitable[U]], /):
+  tasks = [asyncio.ensure_future(awaitable) for awaitable in awaitables]
+
+  try:
+    await wait_all(tasks)
+  except (asyncio.CancelledError, Exception):
+    for task in tasks:
+      reg = task.result()
+
+      match reg:
+        case AsyncCancelable():
+          await reg.cancel()
+        case Cancelable():
+          reg.cancel()
+
+    raise
+
+  return [task.result() for task in tasks]
+
+
 def run_anonymous(awaitable: Awaitable, /):
   call_trace = traceback.extract_stack()
 
@@ -173,12 +207,15 @@ def run_anonymous(awaitable: Awaitable, /):
   return asyncio.create_task(func())
 
 
-async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]], /) -> Task[T]:
+async def run_double(func: Callable[[Callable[[], bool]], Coroutine[Any, Any, T]], /) -> Task[T]:
   future = Future[None]()
 
   def ready():
     if not future.done():
       future.set_result(None)
+      return True
+    else:
+      return False
 
   async def inner_func():
     try:
@@ -200,7 +237,19 @@ async def run_double(func: Callable[[Callable[[], None]], Coroutine[Any, Any, T]
   return cast(Task[T], task)
 
 
+async def shield(awaitable: Awaitable[T], /) -> T:
+  task = asyncio.ensure_future(awaitable)
+
+  try:
+    return await asyncio.shield(task)
+  except asyncio.CancelledError:
+    return await task
+
+
 async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
+  if not items:
+    return
+
   cancelled_exc: Optional[asyncio.CancelledError] = None
   tasks = [item if isinstance(item, Task) else asyncio.create_task(item) for item in items]
 

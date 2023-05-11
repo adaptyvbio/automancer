@@ -6,7 +6,7 @@ import time
 import uuid
 from graphlib import TopologicalSorter
 from types import EllipsisType
-from typing import Optional
+from typing import Any, Optional
 
 from .util.asyncio import run_double
 
@@ -24,7 +24,7 @@ from .util.pool import Pool
 
 
 class HostRootNode(CollectionNode):
-  def __init__(self, devices):
+  def __init__(self, devices: dict[NodeId, BaseNode]):
     super().__init__()
 
     self.connected = True
@@ -32,6 +32,10 @@ class HostRootNode(CollectionNode):
     self.id = NodeId('root')
     self.label = "Root"
     self.nodes = devices
+
+  def iter_all(self):
+    for child_node in self.nodes.values():
+      yield from child_node.iter_all()
 
   def find(self, path: NodePath) -> Optional[BaseNode]:
     node = self
@@ -176,7 +180,7 @@ class Host:
 
   async def start(self):
     try:
-      await self.pool.wait(forever=True)
+      await asyncio.Future()
     finally:
       await self.destroy()
 
@@ -303,7 +307,7 @@ class Host:
     self.previous_state = state
     return state_update
 
-  async def process_request(self, request, *, client):
+  async def process_request(self, request, *, agent) -> Any:
     if request["type"] == "command":
       chip = self.chips[request["chipId"]]
       await chip.runners[request["namespace"]].command(request["command"])
@@ -368,8 +372,11 @@ class Host:
         self.update_callback()
         return { "chipId": duplicated.id }
 
+      case "requestExecutor":
+        return await self.executors[request["namespace"]].request(request["data"], agent=agent)
+
       case "revealChipDirectory":
-        if client.remote:
+        if agent.client.remote:
           return
 
         chip = self.chips[request["chipId"]]

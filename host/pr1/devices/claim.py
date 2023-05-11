@@ -5,6 +5,8 @@ from typing import Any, Callable, Coroutine, Literal, Optional, Protocol, overlo
 import warnings
 import weakref
 
+from ..util.types import SimpleAsyncCallbackFunction, SimpleCallbackFunction
+
 from ..util.asyncio import DualEvent
 
 
@@ -34,20 +36,30 @@ class ClaimSymbol:
 
 
 class Claim:
-  def __init__(self, target: 'Claimable'):
+  def __init__(self, marker: Optional[Any], target: 'Claimable'):
     self._event = DualEvent()
     self._ref = weakref.ref[Claim](self, target._finalize_claim)
     self._target = target
+
+    self.alive = True
+    self.marker = marker
 
   @property
   def owned(self):
     return self._event.is_set()
 
   def destroy(self):
+    if not self.alive:
+      raise Exception("Already destroyed")
+
+    self.alive = False
+
     if self.owned:
       self._target._designate_owner()
     else:
       self._target._claim_refs.remove(self._ref)
+
+    self._event.unset()
 
   async def lost(self):
     await self._event.wait_unset()
@@ -56,7 +68,12 @@ class Claim:
     await self._event.wait_set()
 
 class Claimable:
-  def __init__(self):
+  def __init__(
+    self,
+    *,
+    change_callback: Optional[SimpleCallbackFunction] = None
+  ):
+    self._change_callback = change_callback
     self._claim_refs = list[weakref.ref[Claim]]()
     self._current_claim_ref: Optional[weakref.ref[Claim]] = None
 
@@ -78,6 +95,9 @@ class Claimable:
     else:
       self._current_claim_ref = None
 
+    if self._change_callback:
+      self._change_callback()
+
   def _finalize_claim(self, ref: weakref.ref[Claim]):
     if self._current_claim_ref is ref:
       self._designate_owner()
@@ -86,11 +106,27 @@ class Claimable:
       self._claim_refs.remove(self._current_claim_ref)
       warnings.warn(f"Leak of awaiting claim to {self}")
 
-  def claim(self):
-    claim = Claim(self)
-    self._claim_refs.append(claim._ref)
+  def claim(self, marker: Optional[Any] = None, *, force: bool = False):
+    claim = Claim(marker, target=self)
+    current_claim = self._get_current_claim()
 
-    if not self._get_current_claim():
-      self._designate_owner()
+    if force:
+      if current_claim:
+        self._claim_refs.append(current_claim._ref)
+        current_claim._event.unset()
+
+      self._current_claim_ref = claim._ref
+      claim._event.set()
+
+      if self._change_callback:
+        self._change_callback()
+    else:
+      self._claim_refs.append(claim._ref)
+
+      if not current_claim:
+        self._designate_owner()
 
     return claim
+
+  def owner(self):
+    return self._get_current_claim()

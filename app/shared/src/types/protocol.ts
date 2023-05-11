@@ -1,3 +1,4 @@
+import { ChannelId, ClientId } from '../client';
 import { Chip, ChipId, HostIdentifier, HostState } from './host';
 import { ProtocolBlockPath } from './master';
 import { UnitNamespace } from './unit';
@@ -44,6 +45,12 @@ export type RequestFunc = UnionToIntersection<
     (options: { type: 'reloadUnits'; }) => Promise<void>
   ) | (
     (options: {
+      type: 'requestExecutor';
+      data: unknown;
+      namespace: UnitNamespace;
+    }) => Promise<unknown>
+  ) | (
+    (options: {
       type: 'revealChipDirectory';
       chipId: ChipId;
     }) => Promise<void>
@@ -71,6 +78,12 @@ export type RequestFunc = UnionToIntersection<
 
 
 export namespace ClientProtocol {
+  export interface ChannelMessage {
+    type: 'channel';
+    id: ChannelId;
+    data: unknown;
+  }
+
   export interface ExitMessage {
     type: 'exit';
   }
@@ -81,12 +94,19 @@ export namespace ClientProtocol {
     data: unknown;
   }
 
-  export type Message = ExitMessage | RequestMessage;
+  export type Message = ChannelMessage | ExitMessage | RequestMessage;
 }
 
 export namespace ServerProtocol {
+  export interface ChannelMessage {
+    type: 'channel';
+    id: ChannelId;
+    data: unknown;
+  }
+
   export interface InitializationMessage {
     type: 'initialize';
+    clientId: ClientId;
     identifier: HostIdentifier;
     staticUrl: string | null;
     version: number;
@@ -103,5 +123,5 @@ export namespace ServerProtocol {
     data: HostState;
   }
 
-  export type Message = InitializationMessage | ResponseMessage | StateMessage;
+  export type Message = ChannelMessage | InitializationMessage | ResponseMessage | StateMessage;
 }

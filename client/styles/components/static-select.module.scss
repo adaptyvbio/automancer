@@ -1,0 +1,13 @@
+@use "../mixins" as *;
+
+
+.root {
+  // @include superimposed-children();
+  position: relative;
+
+  select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+  }
+}

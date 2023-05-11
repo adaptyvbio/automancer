@@ -15,6 +15,7 @@ class Pool:
   """
 
   def __init__(self, *, open: bool = False):
+    self._closing = False
     self._open = False
     self._preopen = open
     self._task_event = Event()
@@ -60,11 +61,23 @@ class Pool:
     Calling this function multiple times will increment the cancellation counter of tasks already in the pool, and cancel newly-added tasks.
     """
 
+    self._closing = True
+
     for task in self._tasks:
       task.cancel()
 
     # Used as a signal to wake up wait() and have it return
     self._task_event.set()
+
+  def create_child(self):
+    """
+    Creates a child pool.
+    """
+
+    pool = self.__class__()
+    self.start_soon(pool.wait())
+
+    return pool
 
   def wait(self, *, forever: bool = False):
     """
@@ -85,8 +98,6 @@ class Pool:
 
   async def _wait(self, *, forever: bool):
     cancelled = False
-    closed = False
-
     exceptions = list[BaseException]()
 
     while True:
@@ -102,14 +113,14 @@ class Pool:
             try:
               exc = task.exception()
             except asyncio.CancelledError:
-              closed = True
+              pass
             else:
               if exc:
                 exceptions.append(exc)
 
             self._tasks.remove(task)
 
-      if forever and (not cancelled) and (not closed) and (not exceptions):
+      if forever and (not cancelled) and (not self._closing) and (not exceptions):
         self._task_event.clear()
 
         try:
@@ -143,7 +154,7 @@ class Pool:
       critical: Whether to close the pool when this task finishes.
     """
 
-    if (not self._open) and not (self._preopen):
+    if (not self._open) and (not self._preopen):
       raise Exception("Pool not open")
 
     task = asyncio.create_task(coro)
@@ -199,26 +210,21 @@ class Pool:
 
 
 if __name__ == "__main__":
-  async def sleep(delay: float):
-    try:
-      await asyncio.sleep(delay)
-    except asyncio.CancelledError:
-      pass
+  async def first(pool: Pool):
+    print("First")
+    pool.start_soon(second())
+    await asyncio.sleep(0.5)
 
-    raise Exception('I\'m first')
+  async def second():
+    print("Second")
 
-  async def five():
-    async with Pool.open() as pool:
-      for i in range(5):
-        pool.start_soon(sleep(i + 1))
-
+  # async def five():
+  #   async with Pool.open() as pool:
+  #     for i in range(5):
+  #       pool.start_soon(sleep(i + 1))
 
   async def main():
     async with Pool.open() as pool:
-      # pool.start_soon(sleep(0.2))
-      pool.start_soon(five())
-      await asyncio.sleep(0.1)
-      raise Exception('aa')
-      # pool.start_soon(sleep(0.2))
+      pool.start_soon(first(pool))
 
   asyncio.run(main())

@@ -1,8 +1,8 @@
 /// <reference path="global-interfaces.d.ts" />
 /// <reference path="types.d.ts" />
 
-import * as React from 'react';
-import * as ReactDOM from 'react-dom/client';
+import * as React_ from 'react';
+import * as ReactDOM_ from 'react-dom/client';
 import { createRoot } from 'react-dom/client';
 
 import { BrowserApp } from './browser-app';
@@ -26,7 +26,12 @@ export * from './components/icon';
 export * as Form from './components/standard-form';
 export { Pool } from './util';
 export * as util from './util';
-export { React, ReactDOM };
+
+/** @deprecated */
+export const React = React_;
+
+/** @deprecated */
+export const ReactDOM = ReactDOM_;
 
 export * from './dynamic-value';
 export * from './geometry';
@@ -39,14 +44,23 @@ export * from './components/graph-editor';
 export * from './components/large-icon';
 export * from './components/progress-bar';
 export * from './components/timed-progress-bar';
+export * from './components/title-bar';
 export * from './components/item-list';
 export * from './components/selector';
+export * from './components/shadow-scrollable';
+export * from './components/static-select';
+export * from './store/base';
+export * from './store/browser-storage';
+export * from './store/idb';
+export * from './store/store-manager';
+export * from './store/values';
 export * from './unit';
 
 export * from './interfaces/host';
 export * from './interfaces/graph';
 export * from './interfaces/protocol';
 export * from './interfaces/unit';
+export * from './interfaces/util';
 export * from './interfaces/view';
 
 

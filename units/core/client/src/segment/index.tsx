@@ -1,4 +1,4 @@
-import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, React, SimpleFeatureList, UnitTools } from 'pr1';
+import { BlockUnit, DiagnosticsReport, FeatureGroupDef, GraphNode, GraphRenderer, HeadUnit, Host, MenuEntryPath, ProcessUnit, ProtocolBlock, ProtocolBlockPath, ProtocolError, ProtocolProcess, SimpleFeatureList, UnitTools } from 'pr1';
 
 
 export interface Block extends ProtocolBlock {

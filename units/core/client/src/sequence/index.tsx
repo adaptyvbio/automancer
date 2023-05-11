@@ -1,5 +1,6 @@
-import { GraphLink, Host, MenuEntryPath, Plugin, PluginBlockImpl, Point as GeometryPoint, ProtocolBlockGraphRenderer, React } from 'pr1';
+import { Point as GeometryPoint, GraphLink, Plugin, PluginBlockImpl, ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererNodeInfo, React } from 'pr1';
 import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { Fragment } from 'react';
 
 
 export interface Block extends ProtocolBlock {
@@ -84,6 +85,8 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
       },
 
     render(position, renderOptions) {
+      let nodeInfos: ProtocolBlockGraphRendererNodeInfo[] = [];
+
       let vertical = options.settings.vertical;
       let linkDirection = vertical
         ? ('vertical' as const)
@@ -93,10 +96,12 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
         let childMetrics = childrenMetrics[childIndex];
         let childPos = childrenPos[childIndex];
 
-        let el = childMetrics.render({
+        let childOffset = {
           x: position.x + childPos.x,
           y: position.y + childPos.y
-        }, {
+        };
+
+        let childRender = childMetrics.render(childOffset, {
           attachmentEnd: (childIndex < block.children.length - 1)
             ? !linksCompact[childIndex]
             : renderOptions.attachmentEnd,
@@ -105,43 +110,56 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
             : renderOptions.attachmentStart
         });
 
-        return <React.Fragment key={childIndex}>{el}</React.Fragment>;
+        nodeInfos.push(...childRender.nodes.map((nodeInfo) => ({
+          ...nodeInfo,
+          position: {
+            x: childOffset.x + nodeInfo.position.x,
+            y: childOffset.y + nodeInfo.position.y
+          }
+        })))
+
+        return (
+          <Fragment key={childIndex}>{childRender.element}</Fragment>
+        );
       });
 
-      return (
-        <>
-          {children}
-          {new Array(children.length - 1).fill(0).map((_, childIndex) => {
-            if (linksCompact[childIndex]) {
-              return null;
-            }
+      return {
+        element: (
+          <>
+            {children}
+            {new Array(children.length - 1).fill(0).map((_, childIndex) => {
+              if (linksCompact[childIndex]) {
+                return null;
+              }
 
-            let start = childrenMetrics[childIndex].end;
-            let startPos = childrenPos[childIndex];
+              let start = childrenMetrics[childIndex].end;
+              let startPos = childrenPos[childIndex];
 
-            let end = childrenMetrics[childIndex + 1].start;
-            let endPos = childrenPos[childIndex + 1];
+              let end = childrenMetrics[childIndex + 1].start;
+              let endPos = childrenPos[childIndex + 1];
 
-            return (
-              <GraphLink
-                link={{
-                  start: {
-                    direction: linkDirection,
-                    x: position.x + start.x + startPos.x,
-                    y: position.y + start.y + startPos.y
-                  },
-                  end: {
-                    direction: linkDirection,
-                    x: position.x + end.x + endPos.x,
-                    y: position.y + end.y + endPos.y
-                  }
-                }}
-                settings={options.settings}
-                key={childIndex} />
-            );
-          })}
-        </>
-      );
+              return (
+                <GraphLink
+                  link={{
+                    start: {
+                      direction: linkDirection,
+                      x: position.x + start.x + startPos.x,
+                      y: position.y + start.y + startPos.y
+                    },
+                    end: {
+                      direction: linkDirection,
+                      x: position.x + end.x + endPos.x,
+                      y: position.y + end.y + endPos.y
+                    }
+                  }}
+                  settings={options.settings}
+                  key={childIndex} />
+              );
+            })}
+          </>
+        ),
+        nodes: nodeInfos
+      };
     }
   };
 };

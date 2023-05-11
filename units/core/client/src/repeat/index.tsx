@@ -1,4 +1,4 @@
-import { ProtocolBlockGraphRendererMetrics, ProtocolBlockGraphRenderer, GraphNodeContainer, React, UnitTools, BlockUnit, formatDynamicValue, DynamicValue, Plugin, PluginBlockImpl } from 'pr1';
+import { DynamicValue, Plugin, PluginBlockImpl, ProtocolBlockGraphRendererMetrics, React, formatDynamicValue } from 'pr1';
 import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 

@@ -1,3 +1,4 @@
+import { List, Map as ImMap } from 'immutable';
 import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
 
@@ -5,10 +6,10 @@ import graphEditorStyles from '../../styles/components/graph-editor.module.scss'
 
 import { FeatureList } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
-import { Point, SideValues, Size } from '../geometry';
+import { Point, SideValues, Size, squareDistance, squareLength } from '../geometry';
 import { Host } from '../host';
 import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
-import { UnknownPluginBlockImpl } from '../interfaces/plugin';
+import { GlobalContext, UnknownPluginBlockImpl } from '../interfaces/plugin';
 import { FeatureGroupDef } from '../interfaces/unit';
 import { getBlockName } from '../protocol';
 import * as util from '../util';
@@ -35,13 +36,15 @@ export interface GraphEditorState {
 }
 
 export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
-  controller = new AbortController();
-  initialized = false;
-  offsetBoundaries: { min: Point; max: Point; } | null = null;
-  refContainer = React.createRef<HTMLDivElement>();
-  settings: GraphRenderSettings | null = null;
+  private controller = new AbortController();
+  private initialized = false;
+  private lastRenderedNodePositions: ImMap<List<number>, Point> | null = null;
+  private pool = new util.Pool();
+  private offsetBoundaries: { min: Point; max: Point; } | null = null;
+  private refContainer = React.createRef<HTMLDivElement>();
+  private settings: GraphRenderSettings | null = null;
 
-  observer = new ResizeObserver((_entries) => {
+  private observer = new ResizeObserver((_entries) => {
     if (!this.initialized) {
       this.initialized = true;
       this.setSize();
@@ -50,7 +53,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     }
   });
 
-  observerDebounced = util.debounce(500, () => {
+  private observerDebounced = util.debounce(500, () => {
     this.setSize();
 
     // this.setState((state) => ({
@@ -161,9 +164,13 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
       return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }
 
-    let context = { host: this.props.host };
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
+    };
+
     let settings = this.settings!;
-    let renderedTree!: React.ReactNode | null;
+    let graphRootElement!: React.ReactNode | null;
 
     let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
@@ -177,8 +184,6 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         ancestors: ProtocolBlock[],
         location: unknown
       ): ProtocolBlockGraphRendererMetrics => {
-        // let blockImpl = getBlockImpl(block);
-
         let currentBlock = groupRootBlock;
         let currentBlockImpl: UnknownPluginBlockImpl;
         let currentBlockPath = path;
@@ -229,25 +234,38 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         }, context);
       };
 
+
+      // Render graph
+
       let origin: Point = { x: 1, y: 1 };
       let treeMetrics = computeGraph(this.props.protocol.root, [], [], this.props.location ?? null);
 
-      renderedTree = treeMetrics.render(origin, {
+      let rendered = treeMetrics.render(origin, {
         attachmentEnd: false,
         attachmentStart: false
       });
 
-      let margin = {
+      graphRootElement = rendered.element;
+
+      this.lastRenderedNodePositions = ImMap(rendered.nodes.map((nodeInfo) => [
+        List(nodeInfo.path),
+        nodeInfo.position
+      ]));
+
+
+      // Compute boundaries
+
+      let margin: SideValues = {
         bottom: 2,
         left: 1,
         right: 1,
         top: 1
-      } satisfies SideValues;
+      };
 
-      let min = {
+      let min: Point = {
         x: (origin.x - margin.left) * settings.cellPixelSize,
         y: (origin.y - margin.top) * settings.cellPixelSize
-      } satisfies Point;
+      };
 
       this.offsetBoundaries = {
         min,
@@ -257,7 +275,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         }
       };
     } else {
-      renderedTree = null;
+      graphRootElement = null;
     }
 
     let frac = (x: number) => (x - Math.floor(x));
@@ -265,46 +283,67 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     let offsetY = this.state.offset.y;
 
     return (
-      <div className={graphEditorStyles.root} ref={this.refContainer} /* tabIndex={-1} onKeyDown={(event) => {
-        if (!['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key)) {
+      <div className={graphEditorStyles.root} ref={this.refContainer} tabIndex={-1} onKeyDown={(event) => {
+        if (!['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
           return;
         }
 
         event.preventDefault();
         event.stopPropagation();
 
-        if (this.props.selectedBlockPath) {
-          let currentBlock = this.props.tree!;
-          let lineBlocks: ProtocolBlock[] = [];
+        if (this.lastRenderedNodePositions) {
+          let currentPath = this.props.selectedBlockPath && List(this.props.selectedBlockPath);
+          let originPosition = currentPath && this.lastRenderedNodePositions.get(currentPath)!;
 
-          for (let key of this.props.selectedBlockPath) {
-            let currentBlockImpl = getBlockImpl(currentBlock);
-            currentBlock = currentBlockImpl.getChild!(currentBlock, key);
-            lineBlocks.push(currentBlock);
+          let minDistance = Infinity;
+          let minPath: List<number> | null = null;
+
+          for (let [path, position] of this.lastRenderedNodePositions) {
+            if (path.equals(currentPath)) {
+              continue;
+            }
+
+            let distance: number;
+
+            if (originPosition) {
+              if ((event.key === 'ArrowDown') && !(position.y > originPosition.y)) {
+                continue;
+              }
+
+              if ((event.key === 'ArrowUp') && !(position.y < originPosition.y)) {
+                continue;
+              }
+
+              if ((event.key === 'ArrowRight') && !(position.x > originPosition.x)) {
+                continue;
+              }
+
+              if ((event.key === 'ArrowLeft') && !(position.x < originPosition.x)) {
+                continue;
+              }
+
+              distance = squareDistance(position, originPosition);
+            } else {
+              if (event.key === 'ArrowDown') {
+                distance = squareLength(position);
+              } else if (event.key === 'ArrowUp') {
+                distance = -squareLength(position);
+              } else {
+                distance = Infinity;
+              }
+            }
+
+            if (distance < minDistance) {
+              minDistance = distance;
+              minPath = path;
+            }
           }
 
-          for (let [blockIndex, block] of lineBlocks.slice().reverse().entries()) {
-            let blockImpl = getBlockImpl(block);
-
-            let key: unknown;
-
-            switch (event.key) {
-              case 'ArrowDown':
-                key = blockImpl.getAdjacentBlockKey?.(block, 1) ?? null;
-                break;
-              case 'ArrowUp':
-                key = blockImpl.getAdjacentBlockKey?.(block, -1) ?? null;
-                break;
-            }
-
-            if (key !== null) {
-              this.props.selectBlock([...this.props.selectedBlockPath.slice(0, blockIndex), key]);
-
-              break;
-            }
+          if (minPath) {
+            this.props.selectBlock(minPath.toArray());
           }
         }
-      }} */>
+      }}>
         <svg
           viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`}
           className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}
@@ -330,7 +369,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           <g transform={`translate(${-offsetX} ${-offsetY})`} onTransitionEnd={() => {
             this.setState({ animatingView: false });
           }}>
-            {renderedTree}
+            {graphRootElement}
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
@@ -568,20 +607,33 @@ const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock & {
     size,
 
     render(position, renderOptions) {
-      return (
-        <>
-          <GraphNodeContainer
-            cellSize={size}
-            path={path}
-            position={position}
-            settings={options.settings}
-            title={block.label} />
-          {childMetrics.render({
-            x: position.x + 1,
-            y: position.y + 2
-          }, renderOptions)}
-        </>
-      );
+      let offset: Point = {
+        x: position.x + 1,
+        y: position.y + 2
+      };
+
+      let childRender = childMetrics.render(offset, renderOptions)
+
+      return {
+        element: (
+          <>
+            <GraphNodeContainer
+              cellSize={size}
+              path={path}
+              position={position}
+              settings={options.settings}
+              title={block.label} />
+            {childRender.element}
+          </>
+        ),
+        nodes: childRender.nodes.map((nodeInfo) => ({
+          ...nodeInfo,
+          position: {
+            x: offset.x + nodeInfo.position.x,
+            y: offset.y + nodeInfo.position.y
+          }
+        }))
+      };
     }
   }
 };

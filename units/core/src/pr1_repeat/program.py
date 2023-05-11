@@ -108,7 +108,6 @@ class Program(BaseProgram):
     self._point = point or ProgramPoint(child=None, iteration=0)
 
     while True:
-      owner = self._handle.create_child(self._block.block)
       current_point = self._point
 
       self._iteration = current_point.iteration
@@ -117,6 +116,7 @@ class Program(BaseProgram):
       if (iteration_count is not None) and (self._iteration >= iteration_count):
         break
 
+      owner = self._handle.create_child(self._block.block)
       self._mode = ProgramMode.Normal(owner)
 
       self._handle.send(ProgramExecEvent(location=ProgramLocation(

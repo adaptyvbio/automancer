@@ -6,6 +6,11 @@ import type { GraphRenderSettings } from '../components/graph-editor';
 import type { GlobalContext } from './plugin';
 
 
+export interface ProtocolBlockGraphRendererNodeInfo {
+  path: ProtocolBlockPath;
+  position: Point;
+}
+
 export interface ProtocolBlockGraphRendererMetrics {
   start: Point;
   end: Point;
@@ -13,7 +18,10 @@ export interface ProtocolBlockGraphRendererMetrics {
   compactable?: unknown;
   size: Size;
 
-  render(position: Point, options: ProtocolBlockGraphRendererRenderOptions): ReactNode;
+  render(position: Point, options: ProtocolBlockGraphRendererRenderOptions): {
+    element: ReactNode;
+    nodes: ProtocolBlockGraphRendererNodeInfo[];
+  };
 }
 
 export interface ProtocolBlockGraphRendererRenderOptions {

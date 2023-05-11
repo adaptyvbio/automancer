@@ -41,55 +41,64 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
     render(position, renderOptions) {
       let active = false; // (location !== null);
 
-      return (
-        <GraphNode
-          active={active}
-          autoMove={false}
-          cellSize={{
-            width,
-            height
-          }}
-          createMenu={() => {
-            return [
-              ...(active
-                ? createActiveBlockMenu(block, location!, context)
-                : []),
-              { id: 'jump', name: 'Jump to', icon: 'move_down' },
-              { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
-            ];
-          }}
-          node={{
-            id: '_',
-            title: (name !== null) ? { value: name } : null,
-            features,
-            position
-          }}
-          onSelectBlockMenu={(menuPath) => {
-            let message = onSelectBlockMenu(block, location!, menuPath);
+      return {
+        element: (
+          <GraphNode
+            active={active}
+            autoMove={false}
+            cellSize={{
+              width,
+              height
+            }}
+            createMenu={() => {
+              return [
+                ...(active
+                  ? createActiveBlockMenu(block, location!, context)
+                  : []),
+                { id: 'jump', name: 'Jump to', icon: 'move_down' },
+                { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
+              ];
+            }}
+            node={{
+              id: '_',
+              title: (name !== null) ? { value: name } : null,
+              features,
+              position
+            }}
+            onSelectBlockMenu={(menuPath) => {
+              let message = onSelectBlockMenu(block, location!, menuPath);
 
-            if (message) {
-              // ...
-              return;
-            }
-
-            switch (menuPath.first()) {
-              case 'jump': {
-                let tree = options.settings.editor.props.tree!;
-
-                let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
-                  let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
-                  return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
-                };
-
-                let point = getChildPoint(tree, path);
-                options.settings.editor.props.execution.jump(point);
+              if (message) {
+                // ...
+                return;
               }
-            }
-          }}
-          path={path}
-          selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
-          settings={options.settings} />
-      );
+
+              switch (menuPath.first()) {
+                case 'jump': {
+                  let tree = options.settings.editor.props.tree!;
+
+                  let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
+                    let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
+                    return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
+                  };
+
+                  let point = getChildPoint(tree, path);
+                  options.settings.editor.props.execution.jump(point);
+                }
+              }
+            }}
+            path={path}
+            selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
+            settings={options.settings} />
+        ),
+        nodes: [{
+          path,
+          position: {
+            x: position.x + (width * 0.5),
+            y: position.y + (height * 0.5)
+          }
+        }]
+      };
     }
   };
 };

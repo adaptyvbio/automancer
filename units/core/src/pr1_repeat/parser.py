@@ -62,6 +62,9 @@ class Block(BaseBlock):
   def __get_node_children__(self):
     return [self.block]
 
+  def __get_node_name__(self):
+    return ["Repeat"]
+
   def create_program(self, handle):
     from .program import Program
     return Program(self, handle)

@@ -339,9 +339,11 @@ class ProgramHandle:
     if include_self:
       reversed_ancestors.append(self._program)
 
-    while not isinstance(parent := self._parent, Master):
-      if (not same_type) or isinstance(parent, type(self._program)):
-        reversed_ancestors.insert(0, parent._program)
+    handle = self
+
+    while not isinstance(handle := handle._parent, Master):
+      if (not same_type) or isinstance(handle, type(self._program)):
+        reversed_ancestors.insert(0, handle._program)
 
     return reversed_ancestors[::-1]
 

@@ -1,13 +1,13 @@
 import time
 from abc import ABC, abstractmethod
 from asyncio import Event, Lock
+from enum import IntEnum
 from typing import Any, Generic, NewType, Optional, TypeVar, final
 
-from ...util.asyncio import DualEvent
+from ...util.asyncio import DualEvent, race
 from ...util.pool import Pool
 from ..claim import Claimable
-from .common import (BaseNode, NodeListener, NodeListenerMode,
-                     NodeUnavailableError)
+from .common import BaseNode, NodeListener, NodeUnavailableError
 
 
 @final
@@ -61,7 +61,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     if self.writable:
       self.claimable = Claimable(change_callback=self._claim_change)
-      self.writer: Optional[NodeValueWriter] = None
+      self._writer: Optional[NodeValueWriter] = None
 
   # Internal
 
@@ -118,13 +118,17 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
   # Called by the consumer
 
+  @property
+  def writer(self):
+    # Create the writer here to ensure it is done during or after initialization
+    if not self._writer:
+      self._writer = NodeValueWriter(self)
+
+    return self._writer
+
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     if not self.writable:
       raise NotImplementedError
-
-    # Create the writer here to ensure it is done during or after initialization
-    if not self.writer:
-      self.writer = NodeValueWriter(self)
 
     return self.claimable.claim(marker, force=force)
 
@@ -201,9 +205,14 @@ class ValueNode(BaseNode, ABC, Generic[T]):
         }
 
 
+class NodeValueWriterError(IntEnum):
+  Disconnected = 0
+
 class NodeValueWriter(Generic[T]):
   def __init__(self, node: ValueNode[T]):
     self.node = node
+
+    self.error: Optional[NodeValueWriterError] = None
 
     # outer None -> target value is implicitly undefined (= never called write())
     # inner None -> target value is explicitly undefined (= don't care)
@@ -220,33 +229,47 @@ class NodeValueWriter(Generic[T]):
   async def wait_unsettled(self):
     await self._settle_event.wait_unset()
 
-  def set(self, value: T | NullType, /):
+  def set(self, value: Optional[T | NullType], /):
     self.target_value = (time.time(), value)
     self._change_event.set()
 
   async def _worker(self):
-    from .watcher import WatchableNode
+    from .watcher import Watcher, WatchModes
 
-    if isinstance(self, WatchableNode) and (not self.node.stable):
-      def listener(node: BaseNode, *, mode: NodeListenerMode):
-        self._change_event.set()
+    modes = WatchModes({'connection'})
 
-      reg = await self.watch_value(listener)
-    else:
-      reg = None
+    if not self.node.stable:
+      modes.add('value')
 
-    try:
+    async with Watcher([self.node], modes=modes) as watcher:
+      watcher_iter = aiter(watcher)
+
       while True:
-        await self._change_event.wait()
+        await race(
+          anext(watcher_iter),
+          self._change_event.wait()
+        )
+
         self._change_event.clear()
 
-        if (self.target_value is not None) and ((target_value := self.target_value[1]) is not None):
-          self._settle_event.unset()
-          await self.node._write(target_value)
+        if self.node.connected:
+          try:
+            if (self.target_value is not None) and ((target_value := self.target_value[1]) is not None):
+              if (not self.node.value) or (target_value != self.node.value[1]):
+                self._settle_event.unset()
+                await self.node._write(target_value)
+
+                # Not sure whether to keep this or move it to plugins
+                self.node.value = (time.time(), target_value)
+                self.node._trigger_listeners(mode='value')
+
+              self.error = None
+            else:
+              await self.node._clear()
+              self.error = None
+          except NodeUnavailableError:
+            self.error = NodeValueWriterError.Disconnected
         else:
-          await self.node._clear()
+          self.error = NodeValueWriterError.Disconnected
 
         self._settle_event.set()
-    finally:
-      if reg:
-        reg.cancel()

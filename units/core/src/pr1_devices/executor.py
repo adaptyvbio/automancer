@@ -105,7 +105,7 @@ def export_node_state(node: BaseNode, /):
       state |= {
         "writable": {
           "owner": (export_claim_marker(owner.marker) if owner else None),
-          "targetValue": node.export_value(node.target_value)
+          "targetValue": node.export_value(node.writer.target_value)
         }
       }
 

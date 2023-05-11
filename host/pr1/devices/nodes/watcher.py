@@ -98,6 +98,7 @@ class Watcher:
 
   async def __aenter__(self):
     await self.start()
+    return self
 
   async def __aexit__(self, exc_name, exc, exc_type):
     await self.stop()

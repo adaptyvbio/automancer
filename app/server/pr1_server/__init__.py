@@ -318,7 +318,7 @@ class App:
     try:
       async with Pool.open() as pool:
         self._pool = pool
-        pool.start_soon(self.host.pool.wait())
+        pool.start_soon(self.host.pool.wait(forever=True))
 
         await self.host.initialize()
 

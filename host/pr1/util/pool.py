@@ -154,7 +154,7 @@ class Pool:
       critical: Whether to close the pool when this task finishes.
     """
 
-    if (not self._open) and not (self._preopen):
+    if (not self._open) and (not self._preopen):
       raise Exception("Pool not open")
 
     task = asyncio.create_task(coro)

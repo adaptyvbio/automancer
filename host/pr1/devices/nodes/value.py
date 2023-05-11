@@ -242,11 +242,9 @@ class NodeValueWriter(Generic[T]):
       modes.add('value')
 
     async with Watcher([self.node], modes=modes) as watcher:
-      watcher_iter = aiter(watcher)
-
       while True:
         await race(
-          anext(watcher_iter),
+          watcher.wait_event(),
           self._change_event.wait()
         )
 

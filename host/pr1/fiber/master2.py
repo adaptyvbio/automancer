@@ -342,7 +342,7 @@ class ProgramHandle:
     handle = self
 
     while not isinstance(handle := handle._parent, Master):
-      if (not same_type) or isinstance(handle, type(self._program)):
+      if (not same_type) or isinstance(handle._program, type(self._program)):
         reversed_ancestors.insert(0, handle._program)
 
     return reversed_ancestors[::-1]

@@ -31,13 +31,17 @@ class Watcher:
       await self.start()
 
     while True:
-      await self._event.wait()
-      event = self._queue.pop()
+      yield await self.wait_event()
 
-      if not self._queue:
-        self._event.clear()
+  async def wait_event(self):
+    await self._event.wait()
+    event = self._queue.pop()
 
-      yield event
+    if not self._queue:
+      self._event.clear()
+
+    return event
+
 
   async def start(self):
     if self._started:

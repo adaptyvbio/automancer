@@ -436,7 +436,9 @@ class Host:
           try:
             await asyncio.shield(done)
           except asyncio.CancelledError:
+            logger.info(f"Halting protocol on chip '{chip.id}'")
             chip.master.halt()
+
             await done
 
           logger.info(f"Ran protocol on chip '{chip.id}'")

@@ -36,7 +36,7 @@ class Declaration:
   stable: bool = False
 
   def __lt__(self, other: Self):
-    return len(self.trace) < len(other.trace)
+    return len(self.trace) > len(other.trace)
 
 
 @dataclass
@@ -106,14 +106,6 @@ class Runner(BaseRunner):
   async def _node_worker(self, node: ValueNode, node_info: NodeInfo):
     self._logger.debug(f"Launching worker of node with id '{node.id}'")
 
-    # assert node_info.claim
-    assert node_info.update_event
-
-    # def listener():
-    #   pass
-
-    # reg = node.watch_connection(listener)
-
     node_info.claim = node.claim()
 
     try:
@@ -126,37 +118,15 @@ class Runner(BaseRunner):
           node_info.update_event.clear()
 
           if node_info.current_declaration:
-            value = node_info.current_declaration.assignments[node]
+            assignment_value = node_info.current_declaration.assignments[node]
+            value = assignment_value if (assignment_value is not None) else Null
+          else:
+            value = None
 
-            job = asyncio.Future()
+          node.writer.set(value)
 
-            await asyncio.sleep(1)
-            node_info.settle_event.set()
-
-            # match node:
-            #   case BooleanNode():
-            #     job = node.maintain(value if value is not None else Null)
-            #   case EnumNode():
-            #     job = node.maintain(value if value is not None else Null)
-            #   case NumericNode():
-            #     job = node.maintain(value if value is not None else Null)
-            #   case _:
-            #     raise ValueError
-
-            try:
-              await race(job, node_info.update_event.wait())
-            except Exception as e:
-              break
-
-            # (item_info := candidate.item_info).notify(StateEvent(
-            #   item_info.location,
-            #   analysis=MasterAnalysis(errors=[
-            #     MasterError(f"Device internal error: {e}")
-            #   ]),
-            #   failure=True
-            # ))
-
-          # node_info.settled = True
+          await node.writer.wait_settled()
+          node_info.settle_event.set()
     finally:
       node_info.claim.destroy()
       node_info.claim = None

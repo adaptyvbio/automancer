@@ -24,15 +24,6 @@ class Pool:
   def __len__(self):
     return len(self._tasks)
 
-  def _done_callback(self, task: Task):
-    try:
-      exc = task.exception()
-    except asyncio.CancelledError:
-      pass
-    else:
-      if exc:
-        self.close()
-
   def add(self, task: Task[Any]):
     """
     Adds a new task to the pool.
@@ -40,8 +31,6 @@ class Pool:
 
     if (not self._open) and not (self._preopen):
       raise Exception("Pool not open")
-
-    task.add_done_callback(self._done_callback)
 
     self._task_event.set()
     self._tasks.add(task)
@@ -103,8 +92,9 @@ class Pool:
     while True:
       while (tasks := self._tasks.copy()):
         try:
-          await asyncio.wait(tasks)
+          await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
         except asyncio.CancelledError:
+          # Reached when the call to wait() is cancelled
           cancelled = True
           self.close()
 
@@ -120,7 +110,10 @@ class Pool:
 
             self._tasks.remove(task)
 
-      if forever and (not cancelled) and (not self._closing) and (not exceptions):
+        if exceptions and (not self._closing):
+          self.close()
+
+      if forever and (not self._closing):
         self._task_event.clear()
 
         try:

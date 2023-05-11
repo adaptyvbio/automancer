@@ -1,4 +1,5 @@
-from asyncio import Event
+from asyncio import Event, Task
+import asyncio
 from dataclasses import dataclass, field
 from logging import Logger
 from types import EllipsisType
@@ -171,6 +172,8 @@ class PublisherProgram(BaseProgram):
 class ApplierProgramMode:
   @dataclass
   class Applying:
+    task: Task[None] = field(repr=False)
+
     def export(self):
       return 0
 
@@ -213,33 +216,33 @@ class ApplierProgram(BaseProgram):
 
   def halt(self):
     match self._mode:
+      case ApplierProgramMode.Applying(task):
+        task.cancel()
       case ApplierProgramMode.Normal(owner):
         owner.halt()
 
-  # def receive(self, message, /):
-  #   match message:
-  #     case "pause":
-  #       pass
-  #     case "resume":
-  #       pass
-
   async def run(self, point, stack):
-    self._mode = ApplierProgramMode.Applying()
-    self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode)))
-
     self._logger.debug("Applying")
 
     self._runner._master = self._handle.master
     self._runner.update()
 
-    await self._runner.wait()
+    apply_task = asyncio.create_task(self._runner.wait())
 
-    self._logger.debug("Applied")
-
-    owner = self._handle.create_child(self._block.child)
-    self._mode = ApplierProgramMode.Normal(owner)
+    self._mode = ApplierProgramMode.Applying(apply_task)
     self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode)))
 
-    await owner.run(point, stack)
+    try:
+      await apply_task
+    except asyncio.CancelledError:
+      return
+    else:
+      self._logger.debug("Applied")
+
+      owner = self._handle.create_child(self._block.child)
+      self._mode = ApplierProgramMode.Normal(owner)
+      self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode)))
+
+      await owner.run(point, stack)
 
     del self._mode

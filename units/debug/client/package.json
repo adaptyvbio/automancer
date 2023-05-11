@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "build": "npm run build:js && (npm test || true)",
+    "build:js": "esbuild src/index.ts --bundle --external:pr1 --external:react --format=esm --minify --outdir=../src/pr1_debug/client",
+    "test": "tsc"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.16",
+    "esbuild": "~0.15.16",
+    "pr1": "file:../../../client",
+    "pr1-shared": "file:../../../app/shared",
+    "sass": "^1.54.4",
+    "typescript": "~4.9.0"
+  }
+}

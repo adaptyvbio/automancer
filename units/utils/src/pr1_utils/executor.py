@@ -33,8 +33,7 @@ class SystemNode(DeviceNode):
       node.id: node for node in {
         EpochNode(pool=pool),
         ProcessMemoryUsageNode(pool=pool),
-        RandomNode(pool=pool),
-        WaitNode(pool=pool)
+        RandomNode(pool=pool)
       }
     }
 
@@ -92,23 +91,6 @@ class RandomNode(PollableReadableNode, NumericNode):
 
   async def _read_value(self):
     return random.random()
-
-class WaitNode(NumericNode):
-  def __init__(self, *, pool: Pool):
-    super().__init__(
-      pool=pool,
-      unit=ureg.sec,
-      writable=True
-    )
-
-    self.connected = True
-    self.icon = "schedule"
-    self.id = NodeId('wait')
-    self.label = "Wait"
-
-  async def _write(self, value, /):
-    assert not isinstance(value, NullType)
-    await asyncio.sleep(value.magnitude) # type: ignore
 
 
 class Executor(BaseExecutor):

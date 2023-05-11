@@ -5,8 +5,7 @@
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "node",
-    "noEmit": true,
-    "resolveJsonModule": true
+    "noEmit": true
   },
   "references": [
     { "path": "../client" }

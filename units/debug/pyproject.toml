@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=66", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pr1-debug"
+dynamic = ["version"]
+requires-python = ">3.11"
+
+[project.entry-points."pr1.units"]
+debug = "pr1_debug"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"pr1_debug.client" = ["*"]
+
+[tool.setuptools_scm]
+root = "../.."

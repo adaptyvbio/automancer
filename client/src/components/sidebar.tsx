@@ -73,7 +73,11 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
             { id: 'draft',
               label: 'Protocols',
               icon: 'receipt_long',
-              route: '/draft' }
+              route: '/draft' },
+            { id: 'settings',
+              label: 'Settings',
+              icon: 'settings',
+              route: '/settings' }
         ] },
         ...(unitEntries && (unitEntries?.length > 0)
           ? [{ id: 'unit', entries: unitEntries }]

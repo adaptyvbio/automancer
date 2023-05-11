@@ -1,39 +1,53 @@
 import * as React from 'react';
+import { ComponentType, useContext } from 'react';
 import seqOrd from 'seq-ord';
-
-import { Application } from '../application';
-import { Icon } from '../components/icon';
-import * as Form from '../components/standard-form';
-import { TitleBar } from '../components/title-bar';
-import { Host } from '../host';
-import { UnitInfo, UnitNamespace } from '../units';
-import * as util from '../util';
-import { Button } from '../components/button';
-import { ViewProps } from '../interfaces/view';
-import { BaseUrl } from '../constants';
-import { Description } from '../components/description';
 
 import descriptionStyles from '../../styles/components/description.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
 import styles from '../../styles/views/conf.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
+import { Icon } from '../components/icon';
+import * as Form from '../components/standard-form';
+import { TitleBar } from '../components/title-bar';
+import * as util from '../util';
+import { Button } from '../components/button';
+import { ViewProps } from '../interfaces/view';
+import { BaseUrl } from '../constants';
+import { Description } from '../components/description';
+import { UnitInfo } from 'pr1-shared';
+import { OrdinaryId } from '../interfaces/util';
+import { ApplicationStore } from '../application';
+
+
+export interface ConfGroup {
+  id: OrdinaryId;
+  pages: ConfPage[];
+}
+
+export interface ConfPage {
+  id: OrdinaryId;
+  component?: ConfPageComponent;
+  icon: string;
+  label: string;
+}
+
 
 export type ViewConfProps = ViewProps<{
   id: 'main',
   params: {};
 } | {
-  id: 'section';
+  id: 'page';
   params: {
     0: string | undefined;
     groupId: string;
-    sectionId: string;
+    pageId: string;
   };
 }>;
 
 export interface ViewConfState {
   reloadBannerVisible: boolean;
-  selectedGroupAndSectionIds: [string, string] | null;
+  selectedGroupAndPageIds: [string, string] | null;
 }
 
 export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
@@ -41,8 +55,8 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
     super(props);
 
     this.state = {
-      reloadBannerVisible: true,
-      selectedGroupAndSectionIds: null
+      reloadBannerVisible: false,
+      selectedGroupAndPageIds: null
     };
   }
 
@@ -53,12 +67,13 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
   render() {
     let unitsInfo = this.props.host.state.info.units;
 
-    let groups = [
+    let groups: ConfGroup[] = [
       {
         id: 'main',
-        sections: [
+        pages: [
           {
             id: 'general',
+            component: GeneralConfPage,
             icon: 'settings',
             label: 'General'
           },
@@ -69,8 +84,8 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
           }
         ]
       },
-      { id: 'units',
-        sections: Object.values(unitsInfo)
+      { id: 'plugins',
+        pages: Object.values(unitsInfo)
           .map((unitInfo) => ({
             id: unitInfo.namespace,
             icon: 'extension',
@@ -82,7 +97,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
       },
       {
         id: 'add-unit',
-        sections: [
+        pages: [
           {
             id: 'add-unit',
             icon: 'add',
@@ -94,40 +109,43 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
 
     let route = this.props.route;
 
+    let currentPage: ConfPage | null;
+
+    if (route.id === 'page') {
+      let { groupId, pageId } = route.params;
+
+      currentPage = groups
+        .find((group) => group.id === groupId)?.pages
+        .find((page) => page.id === pageId) ?? null;
+    } else {
+      currentPage = null;
+    }
+
+    let CurrentPageComponent = currentPage?.component;
+
+
     return (
       <main className={viewStyles.root}>
-        <TitleBar title={(() => {
-          if (route.id === 'section') {
-            let { groupId, sectionId } = route.params;
-
-            return groups
-              .find((group) => group.id === groupId)!
-              .sections
-              .find((section) => section.id === sectionId)!
-              .label;
-          }
-
-          return 'Settings';
-        })()} />
+        <TitleBar title={currentPage?.label ?? 'Settings'} />
         <div className={util.formatClass(viewStyles.contents, styles.root)}>
           <div className={styles.selectorRoot}>
             <div className={styles.selectorListRoot}>
               {groups.map((group) => (
                 <div className={styles.selectorListGroup} key={group.id}>
-                  {group.sections.map((section) => (
-                    <a href={`${BaseUrl}/settings/${group.id}/${section.id}`} className={util.formatClass(styles.selectorListEntry, {
-                      '_selected': (route.id === 'section')
+                  {group.pages.map((page) => (
+                    <a href={`${BaseUrl}/settings/${group.id}/${page.id}`} className={util.formatClass(styles.selectorListEntry, {
+                      '_selected': (route.id === 'page')
                         && (route.params.groupId === group.id)
-                        && (route.params.sectionId === section.id)
-                    })} key={section.id}>
-                      <Icon name={section.icon} className={styles.selectorListIcon} />
-                      <div className={styles.selectorListLabel}>{section.label}</div>
+                        && (route.params.pageId === page.id)
+                    })} key={page.id}>
+                      <Icon name={page.icon} className={styles.selectorListIcon} />
+                      <div className={styles.selectorListLabel}>{page.label}</div>
                     </a>
                   ))}
                 </div>
               ))}
 
-              {false && new Array(2).fill(0).map(() => (
+              {/* {new Array(2).fill(0).map(() => (
                 <div className={styles.selectorListGroup}>
                   {new Array(10).fill(0).map(() => (
                     <button type="button" className={styles.selectorListEntry}>
@@ -136,10 +154,10 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
                     </button>
                   ))}
                 </div>
-              ))}
+              ))} */}
             </div>
           </div>
-          {(route.id === 'section' && false) && (
+          {/* {(route.id === 'section') && (
             <div className={styles.contentsOuter}>
               <div className={styles.contentsInner}>
                 {(() => {
@@ -172,11 +190,19 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
                 })()}
               </div>
             </div>
+          )} */}
+
+          {CurrentPageComponent && (
+            <div className={styles.contentsOuter}>
+              <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
+                <CurrentPageComponent
+                  setReloadRequired={() => void this.setState({ reloadBannerVisible: true })}
+                  store={this.props.app.store} />
+              </div>
+            </div>
           )}
 
-          <div className={styles.contentsOuter}>
-            <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
-              <h2>AMF</h2>
+              {/* <h2>AMF</h2>
 
               <h3>Devices</h3>
 
@@ -210,20 +236,12 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
                     </div>
                     <Button className={descriptionStyles.itemlistAction}>Configure</Button>
                   </div>
-                ))} */}
+                ))} }
               </div>
 
               <div className={descriptionStyles.rightactions}>
                 <Button>Other...</Button>
-              </div>
-
-              {/* {new Array(100).fill(0).map(() => (<label className={formStyles.checkRoot}>
-                <input type="checkbox" />
-                <div className={formStyles.checkTitle}>Automatic save</div>
-                <p className={formStyles.checkDescription}>The editor's contents will be saved automatically at regular intervals.</p>
-              </label>))} */}
-            </div>
-          </div>
+              </div> */}
           {this.state.reloadBannerVisible && (
             <div className={styles.reload}>
               <p>Reload the setup to apply changes.</p>
@@ -238,7 +256,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
 
   static routes = [
     { id: 'main', pattern: '/settings' },
-    { id: 'section', pattern: '/settings/:groupId/:sectionId/**' }
+    { id: 'page', pattern: '/settings/:groupId/:pageId/**' }
   ];
 }
 
@@ -265,4 +283,54 @@ function UnitIcon(props: {
       <div className="usettings-icon" dangerouslySetInnerHTML={{ __html: icon.value }} />
     );
   }
+}
+
+
+export type ConfPageComponent = ComponentType<ConfPageComponentProps>;
+
+export interface ConfPageComponentProps {
+  setReloadRequired(): void;
+  store: ApplicationStore;
+}
+
+
+enum ShortcutPref {
+  Default,
+  Disabled,
+  Symbol
+}
+
+function GeneralConfPage(props: ConfPageComponentProps) {
+  let [automaticSave, setAutomaticSave] = props.store.usePersistent<boolean>(['editor', 'automatic-save'], false);
+  let [shortcutPref, setShortcutPref] = props.store.usePersistent<ShortcutPref>(['misc', 'shortcut'], ShortcutPref.Disabled);
+  // let [progressDisplayPref, setProgressDisplayPref] = props.store.usePersistent<>();
+
+  return (
+    <>
+      <h2>General</h2>
+
+      <h3>Editor</h3>
+
+      <label className={formStyles.checkRoot}>
+        <input type="checkbox" checked={automaticSave} onInput={(event) => void setAutomaticSave(!automaticSave)} />
+        <div className={formStyles.checkTitle}>Automatic save</div>
+        <p className={formStyles.checkDescription}>The editor's contents will be saved automatically at regular intervals.</p>
+      </label>
+
+      <h3>Miscellaneous</h3>
+
+      <Form.Select
+        label="Shortcut display"
+        value={shortcutPref}
+        onInput={(value) => void setShortcutPref(value)}
+        options={[
+          { id: ShortcutPref.Disabled,
+            label: 'Disabled' },
+          { id: ShortcutPref.Default,
+            label: 'Default' },
+          { id: ShortcutPref.Symbol,
+            label: 'Symbols' }
+        ]} />
+    </>
+  );
 }

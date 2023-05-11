@@ -32,10 +32,9 @@ class SubscribableReadableNode(WatchableNode):
   A readable node whose changes can be reported by the node's implementation.
   """
 
-  def __init__(self, *, pool: Pool, **kwargs):
+  def __init__(self, **kwargs):
     super().__init__(**kwargs)
 
-    self._pool = pool
     self._watch_canceled = False
     self._watch_count = 0
     self._watch_task: Optional[Task[None]] = None

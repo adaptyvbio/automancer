@@ -3,10 +3,11 @@ from abc import ABC, abstractmethod
 from asyncio import Event, Lock
 from typing import Any, Generic, NewType, Optional, TypeVar, final
 
+from ...util.asyncio import DualEvent
 from ...util.pool import Pool
 from ..claim import Claimable
-from .common import (BaseNode, ConfigurableNode, NodeListener,
-                     NodeListenerMode, NodeUnavailableError, configure)
+from .common import (BaseNode, NodeListener, NodeListenerMode,
+                     NodeUnavailableError)
 
 
 @final
@@ -25,6 +26,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
       self,
       *,
       nullable: bool = False,
+      pool: Pool,
       readable: bool = False,
       stable: bool = True,
       writable: bool = False
@@ -41,12 +43,10 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     super().__init__()
 
+    self._pool = pool
+
     # This is updated each time _read() returns true, meaning self.value changed.
     self._revision = NodeRevision(0)
-
-    # outer None -> target value is implicitly undefined (= never called write())
-    # inner None -> target value is explicitly undefined (= don't care)
-    self.target_value: Optional[tuple[float, Optional[T | NullType]]] = None
 
     # None -> value is unknown
     self.value: Optional[tuple[float, T | NullType]] = None
@@ -61,7 +61,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     if self.writable:
       self.claimable = Claimable(change_callback=self._claim_change)
-      self._write_lock = Lock()
+      self.writer: Optional[NodeValueWriter] = None
 
   # Internal
 
@@ -96,7 +96,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     raise NotImplementedError
 
-  async def _write(self, value: (T | NullType), /):
+  async def _write(self, value: T | NullType, /):
     """
     Writes the node's value.
 
@@ -121,6 +121,10 @@ class ValueNode(BaseNode, ABC, Generic[T]):
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     if not self.writable:
       raise NotImplementedError
+
+    # Create the writer here to ensure it is done during or after initialization
+    if not self.writer:
+      self.writer = NodeValueWriter(self)
 
     return self.claimable.claim(marker, force=force)
 
@@ -171,64 +175,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     return self._attach_listener(listener, mode='target')
 
-  async def write(self, value: T | NullType, /):
-    from .readable import SubscribableReadableNode
-
-    if not self.writable:
-      raise NotImplementedError
-
-    self.target_value = (time.time(), value)
-    self._trigger_listeners(mode='target')
-
-    async with self._write_lock:
-      if self.connected:
-        try:
-          await self._write(value)
-        except NodeUnavailableError:
-          pass
-        else:
-          self.value = self.target_value
-          self._trigger_listeners(mode='value')
-
-  async def maintain(self, value: T | NullType, /):
-    from .readable import WatchableNode
-
-    if not self.writable:
-      raise NotImplementedError
-
-    self.target_value = (time.time(), value)
-    self._trigger_listeners(mode='target')
-
-    async with self._write_lock:
-      while True:
-        await self.wait_connected()
-
-        try:
-          await self._write(value)
-        except NodeUnavailableError:
-          continue
-
-        self.value = (time.time(), value)
-
-        await self.wait_disconnected()
-
-        # if isinstance(self, WatchableNode) and (not self.stable):
-        #   change_event = Event()
-
-        #   def listener(node: BaseNode, *, mode: NodeListenerMode):
-        #     change_event.set()
-
-        #   reg = await self.watch_value(listener)
-
-        #   try:
-        #     while True:
-        #       await change_event.wait()
-        #       change_event.clear()
-
-        #       await self._write(value)
-        #   finally:
-        #     reg.cancel()
-
   def export(self):
     return {
       **super().export(),
@@ -253,3 +199,54 @@ class ValueNode(BaseNode, ABC, Generic[T]):
           "type": "default",
           "value": self._export_value(value)
         }
+
+
+class NodeValueWriter(Generic[T]):
+  def __init__(self, node: ValueNode[T]):
+    self.node = node
+
+    # outer None -> target value is implicitly undefined (= never called write())
+    # inner None -> target value is explicitly undefined (= don't care)
+    self.target_value: Optional[tuple[float, Optional[T | NullType]]] = None
+
+    self._change_event = Event()
+    self._settle_event = DualEvent()
+
+    self.node._pool.start_soon(self._worker())
+
+  async def wait_settled(self):
+    await self._settle_event.wait_set()
+
+  async def wait_unsettled(self):
+    await self._settle_event.wait_unset()
+
+  def set(self, value: T | NullType, /):
+    self.target_value = (time.time(), value)
+    self._change_event.set()
+
+  async def _worker(self):
+    from .watcher import WatchableNode
+
+    if isinstance(self, WatchableNode) and (not self.node.stable):
+      def listener(node: BaseNode, *, mode: NodeListenerMode):
+        self._change_event.set()
+
+      reg = await self.watch_value(listener)
+    else:
+      reg = None
+
+    try:
+      while True:
+        await self._change_event.wait()
+        self._change_event.clear()
+
+        if (self.target_value is not None) and ((target_value := self.target_value[1]) is not None):
+          self._settle_event.unset()
+          await self.node._write(target_value)
+        else:
+          await self.node._clear()
+
+        self._settle_event.set()
+    finally:
+      if reg:
+        reg.cancel()

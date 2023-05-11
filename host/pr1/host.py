@@ -180,7 +180,7 @@ class Host:
 
   async def start(self):
     try:
-      await self.pool.wait(forever=True)
+      await asyncio.Future()
     finally:
       await self.destroy()
 

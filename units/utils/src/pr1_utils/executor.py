@@ -34,7 +34,7 @@ class SystemNode(DeviceNode):
         EpochNode(pool=pool),
         ProcessMemoryUsageNode(pool=pool),
         RandomNode(pool=pool),
-        WaitNode()
+        WaitNode(pool=pool)
       }
     }
 
@@ -94,8 +94,9 @@ class RandomNode(PollableReadableNode, NumericNode):
     return random.random()
 
 class WaitNode(NumericNode):
-  def __init__(self):
+  def __init__(self, *, pool: Pool):
     super().__init__(
+      pool=pool,
       unit=ureg.sec,
       writable=True
     )

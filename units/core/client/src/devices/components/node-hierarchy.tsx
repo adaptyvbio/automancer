@@ -1,5 +1,6 @@
-import { Set as ImSet, List, fromJS } from 'immutable';
-import { OrdinaryId, ShadowScrollable, SyncObjectStore, useSyncObjectStore, util, Icon } from 'pr1';
+import { Set as ImSet, List } from 'immutable';
+import { OrdinaryId, ShadowScrollable, util, Icon } from 'pr1';
+import { useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
@@ -31,20 +32,11 @@ export type HierarchyEntryPath<EntryId extends OrdinaryId> = List<EntryId>;
 
 export interface NodeHierarchyProps<HierarchyEntryId extends OrdinaryId> {
   entries: HierarchyEntry<HierarchyEntryId>[];
-  store?: SyncObjectStore<unknown>;
-
   onSelectEntry(entryPath: HierarchyEntryPath<HierarchyEntryId>): void;
 }
 
 export function NodeHierarchy<HierarchyEntryId extends OrdinaryId>(props: NodeHierarchyProps<HierarchyEntryId>) {
-  let [openEntryPaths, setOpenEntryPaths] = useSyncObjectStore(ImSet<List<HierarchyEntryId>>(), props.store, {
-    deserialize(serializedValue: any) {
-      return ImSet(fromJS(serializedValue));
-    },
-    serialize(value) {
-      return value.toJS();
-    }
-  });
+  let [openEntryPaths, setOpenEntryPaths] = useState(ImSet<List<HierarchyEntryId>>());
 
   return (
     <div className={styles.root}>

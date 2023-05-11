@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { List, Map as ImMap, Set as ImSet } from 'immutable';
-import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, TitleBar, formatDynamicValue, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
 import { Component, PropsWithChildren, createRef, useEffect, useRef, useState } from 'react';
 
@@ -149,7 +149,7 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
   //   userNodes: List()
   // }, createSyncSessionStorageStore(namespace + '.preferences'));
 
-  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null>(null, createSyncSessionStorageStore('deviceControl.selectedEntry'));
+  let [selectedNodePath, setSelectedNodePath] = props.app.store.useSession<NodePath | null>(['plugin', namespace, 'selectedEntry'], null);
   let [nodeStates, setNodeStates] = useState<ImMap<NodePath, NodeState> | null>(null);
 
   let createNodeEntriesFromNodes = (nodes: BaseNode[], parentNodePath: NodePath = List()): HierarchyEntry<NodeId>[] => {
@@ -211,7 +211,6 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
           <NodeHierarchy
             entries={createNodeEntriesFromNodes(Object.values(executor.root.nodes))}
             onSelectEntry={(entryPath) => void setSelectedNodePath(entryPath)}
-            store={createSyncSessionStorageStore('deviceControl.hierarchyOpenEntries')}
             /* [
             { type: 'node',
               id: 'a',

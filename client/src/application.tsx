@@ -1,18 +1,17 @@
-import { Set as ImSet, removeIn, setIn } from 'immutable';
+import { Set as ImSet } from 'immutable';
 import { Client, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
-import type { AppBackend, DraftItem } from './app-backends/base';
-import type { Chip, ChipId } from './backends/common';
+import type { AppBackend } from './app-backends/base';
 import { Sidebar } from './components/sidebar';
-import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftPrimitive, DraftsRecord } from './draft';
+import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftsRecord } from './draft';
 import type { Host } from './host';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
 import { ViewDesign } from './views/test/design';
-import { ViewDraft, ViewDraftWrapper } from './views/draft';
+import { ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
 import { ViewDrafts } from './views/protocols';
 import { ViewConf } from './views/conf';
@@ -23,6 +22,7 @@ import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
 import { ViewUnitTab } from './views/unit-tab';
+import { StoreManagerHook } from './store/store-manager';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
@@ -63,6 +63,12 @@ function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch
 }
 
 
+export interface ApplicationStore {
+  usePersistent: StoreManagerHook;
+  useSession: StoreManagerHook;
+}
+
+
 export interface ApplicationProps {
   appBackend: AppBackend;
   client: Client;
@@ -86,6 +92,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   pool = new Pool();
   unsavedDataCallback: UnsavedDataCallback | null = null;
 
+  store: ApplicationStore;
+
   constructor(props: ApplicationProps) {
     super(props);
 
@@ -96,6 +104,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       openDraftIds: ImSet(),
 
       currentRouteData: null
+    };
+
+    this.store = {
+      usePersistent: this.appBackend.persistentStoreManager.useEntry,
+      useSession: this.appBackend.sessionStoreManager.useEntry
     };
   }
 

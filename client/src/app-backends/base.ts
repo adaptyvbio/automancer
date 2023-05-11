@@ -1,4 +1,5 @@
 import type { DraftId, DraftPrimitive } from '../draft';
+import type { StoreManager } from '../store/store-manager';
 
 
 export interface DraftItem {
@@ -29,6 +30,9 @@ export interface DraftItem {
 }
 
 export interface AppBackend {
+  persistentStoreManager: StoreManager;
+  sessionStoreManager: StoreManager;
+
   initialize(): Promise<void>;
 
   createDraft(options: { directory: boolean; source: string; }): Promise<DraftItem | null>;

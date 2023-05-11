@@ -1,11 +1,13 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { List, Map as ImMap } from 'immutable';
-import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, HierarchyEntry, Host, Icon, NodeHierarchy, OrdinaryId, StateUnit, StaticSelect, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
+import { List, Map as ImMap, Set as ImSet } from 'immutable';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, TitleBar, createSyncSessionStorageStore, formatDynamicValue, useSyncObjectStore, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
 import { Component, PropsWithChildren, createRef, useEffect, useRef, useState } from 'react';
 
 import styles from './styles.module.scss';
+
+import { HierarchyEntry, NodeHierarchy } from './components/node-hierarchy';
 
 
 export type NodeId = Brand<string, 'NodeId'>;
@@ -118,15 +120,36 @@ export interface NodeState {
 }
 
 
+// User composite node
+interface UserNode {
+  nodes: ImSet<NodePath>;
+}
+
+interface NodePreferences {
+  chartWindowOptionId: number;
+  open: boolean;
+  saved: {
+    open: boolean;
+  };
+}
+
+interface Preferences {
+  nodePrefs: ImMap<NodePath, NodePreferences>;
+  userNodes: List<UserNode>;
+}
+
+
 const namespace = ('devices' as UnitNamespace);
 
 function DeviceControlTab(props: GeneralTabComponentProps) {
   let executor = (props.host.state.executors[namespace] as ExecutorState);
-  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null, NodeId[] | null>(null, createSyncSessionStorageStore('deviceControl.selectedEntry'), {
-    deserialize: (serializedValue) => (serializedValue && List(serializedValue)),
-    serialize: (value) => (value?.toJS() ?? null),
-  });
 
+  // let [preferences, setPreferences] = useSyncObjectStore<Preferences>({
+  //   nodePrefs: ImMap(),
+  //   userNodes: List()
+  // }, createSyncSessionStorageStore(namespace + '.preferences'));
+
+  let [selectedNodePath, setSelectedNodePath] = useSyncObjectStore<NodePath | null>(null, createSyncSessionStorageStore('deviceControl.selectedEntry'));
   let [nodeStates, setNodeStates] = useState<ImMap<NodePath, NodeState> | null>(null);
 
   let createNodeEntriesFromNodes = (nodes: BaseNode[], parentNodePath: NodePath = List()): HierarchyEntry<NodeId>[] => {
@@ -467,6 +490,7 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                   });
                 }}>{owned ? 'Release' : 'Claim'}</Button>
               )}
+              <Button>Pin</Button>
             </div>
           </div>
           <div className={styles.detailInfoRoot}>
@@ -482,7 +506,7 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 {nodeState.connected ? 'Connected' : 'Disconnected'}
               </div>
             </div>
-            {nodeState.writable && (
+            {false && nodeState.writable && (
               <div className={styles.detailInfoEntry}>
                 <div className={styles.detailInfoLabel}>Current user</div>
                 <div className={styles.detailInfoValue}>{(() => {

@@ -39,7 +39,6 @@ export * from './geometry';
 export * from './components/button';
 export * from './components/context-menu';
 export * from './components/description';
-export * from './components/node-hierarchy';
 export * from './components/diagnostics-report';
 export * from './components/features';
 export * from './components/graph-editor';
@@ -49,6 +48,7 @@ export * from './components/timed-progress-bar';
 export * from './components/title-bar';
 export * from './components/item-list';
 export * from './components/selector';
+export * from './components/shadow-scrollable';
 export * from './components/static-select';
 export * from './unit';
 

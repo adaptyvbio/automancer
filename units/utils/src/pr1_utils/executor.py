@@ -49,6 +49,7 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
     )
 
     self.connected = True
+    self.icon = "memory_alt"
     self.id = NodeId('memory')
     self.label = "Process memory usage"
 

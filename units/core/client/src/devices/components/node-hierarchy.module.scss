@@ -1,5 +1,5 @@
-@use "../constants" as *;
-@use "../mixins" as *;
+@use "pr1/styles/constants" as *;
+@use "pr1/styles/mixins" as *;
 
 
 .root {
@@ -116,13 +116,13 @@
   &Icon {
     font-variation-settings:
       'FILL' 0,
-      'wght' 200,
+      'wght' 100,
       'GRAD' 200,
       'opsz' 24;
   }
 
   &Label {
-    font-weight: 500;
+    // font-weight: 500;
 
     // &::after {
     //   content: " ●";
@@ -142,6 +142,23 @@
       'wght' 200,
       'GRAD' 200,
       'opsz' 24;
+  }
+
+  &Button:global(._selected) {
+    // background-color: #fafafa;
+    border: 1px solid #eee;
+  }
+
+  &Button:global(._selected) &Icon {
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 200,
+      'GRAD' 200,
+      'opsz' 24;
+  }
+
+  &Button:global(._selected) &Label {
+    font-weight: 600;
   }
 }
 
@@ -170,7 +187,7 @@
 }
 
 
-.collectionRoot:global(._open) > .entryButton, .entryButton:is(:hover, :global(._selected)) {
-  background-color: #fafafa;
+.collectionRoot:global(._open) > .entryButton, .entryButton:not(:global(._selected)):hover {
+  // background-color: #fafafa;
   border-color: #0001;
 }

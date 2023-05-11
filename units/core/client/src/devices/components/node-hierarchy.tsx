@@ -1,14 +1,7 @@
 import { Set as ImSet, List, fromJS } from 'immutable';
-import * as React from 'react';
+import { OrdinaryId, ShadowScrollable, SyncObjectStore, useSyncObjectStore, util, Icon } from 'pr1';
 
-import styles from '../../styles/components/device-hierarchy.module.scss';
-
-import { OrdinaryId } from '../interfaces/util';
-import { formatClass } from '../util';
-import { Icon } from './icon';
-import { SyncObjectStore, useSyncObjectStore } from '../store';
-import * as util from '../util';
-import { ShadowScrollable } from './shadow-scrollable';
+import styles from './node-hierarchy.module.scss';
 
 
 export interface HierarchyNodeEntry<EntryId extends OrdinaryId> {
@@ -105,7 +98,7 @@ export function NodeHierarchyEntry<HierarchyEntryId extends OrdinaryId>(props: {
   switch (props.entry.type) {
     case 'collection':
       return (
-        <div className={formatClass(styles.collectionRoot, { '_open': props.openEntryPaths.has(props.entryPath) })}>
+        <div className={util.formatClass(styles.collectionRoot, { '_open': props.openEntryPaths.has(props.entryPath) })}>
           <div className={styles.entryRoot}>
             <button type="button" className={styles.entryButton} onClick={() =>
               void props.setOpenEntryPaths(util.toggleSet(props.openEntryPaths, props.entryPath)
@@ -137,7 +130,7 @@ export function NodeHierarchyEntry<HierarchyEntryId extends OrdinaryId>(props: {
         <div className={styles.entryRoot}>
           <button
             type="button"
-            className={formatClass(styles.entryButton, { '_selected': props.entry.selected })}
+            className={util.formatClass(styles.entryButton, { '_selected': props.entry.selected })}
             onClick={() => void props.onSelectEntry(props.entryPath)}>
             <Icon name={props.entry.icon} style="sharp" className={styles.entryIcon} />
             <div className={styles.entryBody}>

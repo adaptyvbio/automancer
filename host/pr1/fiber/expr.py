@@ -8,11 +8,11 @@ from pint import Quantity
 from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
+from ..error import Diagnostic, ErrorDocumentReference
 from ..host import logger
 from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
-from ..draft import DraftDiagnostic
 from ..reader import LocatedString, LocatedValue, LocationArea
 from ..util.decorators import debug
 from ..util.misc import Exportable, log_exception
@@ -88,13 +88,14 @@ def export_value(value: Any, /):
       }
 
 
-class PythonSyntaxError(Exception):
-  def __init__(self, message, target):
-    self.message = message
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(self.message, ranges=self.target.area.ranges)
+class PythonSyntaxError(Diagnostic, Exception):
+  def __init__(self, message: str, target: LocatedValue, /):
+    Exception.__init__(self, message)
+    Diagnostic.__init__(
+      self,
+      message,
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 
 class PythonExprKind(Enum):

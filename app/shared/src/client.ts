@@ -2,7 +2,7 @@ import { Deferred, defer } from './defer';
 import { createErrorWithCode } from './error';
 import { Brand } from './types/util';
 import { HostIdentifier, HostState } from './types/host';
-import { ClientProtocol, RequestFunc, ServerProtocol } from './types/protocol';
+import { ClientProtocol, RequestFunc, ServerProtocol } from './types/communication';
 
 
 export type ClientId = Brand<string, 'ClientId'>;

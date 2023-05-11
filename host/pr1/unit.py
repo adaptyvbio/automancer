@@ -166,7 +166,7 @@ class UnitManager:
     # - 0    name
     # - 0    [other parsers]
 
-    self.Parsers = sorted([unit.Parser for unit in self.units.values() if hasattr(unit, 'Parser')], key=(lambda Parser: Parser.priority), reverse=True)
+    self.Parsers = [unit.Parser for unit in self.units.values() if hasattr(unit, 'Parser')]
 
   def reload(self):
     for unit_info in self.units_info.values():

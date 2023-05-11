@@ -4,6 +4,7 @@ import styles from '../../styles/components/diagnostics-summary.module.scss';
 
 import { Icon } from '../components/icon';
 import * as util from '../util';
+import { ShortcutGuide } from './shortcut-guide';
 
 
 export function DraftSummary(props: {
@@ -30,7 +31,9 @@ export function DraftSummary(props: {
       {props.onStart && (
         <button type="button" className={styles.actionRoot} onClick={props.onStart}>
           <Icon name="play_circle" className={styles.actionIcon} />
-          <div className={styles.actionLabel}>Start</div>
+          <div className={styles.actionLabel}>
+            <ShortcutGuide shortcut="Meta+Shift+S" onTrigger={props.onStart}>Start</ShortcutGuide>
+          </div>
         </button>
       )}
     </div>

@@ -125,6 +125,16 @@
   background-color: rgba($app-orange, 10%);
   border: 2px solid $app-orange;
   border-radius: 8px;
+
+  cursor: pointer;
+
+  &:hover, &:global(._selected) {
+    background-color: rgba($app-orange, 15%);
+  }
+
+  &:global(._selected) {
+    box-shadow: 4px 4px 2px #00000022;
+  }
 }
 
 .grouplabel {
@@ -187,8 +197,9 @@
   }
 
   &:global(._selected) {
-    background-color: lighten($app-blue, 56%);
+    // background-color: lighten($app-blue, 56%);
     border-color: $app-blue;
+    outline: 3px solid rgba($app-blue, 20%);
   }
 
   &:global(._context) {

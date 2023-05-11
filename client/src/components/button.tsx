@@ -1,18 +1,26 @@
 import * as React from 'react';
 
-import * as util from '../util';
-
 import formStyles from '../../styles/components/form.module.scss';
+
+import * as util from '../util';
+import { ShortcutGuide } from './shortcut-guide';
 
 
 export function Button(props: React.PropsWithChildren<{
   className?: string;
-  onClick?(): void;
+  onClick(): void;
+  shortcut?: string;
 }>) {
   return (
     <button
       type="button"
       className={util.formatClass(formStyles.btn, props.className)}
-      onClick={props.onClick}>{props.children}</button>
+      onClick={props.onClick}>
+      <ShortcutGuide
+        onTrigger={props.onClick}
+        shortcut={props.shortcut ?? null}>
+        {props.children}
+      </ShortcutGuide>
+    </button>
   )
 }

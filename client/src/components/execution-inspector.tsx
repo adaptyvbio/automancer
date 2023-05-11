@@ -1,20 +1,19 @@
-import { Chip, UnitNamespace } from 'pr1-shared';
+import { Chip, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
+import { Fragment } from 'react';
 
+import featureStyles from '../../styles/components/features.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Icon } from './icon';
-import * as util from '../util';
-import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, UnitTools } from '../unit';
-import { FeatureList } from './features';
-import { ContextMenuArea } from './context-menu-area';
-import { getAggregateLabelItems, renderLabel } from './block-inspector';
 import { Button } from './button';
 import { ErrorBoundary } from './error-boundary';
-import { UnitContext } from '../interfaces/unit';
+import { BlockContext, GlobalContext } from '../interfaces/plugin';
+import { Pool } from '../util';
+import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
+import { FeatureEntry, FeatureList } from './features';
 
 
 export interface ExecutionInspectorProps {
@@ -27,270 +26,156 @@ export interface ExecutionInspectorProps {
 }
 
 export interface ExecutionInspectorState {
-  activeBlockPathIndex: number;
-  hoveredAggregateIndex: number | null;
+  selectedBlockPathIndex: number;
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
-  pool = new util.Pool();
+  pool = new Pool();
 
   constructor(props: ExecutionInspectorProps) {
     super(props);
 
     this.state = {
-      activeBlockPathIndex: 0,
-      hoveredAggregateIndex: null
+      selectedBlockPathIndex: 0
     };
   }
 
-  render() {
-    let context = {
-      host: this.props.host
-    } satisfies UnitContext;
-    let units = this.props.host.units;
+  override render() {
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
+    };
 
-    let activeBlockPath = this.props.activeBlockPaths[this.state.activeBlockPathIndex];
-    let activeExecPath: number[] = [];
+    let blockPath = this.props.activeBlockPaths[this.state.selectedBlockPathIndex];
 
-    let lineBlocks = [this.props.protocol.root];
-    let lineLocations = [this.props.location];
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, context);
 
-    for (let key of activeBlockPath) {
-      let parentBlock = lineBlocks.at(-1);
-      let parentLocation = lineLocations.at(-1);
+    let ancestorGroups = blockAnalysis.groups.slice(0, -1);
+    let leafGroup = blockAnalysis.groups.at(-1);
 
-      let unit = UnitTools.asBlockUnit(units[parentBlock.namespace])!;
-      let refs = unit.getChildrenExecutionRefs(parentBlock, parentLocation)!;
-      let ref = refs.find((ref) => ref.blockKey === key)!;
-
-      activeExecPath.push(ref.executionId);
-
-      let block = unit.getChildBlock!(parentBlock, key);
-      let location = unit.getActiveChildLocation!(parentLocation, ref.executionId);
-
-      lineBlocks.push(block);
-      lineLocations.push(location);
-    }
-
-    let aggregates = getBlockAggregates(lineBlocks);
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, lineLocations, this.props.protocol.name, context);
-
-    let pausedAggregateIndexRaw = aggregates.findIndex((aggregate) => {
-      if (!aggregate.state) {
-        return false;
-      }
-
-      let block = aggregate.blocks[0];
-      let location = lineLocations[aggregate.offset];
-      let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-      return unit.isBlockPaused?.(block, location, context) ?? false;
-    });
-
-    let pausedAggregateIndex = (pausedAggregateIndexRaw >= 0) ? pausedAggregateIndexRaw : null;
-
-    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace])!;
-    let HeadComponent = headUnit.HeadComponent;
-
-    if (pausedAggregateIndex === null) {
-      let block = lineBlocks.at(-1);
-      let location = lineLocations.at(-1);
-
-      if (headUnit.isBlockPaused?.(block, location, context)) {
-        pausedAggregateIndex = aggregates.length;
-      }
-    }
+    let leafPair = blockAnalysis.pairs.at(-1);
+    let leafBlockImpl = getBlockImpl(leafPair.block, context);
+    let leafBlockContext = createBlockContext(blockPath, this.props.chip.id, context);
 
     return (
       <div className={spotlightStyles.root}>
         <div className={spotlightStyles.contents}>
           {(
             <div className={spotlightStyles.breadcrumbRoot}>
-              {aggregateLabelItems /* .slice(0, -1) */ .map((item, index, arr) => {
-                let last = index === (arr.length - 1);
+              {ancestorGroups.map((group, groupIndex, arr) => {
+                let last = groupIndex === (arr.length - 1);
 
                 return (
-                  <React.Fragment key={index}>
-                    <ContextMenuArea
-                      createMenu={() => item.blocks.flatMap((block, blockRelIndex, arr) => {
-                        let blockIndex = item.aggregate.offset + blockRelIndex;
-                        let location = lineLocations[blockIndex];
-                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-                        let menu = (unit.createActiveBlockMenu?.(block, location, { host: this.props.host }) ?? []).map((entry) => ({
-                          ...entry,
-                          id: [blockRelIndex, ...[entry.id].flat()]
-                        }));
-
-                        return (menu.length > 0)
-                          ? [
-                            { id: [blockRelIndex, 'header'], name: unit.getBlockClassLabel?.(block, context) ?? block.namespace, type: 'header' },
-                            ...menu
-                          ]
-                          : [];
-                      })}
-                      onSelect={(path) => {
-                        let blockRelIndex = path.first() as number;
-                        let block = item.blocks[blockRelIndex];
-
-                        let blockIndex = item.aggregate.offset + blockRelIndex;
-                        let blockPath = activeBlockPath.slice(0, blockIndex);
-                        let execPath = activeExecPath.slice(0, blockIndex);
-
-                        let location = lineLocations[blockIndex];
-                        let unit = UnitTools.asBlockUnit(units[block.namespace])!;
-
-                        let message = unit.onSelectBlockMenu?.(block, location, path.slice(1));
-
-                        if (message) {
-                          this.pool.add(async () => {
-                            await this.props.host.client.request({
-                              type: 'sendMessageToActiveBlock',
-                              chipId: this.props.chip.id,
-                              path: execPath, message
-                            });
-                          });
-                        }
-                      }}>
-                      <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                        this.props.selectBlock(activeBlockPath.slice(0, item.offset));
-                      }}>{renderLabel(item.label)}</button>
-                    </ContextMenuArea>
+                  <Fragment key={groupIndex}>
+                    <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
+                      this.props.selectBlock(group.path);
+                    }}>{group.name ?? <i>Untitled</i>}</button>
                     {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </div>
           )}
           <div className={spotlightStyles.header}>
-            <h2 className={spotlightStyles.title}>{renderLabel(UnitTools.getBlockLabel(lineBlocks.at(-1), lineLocations.at(-1), this.props.host))}</h2>
+            <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafPair.block) ?? 'Untitled'}</i>}</h2>
+
             <div className={spotlightStyles.navigationRoot}>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === 0}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === 0}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
               </button>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.activeBlockPathIndex === (this.props.activeBlockPaths.length - 1)}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === (this.props.activeBlockPaths.length - 1)}>
                 <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
               </button>
             </div>
           </div>
 
-          {HeadComponent && (
+          {blockAnalysis.isLeafBlockTerminal && (
+            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, context)} />
+          )}
+
+          {leafBlockImpl.Component && (
             <ErrorBoundary>
-              <HeadComponent
-                block={lineBlocks.at(-1)}
-                context={context}
-                location={lineLocations.at(-1)} />
+              <leafBlockImpl.Component
+                block={leafPair.block}
+                context={leafBlockContext}
+                location={leafPair.location} />
             </ErrorBoundary>
           )}
 
-          <FeatureList
-            indexOffset={aggregates.findIndex((aggregate) => aggregate.state)}
-            hoveredGroupIndex={this.state.hoveredAggregateIndex}
-            pausedGroupIndex={pausedAggregateIndex}
-            list={
-              Array.from(aggregates.entries())
-                .filter(([_aggregateIndex, aggregate]) => aggregate.state)
-                .map(([aggregateIndex, aggregate]) => {
-                  let blockIndex = aggregate.offset;
-                  let location = lineLocations[blockIndex] as {
-                    state: Record<UnitNamespace, {
-                      location: unknown;
-                      settled: boolean;
-                    }> | null;
-                  };
+          <div className={featureStyles.root}>
+            {blockAnalysis.groups.slice().reverse().map((group) =>
+              group.pairs.slice().reverse().map((pair, pairIndex) => {
+                let blockImpl = getBlockImpl(pair.block, context);
+                let blockPath = (pairIndex > 0)
+                  ? group.path.slice(0, -pairIndex)
+                  : group.path;
+                let blockContext = createBlockContext(blockPath, this.props.chip.id, context);
 
-                  let disabled = (this.state.hoveredAggregateIndex !== null)
-                    ? (aggregateIndex >= this.state.hoveredAggregateIndex)
-                    : (pausedAggregateIndex !== null) && (aggregateIndex >= pausedAggregateIndex);
-
-                  let ancestorStates = aggregates
-                    .slice(aggregateIndex + 1, this.state.hoveredAggregateIndex ?? pausedAggregateIndex ?? aggregates.length)
-                    .map((aggregate) => aggregate.state!);
-
-                  return Object.values(units).flatMap((unit) => {
-                    return (unit.namespace in aggregate.state!)
-                      ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                        aggregate.state![unit.namespace],
-                        ancestorStates.map((state) => state[unit.namespace]),
-                        location.state?.[unit.namespace].location,
-                        context
-                      ) ?? []
-                      : [];
-                  }).map((feature) => ({
-                    ...feature,
-                    disabled: (disabled || feature.disabled)
-                  }));
-                })
-            }
-            setHoveredGroupIndex={(hoveredAggregateIndex) => void this.setState({ hoveredAggregateIndex })}
-            setPausedGroupIndex={(aggregateIndex) => {
-              this.pool.add(async () => {
-                if (aggregateIndex !== null) {
-                  if ((pausedAggregateIndex !== null) && (pausedAggregateIndex < aggregateIndex)) {
-                    let prevAggregate = aggregates[aggregateIndex - 1];
-                    await this.props.host.client.request({
-                      type: 'sendMessageToActiveBlock',
-                      chipId: this.props.chip.id,
-                      path: activeExecPath.slice(0, prevAggregate.offset),
-                      message: { type: 'resume' }
-                    });
-                  } else {
-                    let aggregate = aggregates[aggregateIndex];
-                    let blockIndex = aggregate?.offset ?? (lineBlocks.length - 1);
-
-                    await this.props.host.client.request({
-                      type: 'sendMessageToActiveBlock',
-                      chipId: this.props.chip.id,
-                      path: activeExecPath.slice(0, blockIndex),
-                      message: { type: 'pause' }
-                    });
-                  }
-                } else {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath,
-                    message: { type: 'resume' }
-                  });
+                if (!blockImpl.createFeatures) {
+                  return null;
                 }
-              });
-            }} />
+
+                let actions = (blockImpl.createActions?.(pair.block, pair.location, blockContext) ?? []);
+
+                return (
+                  <FeatureEntry
+                    actions={[
+                      ...actions,
+                      { id: '_halt',
+                        icon: 'skip_next' }
+                    ]}
+                    detail={blockImpl.Component && (() => {
+                      let Component = blockImpl.Component!;
+
+                      return (
+                        <Component
+                          block={pair.block}
+                          context={blockContext}
+                          location={pair.location} />
+                      );
+                    })}
+                    features={blockImpl.createFeatures(pair.block, pair.location, context)}
+                    onAction={(actionId) => {
+                      if (actionId === '_halt') {
+                        this.pool.add(async () => {
+                          await this.props.host.client.request({
+                            type: 'sendMessageToActiveBlock',
+                            chipId: this.props.chip.id,
+                            path: blockPath,
+                            message: { type: 'halt' }
+                          });
+                        });
+                      } else {
+                        actions.find((action) => (action.id === actionId))?.onTrigger();
+                      }
+                    }}
+                    key={blockPath.at(-1) ?? -1} />
+                );
+              })
+            )}
+          </div>
         </div>
         <div className={spotlightStyles.footerRoot}>
-          <div className={formStyles.actions}>
-            <Button onClick={() => {
+          <div className={spotlightStyles.footerActions}>
+            {leafBlockImpl.createCommands?.(leafPair.block, leafPair.location, leafBlockContext).map((command) => (
+              <Button
+                onClick={() => command.onTrigger()}
+                shortcut={command.shortcut}
+                key={command.id}>
+                {command.label}
+              </Button>
+            ))}
+          </div>
+          <div className={spotlightStyles.footerActions}>
+            <Button shortcut="Alt+ArrowRight" onClick={() => {
               this.pool.add(async () => {
-                if (pausedAggregateIndex !== null) {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath,
-                    message: { type: 'resume' }
-                  });
-                } else {
-                  await this.props.host.client.request({
-                    type: 'sendMessageToActiveBlock',
-                    chipId: this.props.chip.id,
-                    path: activeExecPath.slice(0, aggregates.at(-1).offset),
-                    message: { type: 'pause' }
-                  });
-                }
-              });
-            }}>{(pausedAggregateIndex !== null) ? 'Resume' : 'Pause'}</Button>
-            <Button onClick={() => {
-              this.pool.add(async () => {
-                await this.props.host.client.request({
-                  type: 'sendMessageToActiveBlock',
-                  chipId: this.props.chip.id,
-                  path: activeExecPath,
-                  message: { type: 'halt' }
-                });
+                await leafBlockContext.sendMessage({ type: 'halt' });
               });
             }}>Skip</Button>
           </div>
-          <div>
-            {/* <div className={spotlightStyles.footerStatus}>Pausing</div> */}
-          </div>
+          {/* <div>
+            <div className={spotlightStyles.footerStatus}>Pausing</div>
+          </div> */}
         </div>
       </div>
     );

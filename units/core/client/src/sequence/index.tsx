@@ -1,5 +1,5 @@
-import { GraphRendererDefaultMetrics, GraphLink, GraphRenderer, Host, MenuEntryPath, ProtocolBlock, ProtocolBlockPath, UnknownUnit, BlockUnit } from 'pr1';
-import { UnitNamespace } from 'pr1-shared';
+import { Point as GeometryPoint, GraphLink, Plugin, PluginBlockImpl, ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererNodeInfo } from 'pr1';
+import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import { Fragment } from 'react';
 
 
@@ -7,19 +7,11 @@ export interface Block extends ProtocolBlock {
   children: ProtocolBlock[];
 }
 
-export interface BlockMetrics extends GraphRendererDefaultMetrics {
-  children: GraphRendererDefaultMetrics[];
-  childrenX: number[];
-  linksCompact: boolean[];
-}
-
 export interface Location {
-  children: { 0: unknown; };
+  children: Record<number, unknown>;
   index: number;
   interrupting: boolean;
 }
-
-export type Key = number;
 
 export interface Point {
   child: unknown | null;
@@ -30,191 +22,167 @@ export interface Point {
 const horizontalCellGap = 2;
 const verticalCellGap = 1;
 
-const namespace = ('sequence' as UnitNamespace);
+const namespace = ('sequence' as PluginName);
 
-const graphRenderer: GraphRenderer<Block, BlockMetrics, Location> = {
-  computeMetrics(block, ancestors, location, options, context) {
-    let vertical = options.settings.vertical;
-    let verticalFlag = vertical ? 1 : 0;
+const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, ancestors, location, options, context) => {
+  let vertical = options.settings.vertical;
+  let verticalFlag = vertical ? 1 : 0;
 
-    let childrenMetrics = block.children.map((child, index) => options.computeMetrics(child, [...ancestors, block], location?.children[0]));
-    let linksCompact: boolean[] = [];
+  let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex, location?.children[location.index]));
+  let linksCompact: boolean[] = [];
 
-    let xs = 0;
-    let wasCompactable = false;
+  let inlineDirSize = Math.max(...childrenMetrics.map(({ size }) => vertical ? size.width : size.height));
 
-    let childrenX = childrenMetrics.map((childMetrics, childIndex) => {
-      let child = block.children[childIndex];
+  let currentBlockDirPos = 0;
+  let wasCompactable = false;
 
-      if (childIndex > 0) {
-        let compact = options.settings.allowCompactActions && wasCompactable && !!childMetrics.compactable;
-        linksCompact.push(compact);
+  let childrenPos = childrenMetrics.map((childMetrics, childIndex): GeometryPoint => {
+    if (childIndex > 0) {
+      let compact = options.settings.allowCompactActions && wasCompactable && !!childMetrics.compactable;
+      linksCompact.push(compact);
 
-        if (!compact) {
-          xs += vertical
-            ? verticalCellGap
-            : horizontalCellGap;
-        }
+      if (!compact) {
+        currentBlockDirPos += vertical
+          ? verticalCellGap
+          : horizontalCellGap;
       }
+    }
 
-      wasCompactable = !!childMetrics.compactable;
+    wasCompactable = !!childMetrics.compactable;
 
-      let x = xs;
+    let childBlockDirPos = currentBlockDirPos;
 
-      xs += vertical
-        ? childMetrics.size.height
-        : childMetrics.size.width;
-
-      return x;
-    });
-
-    let start = childrenMetrics[0].start;
-    let end = childrenMetrics.at(-1).end;
+    currentBlockDirPos += vertical
+      ? childMetrics.size.height
+      : childMetrics.size.width;
 
     return {
-      children: childrenMetrics,
-      childrenX,
-      linksCompact,
-
-      start: {
-        x: childrenX[0] * (1 - verticalFlag) + start.x,
-        y: childrenX[0] * verticalFlag + start.y
-      },
-      end: {
-        x: childrenX.at(-1) * (1 - verticalFlag) + end.x,
-        y: childrenX.at(-1) * verticalFlag + end.y
-      },
-      size: vertical
-        ? {
-          width: Math.max(...childrenMetrics.map(({ size }) => size.width)),
-          height: xs
-        }
-        : {
-          width: xs,
-          height: Math.max(...childrenMetrics.map(({ size }) => size.height))
-        }
+      x: (inlineDirSize - childMetrics.size.width) * 0.5,
+      y: childBlockDirPos
     };
-  },
-  render(block, path, metrics, position, location, options, context) {
-    let vertical = options.settings.vertical;
-    let verticalFlag = vertical ? 1 : 0;
-    let linkDirection = vertical
-      ? ('vertical' as const)
-      : ('horizontal' as const);
+  });
 
-    let children = block.children.map((child, childIndex) => {
-      let childLocation = (location?.index === childIndex)
-        ? location.children[0]
-        : null;
+  let start = childrenMetrics[0].start;
+  let end = childrenMetrics.at(-1).end;
 
-      let childX = metrics.childrenX[childIndex];
-      let childSize = metrics.children[childIndex];
+  return {
+    start: {
+      x: childrenPos[0].x + start.x,
+      y: childrenPos[0].y + start.y
+    },
+    end: {
+      x: childrenPos.at(-1).x + end.x,
+      y: childrenPos.at(-1).y + end.y
+    },
+    size: vertical
+      ? {
+        width: inlineDirSize,
+        height: currentBlockDirPos
+      }
+      : {
+        width: currentBlockDirPos,
+        height: inlineDirSize
+      },
 
-      let el = options.render(child, [...path, childIndex], childSize, {
-        x: position.x + childX * (1 - verticalFlag),
-        y: position.y + childX * verticalFlag
-      }, childLocation, {
-        attachmentEnd: (childIndex < block.children.length - 1)
-          ? !metrics.linksCompact[childIndex]
-          : options.attachmentEnd,
-        attachmentStart: (childIndex > 0)
-          ? !metrics.linksCompact[childIndex - 1]
-          : options.attachmentStart
+    render(position, renderOptions) {
+      let nodeInfos: ProtocolBlockGraphRendererNodeInfo[] = [];
+
+      let vertical = options.settings.vertical;
+      let linkDirection = vertical
+        ? ('vertical' as const)
+        : ('horizontal' as const);
+
+      let children = block.children.map((_child, childIndex) => {
+        let childMetrics = childrenMetrics[childIndex];
+        let childPos = childrenPos[childIndex];
+
+        let childOffset = {
+          x: position.x + childPos.x,
+          y: position.y + childPos.y
+        };
+
+        let childRender = childMetrics.render(childOffset, {
+          attachmentEnd: (childIndex < block.children.length - 1)
+            ? !linksCompact[childIndex]
+            : renderOptions.attachmentEnd,
+          attachmentStart: (childIndex > 0)
+            ? !linksCompact[childIndex - 1]
+            : renderOptions.attachmentStart
+        });
+
+        nodeInfos.push(...childRender.nodes.map((nodeInfo) => ({
+          ...nodeInfo,
+          position: {
+            x: childOffset.x + nodeInfo.position.x,
+            y: childOffset.y + nodeInfo.position.y
+          }
+        })))
+
+        return (
+          <Fragment key={childIndex}>{childRender.element}</Fragment>
+        );
       });
 
-      return <Fragment key={childIndex}>{el}</Fragment>;
-    });
+      return {
+        element: (
+          <>
+            {children}
+            {new Array(children.length - 1).fill(0).map((_, childIndex) => {
+              if (linksCompact[childIndex]) {
+                return null;
+              }
 
-    return (
-      <>
-        {new Array(children.length - 1).fill(0).map((_, index) => {
-          if (metrics.linksCompact[index]) {
-            return null;
-          }
+              let start = childrenMetrics[childIndex].end;
+              let startPos = childrenPos[childIndex];
 
-          let start = metrics.children[index].end;
-          let startX = metrics.childrenX[index];
+              let end = childrenMetrics[childIndex + 1].start;
+              let endPos = childrenPos[childIndex + 1];
 
-          let end = metrics.children[index + 1].start;
-          let endX = metrics.childrenX[index + 1];
-
-          return (
-            <GraphLink
-              link={{
-                start: {
-                  direction: linkDirection,
-                  x: position.x + start.x + startX * (1 - verticalFlag),
-                  y: position.y + start.y + startX * verticalFlag
-                },
-                end: {
-                  direction: linkDirection,
-                  x: position.x + end.x + endX * (1 - verticalFlag),
-                  y: position.y + end.y + endX * verticalFlag
-                }
-              }}
-              settings={options.settings}
-              key={index} />
-          );
-        })}
-        {children}
-      </>
-    );
-  }
+              return (
+                <GraphLink
+                  link={{
+                    start: {
+                      direction: linkDirection,
+                      x: position.x + start.x + startPos.x,
+                      y: position.y + start.y + startPos.y
+                    },
+                    end: {
+                      direction: linkDirection,
+                      x: position.x + end.x + endPos.x,
+                      y: position.y + end.y + endPos.y
+                    }
+                  }}
+                  settings={options.settings}
+                  key={childIndex} />
+              );
+            })}
+          </>
+        ),
+        nodes: nodeInfos
+      };
+    }
+  };
 };
 
-function getChildBlock(block: Block, key: number) {
-  return block.children[key];
-}
-
-function getActiveChildLocation(location: Location, _key: number) {
-  return location.children[0];
-}
-
-function getChildrenExecutionRefs(block: Block, location: Location) {
-  return [{ blockKey: location.index, executionId: 0 }];
-}
-
-function createActiveBlockMenu(block: Block, location: Location, options: { host: Host; }) {
-  return [
-    { id: 'halt', name: 'Skip', icon: 'double_arrow', disabled: false },
-    { id: 'interrupt', name: 'Interrupt', icon: 'pan_tool', checked: location.interrupting }
-  ];
-}
-
-function createDefaultPoint(block: Block, key: number, getChildPoint: (block: ProtocolBlock) => unknown) {
-  return {
-    child: getChildPoint(block.children[key]),
-    index: key
-  };
-}
-
-function onSelectBlockMenu(_block: Block, location: Location, path: MenuEntryPath) {
-  switch (path.first()) {
-    case 'halt':
-      return { type: 'halt' };
-    case 'interrupt':
-      return { type: 'setInterrupt', value: !location.interrupting }
-  }
-}
-
-
-const unit = {
+export default {
   namespace,
-  graphRenderer,
 
-  getBlockClassLabel(block, context) {
-    return 'Sequence';
-  },
-  getBlockLabel(block, location, context) {
-    return 'Sequence';
-  },
-
-  createActiveBlockMenu,
-  createDefaultPoint,
-  getChildBlock,
-  getActiveChildLocation,
-  getChildrenExecutionRefs,
-  onSelectBlockMenu
-} satisfies BlockUnit<Block, BlockMetrics, Location, Key>;
-
-export default unit;
+  blocks: {
+    ['_' as ProtocolBlockName]: {
+      computeGraph,
+      getChildren(block, context) {
+        return block.children;
+      },
+      getChildrenExecution(block, location, context) {
+        return [
+          ...(new Array(location.index).fill(null)),
+          { location: location.children[location.index] },
+          ...(new Array(block.children.length - location.index - 1).fill(null))
+        ];
+      },
+      getLabel(block) {
+        return 'Sequence';
+      }
+    } satisfies PluginBlockImpl<Block, Location>
+  }
+} satisfies Plugin;

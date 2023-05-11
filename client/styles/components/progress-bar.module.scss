@@ -5,7 +5,9 @@
   display: grid;
   align-items: center;
   column-gap: 1rem;
-  grid-template-columns: 1fr 3rem;
+  grid-template-columns: 1fr auto;
+
+  margin: 1rem 0;
 }
 
 .outer {
@@ -45,7 +47,7 @@
   background-color: #0003;
 }
 
-.text {
+.outer + * {
   color: #999;
   font-variant-numeric: tabular-nums;
   text-align: right;

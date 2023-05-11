@@ -6,7 +6,7 @@ import time
 import uuid
 from graphlib import TopologicalSorter
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .util.asyncio import run_double
 
@@ -14,12 +14,16 @@ from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.nodes.collection import CollectionNode, DeviceNode
 from .devices.nodes.common import BaseNode, NodeId, NodePath
+from .document import Document
 from .draft import Draft, DraftCompilation
-from .fiber.langservice import Analysis, print_analysis
+from .fiber.langservice import (Analysis, Attribute, BoolType, KVDictType,
+                                PrimitiveType, SimpleDictType, StrType,
+                                print_analysis)
 from .fiber.master2 import Master
+from .fiber.parser import AnalysisContext
 from .unit import UnitManager
 from .ureg import ureg
-from .util import schema as sc
+from .util.asyncio import run_double
 from .util.pool import Pool
 
 
@@ -73,40 +77,51 @@ class Host:
 
     # -- Load configuration -------------------------------
 
-    conf_schema = sc.Schema({
-      'id': str,
-      'name': str,
-      'units': sc.Noneable(sc.SimpleDict(str, {
-        'development': sc.Optional(sc.ParseType(bool)),
-        'enabled': sc.Optional(sc.ParseType(bool)),
-        'module': sc.Optional(str),
-        'options': sc.Optional(dict),
-        'path': sc.Optional(str)
-      })),
-      'version': sc.ParseType(int)
+    conf_type = SimpleDictType({
+      'id': StrType(),
+      'name': StrType(),
+      'units': KVDictType(
+        StrType(),
+        SimpleDictType({
+          'development': Attribute(BoolType(), optional=True),
+          'enabled': Attribute(BoolType(), optional=True),
+          'module': Attribute(StrType(), optional=True),
+          'options': Attribute(PrimitiveType(dict), optional=True),
+          'path': Attribute(StrType(), optional=True)
+        })
+      ),
+      'version': PrimitiveType(int)
     })
 
-    conf_path = self.data_dir / "setup.yml"
+    conf_path = (self.data_dir / "setup.yml")
 
     if conf_path.exists():
-      try:
-        conf = reader.parse((self.data_dir / "setup.yml").open().read())
-        conf = conf_schema.transform(conf)
-      except reader.LocatedError as e:
-        e.display()
+      document = Document.text((self.data_dir / "setup.yml").open().read())
+
+      analysis, conf_data = reader.loads2(document.source)
+      raw_conf: Any = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
+
+      print_analysis(analysis, logger)
+
+      if isinstance(raw_conf, EllipsisType) or analysis.errors:
         sys.exit(1)
+
+      conf = cast(reader.LocatedValue, raw_conf).dislocate()
+      units_conf = {
+        namespace: {
+          **conf['units'][namespace],
+          'options': raw_unit_conf.get('options')
+        } for namespace, raw_unit_conf in (raw_conf['units'] or dict()).items()
+      }
     else:
       conf = {
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
-        'units': {
-          'template': {
-            'enabled': False
-          }
-        },
+        'units': {},
         'version': 1
       }
 
+      units_conf = dict()
       conf_path.open("w").write(reader.dumps(conf))
 
     self.id = conf['id']
@@ -117,7 +132,7 @@ class Host:
     # -- Load units ---------------------------------------
 
     self.executors = dict()
-    self.manager = UnitManager(conf['units'] or dict())
+    self.manager = UnitManager(units_conf)
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 
@@ -157,7 +172,7 @@ class Host:
     logger.debug("Initialized executors")
     logger.info("Node tree")
 
-    for line in self.root_node.format().splitlines():
+    for line in self.root_node.format_hierarchy().splitlines():
       logger.debug(line)
 
     for path in self.chips_dir.iterdir():

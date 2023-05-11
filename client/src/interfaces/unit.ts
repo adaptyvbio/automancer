@@ -6,8 +6,8 @@ import type { Chip } from '../backends/common';
 import type { MenuDef, MenuEntryPath } from '../components/context-menu';
 import type { Host } from '../host';
 import type { ChipTabComponentProps, NavEntry } from '../units';
-import type { GraphRendererDefaultMetrics, GraphRenderer } from './graph';
-import type { MasterStateLocation, ProtocolBlock, ProtocolBlockPath, ProtocolState } from './protocol';
+import type { ProtocolBlockGraphRendererMetrics, ProtocolBlockGraphRenderer } from './graph';
+import type { ProtocolBlock, ProtocolBlockPath } from './protocol';
 
 
 //> Feature
@@ -54,14 +54,16 @@ export interface Unit<Block extends ProtocolBlock = never, Location = never, Pro
   isBlockPaused?(block: Block, location: Location, options: { host: Host; }): boolean;
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 
-  graphRenderer?: GraphRenderer<Block, GraphRendererDefaultMetrics>;
+  graphRenderer?: ProtocolBlockGraphRenderer<Block, ProtocolBlockGraphRendererMetrics>;
 }
 
 
+/** @deprecated */
 export interface UnitContext {
   host: Host;
 }
 
+/** @deprecated */
 export interface OptionsComponentProps {
   app: Application;
   baseUrl: string;
@@ -82,6 +84,7 @@ export interface GeneralTabComponentProps {
   host: Host;
 }
 
+/** @deprecated */
 export interface BaseUnit {
   namespace: UnitNamespace;
 
@@ -97,6 +100,7 @@ export interface BaseUnit {
 }
 
 
+/** @deprecated */
 export interface ProcessComponentProps<Data, Location> {
   context: UnitContext;
   data: Data;
@@ -104,37 +108,45 @@ export interface ProcessComponentProps<Data, Location> {
   time: number;
 }
 
+/** @deprecated */
 export interface ProcessUnit<Data, Location> extends BaseUnit {
   ProcessComponent?: React.ComponentType<ProcessComponentProps<Data, Location>>;
   createProcessFeatures(data: Data, location: Location | null, context: UnitContext): FeatureGroupDef;
   getProcessLabel(data: Data, context: UnitContext): string | null;
 }
 
+/** @deprecated */
 export type UnknownProcessUnit = ProcessUnit<unknown, unknown>;
 
 
+/** @deprecated */
 export interface StateUnit<State, Location> extends BaseUnit {
   createStateFeatures(state: State, ancestorStates: State[] | null, location: Location | null, context: UnitContext): FeatureGroupDef;
 }
 
+/** @deprecated */
 export type UnknownStateUnit = StateUnit<unknown, unknown>;
 
 
+/** @deprecated */
 export interface HeadComponentProps<Block, Location> {
   block: Block;
   context: UnitContext;
   location: Location | null;
 }
 
+/** @deprecated */
 export interface HeadUnit<Block extends ProtocolBlock, Location> extends BlockUnit<Block, unknown, Location, unknown> {
   HeadComponent: React.ComponentType<HeadComponentProps<Block, Location>>;
 }
 
+/** @deprecated */
 export type UnknownHeadUnit = HeadUnit<ProtocolBlock | never, unknown>;
 
 
+/** @deprecated */
 export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, Key> extends BaseUnit {
-  graphRenderer: GraphRenderer<Block, BlockMetrics, Location>;
+  graphRenderer: ProtocolBlockGraphRenderer<Block, BlockMetrics, Location>;
 
   createActiveBlockMenu?(block: Block, location: Location, options: { host: Host; }): MenuDef;
   createDefaultPoint?(block: Block, key: unknown, getChildPoint: (block: ProtocolBlock) => unknown): unknown;
@@ -149,12 +161,15 @@ export interface BlockUnit<Block extends ProtocolBlock, BlockMetrics, Location, 
   onSelectBlockMenu?(block: Block, location: Location, path: MenuEntryPath): unknown | undefined;
 }
 
+/** @deprecated */
 export type UnknownBlockUnit = BlockUnit<ProtocolBlock | never, unknown, unknown, unknown>;
 
 
+/** @deprecated */
 export type UnknownUnit = BaseUnit
   & (UnknownBlockUnit | {})
   & (UnknownProcessUnit | {})
   & (UnknownStateUnit | {});
 
+/** @deprecated */
 export type Units = Record<UnitNamespace, UnknownUnit>;

@@ -1,15 +1,16 @@
+import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import * as React from 'react';
+import { Fragment } from 'react';
 
+import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
-import { Icon } from './icon';
-import * as util from '../util';
-import { Protocol, ProtocolBlock, ProtocolBlockAggregate, ProtocolBlockPath, ProtocolState } from '../interfaces/protocol';
 import { Host } from '../host';
-import { getBlockAggregates, UnitTools } from '../unit';
-import { SimpleFeatureList } from './features';
-import { UnitContext } from '../interfaces/unit';
-import { ErrorBoundary } from './error-boundary';
+import { GlobalContext } from '../interfaces/plugin';
+import * as util from '../util';
+import { Icon } from './icon';
+import { analyzeBlockPath, getBlockImpl } from '../protocol';
+import { FeatureEntry, FeatureList } from './features';
 
 
 export interface BlockInspectorProps {
@@ -24,6 +25,8 @@ export interface BlockInspectorState {
 }
 
 export class BlockInspector extends React.Component<BlockInspectorProps, BlockInspectorState> {
+  private pool = new util.Pool();
+
   constructor(props: BlockInspectorProps) {
     super(props);
 
@@ -32,132 +35,72 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
 
   render() {
     if (!this.props.blockPath) {
-      return <div />;
+      return (
+        <div className={spotlightStyles.placeholder}>
+          <p>Nothing selected</p>
+        </div>
+      );
     }
 
-    let context = {
-      host: this.props.host
-    } satisfies UnitContext;
-    let units = this.props.host.units;
+    let context: GlobalContext = {
+      host: this.props.host,
+      pool: this.pool
+    };
 
-    let targetBlock = this.props.protocol.root;
-    let lineBlocks = [targetBlock];
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, null, this.props.blockPath, context);
 
-    for (let key of this.props.blockPath) {
-      let unit = UnitTools.asBlockUnit(units[targetBlock.namespace])!;
-      targetBlock = unit.getChildBlock!(targetBlock, key);
-      lineBlocks.push(targetBlock);
-    }
+    let ancestorGroups = blockAnalysis.groups.slice(0, -1);
+    let leafGroup = blockAnalysis.groups.at(-1);
 
-    let aggregates = getBlockAggregates(lineBlocks)
-    let aggregateLabelItems = getAggregateLabelItems(aggregates, null, this.props.protocol.name, context);
+    let leafBlock = blockAnalysis.pairs.at(-1).block;
+    let leafBlockImpl = getBlockImpl(leafBlock, context);
 
-    let headUnit = UnitTools.asHeadUnit(units[lineBlocks.at(-1).namespace]);
-    let HeadComponent = headUnit?.HeadComponent;
+    // console.log(blockAnalysis);
 
     return (
       <div className={util.formatClass(spotlightStyles.root, spotlightStyles.contents)}>
-        {(
+        {(ancestorGroups.length > 0) && (
           <div className={spotlightStyles.breadcrumbRoot}>
-            {aggregateLabelItems.map((item, itemIndex, arr) => {
-              let last = itemIndex === (arr.length - 1);
+            {ancestorGroups.map((group, groupIndex, arr) => {
+              let last = groupIndex === (arr.length - 1);
 
               return (
-                <React.Fragment key={itemIndex}>
+                <Fragment key={groupIndex}>
                   <button type="button" className={spotlightStyles.breadcrumbEntry} onClick={() => {
-                    this.props.selectBlock(this.props.blockPath!.slice(0, item.offset));
-                  }}>{renderLabel(item.label)}</button>
+                    this.props.selectBlock(group.path);
+                  }}>{group.name ?? <i>Untitled</i>}</button>
                   {!last && <Icon name="chevron_right" className={spotlightStyles.breadcrumbIcon} />}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </div>
         )}
         <div className={spotlightStyles.header}>
-          <h2 className={spotlightStyles.title}>{renderLabel(aggregateLabelItems.at(-1).label)}</h2>
+          <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafBlock) ?? 'Untitled'}</i>}</h2>
         </div>
 
-        {HeadComponent && (
-          <ErrorBoundary>
-            <HeadComponent
-              block={lineBlocks.at(-1)}
-              context={context}
-              location={null} />
-          </ErrorBoundary>
+        {blockAnalysis.isLeafBlockTerminal && (
+          <FeatureList features={leafBlockImpl.createFeatures!(leafBlock, null, context)} />
         )}
 
-        <SimpleFeatureList list={
-          Array.from(aggregates.entries())
-            .filter(([_aggregateIndex, aggregate]) => aggregate.state)
-            .map(([aggregateIndex, aggregate]) => {
-              return Object.values(units).flatMap((unit) => {
-                return (unit.namespace in aggregate.state!)
-                  ? UnitTools.asStateUnit(unit)?.createStateFeatures?.(
-                    aggregate.state![unit.namespace],
-                    aggregates
-                      .slice(aggregateIndex + 1)
-                      .map((aggregate) => aggregate.state![unit.namespace]),
-                    null,
-                    context
-                  ) ?? []
-                  : [];
-              });
+        <div className={featureStyles.root}>
+          {blockAnalysis.groups.slice().reverse().map((group) =>
+            group.pairs.slice().reverse().map((pair, pairIndex) => {
+              let blockImpl = getBlockImpl(pair.block, context);
+
+              if (!blockImpl.createFeatures) {
+                return null;
+              }
+
+              return (
+                <FeatureEntry
+                  features={blockImpl.createFeatures(pair.block, pair.location, context)}
+                  key={pairIndex} />
+              );
             })
-        } />
+          )}
+        </div>
       </div>
     );
   }
-}
-
-
-export function renderLabel(label: ReturnType<typeof UnitTools.getBlockLabel>) {
-  return (
-    <>
-      {label.explicit
-        ? label.value
-        : <i>{label.value}</i>}
-      {label.suffix && (' ' + label.suffix)}
-    </>
-  );
-}
-
-export function getAggregateLabelItems(aggregates: ProtocolBlockAggregate[], locations: unknown[] | null, protocolName: string | null, context: UnitContext) {
-  return aggregates.flatMap((aggregate, aggregateIndex) => {
-    let label = aggregate.state && UnitTools.getBlockStateNameFromState(aggregate.state);
-
-    if (aggregateIndex < 1) {
-      label ??= protocolName;
-    }
-
-    if (label) {
-      return [{
-        aggregate,
-        blocks: aggregate.blocks,
-        label: {
-          explicit: true,
-          suffix: null,
-          value: label
-        },
-        offset: aggregate.offset + aggregate.blocks.length - 1
-      }];
-    } else {
-      return aggregate.blocks.flatMap((block, blockIndex) => {
-        let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
-        let location = locations?.[aggregate.offset + blockIndex];
-
-        if (!unit.getBlockLabel) {
-          return [];
-        }
-
-        return [{
-          aggregate,
-          blocks: blockIndex === 1 // TODO: Improve this
-            ? [aggregate.blocks[0], block]
-            : [block],
-          label: UnitTools.getBlockLabel(block, location, context.host),
-          offset: aggregate.offset + blockIndex
-        }];
-      });
-    }
-  });
 }

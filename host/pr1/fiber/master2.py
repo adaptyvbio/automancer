@@ -1,4 +1,5 @@
 from asyncio import Event, Future, Lock, Task
+from logging import Logger
 from pprint import pprint
 from collections import deque
 from dataclasses import dataclass, field
@@ -6,10 +7,12 @@ import functools
 from os import PathLike
 from pathlib import Path
 from traceback import StackSummary
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 import asyncio
 import traceback
 
+from ..host import logger
+from ..util.decorators import provide_logger
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
@@ -18,7 +21,7 @@ from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import ProgramExecEvent
 from .eval import EvalStack
-from .parser import BaseBlock, BaseProgramPoint, BlockProgram, BlockState, FiberProtocol, HeadProgram
+from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
 from ..chip import Chip
 from ..ureg import ureg
 
@@ -26,8 +29,9 @@ if TYPE_CHECKING:
   from ..host import Host
 
 
+@provide_logger(logger)
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: SimpleCallbackFunction, host: 'Host'):
+  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
     self.chip = chip
     self.host = host
     self.protocol = protocol
@@ -43,14 +47,21 @@ class Master:
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._location: Optional[ProgramHandleEventEntry] = None
+    self._logger: Logger
     self._owner: ProgramOwner
     self._pool = Pool()
-    self._ready_future = Future[None]()
     self._update_callback: Optional[SimpleCallbackFunction] = None
     self._update_lock_depth = 0
     self._update_handle: Optional[asyncio.Handle] = None
     self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
+
+    for line in self.protocol.root.format_hierarchy().splitlines():
+      self._logger.debug(line)
+
+  @property
+  def pool(self):
+    return self._pool
 
   def done(self):
     return self._pool.wait()
@@ -100,23 +111,22 @@ class Master:
     self._update_callback = update_callback
 
     self._handle = ProgramHandle(self, id=0)
-    self._handle._program = self.protocol.root.Program(self.protocol.root, self._handle)
+    self._handle._program = self.protocol.root.create_program(self._handle)
     self._owner = ProgramOwner(self._handle, self._handle._program)
 
     async def func():
       try:
         self.update_soon()
-        await self._owner.run(runtime_stack)
+        await self._owner.run(None, runtime_stack)
         self.update_now()
-      except Exception as e:
-        if self._ready_future:
-          self._ready_future.set_exception(e)
-        else:
-          raise
-
-        self._pool.close()
       finally:
-        self._cleanup_callback()
+        if self._update_handle:
+          self._update_handle.cancel()
+          self._update_handle = None
+
+        if self._cleanup_callback:
+          self._cleanup_callback()
+
         await self.state_manager.clear()
 
     self._pool.start_soon(func())
@@ -223,10 +233,6 @@ class Master:
     if self._update_callback and useful:
       self._update_callback()
 
-    if self._ready_future:
-      self._ready_future.set_result(None)
-      self._ready_future = None
-
     # from pprint import pprint
     # pprint(changes)
 
@@ -313,7 +319,7 @@ class ProgramHandle:
     self._children = dict[int, ProgramHandle]()
     self._id = id
     self._parent = parent
-    self._program: BlockProgram
+    self._program: BaseProgram
 
     self._analysis = MasterAnalysis()
     self._location: Optional[Exportable] = None
@@ -327,12 +333,27 @@ class ProgramHandle:
   def master(self) -> Master:
     return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
 
+  def ancestors(self, *, include_self: bool = False, same_type: bool = True):
+    reversed_ancestors = list[BaseProgram]()
+
+    if include_self:
+      reversed_ancestors.append(self._program)
+
+    handle = self
+
+    while not isinstance(handle := handle._parent, Master):
+      if (not same_type) or isinstance(handle, type(self._program)):
+        reversed_ancestors.insert(0, handle._program)
+
+    return reversed_ancestors[::-1]
+
+
   def collect_children(self):
     self.master.update_now()
 
   def create_child(self, child_block: BaseBlock, *, id: int = 0):
     handle = ProgramHandle(self, id=id)
-    handle._program = child_block.Program(child_block, handle)
+    handle._program = child_block.create_program(handle)
 
     assert not (handle._id in self._children)
     self._children[handle._id] = handle
@@ -411,15 +432,15 @@ class ProgramHandle:
       raise ValueError("Not locked")
 
 class ProgramOwner:
-  def __init__(self, handle: ProgramHandle, program: BlockProgram):
+  def __init__(self, handle: ProgramHandle, program: BaseProgram):
     self._handle = handle
     self._program = program
 
   def halt(self):
     self._program.halt()
 
-  async def run(self, stack: EvalStack):
-    await self._program.run(stack)
+  async def run(self, point: Optional[BaseProgramPoint], stack: EvalStack):
+    await self._program.run(point, stack)
 
     for child_handle in self._handle._children.values():
       assert child_handle._consumed

@@ -1,50 +1,71 @@
-from abc import ABC, abstractmethod
 import builtins
-from contextlib import contextmanager
-from os import PathLike
+import copy
 import os
-import numpy as np
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from dataclasses import KW_ONLY, dataclass, field
 from io import FileIO, IOBase, TextIOBase
 from logging import Logger
+from os import PathLike
 from pathlib import Path
+import re
 from tokenize import TokenError
 from types import EllipsisType
-import pint
-from collections import namedtuple
-from pint import Quantity, Unit
-from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast
+from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
+                    Protocol, TypeVar, cast)
 
-from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject, ValueAsPythonExpr
-from ..error import Error, ErrorDocumentReference, Trace
+import numpy as np
+import pint
+from pint import Quantity, Unit
+
+from ..error import Diagnostic, Error, ErrorDocumentReference, Trace
+from ..reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
+                      LocatedValue, LocatedValueContainer, LocationArea,
+                      LocationRange, ReliableLocatedDict, ReliableLocatedList)
 from ..ureg import ureg
 from ..util.misc import Exportable
 from ..util.parser import check_identifier
-from ..draft import DraftDiagnostic, DraftGenericError
-from ..reader import LocatedDict, LocatedError, LocatedList, LocatedString, LocatedValue, LocatedValueContainer, LocationArea, LocationRange, ReliableLocatedDict, ReliableLocatedList
+from .expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
+                   ValueAsPythonExpr)
 
 if TYPE_CHECKING:
   from .parser import AnalysisContext
 
 
 @dataclass
-class AnalysisRelation(Exportable):
-  definition: LocationRange
-  references: list[LocationRange]
+class AnalysisMarker(Exportable):
+  message: str
+  reference: ErrorDocumentReference
+  _: KW_ONLY
+  kind: Literal['deprecated', 'unnecessary']
 
   def export(self):
     return {
-      "definition": [self.definition.start, self.definition.end],
-      "references": [[range.start, range.end] for range in self.references]
+      "kind": self.kind,
+      "message": self.message,
+      "reference": self.reference.export()
+    }
+
+@dataclass
+class AnalysisRelation(Exportable):
+  definition_body: ErrorDocumentReference
+  definition_name: ErrorDocumentReference
+  references: list[ErrorDocumentReference]
+
+  def export(self):
+    return {
+      "definitionBody": self.definition_body.export(),
+      "definitionName": self.definition_name.export(),
+      "references": [ref.export() for ref in self.references]
     }
 
 @dataclass
 class AnalysisRename(Exportable):
-  ranges: list[LocationRange]
+  items: list[ErrorDocumentReference]
 
   def export(self):
     return {
-      "ranges": [[range.start, range.end] for range in self.ranges]
+      "items": [ref.export() for ref in self.items]
     }
 
 @dataclass
@@ -54,20 +75,33 @@ class AnalysisSelection(Exportable):
   def export(self):
     return [self.range.start, self.range.end]
 
+@dataclass
+class AnalysisToken(Exportable):
+  name: str
+  reference: ErrorDocumentReference
+
+  def export(self):
+    return {
+      "name": self.name,
+      "reference": self.reference.export()
+    }
+
 
 T = TypeVar('T')
 
 @dataclass(kw_only=True)
 class Analysis:
-  errors: list[Any] = field(default_factory=list)
-  warnings: list[Any] = field(default_factory=list)
+  errors: list[Diagnostic] = field(default_factory=list)
+  warnings: list[Diagnostic] = field(default_factory=list)
 
   completions: list[Any] = field(default_factory=list)
   folds: list[Any] = field(default_factory=list)
   hovers: list[Any] = field(default_factory=list)
+  markers: list[AnalysisMarker] = field(default_factory=list)
   relations: list[AnalysisRelation] = field(default_factory=list)
   renames: list[AnalysisRename] = field(default_factory=list)
   selections: list[AnalysisSelection] = field(default_factory=list)
+  tokens: list[AnalysisToken] = field(default_factory=list)
 
   def add(self, other: tuple['Analysis', T], /, trace: Optional[Trace] = None) -> T:
     analysis, value = other
@@ -83,9 +117,11 @@ class Analysis:
     self.completions += analysis.completions
     self.folds += analysis.folds
     self.hovers += analysis.hovers
+    self.markers += analysis.markers
     self.relations += analysis.relations
     self.renames += analysis.renames
     self.selections += analysis.selections
+    self.tokens += analysis.tokens
 
     return value
 
@@ -96,9 +132,11 @@ class Analysis:
       completions=(self.completions + other.completions),
       folds=(self.folds + other.folds),
       hovers=(self.hovers + other.hovers),
+      markers=(self.markers + other.markers),
       relations=(self.relations + other.relations),
       renames=(self.renames + other.renames),
-      selections=(self.selections + other.selections)
+      selections=(self.selections + other.selections),
+      tokens=(self.tokens + other.tokens)
     )
 
   def __repr__(self):
@@ -161,57 +199,56 @@ class Hover:
     }
 
 
-class LangServiceError(Exception):
-  def diagnostic(self) -> DraftDiagnostic:
-    ...
-
-class AmbiguousKeyError(LangServiceError):
-  def __init__(self, key, target):
-    self.key = key
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Ambiguous key '{self.key}'", ranges=self.key.area.ranges)
-
-class DuplicateKeyError(LangServiceError):
-  def __init__(self, key, target):
-    self.key = key
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Duplicate key '{self.key}'", ranges=self.key.area.ranges)
-
-class ExtraneousKeyError(LangServiceError):
-  def __init__(self, key, target):
-    self.key = key
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Extraneous key '{self.key}'", ranges=self.key.area.ranges)
-
-class MissingKeyError(LangServiceError):
-  def __init__(self, key, target):
-    self.key = key
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Missing key '{self.key}'", ranges=self.target.area.ranges)
-
-class InvalidIdentifierError(LangServiceError):
+class AmbiguousKeyError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
-    self.target = target
+    super().__init__(
+      f"Ambiguous key '{target}'",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
-class InvalidEnumValueError(Error):
+class DuplicateKeyError(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      f"Duplicate key '{target}'",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class ExtraneousKeyError(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      f"Unrecognized key '{target}'",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class MissingKeyError(Diagnostic):
+  def __init__(self, target: LocatedValue, /, key: str):
+    super().__init__(
+      f"Missing key '{key}'",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class InvalidIdentifierError(Diagnostic):
+  def __init__(self, target: LocatedValue):
+    super().__init__(
+      "Invalid identifier",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class InvalidEnumValueError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(f"Invalid enum value", references=[ErrorDocumentReference.from_value(target)])
 
-class MissingAttributeError(Error):
+class MissingAttributeError(Diagnostic):
   def __init__(self, target: LocatedValue, attribute: str, /):
     super().__init__(f"Missing attribute '{attribute}'", references=[ErrorDocumentReference.from_value(target)])
 
-class InvalidDataTypeError(Error):
+class InvalidDataTypeError(Diagnostic):
   def __init__(self, target: LocatedValue, /, message: str):
     super().__init__(f"Invalid data type: {message}", references=[ErrorDocumentReference.from_value(target)])
+
+class InvalidIntegerError(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(f"Invalid integer", references=[ErrorDocumentReference.from_value(target)])
 
 
 class Type(Protocol):
@@ -262,9 +299,9 @@ class Attribute:
         range=key_range
       ))
 
-    if self._deprecated:
+    # if self._deprecated:
       # TODO: Use a deprecation flag
-      analysis.warnings.append(DraftGenericError("This attribute is deprecated", ranges=[key_range]))
+      # analysis.warnings.append(DraftGenericError("This attribute is deprecated", ranges=[key_range]))
 
     value_analysis, value = self._type.analyze(obj, context)
 
@@ -353,12 +390,12 @@ class CompositeDict:
 
       # e.g. 'invalid/bar'
       if namespace and not (namespace in self._namespaces):
-        analysis.errors.append(ExtraneousKeyError(namespace, obj))
+        analysis.errors.append(ExtraneousKeyError(namespace))
         continue
 
       # e.g. 'foo/invalid' or 'invalid'
       if not attr_entries:
-        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
+        analysis.errors.append(ExtraneousKeyError(obj_key))
         continue
 
       if not namespace:
@@ -370,14 +407,14 @@ class CompositeDict:
           namespace = next(iter(attr_entries.keys()))
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
-          analysis.errors.append(AmbiguousKeyError(obj_key, obj))
+          analysis.errors.append(AmbiguousKeyError(obj_key))
           continue
       # e.g. 'foo/bar'
       else:
         pass
 
       if attr_name in attr_values[namespace]:
-        analysis.errors.append(DuplicateKeyError(obj_key, obj))
+        analysis.errors.append(DuplicateKeyError(obj_key))
         continue
 
       attr = attr_entries[namespace]
@@ -394,7 +431,7 @@ class CompositeDict:
     for attr_name, attr_entries in self._attributes.items():
       for namespace, attr in attr_entries.items():
         if (not attr._optional) and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
+          analysis.errors.append(MissingKeyError(obj, (f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name))
           strict_failed = True
 
     analysis.completions.append(Completion(
@@ -427,64 +464,68 @@ class DictType(SimpleDict):
     super().__init__(attrs, foldable=foldable, strict=True)
 
 
-class DivisibleCompositeDictType(Type):
-  _native_namespace = "_"
-  _separator = "/"
+class DivisibleCompositeDictType(Type, Generic[T]):
+  def __init__(self, *, foldable: bool = True, separator: str = "/"):
+    self._attributes_by_key = dict[T, dict[str, Attribute]]()
+    self._attributes_by_name = dict[str, tuple[bool, Optional[T]]]()
+    self._attributes_by_unique_name = dict[str, tuple[T, str]]()
 
-  def __init__(self, native_attrs: Optional[dict[str, Attribute | Type]] = None, /, *, foldable: bool = True):
-    self._attributes = dict[str, dict[str, Attribute]]()
+    # [_/1]
+    # [_/1], a/1
+    # [a/1]
+    # a/1, b/1
+
     self._foldable = foldable
-
-    if native_attrs:
-      self.add(native_attrs, namespace=self._native_namespace)
+    self._separator = separator
 
   @property
   def completion_items(self):
     completion_items = list[CompletionItem]()
 
-    for namespace, attrs in self._attributes.items():
+    for namespace, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        ambiguous = any(attr_name in other_attrs for other_namespace, other_attrs in self._attributes.items() if other_namespace != namespace)
-        native = (namespace == self._native_namespace)
-
         completion_items.append(CompletionItem(
           documentation=attr._description,
           kind=attr._kind,
           label=attr_name,
-          namespace=(namespace if not native else None),
+          namespace=None,
           signature=(attr._signature or (f"{attr_name}: <value>" if attr._description else None)),
           sublabel=attr._label,
-          text=(f"{namespace}{self._separator}{attr_name}" if ambiguous and (not native) else attr_name)
+          text=(attr_name)
         ))
 
     return completion_items
 
-  def _parse_attr_key(self, attr_key: str, /):
-    segments = attr_key.split(self._separator)
+  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], /, key: T, prefix: Optional[str] = None):
+    assert not (key in self._attributes_by_key)
+    assert key is not None
 
-    if len(segments) > 1:
-      attr_name = attr_key[(len(segments[0]) + 1):]
-      namespace = segments[0]
-    else:
-      attr_name = attr_key
-      namespace = None
+    self._attributes_by_key[key] = dict()
 
-    attr_entries = dict[str, Attribute]()
+    for attr_name, raw_attr in attrs.items():
+      if isinstance(raw_attr, Attribute):
+        attr = raw_attr
+      else:
+        attr = Attribute(cast(Type, raw_attr))
 
-    for attrs_namespace, attrs in self._attributes.items():
-      if attr_name in attrs:
-        attr_entries[attrs_namespace] = attrs[attr_name]
+      if prefix:
+        attr = copy.copy(attr)
+        unique_name = f"{prefix}{self._separator}{attr_name}"
 
-    return namespace, attr_name, attr_entries
+        assert not (unique_name in self._attributes_by_unique_name)
+        self._attributes_by_unique_name[unique_name] = (key, attr_name)
 
-  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], *, namespace: str):
-    assert not (namespace in self._attributes)
+      self._attributes_by_key[key][attr_name] = attr
 
-    for attr_name, attr in attrs.items():
-      if not isinstance(attr, Attribute):
-        attrs[attr_name] = Attribute(cast(Type, attr))
+      native = not prefix
 
-    self._attributes[namespace] = cast(dict[str, Attribute], attrs)
+      match (native, self._attributes_by_name.get(attr_name)):
+        case (_, None) | (True, (False, _)):
+          self._attributes_by_name[attr_name] = (native, key)
+        case (False, (False, _)):
+          self._attributes_by_name[attr_name] = (True, None)
+        case (True, (True, _)):
+          raise ValueError("Duplicate name")
 
   def analyze(self, obj, /, context):
     analysis, primitive_result = PrimitiveType(dict).analyze(obj, context)
@@ -508,61 +549,57 @@ class DivisibleCompositeDictType(Type):
 
     analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
 
-    attr_values = { namespace: dict[str, Any]() for namespace in self._attributes.keys() }
+    attr_values = { key: dict[str, Any]() for key in self._attributes_by_key.keys() }
 
     for obj_key, obj_value in obj.items():
-      namespace, attr_name, attr_entries = self._parse_attr_key(obj_key)
+      unique_attr = self._attributes_by_unique_name.get(obj_key)
 
-      # e.g. 'invalid/bar'
-      if namespace and not (namespace in self._attributes):
-        analysis.errors.append(ExtraneousKeyError(namespace, obj))
-        continue
+      # e.g. 'foo/bar'
+      if unique_attr:
+        key, attr_name = unique_attr
 
-      # e.g. 'foo/invalid' or 'invalid'
-      if not attr_entries:
-        analysis.errors.append(ExtraneousKeyError(obj_key, obj))
-        continue
+      # e.g. 'foobar'
+      elif (unprefixed_attr := self._attributes_by_name.get(obj_key)):
+        _, unprefixed_key = unprefixed_attr
 
-      if not namespace:
         # e.g. 'bar' where '_/bar' exists
-        if self._native_namespace in attr_entries:
-          namespace = self._native_namespace
         # e.g. 'bar' where only 'a/bar' exists
-        elif len(attr_entries) == 1:
-          namespace = next(iter(attr_entries.keys()))
+        if unprefixed_key is not None:
+          key = unprefixed_key
+          attr_name = obj_key
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
-          analysis.errors.append(AmbiguousKeyError(obj_key, obj))
+          analysis.errors.append(AmbiguousKeyError(obj_key))
           continue
-      # e.g. 'foo/bar'
-      else:
-        pass
 
-      if attr_name in attr_values[namespace]:
-        analysis.errors.append(DuplicateKeyError(obj_key, obj))
+      # e.g. 'foo/invalid' or 'invalid'
+      else:
+        analysis.errors.append(ExtraneousKeyError(obj_key))
         continue
 
-      attr_values[namespace][attr_name] = obj_value
+      if attr_name in attr_values[key]:
+        analysis.errors.append(DuplicateKeyError(obj_key))
+        continue
+
+      attr_values[key][LocatedString(attr_name, absolute=False, area=obj_key.area)] = obj_value
 
     failure = False
 
-    for namespace, attrs in self._attributes.items():
+    for prefix, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        if attr._required and not (attr_name in attr_values[namespace]):
-          analysis.errors.append(MissingKeyError((f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name, obj))
+        if attr._required and not (attr_name in attr_values[prefix]):
+          analysis.errors.append(MissingKeyError(obj, attr_name))
           failure = True
 
     return analysis, (attr_values if not failure else Ellipsis)
 
-  def analyze_namespace(self, attr_values: dict[str, Any], /, context, *, namespace: Optional[str]):
-    namespace = namespace or self._native_namespace
-
+  def analyze_namespace(self, attr_values: dict[T, dict[str, Any]], /, context: 'AnalysisContext', *, key: T):
     analysis = Analysis()
     failure = False
     result = dict[str, Any]()
 
-    for attr_name, attr_value in attr_values[namespace].items():
-      attr = self._attributes[namespace][attr_name]
+    for attr_name, attr_value in attr_values[key].items():
+      attr = self._attributes_by_key[key][attr_name]
       attr_result = analysis.add(attr.analyze(attr_value, attr_name, context))
 
       if not isinstance(attr_result, EllipsisType):
@@ -572,9 +609,22 @@ class DivisibleCompositeDictType(Type):
 
     return analysis, (result if not failure else Ellipsis)
 
+  def copy(self):
+    output = DivisibleCompositeDictType.__new__(self.__class__)
+
+    output._attributes_by_key = self._attributes_by_key.copy()
+    output._attributes_by_name = self._attributes_by_name.copy()
+    output._attributes_by_unique_name = self._attributes_by_unique_name.copy()
+
+    output._foldable = self._foldable
+    output._separator = self._separator
+
+    return output
+
 class SimpleDictType(DivisibleCompositeDictType):
   def __init__(self, attrs: dict[str, Attribute | Type]):
-    super().__init__(attrs)
+    super().__init__()
+    self.add(attrs, key=0)
 
   def analyze(self, obj, /, context):
     analysis, global_result = super().analyze(obj, context)
@@ -582,7 +632,7 @@ class SimpleDictType(DivisibleCompositeDictType):
     if isinstance(global_result, EllipsisType):
       return analysis, Ellipsis
 
-    result = analysis.add(super().analyze_namespace(global_result, context, namespace=None))
+    result = analysis.add(super().analyze_namespace(global_result, context, key=0))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
@@ -621,62 +671,54 @@ class SimpleDictAsPythonExpr(Evaluable):
     return cls(value, depth=depth) if depth > 0 else value
 
 
-class InvalidValueError(LangServiceError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid value", ranges=self.target.area.ranges)
-
-class InvalidPrimitiveError(Error):
+class InvalidPrimitiveError(Diagnostic):
   def __init__(self, target: LocatedValue, primitive: Callable):
     super().__init__(
       f"Invalid primitive, expected {primitive.__name__}",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
-class MissingUnitError(LangServiceError):
-  def __init__(self, target, unit):
-    self.target = target
-    self.unit = unit
+class MissingUnitError(Diagnostic):
+  def __init__(self, target: LocatedValue, /, unit: Unit):
+    super().__init__(
+      f"Missing unit, expected {unit:~P}",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
-  def diagnostic(self):
-    return DraftDiagnostic(f"Missing unit, expected {self.unit:~P}", ranges=self.target.area.ranges)
-
-class InvalidUnitError(Error):
+class InvalidUnitError(Diagnostic):
   def __init__(self, target: LocatedValue, /, unit: Unit):
     super().__init__(
       f"Invalid unit, expected {unit:P}",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
-class UnknownUnitError(Error):
+class UnknownUnitError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Unknown unit",
       references=[ErrorDocumentReference.from_value(target)]
     )
 
-class InvalidExpr(LangServiceError):
-  def __init__(self, target):
-    self.target = target
+class InvalidExpr(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid value, expected expression",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid value, expected expression", ranges=self.target.area.ranges)
+class InvalidExprKind(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid expression kind",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
-class InvalidExprKind(LangServiceError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid expression kind", ranges=self.target.area.ranges)
-
-class InvalidFileObject(LangServiceError):
-  def __init__(self, target):
-    self.target = target
-
-  def diagnostic(self):
-    return DraftDiagnostic(f"Invalid file object", ranges=self.target.area.ranges)
+class InvalidFileObject(Diagnostic):
+  def __init__(self, target: LocatedValue, /):
+    super().__init__(
+      "Invalid file object",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 class PathOutsideDirError(Error):
   def __init__(self, target: LocatedValue[Path], dir_path: Path, /):
@@ -704,11 +746,24 @@ class PrimitiveType(Type):
 
   def _analyze(self, obj, /, context):
     match self._primitive:
-      case builtins.float | builtins.int if isinstance(obj, str):
+      case builtins.int if isinstance(obj, str):
+        assert isinstance(obj, LocatedString)
+
+        if match := re.compile(r"^0x([0-9a-f]+)$").match(obj.value):
+          value = int(match[1], 16)
+        elif match := re.compile(r"^0b([01]+)$").match(obj.value):
+          value = int(match[1], 2)
+        elif re.compile(r"^-?[0-9]+$").match(obj.value):
+          value = int(obj.value)
+        else:
+          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+
+        return Analysis(), LocatedValue.new(value, area=obj.area)
+      case builtins.float if isinstance(obj, str):
         assert isinstance(obj, LocatedString)
 
         try:
-          value = self._primitive(obj.value)
+          value = float(obj.value)
         except (TypeError, ValueError):
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
         else:
@@ -722,6 +777,8 @@ class PrimitiveType(Type):
           return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _ if not isinstance(obj.value, self._primitive):
         return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+      case builtins.int if isinstance(obj.value, int): # Convert booleans to ints
+        return Analysis(), LocatedValue.new(int(obj.value), obj.area)
       case _:
         return Analysis(), obj
 
@@ -937,7 +994,7 @@ class QuantityType(Type):
       except (pint.PintError, TokenError):
         return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
       except Exception:
-        return Analysis(errors=[DraftGenericError("Unknown error", ranges=obj.area.ranges)]), Ellipsis
+        return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
     elif isinstance(obj.value, (float, int)):
       value = ureg.Quantity(obj.value)
     else:
@@ -958,7 +1015,7 @@ class QuantityType(Type):
   @staticmethod
   def check(value: Quantity, unit: Unit, *, target: LocatedValue):
     match value:
-      case Quantity() if value.check(unit):
+      case Quantity() if value.check(unit): # type: ignore
         return Analysis(), LocatedValue.new(value.to(unit), area=target.area)
       case Quantity(dimensionless=True):
         return Analysis(errors=[MissingUnitError(target, unit)]), Ellipsis
@@ -982,6 +1039,25 @@ class ArbitraryQuantityType:
 class BoolType(PrimitiveType):
   def __init__(self):
     super().__init__(bool)
+
+class IntType(Type):
+  def __init__(self, *, mode: Literal['any', 'positive', 'positive_or_null'] = 'any'):
+    self._mode = mode
+
+  def analyze(self, obj, /, context):
+    analysis, raw_result = PrimitiveType(int).analyze(obj, context.update(eval_depth=0))
+
+    if isinstance(raw_result, EllipsisType):
+      return analysis, Ellipsis
+
+    result = cast(LocatedValue[int], raw_result)
+
+    if (result.value < 0) and (self._mode != 'any'):
+      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+    elif (result.value == 0) and (self._mode == 'positive'):
+      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+    else:
+      return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
 class StrType(PrimitiveType):
   def __init__(self):
@@ -1366,13 +1442,19 @@ class DataTypeType(Type):
       return analysis, ValueAsPythonExpr.new(LocatedValue.new(value, obj.area), depth=context.eval_depth)
 
 
-# TODO: Improve
 def print_analysis(analysis: Analysis, /, logger: Logger):
   for error in analysis.errors:
-    diagnostic = error.diagnostic()
-    area = LocationArea(diagnostic.ranges)
+    logger.error(error.message)
 
-    logger.error(diagnostic.message)
+    for ref in error.references:
+      if isinstance(ref, ErrorDocumentReference) and ref.area:
+        for line in ref.area.format().splitlines():
+          logger.debug(line)
 
-    for line in area.format().splitlines():
-      logger.debug(line)
+  for warning in analysis.warnings:
+    logger.warning(warning.message)
+
+    for ref in warning.references:
+      if isinstance(ref, ErrorDocumentReference) and ref.area:
+        for line in ref.area.format().splitlines():
+          logger.debug(line)

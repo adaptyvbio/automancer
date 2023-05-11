@@ -1,11 +1,6 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
-import * as Form from '../components/standard-form';
-import { Icon } from './icon';
-
-import descriptionStyles from '../../styles/components/description.module.scss';
-import formStyles from '../../styles/components/form.module.scss';
 import styles from '../../styles/components/modal.module.scss';
 
 
@@ -40,6 +35,11 @@ export class Modal extends React.Component<ModalProps, ModalState> {
           onClick={(event) => {
             if (event.currentTarget === event.target) {
               this.props.onCancel();
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
             }
           }}>
           <div className={styles.container}>

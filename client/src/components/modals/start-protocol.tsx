@@ -1,11 +1,9 @@
 import * as React from 'react';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
-import formStyles from '../../../styles/components/form.module.scss';
 
 import { Modal } from '../modal';
 import * as Form from '../standard-form';
-import { Icon } from '../icon';
 import { Host } from '../../host';
 import { MetadataTools } from '../../unit';
 import { Chip, ChipCondition, ChipId, UnitNamespace } from 'pr1-shared';
@@ -87,7 +85,7 @@ export function StartProtocolModal(props: {
         )}
 
         <Form.Actions mode="modal">
-          <Form.Action label="Cancel" onClick={props.onCancel} />
+          <Form.Action label="Cancel" shortcut="Escape" onClick={props.onCancel} />
           <Form.Action label="Start" type="submit" />
         </Form.Actions>
       </form>

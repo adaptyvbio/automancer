@@ -11,7 +11,7 @@ from pr1.fiber.parser import HeadProgram
 from pr1.util.decorators import provide_logger
 
 from . import logger
-from .parser import StateBlock, StateProgramPoint
+from .parser import StateApplierBlock, StateProgramPoint
 
 
 @dataclass
@@ -77,7 +77,7 @@ class TerminatedMode:
 
 @provide_logger(logger)
 class StateProgram(HeadProgram):
-  def __init__(self, block: StateBlock, handle):
+  def __init__(self, block: StateApplierBlock, handle):
     self._logger: Logger
 
     self._block = block

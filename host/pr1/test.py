@@ -1,8 +1,8 @@
 import asyncio
-import appdirs
 import logging
 from pathlib import Path
 from pprint import pprint
+import signal
 
 from .devices.claim import ClaimSymbol
 from .host import Host
@@ -32,7 +32,6 @@ logger = logging.getLogger("pr1.test")
 
 class Backend:
   def __init__(self) -> None:
-    self.data_dir = Path(appdirs.user_data_dir("PR-1", "Hsn"))
     self.data_dir = Path("tmp/master-host").resolve()
     logger.debug(f"Storing data in '{self.data_dir}'")
 
@@ -63,11 +62,11 @@ async def main():
 name: Test
 
 steps:
-  wait: 1s
-  record:
-    fields:
-      - value: Okolab.temperature
-    output: foo.bar
+  wait: 1 sec
+  # actions:
+  #   - wait: 2 sec
+  #   # - wait: 2 sec
+  PLC.A1: 5
 """)
 
   draft = Draft(
@@ -82,8 +81,10 @@ steps:
     Parsers=host.manager.Parsers
   )
 
+  # print(parser.analysis)
 
-  # print(parser.protocol.root)
+  if parser.protocol:
+    print(parser.protocol.root.format_hierarchy())
 
   # return
 
@@ -103,8 +104,15 @@ steps:
       pass
 
     async def a():
+      done = asyncio.create_task(master.done())
+
+      loop = asyncio.get_event_loop()
+      loop.add_signal_handler(signal.SIGINT, master.halt)
+
       await master.run(update_callback)
-      await master.done()
+      await done
+
+      loop.remove_signal_handler(signal.SIGINT)
 
       # async for info in master.run():
       #   # continue
@@ -165,8 +173,8 @@ steps:
     print("--------")
     print()
 
-    await asyncio.gather(a(), b())
-    # await a()
+    # await asyncio.gather(a(), b())
+    await a()
 
 
 

@@ -65,37 +65,17 @@ class DraftCompilation:
     return {
       "analysis": {
         "completions": [completion.export() for completion in self.analysis.completions],
-        "diagnostics": [
-          *[{ "kind": "error", **error.diagnostic().export() } for error in self.analysis.errors],
-          *[{ "kind": "warning", **warning.diagnostic().export() } for warning in self.analysis.warnings]
-        ],
+        "errors": [error.export() for error in self.analysis.errors],
         "folds": [fold.export() for fold in self.analysis.folds],
         "hovers": [hover.export() for hover in self.analysis.hovers],
+        "markers": [marker.export() for marker in self.analysis.markers],
         "relations": [relation.export() for relation in self.analysis.relations],
         "renames": [rename.export() for rename in self.analysis.renames],
         "selections": [selection.export() for selection in self.analysis.selections],
+        "tokens": [token.export() for token in self.analysis.tokens],
+        "warnings": [warning.export() for warning in self.analysis.warnings]
       },
       "documentPaths": [str(path) for path in self.document_paths],
       "protocol": self.protocol and self.protocol.export(),
       "valid": (not self.analysis.errors)
     }
-
-
-class DraftDiagnostic:
-  def __init__(self, message, *, ranges = list()):
-    self.message = message
-    self.ranges = ranges
-
-  def export(self):
-    return {
-      "message": self.message,
-      "ranges": [[range.start, range.end] for range in self.ranges]
-    }
-
-class DraftGenericError:
-  def __init__(self, message, *, ranges = list()):
-    self.message = message
-    self.ranges = ranges
-
-  def diagnostic(self):
-    return DraftDiagnostic(self.message, ranges=self.ranges)

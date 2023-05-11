@@ -19,9 +19,6 @@ export function ExecutionDiagnosticsReport(props: {
   };
 
   return (
-    <DiagnosticsReport diagnostics={[
-      ...processDiagnostics(props.analysis.errors, 'error'),
-      ...processDiagnostics(props.analysis.warnings, 'warning')
-    ]} />
+    <DiagnosticsReport analysis={props.analysis} />
   );
 }

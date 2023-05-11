@@ -2,33 +2,46 @@ from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path, PurePath
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence
+from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
+                    Protocol, Sequence, TypeVar)
 
-from ..error import Trace
-from ..util.misc import Exportable
-from . import langservice as lang
-from .eval import EvalContext, EvalEnv, EvalEnvValue, EvalEnvs, EvalStack
 from .. import reader
-from ..reader import LocationArea
-from ..draft import Draft, DraftDiagnostic
+from ..draft import Draft
+from ..error import Error, ErrorDocumentReference, Trace
+from ..reader import LocatedString, LocatedValue, LocationArea
 from ..ureg import ureg
-from ..util.decorators import debug
 from ..util.asyncio import run_anonymous
+from ..util.decorators import debug
+from ..util.misc import Exportable, HierarchyNode
+from . import langservice as lang
+from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack
 
 if TYPE_CHECKING:
-  from .master2 import Master, ProgramHandle
-  from .process import ProgramExecEvent
   from ..host import Host
   from ..units.base import BaseRunner
+  from .master2 import ProgramHandle
 
 
-@debug
-class MissingProcessError(Exception):
-  def __init__(self, area: LocationArea):
-    self.area = area
+class DuplicateLeadTransformInLayerError(Error):
+  def __init__(self, targets: list[LocationArea]):
+    super().__init__(
+      "Duplicate lead transform in layer",
+      references=[ErrorDocumentReference.from_area(target) for target in targets]
+    )
 
-  def diagnostic(self):
-    return DraftDiagnostic(f"Missing process", ranges=self.area.ranges)
+class LeadTransformInPassiveLayerError(Error):
+  def __init__(self, target: LocatedValue):
+    super().__init__(
+      "Lead transform in passive layer",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
+
+class MissingLeadTransformInLayerError(Error):
+  def __init__(self, target: LocatedValue):
+    super().__init__(
+      "Missing lead transform in layer",
+      references=[ErrorDocumentReference.from_value(target)]
+    )
 
 
 class BlockUnitState(Exportable):
@@ -125,7 +138,7 @@ class BlockUnitPreparationData:
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 ProtocolDetails = dict[str, ProtocolUnitDetails]
 
-class BlockProgram(ABC):
+class BaseProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
     pass
 
@@ -140,7 +153,7 @@ class BlockProgram(ABC):
   def halt(self):
     ...
 
-  def receive(self, message: Any) -> None:
+  def receive(self, message: Any, /) -> None:
     match message["type"]:
       case "halt":
         self.halt()
@@ -157,10 +170,10 @@ class BlockProgram(ABC):
   #   await self._parent.call_resume()
 
   @abstractmethod
-  async def run(self, stack: EvalStack):
+  async def run(self, point: 'Optional[BaseProgramPoint]', stack: EvalStack):
     ...
 
-class HeadProgram(BlockProgram):
+class HeadProgram(BaseProgram):
   @abstractmethod
   async def pause(self) -> bool:
     ...
@@ -172,26 +185,18 @@ class HeadProgram(BlockProgram):
   def stable(self):
     return False
 
-  def receive(self, message):
-    match message["type"]:
-      case "halt":
-        self.halt()
-      case "pause":
-        run_anonymous(self.pause())
-      case "resume":
-        run_anonymous(self.resume(loose=False))
-      case _:
-        super().receive(message)
+class BaseProgramPoint(ABC):
+  pass
 
-class BaseProgramPoint(Protocol):
-  @classmethod
-  def import_value(cls, data: Any, /, block: 'BaseBlock', *, master) -> 'BaseProgramPoint':
+class BaseBlock(ABC, HierarchyNode):
+  def create_program(self, handle: 'ProgramHandle') -> BaseProgram:
     ...
 
-class BaseBlock(Protocol):
-  Point: type[BaseProgramPoint]
-  Program: type[BlockProgram]
+  @abstractmethod
+  def import_point(self, data: Any, /) -> BaseProgramPoint:
+    ...
 
+  @abstractmethod
   def export(self):
     ...
 
@@ -201,14 +206,15 @@ BlockAttrs = dict[str, dict[str, Any | EllipsisType]]
 Attrs = dict[str, Any]
 AttrsOptional = dict[str, Any | EllipsisType]
 
-class BaseParser(Protocol):
+class BaseParser(ABC):
   namespace: str
-  priority: int = 0
+  layer_attributes: Optional[dict[str, lang.Attribute]] = None
   root_attributes = dict[str, lang.Attribute]()
-  segment_attributes = dict[str, lang.Attribute]()
+
+  transformers: 'list[BaseTransformer]'
 
   def __init__(self, fiber: 'FiberParser'):
-    pass
+    self.leaf_transformers = list[BasePartialPassiveTransformer]()
 
   def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, ProtocolUnitData]:
     return lang.Analysis(), ProtocolUnitData()
@@ -216,18 +222,192 @@ class BaseParser(Protocol):
   def leave_protocol(self):
     return lang.Analysis()
 
-  def prepare_block(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, BlockUnitPreparationData | EllipsisType]:
-    return lang.Analysis(), BlockUnitPreparationData(attrs)
+class BaseDefaultTransform(ABC):
+  priority: ClassVar[int]
 
-  def parse_block(self, attrs, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, BlockUnitData | EllipsisType]:
-    return lang.Analysis(), BlockUnitData()
+  def __init__(self):
+    self.adoption_envs = EvalEnvs()
+    self.runtime_envs = EvalEnvs()
 
-class BaseTransform(ABC):
+    self.priority: int
+
   @abstractmethod
-  def execute(self, state: BlockState, transforms: 'Transforms', *, origin_area: LocationArea) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def adopt(self, adoption_envs: EvalEnvs, adoption_stack: EvalStack) -> tuple[lang.Analysis, tuple[Any, EvalStack] | EllipsisType]:
     ...
 
-Transforms = list[BaseTransform]
+  @abstractmethod
+  def execute(self, block: BaseBlock, data: Any) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+class BaseLeadTransform(ABC):
+  def __init__(self):
+    super().__init__()
+    self.priority = 0
+
+  @abstractmethod
+  # def execute(self, execute: 'Callable[[Transforms], tuple[lang.Analysis, BaseBlock | EllipsisType]]') -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+  def adopt(self, adoption_envs: EvalEnvs, adoption_stack: EvalStack) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+Transforms = list[BaseDefaultTransform | BaseLeadTransform]
+
+@dataclass
+class TransformerAdoptionResult:
+  data: Any
+  _: KW_ONLY
+  adoption_stack: EvalStack = field(default_factory=EvalStack)
+
+@dataclass
+class PassiveTransformerPreparationResult:
+  data: Any
+  _: KW_ONLY
+  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+
+
+T = TypeVar('T')
+
+@dataclass
+class LeadTransformerPreparationResult(Generic[T]):
+  data: T
+  origin_area: LocationArea
+  _: KW_ONLY
+  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+
+class BasePassiveTransformer(ABC):
+  attributes = dict[str, lang.Attribute]()
+  priority: ClassVar[int]
+
+  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, Optional[PassiveTransformerPreparationResult] | EllipsisType]:
+    return lang.Analysis(), PassiveTransformerPreparationResult(data)
+
+  @abstractmethod
+  def adopt(self, data: Any, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, Optional[TransformerAdoptionResult] | EllipsisType]:
+    ...
+
+  @abstractmethod
+  def execute(self, data: Any, /, block: BaseBlock) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+class BasePartialPassiveTransformer(ABC):
+  @abstractmethod
+  def execute(self, block: BaseBlock) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+class BaseLeadTransformer(ABC):
+  attributes = dict[str, lang.Attribute]()
+  priority: ClassVar[int] = 0
+
+  @abstractmethod
+  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[lang.Analysis, list[LeadTransformerPreparationResult] | EllipsisType]:
+    return lang.Analysis(), list()
+
+  @abstractmethod
+  def adopt(self, data: Any, /, adoption_stack: EvalStack, trace: Trace) -> tuple[lang.Analysis, BaseBlock | EllipsisType]:
+    ...
+
+BaseTransformer = BasePassiveTransformer | BaseLeadTransformer
+BaseTransformers = list[BaseTransformer]
+
+
+@dataclass
+class Layer:
+  lead_transform: Optional[tuple[BaseLeadTransformer, LeadTransformerPreparationResult]]
+  passive_transforms: list[tuple[BasePassiveTransformer, PassiveTransformerPreparationResult]]
+  _: KW_ONLY
+  adoption_envs: EvalEnvs
+  runtime_envs: EvalEnvs
+  extra_info: Optional[Attrs | EllipsisType] = None
+
+  def adopt(self, adoption_stack: EvalStack, trace: Trace):
+    analysis = lang.Analysis()
+    current_adoption_stack = adoption_stack.copy()
+
+    adopted_transforms = list[tuple[BasePassiveTransformer, Any]]()
+
+    for transformer, transform in self.passive_transforms:
+      transform_result = analysis.add(transformer.adopt(transform.data, current_adoption_stack, trace), trace=trace)
+
+      if isinstance(transform_result, EllipsisType) or not transform_result:
+        continue
+
+      current_adoption_stack |= transform_result.adoption_stack
+      adopted_transforms.append((transformer, transform_result.data))
+
+    return analysis, (adopted_transforms, current_adoption_stack)
+
+  def adopt_lead(self, adoption_stack: EvalStack, trace: Trace):
+    assert self.lead_transform
+
+    analysis, (adopted_transforms, current_adoption_stack) = self.adopt(adoption_stack, trace)
+
+    lead_transformer, lead_transform = self.lead_transform
+    block = analysis.add(lead_transformer.adopt(lead_transform.data, current_adoption_stack, trace), trace=trace)
+
+    if isinstance(block, EllipsisType):
+      return analysis, Ellipsis
+
+    root_block = analysis.add(self.execute(adopted_transforms, block))
+
+    return analysis, root_block
+
+  def execute(self, adopted_transforms: list[tuple[BasePassiveTransformer, Any]], block: BaseBlock):
+    analysis = lang.Analysis()
+    current_block = block
+
+    for transformer, transform_data in adopted_transforms[::-1]:
+      if not isinstance(transform_data, EllipsisType):
+        execute_result = analysis.add(transformer.execute(transform_data, current_block))
+
+        if not isinstance(execute_result, EllipsisType):
+          current_block = execute_result
+
+    return analysis, current_block
+
+
+# ----
+
+
+# SimplifiedProcessParserAttrs = dict[str, Evaluable[LocatedValue[Any]]]
+
+# class BaseSimplifiedProcessParser(ABC, BaseParser):
+#   namespace: ClassVar[str]
+#   priority: ClassVar[int]
+
+#   @abstractmethod
+#   def parse(self, attrs: Attrs, /) -> tuple[lang.Analysis, Exportable | EllipsisType]:
+#     ...
+
+#   def prepare(self, attrs: Attrs, /):
+#     # if any(attr_name in attrs for attr_name in self.segment_attributes.keys()):
+#     if attrs:
+#       return lang.Analysis(), [SimplifiedProcessParserTransform(attrs, self)]
+
+# @dataclass
+# class SimplifiedProcessParserTransform(BaseLeadTransform):
+#   attrs: SimplifiedProcessParserAttrs
+#   parser: BaseSimplifiedProcessParser
+
+#   def adopt(self, adoption_envs, runtime_envs, adoption_stack):
+#     from .segment import SegmentTransform
+
+#     attr_name, attr_value = next(iter(self.attrs.items()))
+#     analysis, eval_result = attr_value.eval(EvalContext(adoption_stack), final=False)
+
+#     if isinstance(eval_result, EllipsisType):
+#       return analysis, eval_result
+
+#     process_data = analysis.add(self.parser.parse({ attr_name: eval_result }))
+
+#     if isinstance(process_data, EllipsisType):
+#       return analysis, process_data
+
+#     return analysis, Layer(
+#       # [StateApplierTransform(settle=True)],
+#       list(),
+#       SegmentTransform(self.parser.namespace, process_data)
+#     ).adopt(adoption_envs, runtime_envs, adoption_stack)
 
 
 # ----
@@ -300,7 +480,9 @@ class FiberParser:
 
     # Root dictionary
 
-    root_type = lang.DivisibleCompositeDictType({
+    root_type = lang.DivisibleCompositeDictType()
+
+    root_type.add({
       'name': lang.Attribute(
         label="Protocol name",
         description="The protocol's name.",
@@ -310,10 +492,10 @@ class FiberParser:
         type=lang.AnyType(),
         required=True
       )
-    })
+    }, key=0)
 
     for parser in self._parsers:
-      root_type.add(parser.root_attributes, namespace=parser.namespace)
+      root_type.add(parser.root_attributes, key=parser)
 
     context = AnalysisContext()
     root_result = analysis.add(root_type.analyze(data, context))
@@ -322,12 +504,23 @@ class FiberParser:
       return analysis, Ellipsis
 
 
+    # Transformers
+
+    transformers = BaseTransformers()
+
+    for parser in self._parsers:
+      transformers += parser.transformers
+
+    self.transformers = sorted(transformers, key=(lambda transformer: -transformer.priority))
+    del transformers
+
+
     # Root block type (1)
 
     self.block_type = lang.DivisibleCompositeDictType()
 
-    for parser in self._parsers:
-      self.block_type.add(parser.segment_attributes, namespace=parser.namespace)
+    for transformer in self.transformers:
+      self.block_type.add(transformer.attributes, key=transformer)
 
 
     # Root unit attributes
@@ -335,7 +528,7 @@ class FiberParser:
     protocol_details = ProtocolDetails()
 
     for parser in self._parsers:
-      unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, namespace=parser.namespace))
+      unit_attrs = analysis.add(root_type.analyze_namespace(root_result, context, key=parser))
 
       if isinstance(unit_attrs, EllipsisType):
         continue
@@ -359,12 +552,16 @@ class FiberParser:
     self.block_type = lang.DivisibleCompositeDictType()
 
     for parser in self._parsers:
-      self.block_type.add(parser.segment_attributes, namespace=parser.namespace)
+      if parser.layer_attributes is not None:
+        self.block_type.add(parser.layer_attributes, key=parser)
+
+    for transformer in self.transformers:
+      self.block_type.add(transformer.attributes, key=transformer)
 
 
     # Root block
 
-    root_result_native = analysis.add(root_type.analyze_namespace(root_result, context, namespace=None))
+    root_result_native = analysis.add(root_type.analyze_namespace(root_result, context, key=0))
 
     if isinstance(root_result_native, EllipsisType):
       return analysis, Ellipsis
@@ -384,17 +581,24 @@ class FiberParser:
     for protocol_unit_details in protocol_details.values():
       adoption_stack |= protocol_unit_details.create_adoption_stack()
 
-    root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
+    layer = analysis.add(self.parse_layer(root_result_native['steps'], adoption_envs, runtime_envs))
 
-    if isinstance(root_block_prep, EllipsisType):
+    if isinstance(layer, EllipsisType):
       return analysis, Ellipsis
 
-    root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
+    root_block = analysis.add(layer.adopt_lead(adoption_stack, trace=Trace()))
 
-    if isinstance(root_block_data, EllipsisType):
-      return analysis, Ellipsis
+    # root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
 
-    root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
+    # if isinstance(root_block_prep, EllipsisType):
+    #   return analysis, Ellipsis
+
+    # root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
+
+    # if isinstance(root_block_data, EllipsisType):
+    #   return analysis, Ellipsis
+
+    # root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
 
     print("\x1b[1;31mAnalysis →\x1b[22;0m", analysis.errors)
     # print(root_block)
@@ -421,89 +625,125 @@ class FiberParser:
     )
 
 
-  def prepare_block(self, attrs: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs):
-    runtime_envs = runtime_envs.copy()
-
+  def parse_layer(
+    self,
+    attrs: Any,
+    /,
+    adoption_envs: EvalEnvs,
+    runtime_envs: EvalEnvs,
+    *,
+    extra_attributes: Optional[dict[str, lang.Attribute | lang.Type]] = None,
+    mode: Literal['any', 'lead', 'passive'] = 'lead'
+  ):
     analysis = lang.Analysis()
     context = AnalysisContext(
       envs_list=[adoption_envs, runtime_envs]
     )
 
-    block_result = analysis.add(self.block_type.analyze(attrs, context))
+    if extra_attributes is not None:
+      block_type = self.block_type.copy()
+      block_type.add(extra_attributes, key=1)
+    else:
+      block_type = self.block_type
+
+    block_result = analysis.add(block_type.analyze(attrs, context))
 
     if isinstance(block_result, EllipsisType):
       return analysis, Ellipsis
 
-    prep = Attrs()
-    failure = False
+    # Process extra info
+
+    if extra_attributes is not None:
+      extra_info = analysis.add(block_type.analyze_namespace(block_result, context, key=1))
+    else:
+      extra_info = None
+
+    # Collect transforms
+
+    lead_transforms = list[tuple[BaseLeadTransformer, LeadTransformerPreparationResult]]()
+    passive_transforms = list[tuple[BasePassiveTransformer, PassiveTransformerPreparationResult]]()
+
+    extra_adoption_envs = EvalEnvs()
+    extra_runtime_envs = EvalEnvs()
+
+    result_by_parser = dict[BaseParser, Any]()
 
     for parser in self._parsers:
-      unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, namespace=parser.namespace))
+      if hasattr(parser, 'preload'):
+        result = analysis.add(self.block_type.analyze_namespace(block_result, context, key=parser))
+
+        if isinstance(result, EllipsisType):
+          return analysis, Ellipsis
+
+        _ = analysis.add(parser.preload(result))
+        result_by_parser[parser] = result
+
+    for transformer in self.transformers:
+      parser = next(parser for parser in self._parsers if transformer in parser.transformers)
+
+      current_adoption_envs = adoption_envs + extra_adoption_envs
+      current_runtime_envs = runtime_envs + extra_runtime_envs
+
+      context = AnalysisContext(
+        envs_list=[current_adoption_envs, current_runtime_envs]
+      )
+
+      if parser.layer_attributes is not None:
+        unit_attrs = result_by_parser[parser]
+      else:
+        unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, key=transformer))
 
       if isinstance(unit_attrs, EllipsisType):
-        failure = True
         continue
 
-      unit_data = analysis.add(parser.prepare_block(unit_attrs, adoption_envs, runtime_envs))
+      if isinstance(transformer, BaseLeadTransformer):
+        new_lead_transforms = analysis.add(transformer.prepare(unit_attrs, current_adoption_envs, current_runtime_envs))
 
-      if isinstance(unit_data, EllipsisType):
-        # TODO: Problem here: what if this error will cause more errors due to missing runtime environments?
-        # Add a flag on the analysis context to ignore these errors.
-        failure = True
-        continue
+        if not isinstance(new_lead_transforms, EllipsisType):
+          if (not lead_transforms) and new_lead_transforms:
+            extra_adoption_envs += new_lead_transforms[0].adoption_envs
+            extra_runtime_envs += new_lead_transforms[0].runtime_envs
 
-      prep[parser.namespace] = unit_data.prep
-      runtime_envs += unit_data.envs
+          lead_transforms += [(transformer, transform) for transform in new_lead_transforms]
+      else:
+        new_passive_transform = analysis.add(transformer.prepare(unit_attrs, current_adoption_envs, current_runtime_envs))
 
-    return analysis, (prep if not failure else Ellipsis)
+        if new_passive_transform and not isinstance(new_passive_transform, EllipsisType):
+          extra_adoption_envs += new_passive_transform.adoption_envs
+          extra_runtime_envs += new_passive_transform.runtime_envs
 
-  def parse_block(self, preps: dict[str, Any], /, adoption_stack: EvalStack, trace: Optional[Trace] = None):
+          passive_transforms.append((transformer, new_passive_transform))
+
+    if (mode == 'passive') and lead_transforms:
+      analysis.errors.append(LeadTransformInPassiveLayerError(attrs))
+    if (mode != 'passive') and (len(lead_transforms) > 1):
+      analysis.errors.append(DuplicateLeadTransformInLayerError([transform.origin_area for _, transform in lead_transforms]))
+    if (mode == 'lead') and (len(lead_transforms) < 1):
+      analysis.errors.append(MissingLeadTransformInLayerError(attrs))
+      return analysis, Ellipsis
+
+    for _, transform in lead_transforms:
+      analysis.tokens.append(lang.AnalysisToken("lead", ErrorDocumentReference.from_area(transform.origin_area)))
+
+    layer = Layer(
+      (lead_transforms[0] if lead_transforms else None),
+      passive_transforms,
+      adoption_envs=extra_adoption_envs,
+      extra_info=extra_info,
+      runtime_envs=extra_runtime_envs
+    )
+
+    return analysis, layer
+
+  def wrap(self, block: BaseBlock, /):
     analysis = lang.Analysis()
-    state = BlockState()
-    transforms = Transforms()
-    trace = trace or Trace()
-
-    # for namespace, prep in preps.items():
-    #   attrs[namespace] = { attr_name: analysis.add(attr_prep.evaluate(adoption_envs, adoption_stack, done=True)) for attr_name, attr_prep in prep.items() }
-
-    failure = False
+    current_block = block
 
     for parser in self._parsers:
-      prep = preps[parser.namespace]
-      # state[parser.namespace] = None
+      for transformer in parser.leaf_transformers:
+        current_block = analysis.add(transformer.execute(block))
 
-      if prep is None:
-        continue
+        if isinstance(current_block, EllipsisType):
+          return analysis, Ellipsis
 
-      block_data = analysis.add(parser.parse_block(prep, adoption_stack, trace))
-
-      if isinstance(block_data, EllipsisType):
-        failure = True
-        continue
-
-      if block_data.state:
-        state[parser.namespace] = block_data.state
-
-      transforms += block_data.transforms
-
-    return analysis, BlockData(state=state, transforms=transforms) if not failure else Ellipsis
-
-  # def parse_block_expr(self, data_block: Any, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> UnresolvedBlockData | EllipsisType:
-  #   from .opaque import OpaqueValue
-
-  #   analysis, data_attrs = lang.LiteralOrExprType(self.segment_type, expr_type=lang.PrimitiveType(OpaqueValue), static=True).analyze(data_block, self.analysis_context)
-  #   self.analysis += analysis
-
-  #   if isinstance(data_attrs, EllipsisType):
-  #     return Ellipsis
-
-  #   if isinstance(data_attrs, LocatedValue) and isinstance(data_attrs.value, PythonExpr):
-  #     return UnresolvedBlockDataExpr(data_attrs.value.augment(adoption_envs))
-
-  #   return UnresolvedBlockDataLiteral(data_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs, fiber=self)
-
-  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    if not transforms:
-      return lang.Analysis(errors=[MissingProcessError(origin_area)]), Ellipsis
-
-    return transforms[0].execute(state, transforms[1:], origin_area=origin_area)
+    return analysis, current_block

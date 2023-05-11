@@ -1,10 +1,11 @@
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 import uuid
 
-from .draft import DraftDiagnostic
-from .reader import LocatedString, LocatedValue, LocationArea
 from .util.misc import Exportable
+
+if TYPE_CHECKING:
+  from .reader import LocatedValue, LocationArea
 
 
 @dataclass(kw_only=True)
@@ -20,7 +21,7 @@ class ErrorReference(Exportable):
 
 @dataclass(kw_only=True)
 class ErrorDocumentReference(ErrorReference, Exportable):
-  area: Optional[LocationArea]
+  area: 'Optional[LocationArea]'
   document_id: str
 
   def export(self):
@@ -32,7 +33,7 @@ class ErrorDocumentReference(ErrorReference, Exportable):
     }
 
   @classmethod
-  def from_area(cls, area: LocationArea, *, id: str = 'target'):
+  def from_area(cls, area: 'LocationArea', *, id: str = 'target'):
     from .document import Document
 
     assert area.source
@@ -47,7 +48,7 @@ class ErrorDocumentReference(ErrorReference, Exportable):
     )
 
   @classmethod
-  def from_value(cls, value: LocatedValue, *, id: str = 'target'):
+  def from_value(cls, value: 'LocatedValue', *, id: str = 'target'):
     return cls.from_area(value.area, id=id)
 
 @dataclass(kw_only=True)
@@ -71,7 +72,7 @@ class Error(Exportable):
   id: Optional[str] = None
   name: str = 'unknown'
   references: list[ErrorReference] = field(default_factory=list)
-  trace: Trace = field(default_factory=list)
+  trace: Optional[Trace] = None
 
   def as_master(self, *, time: Optional[float] = None):
     from .master.analysis import MasterError
@@ -92,21 +93,8 @@ class Error(Exportable):
       "message": self.message,
       "name": self.name,
       "references": [ref.export() for ref in self.references],
-      "trace": [ref.export() for ref in self.references]
+      "trace": [ref.export() for ref in self.trace] if (self.trace is not None) else None
     }
-
-  # For compatibility only
-  def diagnostic(self):
-    return DraftDiagnostic(self.message, ranges=[
-      range for ref in self.references if isinstance(ref, ErrorDocumentReference) and ref.area for range in ref.area.ranges
-    ])
 
 
 Diagnostic = Error
-
-class SomeRandomError(Error):
-  def __init__(self, target: LocatedString, /):
-    super().__init__(
-      message="Some random error",
-      references=[ErrorDocumentReference.from_value(target)]
-    )

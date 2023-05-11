@@ -1,28 +1,33 @@
 from asyncio import Event, Task
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from enum import IntEnum
 from logging import Logger
 from types import EllipsisType
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional, TypedDict
 
+from pr1.fiber.eval import EvalStack
 from pr1.fiber.langservice import Analysis, Attribute, BoolType
 from pr1.fiber.master2 import ProgramHandle, ProgramOwner
-from pr1.fiber.parser import (BaseBlock, BaseParser, BaseTransform, BlockState,
+from pr1.fiber.parser import (BaseBlock, BaseParser, BaseDefaultTransform, BlockState,
                               BlockUnitData, FiberParser, HeadProgram,
                               Transforms)
 from pr1.fiber.process import ProgramExecEvent
 from pr1.master.analysis import MasterAnalysis
-from pr1.reader import LocationArea
+from pr1.reader import LocatedValue, LocationArea
 from pr1.state import StateLocation, StateRecord
 from pr1.util.asyncio import DualEvent, cancel_task, run_anonymous
 from pr1.util.decorators import debug, provide_logger
 
-from . import logger
+from . import logger, namespace
 
 
-class StateParser(BaseParser):
-  namespace = "state"
+class Attributes(TypedDict, total=False):
+  settle: LocatedValue[bool]
+  stable: LocatedValue[bool]
+
+class Parser(BaseParser):
+  namespace = namespace
   priority = 1000
   segment_attributes = {
     'settle': Attribute(
@@ -38,17 +43,58 @@ class StateParser(BaseParser):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def parse_block(self, attrs, /, adoption_stack, trace):
-    return Analysis(), BlockUnitData(transforms=[StateTransform(
-      parser=self,
-      # TODO: Set back to false by default
-      settle=(attrs['settle'].value if ('settle' in attrs) else True),
-      stable=(('stable' in attrs) and attrs['stable'].value)
-    )])
+  def prepare(self, attrs: Attributes, /):
+    settle = (('settle' in attrs) and attrs['settle'].value)
+    stable = (('stable' in attrs) and attrs['stable'].value)
+
+    if settle or stable:
+      return Analysis(), [StateApplierTransform(
+        settle=settle,
+        stable=stable
+      )]
+    else:
+      return Analysis(), Transforms()
+
+
+@dataclass
+class StatePublisherTransform(BaseDefaultTransform):
+  priority = 100
+
+  state: BlockState
+
+  def adopt(self, adoption_envs, adoption_stack):
+    return Analysis(), (None, EvalStack())
+
+  def execute(self, block, data):
+    return Analysis(), StatePublisherBlock(block)
+
+@dataclass
+class StatePublisherBlock(BaseBlock):
+  child: BaseBlock
+
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State publisher"
 
 @dataclass(kw_only=True)
-class StateTransform(BaseTransform):
-  parser: StateParser = field(repr=False)
+class StateApplierTransform(BaseDefaultTransform):
+  priority = 100
+
+  settle: bool
+  stable: bool
+
+  def adopt(self, adoption_envs, adoption_stack):
+    return Analysis(), (None, EvalStack())
+
+  def execute(self, block, data):
+    return Analysis(), StateApplierBlock(block, settle=self.settle, stable=self.stable)
+
+
+@dataclass(kw_only=True)
+class StateTransform(BaseDefaultTransform):
+  parser: Parser = field(repr=False)
   settle: bool
   stable: bool
 
@@ -68,7 +114,7 @@ class StateTransform(BaseTransform):
     #   print(t)
     # print()
 
-    return analysis, StateBlock(
+    return analysis, StateApplierBlock(
       child=child,
       settle=self.settle,
       stable=self.stable,
@@ -108,14 +154,14 @@ class StateProgramPoint:
   child: Any
 
   @classmethod
-  def import_value(cls, data: Any, /, block: 'StateBlock', *, master):
+  def import_value(cls, data: Any, /, block: 'StateApplierBlock', *, master):
     return cls(
       child=(block.child.Point.import_value(data["child"], block.child, master=master) if data["child"] is not None else None)
     )
 
 @provide_logger(logger)
 class StateProgram(HeadProgram):
-  def __init__(self, block: 'StateBlock', handle):
+  def __init__(self, block: 'StateApplierBlock', handle):
     self._logger: Logger
 
     self._block = block
@@ -447,16 +493,21 @@ class StateProgram(HeadProgram):
     self._interrupted_event.set()
 
 
-@debug
-class StateBlock(BaseBlock):
-  Point: type[StateProgramPoint] = StateProgramPoint
+@dataclass
+class StateApplierBlock(BaseBlock):
+  child: BaseBlock
+  _: KW_ONLY
+  settle: bool
+  stable: bool
+
+  Point: ClassVar[type[StateProgramPoint]] = StateProgramPoint
   Program = StateProgram
 
-  def __init__(self, child: BaseBlock, state: BlockState, *, settle: bool, stable: bool):
-    self.child = child
-    self.settle = settle
-    self.stable = stable
-    self.state: BlockState = state # TODO: Remove explicit type hint
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return ["State applier", f"+ Settle: {self.settle}", f"+ Stable: {self.stable}"]
 
   def export(self):
     return {

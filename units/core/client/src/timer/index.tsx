@@ -1,5 +1,5 @@
-import { TimedProgressBar, formatDynamicValue, DynamicValue, ProcessUnit } from 'pr1';
-import { UnitNamespace } from 'pr1-shared';
+import { DynamicValue, Plugin, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue } from 'pr1';
+import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface ProcessData {
@@ -13,39 +13,56 @@ export interface ProcessLocation {
   } | null;
   paused: boolean;
   progress: number;
+  startDate: number;
 }
 
 
 export default {
-  namespace: ('timer' as UnitNamespace),
+  namespace: ('timer' as PluginName),
+  blocks: {
+    ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
+      Component(props) {
+        if (props.location.duration === null) {
+          return (
+            <TimeSensitive
+              contents={() => (
+                <p>Time elapsed: {new Date().toString()}</p>
+              )}
+              interval={1000} />
+          );
+        }
 
-  ProcessComponent(props) {
-    if (!props.location.duration) {
-      return null;
-    }
-
-    return (
-      <div>
-        <TimedProgressBar
-          duration={props.location.duration.value}
-          paused={props.location.paused}
-          time={props.time}
-          value={props.location.progress} />
-      </div>
-    );
-  },
-
-  createProcessFeatures(processData, location, options) {
-    return [{
-      icon: 'hourglass_empty',
-      label: (
-        location
-          ? (location.duration && formatDynamicValue(location.duration.quantity))
-          : (!((processData.duration.type === 'string') && (processData.duration.value === 'forever')) ? formatDynamicValue(processData.duration) : null)
-      ) ?? 'Foorever'
-    }];
-  },
-  getProcessLabel(data, context) {
-    return 'Wait';
+        return (
+          <TimedProgressBar
+            date={props.date}
+            duration={props.location.duration.value}
+            paused={props.location.paused}
+            setValue={(progress) => {
+              props.context.pool.add(async () => {
+                await props.context.sendMessage({
+                  type: 'jump',
+                  value: {
+                    progress
+                  }
+                });
+              });
+            }}
+            value={props.location.progress} />
+        );
+      },
+      createFeatures(data, location) {
+        return [{
+          icon: 'hourglass_empty',
+          label: (
+            location
+              ? (location.duration && formatDynamicValue(location.duration.quantity))
+              : (!((data.duration.type === 'string') && (data.duration.value === 'forever')) ? formatDynamicValue(data.duration) : null)
+          ) ?? 'Forever'
+        }];
+      },
+      getLabel(data) {
+        return 'Wait';
+      }
+    })
   }
-} satisfies ProcessUnit<ProcessData, ProcessLocation>
+} satisfies Plugin

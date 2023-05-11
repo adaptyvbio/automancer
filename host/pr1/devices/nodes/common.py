@@ -2,6 +2,7 @@ from abc import ABC
 import contextlib
 from typing import Callable, Literal, NewType, Optional, Protocol, Sequence, TypeVar
 
+from ...util.misc import HierarchyNode
 from ...util.asyncio import Cancelable, DualEvent
 
 
@@ -23,7 +24,7 @@ class NodeListener(Protocol[T]):
 class NodeUnavailableError(Exception):
   pass
 
-class BaseNode(ABC):
+class BaseNode(HierarchyNode, ABC):
   def __init__(self):
     self.id: NodeId
 
@@ -33,6 +34,14 @@ class BaseNode(ABC):
 
     self._connected_event = DualEvent()
     self._listeners = dict[NodeListenerMode, list[NodeListener]]()
+
+  # Internal
+
+  def __get_node_name__(self):
+    return (f"[{self.id}]" + (f" {self.label}" if self.label else str())) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
+
+  def __hash__(self):
+    return id(self)
 
   # Called by the producer
 
@@ -78,9 +87,6 @@ class BaseNode(ABC):
 
   def iter_all(self):
     yield (NodePath([self.id]), self)
-
-  def format(self, *, prefix: str = str()):
-    return (f"{self.label} ({self.id})" if self.label else str(self.id)) + f" \x1b[92m{self.__class__.__module__}.{self.__class__.__qualname__}\x1b[0m"
 
   async def wait_connected(self):
     await self._connected_event.wait_set()

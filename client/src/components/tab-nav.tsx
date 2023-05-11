@@ -1,9 +1,12 @@
 import * as React from 'react';
+import { Component, ReactNode } from 'react';
+
+import styles from '../../styles/components/tab-nav.module.scss';
 
 import { ExpandableText } from './expandable-text';
 import * as util from '../util';
 
-import styles from '../../styles/components/tab-nav.module.scss';
+import { ShortcutGuide } from './shortcut-guide';
 
 
 export interface TabNavProps {
@@ -12,9 +15,10 @@ export interface TabNavProps {
 
   entries: {
     id: string;
-    contents?: () => React.ReactNode;
+    contents?(): ReactNode;
     disabled?: unknown;
     label: string;
+    shortcut?: string;
   }[];
 }
 
@@ -22,7 +26,7 @@ export interface TabNavState {
   activeEntryId: string | null;
 }
 
-export class TabNav extends React.Component<TabNavProps, TabNavState> {
+export class TabNav extends Component<TabNavProps, TabNavState> {
   constructor(props: TabNavProps) {
     super(props);
 
@@ -33,7 +37,15 @@ export class TabNav extends React.Component<TabNavProps, TabNavState> {
     };
   }
 
-  render() {
+  private setActiveEntryId(entryId: string) {
+    if (this.props.activeEntryId !== undefined) {
+      this.props.setActiveEntryId?.(entryId);
+    } else {
+      this.setState({ activeEntryId: entryId });
+    }
+  }
+
+  override render() {
     let activeEntryId = (this.props.activeEntryId !== undefined)
       ? this.props.activeEntryId
       : this.state.activeEntryId;
@@ -46,15 +58,15 @@ export class TabNav extends React.Component<TabNavProps, TabNavState> {
               type="button"
               disabled={!!entry.disabled}
               className={util.formatClass(styles.entry, { '_active': entry.id === activeEntryId })}
-              onClick={() => {
-                if (this.props.activeEntryId !== undefined) {
-                  this.props.setActiveEntryId?.(entry.id);
-                } else {
-                  this.setState({ activeEntryId: entry.id });
-                }
-              }}
+              onClick={() => void this.setActiveEntryId(entry.id)}
               key={entry.id}>
-              <ExpandableText value={entry.label} />
+              <ExpandableText>
+                <ShortcutGuide
+                  onTrigger={() => void this.setActiveEntryId(entry.id)}
+                  shortcut={entry.shortcut ?? null}>
+                  {entry.label}
+                </ShortcutGuide>
+              </ExpandableText>
             </button>
           ))}
         </nav>

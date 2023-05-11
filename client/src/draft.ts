@@ -1,4 +1,4 @@
-import type { Brand } from 'pr1-shared';
+import type { Brand, Diagnostic, DiagnosticDocumentReference } from 'pr1-shared';
 
 import { DraftItem } from './app-backends/base';
 import { Protocol } from './interfaces/protocol';
@@ -23,6 +23,7 @@ export interface DraftCompletion {
   ranges: DraftRange[];
 }
 
+/** @deprecated */
 export interface DraftDiagnostic {
   kind: 'error' | 'warning';
   message: string;
@@ -40,25 +41,40 @@ export interface DraftFold {
 }
 
 export interface DraftRelation {
-  definition: DraftRange;
-  references: DraftRange[];
+  definitionBody: DiagnosticDocumentReference;
+  definitionName: DiagnosticDocumentReference;
+  references: DiagnosticDocumentReference[];
 }
 
 export interface DraftRename {
-  ranges: DraftRange[];
+  items: DiagnosticDocumentReference[];
 }
 
 export type DraftSelection = DraftRange;
 
+export interface DraftMarker {
+  kind: 'deprecated' | 'unnecessary';
+  message: string;
+  reference: DiagnosticDocumentReference;
+}
+
+export interface DraftToken {
+  name: string;
+  reference: DiagnosticDocumentReference;
+}
+
 export interface DraftCompilation {
   analysis: {
     completions: DraftCompletion[];
-    diagnostics: DraftDiagnostic[];
+    errors: Diagnostic[];
     folds: DraftFold[];
     hovers: DraftHover[];
+    markers: DraftMarker[];
     relations: DraftRelation[];
     renames: DraftRename[];
     selections: DraftSelection[];
+    tokens: DraftToken[];
+    warnings: Diagnostic[];
   };
 
   documentPaths: string[];

@@ -1,30 +1,30 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Literal, Optional, cast
+from typing import Any, Literal, final
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
-from pr1.devices.nodes.value import Null, ValueNode
+from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
-from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, AnyType, Attribute, EnumType,
+from pr1.fiber.expr import Evaluable, export_value
+from pr1.fiber.langservice import (Analysis, AnyType, Attribute, BoolType, EnumType,
                                    PotentialExprType, PrimitiveType,
-                                   QuantityType, TransformType)
-from pr1.fiber.parser import (BaseParser, BlockUnitData,
-                              BlockUnitPreparationData, BlockUnitState,
-                              FiberParser, ProtocolDetails, ProtocolUnitData,
-                              ProtocolUnitDetails)
+                                   QuantityType)
+from pr1.fiber.master2 import ProgramHandle
+from pr1.fiber.parser import (BaseBlock, BaseParser,
+                              BasePartialPassiveTransformer,
+                              BasePassiveTransformer, BaseProgram, BlockUnitState,
+                              FiberParser, ProtocolUnitData,
+                              ProtocolUnitDetails, TransformerAdoptionResult)
 from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
-                                      OuterType, StaticAnalysisAnalysis)
+                                      StaticAnalysisAnalysis)
+from pr1.reader import LocatedValue
 from pr1.util.decorators import debug
 
 from . import namespace
-
-if TYPE_CHECKING:
-  from .runner import DevicesRunner
 
 
 EXPR_DEPENDENCY_METADATA_NAME = f"{namespace}.dependencies"
@@ -84,32 +84,72 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
     }
 
 
-class DevicesParser(BaseParser):
-  namespace = namespace
-  priority = 1100
+@dataclass
+@final
+class ApplierBlock(BaseBlock):
+  child: BaseBlock
 
-  def __init__(self, fiber: FiberParser):
-    self._fiber = fiber
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State applier"
+
+  def create_program(self, handle):
+    from .program import ApplierProgram
+    return ApplierProgram(self, handle)
+
+  def import_point(self, data, /):
+    return self.child.import_point(data)
+
+  def export(self):
+    return {
+      "namespace": namespace,
+      "name": "applier",
+
+      "child": self.child.export()
+    }
+
+
+@dataclass
+@final
+class PublisherBlock(BaseBlock):
+  assignments: dict[NodePath, Evaluable[LocatedValue[Any]]]
+  child: BaseBlock
+  stable: bool
+
+  def __get_node_children__(self):
+    return [self.child]
+
+  def __get_node_name__(self):
+    return "State publisher"
+
+  def create_program(self, handle):
+    from .program import PublisherProgram
+    return PublisherProgram(self, handle)
+
+  def import_point(self, data, /):
+    return self.child.import_point(data)
+
+  def export(self):
+    return {
+      "namespace": namespace,
+      "name": "publisher",
+
+      "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
+      "child": self.child.export(),
+      "stable": self.stable
+    }
+
+
+class PublisherTransformer(BasePassiveTransformer):
+  priority = 100
+
+  def __init__(self, parser: 'Parser'):
+    self._parser = parser
 
   @functools.cached_property
-  def node_map(self) -> dict[str, tuple[BaseNode, NodePath]]:
-    def add_node(node: BaseNode, parent_path: Optional[list[str]] = None):
-      nodes = dict()
-      path = (parent_path or list()) + [node.id]
-
-      if isinstance(node, CollectionNode):
-        for child in node.nodes.values():
-          nodes.update(add_node(child, path))
-
-      if isinstance(node, ValueNode) and node.writable:
-        nodes[".".join(path[1:])] = node, tuple(path[1:])
-
-      return nodes
-
-    return add_node(self._fiber.host.root_node)
-
-  @functools.cached_property
-  def segment_attributes(self):
+  def attributes(self):
     def get_type(node):
       match node:
         case BooleanNode():
@@ -121,13 +161,82 @@ class DevicesParser(BaseParser):
         case _:
           return AnyType()
 
-    return { key: Attribute(
-      description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
-      documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
-      label=node.label,
-      optional=True,
-      type=PotentialExprType(get_type(node))
-    ) for key, (node, path) in self.node_map.items() }
+    return {
+      key: Attribute(
+        description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
+        documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
+        label=node.label,
+        optional=True,
+        type=PotentialExprType(get_type(node))
+      ) for key, (node, path) in self._parser.node_map.items()
+    } | {
+      'stable': Attribute(
+        optional=True,
+        type=BoolType()
+      )
+    }
+
+  def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
+    analysis = Analysis()
+    values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
+
+    stable = data['stable'].value if ('stable' in data) else False # type: ignore
+
+    for key, value in data.items():
+      if key == 'stable':
+        continue
+
+      node, path = self._parser.node_map[key]
+      value = analysis.add(value.eval(EvalContext(adoption_stack), final=False))
+
+      if not isinstance(value, EllipsisType):
+        values[path] = value
+
+    if values:
+      return analysis, TransformerAdoptionResult((values, stable))
+    else:
+      return analysis, None
+
+  def execute(self, data: tuple[dict[NodePath, Evaluable[LocatedValue[Any]]], bool], /, block):
+    values, stable = data
+    return Analysis(), PublisherBlock(values, block, stable=stable)
+
+
+class ApplierTransformer(BasePartialPassiveTransformer):
+  def execute(self, block):
+    return Analysis(), ApplierBlock(block)
+
+
+class Parser(BaseParser):
+  namespace = namespace
+
+  def __init__(self, fiber: FiberParser):
+    super().__init__(fiber)
+
+    self._fiber = fiber
+
+    self.leaf_transformers = [ApplierTransformer()]
+    self.transformers = [PublisherTransformer(self)]
+
+  @functools.cached_property
+  def node_map(self):
+    queue: list[tuple[BaseNode, NodePath]] = [(self._fiber.host.root_node, NodePath())]
+    nodes = dict[str, tuple[BaseNode, NodePath]]()
+
+    while queue:
+      node, node_path = queue.pop()
+
+      if isinstance(node, CollectionNode):
+        for child_node in node.nodes.values():
+          queue.append((
+            child_node,
+            NodePath((*node_path, child_node.id))
+          ))
+
+      if isinstance(node, ValueNode) and node.writable:
+        nodes[".".join(node_path)] = node, node_path
+
+    return nodes
 
   def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
     def create_type(node: BaseNode, parent_path: NodePath = ()):
@@ -178,31 +287,6 @@ class DevicesParser(BaseParser):
     }, name="Devices", readonly=True)
 
     return Analysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
-
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
-    values = dict[NodePath, Evaluable]()
-
-    for attr_key, attr_value in attrs.items():
-      if isinstance(attr_value, EllipsisType): # ?
-        continue
-
-      # node, path = self.node_map[attr_key]
-      values[cast(NodePath, attr_key)] = attr_value
-
-    return Analysis(), BlockUnitPreparationData(values)
-
-  def parse_block(self, attrs, /, adoption_stack, trace):
-    analysis = Analysis()
-    values = dict[NodePath, Evaluable]()
-
-    for key, value in attrs.items():
-      node, path = self.node_map[key]
-      value = analysis.add(value.evaluate(EvalContext(adoption_stack)))
-
-      if not isinstance(value, EllipsisType):
-        values[path] = value
-
-    return analysis, BlockUnitData(state=DevicesState(values))
 
 
 @debug

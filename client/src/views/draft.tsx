@@ -1,39 +1,34 @@
-import { Chip, ChipId, UnitNamespace } from 'pr1-shared';
+import { Chip, ChipId, ProtocolBlockPath, UnitNamespace } from 'pr1-shared';
 import * as React from 'react';
-import Split from 'react-split-grid';
 
 import editorStyles from '../../styles/components/editor.module.scss';
-import spotlightStyles from '../../styles/components/spotlight.module.scss';
-import formStyles from '../../styles/components/form.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 import type { Application } from '../application';
-import { Icon } from '../components/icon';
-import { TextEditor } from '../components/text-editor';
-import { VisualEditor } from '../components/visual-editor';
-import { Draft, DraftCompilation, DraftId, DraftPrimitive } from '../draft';
-import { Host } from '../host';
-import { Pool } from '../util';
-import { BarNav } from '../components/bar-nav';
-import { SplitPanels } from '../components/split-panels';
-import { TitleBar } from '../components/title-bar';
-import { Button } from '../components/button';
-import * as util from '../util';
-import { DraftSummary } from '../components/draft-summary';
-import { GraphEditor } from '../components/graph-editor';
-import { TabNav } from '../components/tab-nav';
 import { BlockInspector } from '../components/block-inspector';
-import * as format from '../format';
-import { ProtocolBlockPath } from '../interfaces/protocol';
-import { StartProtocolModal } from '../components/modals/start-protocol';
-import { BaseUrl } from '../constants';
-import { ViewHashOptions, ViewProps } from '../interfaces/view';
-import { ViewDrafts } from './protocols';
-import { ViewExecution } from './execution';
+import { Button } from '../components/button';
 import { DiagnosticsReport } from '../components/diagnostics-report';
+import { DraftSummary } from '../components/draft-summary';
+import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
+import { GraphEditor } from '../components/graph-editor';
+import { StartProtocolModal } from '../components/modals/start-protocol';
+import { SplitPanels } from '../components/split-panels';
+import { TabNav } from '../components/tab-nav';
+import { TextEditor } from '../components/text-editor';
 import { TimeSensitive } from '../components/time-sensitive';
+import { TitleBar } from '../components/title-bar';
+import { BaseUrl } from '../constants';
+import { Draft, DraftCompilation, DraftId } from '../draft';
+import * as format from '../format';
+import { Host } from '../host';
+import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { UnitTools } from '../unit';
+import * as util from '../util';
+import { Pool } from '../util';
+import { ViewExecution } from './execution';
+import { ViewDrafts } from './protocols';
+import { getBlockImpl } from '../protocol';
 
 
 export interface ViewDraftProps {
@@ -56,13 +51,12 @@ export interface ViewDraftState {
 }
 
 export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
-  chipIdAwaitingRedirection: ChipId | null = null;
-  compilationController: AbortController | null = null;
-  compilationPromise: Promise<DraftCompilation> | null = null;
-  controller = new AbortController();
-  pool = new Pool();
-  refSplit = React.createRef<HTMLDivElement>();
-  refTitleBar = React.createRef<TitleBar>();
+  private chipIdAwaitingRedirection: ChipId | null = null;
+  private compilationController: AbortController | null = null;
+  private compilationPromise: Promise<DraftCompilation> | null = null;
+  private controller = new AbortController();
+  private pool = new Pool();
+  private refTitleBar = React.createRef<TitleBar>();
 
   constructor(props: ViewDraftProps) {
     super(props);
@@ -72,12 +66,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       compiling: props.draft.readable, // The draft will soon be compiling if it's readable.
       requesting: !props.draft.readable,
       selectedBlockPath: null,
+      // selectedBlockPath: [0, 0, 0, 0, 0],
+      // selectedBlockPath: [0],
       startModalOpen: false,
 
       draggedTrack: null,
       graphOpen: true,
       inspectorEntryId: 'inspector',
-      inspectorOpen: false
+      inspectorOpen: true
     };
   }
 
@@ -99,18 +95,6 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         await this.getCompilation();
       }
     });
-
-    // this.updateInspectorOpen();
-
-    document.body.addEventListener('keydown', (event) => {
-      if ((event.key === 's') && (event.ctrlKey || event.metaKey) && event.shiftKey) {
-        event.preventDefault();
-
-        if (!this.state.compiling && this.state.compilation?.valid) {
-          this.setState({ startModalOpen: true });
-        }
-      }
-    }, { signal: this.controller.signal });
   }
 
   componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
@@ -193,28 +177,23 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         compiling: false
       });
 
-      // TODO: Improve
       if (this.state.selectedBlockPath) {
-        let block = compilation.protocol?.root;
+        let currentBlock = compilation.protocol?.root;
 
         for (let key of this.state.selectedBlockPath) {
-          if (!block) {
+          if (!currentBlock) {
             this.setState({ selectedBlockPath: null });
             break;
           }
 
-          let unit = UnitTools.asBlockUnit(this.props.host.units[block.namespace])!;
-          block = unit.getChildBlock?.(block, key);
+          let currentBlockImpl = getBlockImpl(currentBlock, { host: this.props.host });
+          currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
         }
 
-        if (!block) {
+        if (!currentBlock) {
           this.setState({ selectedBlockPath: null });
         }
       }
-
-      // if (options.global) {
-      //   await this.props.app.saveDraftCompilation(this.props.draft, compilation);
-      // }
     }
 
     return compilation;
@@ -279,7 +258,27 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
       );
 
       component = (
-        <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
+        <div className={util.formatClass(viewStyles.contents, editorStyles.root)} tabIndex={-1} onKeyDown={(event) => {
+          switch (event.key) {
+            case 'Escape':
+              if (this.state.selectedBlockPath) {
+                this.setState({
+                  selectedBlockPath: null
+                });
+              } else if (this.state.inspectorOpen) {
+                this.setState({
+                  inspectorOpen: false
+                });
+              }
+
+              break;
+
+            default:
+              return;
+          }
+
+          event.stopPropagation();
+        }}>
           {this.state.startModalOpen && (
             <StartProtocolModal
               host={this.props.host}
@@ -373,12 +372,14 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               { onToggle: (graphOpen) => void this.setState({ graphOpen }),
                 open: this.state.graphOpen,
                 component: (
-                  <GraphEditor
-                    host={this.props.host}
-                    selectBlock={this.selectBlock.bind(this)}
-                    selectedBlockPath={this.state.selectedBlockPath}
-                    summary={summary}
-                    tree={this.state.compilation?.protocol?.root ?? null} />
+                  <ErrorBoundary>
+                    <GraphEditor
+                      host={this.props.host}
+                      protocol={this.state.compilation?.protocol ?? null}
+                      selectBlock={this.selectBlock.bind(this)}
+                      selectedBlockPath={this.state.selectedBlockPath}
+                      summary={summary} />
+                  </ErrorBoundary>
                 ) },
               { nominalSize: CSS.px(400),
                 onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
@@ -391,21 +392,26 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                       entries={[
                         { id: 'inspector',
                           label: 'Inspector',
+                          shortcut: 'I',
                           contents: () => (
                             this.state.compilation?.protocol
                               ? (
-                                <BlockInspector
-                                  blockPath={this.state.selectedBlockPath}
-                                  host={this.props.host}
-                                  protocol={this.state.compilation!.protocol}
-                                  selectBlock={this.selectBlock.bind(this)} />
+                                <ErrorBoundary>
+                                  <BlockInspector
+                                    blockPath={this.state.selectedBlockPath}
+                                    host={this.props.host}
+                                    protocol={this.state.compilation!.protocol}
+                                    selectBlock={this.selectBlock.bind(this)} />
+                                </ErrorBoundary>
                               )
                               : <div />
                           ) },
                         { id: 'report',
                           label: 'Report',
+                          shortcut: 'R',
                           contents: () => (
-                            <DiagnosticsReport diagnostics={this.state.compilation?.analysis.diagnostics ?? []} />
+                            <DiagnosticsReport
+                              analysis={this.state.compilation?.analysis ?? null} />
                           ) }
                       ]} />
                   </div>
@@ -430,14 +436,16 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
         let lastModified = this.props.draft.lastModified;
 
         subtitle = (
-          <TimeSensitive child={() => {
-            let delta = (Date.now() - lastModified);
+          <TimeSensitive
+            contents={() => {
+              let delta = (Date.now() - lastModified);
 
-            return (delta < 5e3)
-              ? 'Just saved'
-              : `Last saved ${format.formatRelativeDate(lastModified)}`;
+              return (delta < 5e3)
+                ? 'Just saved'
+                : `Last saved ${format.formatRelativeDate(lastModified)}`;
+              }
             }
-          } interval={1e3} />
+            interval={1e3} />
         );
       } else {
         subtitle = null;
@@ -525,13 +533,8 @@ export function FilledDraftSummary(props: {
   }
 
   let compilation = props.compilation!;
-
-  let [errorCount, warningCount] = compilation.analysis.diagnostics.reduce(([errorCount, warningCount], diagnostic) => {
-    switch (diagnostic.kind) {
-      case 'error': return [errorCount + 1, warningCount];
-      case 'warning': return [errorCount, warningCount + 1];
-    }
-  }, [0, 0]);
+  let errorCount = compilation.analysis.errors.length;
+  let warningCount = compilation.analysis.warnings.length;
 
   let onStart = compilation.valid
     ? props.onStart

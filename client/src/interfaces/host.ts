@@ -1,4 +1,4 @@
-import type { Brand } from './util';
+import type { Brand } from 'pr1-shared';
 
 
 export interface HostInfo {
@@ -9,7 +9,7 @@ export interface HostInfo {
   local: boolean;
 }
 
-export type HostInfoId = Brand<string, "HostInfoId">;
+export type HostInfoId = Brand<string, 'HostInfoId'>;
 
 
 /* export type HostSettingsId = string;

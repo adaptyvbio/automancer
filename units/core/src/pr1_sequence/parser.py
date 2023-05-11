@@ -1,206 +1,97 @@
 from dataclasses import dataclass
-from enum import IntEnum
-import functools
 from types import EllipsisType
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 
-from pr1.fiber import langservice as lang
-from pr1.fiber.eval import EvalStack
-from pr1.fiber.master2 import ProgramOwner
-from pr1.fiber.parser import Attrs, BaseBlock, BaseParser, BaseTransform, BlockData, BlockProgram, BlockState, BlockUnitData, BlockUnitPreparationData, FiberParser, Transforms
-from pr1.fiber.process import ProgramExecEvent
-from pr1.devices.claim import ClaimSymbol
-from pr1.reader import LocationArea
-from pr1.util.decorators import debug
-from pr1.util.iterators import TriggerableIterator
-from pr1.util.misc import Exportable
+from pr1.fiber.langservice import Analysis, AnyType, Attribute, ListType
+from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
+                              FiberParser, Layer,
+                              LeadTransformerPreparationResult)
+from pr1.reader import LocatedString
+
+from . import namespace
 
 
-SequenceActionInfo = tuple[BlockData, LocationArea]
-
-class SequenceAttrs(TypedDict, total=False):
+class Attributes(TypedDict, total=False):
   actions: list[Any]
 
-SequencePrep = list[tuple[Attrs, LocationArea]]
-
-class SequenceParser(BaseParser):
-  namespace = "sequence"
-  priority = 700
-
-  root_attributes = dict()
-
-  @functools.cached_property
-  def segment_attributes(self):
-    return {
-      'actions': lang.Attribute(
-        description="Describes a nested list of steps.",
-        documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
-        kind='class',
-        signature="actions:\n  - <action 1>\n  - <action 2>",
-        type=lang.ListType(lang.AnyType())
-      )
-    }
+class Transformer(BaseLeadTransformer):
+  priority = 200
+  attributes = {
+    'actions': Attribute(
+      description="Describes a nested list of steps.",
+      documentation=["Actions can be specified as a standard list:\n```prl\nactions:\n```\nThe output structure will appear as flattened."],
+      kind='class',
+      signature="actions:\n  - <action 1>\n  - <action 2>",
+      type=ListType(AnyType())
+    )
+  }
 
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare_block(self, attrs: SequenceAttrs, /, adoption_envs, runtime_envs):
-    if (attr := attrs.get('actions')):
-      actions_prep = SequencePrep()
-      analysis = lang.Analysis()
-      analysis += cast(lang.ListType, self.segment_attributes['actions'].type).create_completion(attr, self._fiber.block_type)
+  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+    analysis = Analysis()
+
+    if (attr := data.get('actions')):
+      action_layers = list[Layer]()
 
       for action_source in attr:
-        action_prep = analysis.add(self._fiber.prepare_block(action_source, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
+        layer = analysis.add(self._fiber.parse_layer(action_source, adoption_envs, runtime_envs))
 
-        if isinstance(action_prep, EllipsisType):
-          continue
+        if not isinstance(layer, EllipsisType):
+          action_layers.append(layer)
 
-        actions_prep.append((action_prep, action_source.area))
+      return analysis, [LeadTransformerPreparationResult(action_layers, origin_area=cast(LocatedString, next(iter(data.keys()))).area)]
 
-      return analysis, BlockUnitPreparationData(actions_prep)
+    return analysis, list()
 
-    else:
-      return lang.Analysis(), BlockUnitPreparationData()
-
-  def parse_block(self, attrs: SequencePrep, /, adoption_stack, trace):
-    analysis = lang.Analysis()
-    actions_info = list[SequenceActionInfo]()
-
-    for action_prep, action_area in attrs:
-      action_data = analysis.add(self._fiber.parse_block(action_prep, adoption_stack))
-
-      if not isinstance(action_data, EllipsisType):
-        actions_info.append((action_data, action_area))
-
-    return analysis, BlockUnitData(transforms=[
-      SequenceTransform(actions_info, parser=self)
-    ])
-
-
-@debug
-class SequenceTransform(BaseTransform):
-  def __init__(self, actions_info: list[SequenceActionInfo], /, parser: SequenceParser):
-    self._actions_info = actions_info
-    self._parser = parser
-
-  def execute(self, state: BlockState, transforms: Transforms, *, origin_area: LocationArea):
-    analysis = lang.Analysis()
+  def adopt(self, data: list[Layer], /, adoption_stack, trace):
+    analysis = Analysis()
     children = list[BaseBlock]()
 
-    for action_data, action_area in self._actions_info:
-      action_block = analysis.add(self._parser._fiber.execute(action_data.state, transforms + action_data.transforms, origin_area=action_area))
+    for action_layer in data:
+      action_block = analysis.add(action_layer.adopt_lead(adoption_stack, trace))
 
       if not isinstance(action_block, EllipsisType):
         children.append(action_block)
 
-    return analysis, SequenceBlock(children) if children else Ellipsis
+    return analysis, Block(children) if children else Ellipsis
 
 
-class SequenceProgramMode(IntEnum):
-  Halted = 0
-  Halting = 1
-  Normal = 2
+class Parser(BaseParser):
+  namespace = namespace
 
-@dataclass(kw_only=True)
-class SequenceProgramLocation(Exportable):
-  index: int
+  def __init__(self, fiber: FiberParser):
+    super().__init__(fiber)
+    self.transformers = [Transformer(fiber)]
 
-  def export(self):
-    return {
-      "index": self.index
-    }
+@dataclass
+class Block(BaseBlock):
+  children: list[BaseBlock]
 
-@dataclass(kw_only=True)
-class SequenceProgramPoint:
-  child: Optional[Any]
-  index: int
+  def __get_node_children__(self):
+    return self.children
 
-  @classmethod
-  def import_value(cls, data: Any, /, block: 'SequenceBlock', *, master):
+  def __get_node_name__(self):
+    return "Sequence"
+
+  def create_program(self, handle):
+    from .program import Program
+    return Program(self, handle)
+
+  def import_point(self, data, /):
+    from .program import ProgramPoint
+
     index = data["index"]
-    child_block = block._children[index]
 
-    return cls(
-      child=(child_block.Point.import_value(data["child"], child_block, master=master) if data["child"] is not None else None),
+    return ProgramPoint(
+      child=(self.children[index].import_point(data["child"]) if data["child"] is not None else None),
       index=index
     )
 
-@debug
-class SequenceProgram(BlockProgram):
-  def __init__(self, block: 'SequenceBlock', handle):
-    self._block = block
-    # self._block._children = [x.child for x in block._children]
-    self._handle = handle
-
-    self._child_index: int
-    self._child_program: ProgramOwner
-    self._halting = False
-    self._point: Optional[SequenceProgramPoint]
-
-  def halt(self):
-    assert not self._halting
-
-    self._halting = True
-    self._child_program.halt()
-
-  # def jump(self, point: SequenceProgramPoint):
-  #   if point.index != self._child_index:
-  #     self._point = point
-  #     self.halt()
-  #   elif point.child:
-  #     self._child_program.jump(point.child)
-
-
-  # def set_interrupt(self, value: bool, /):
-  #   self._interrupting = value
-  #   self._iterator.trigger()
-
-
-  async def run(self, stack: EvalStack):
-    initial_point = None
-    self._point = initial_point or SequenceProgramPoint(child=None, index=0)
-
-    while True:
-      assert self._point
-      self._child_index = self._point.index
-
-      if self._child_index >= len(self._block._children):
-        break
-
-      child_block = self._block._children[self._child_index]
-
-      self._child_program = self._handle.create_child(child_block)
-      self._handle.send(ProgramExecEvent(location=SequenceProgramLocation(index=self._child_index)))
-
-      point = self._point
-      self._point = None
-
-      await self._child_program.run(stack)
-      next_index = self._point.index if self._point else (self._child_index + 1)
-
-      if self._halting or (next_index >= len(self._block._children)):
-        return
-
-      self._handle.collect_children()
-      self._point = SequenceProgramPoint(child=None, index=(self._child_index + 1))
-
-      await self._handle.resume_parent()
-
-
-@debug
-class SequenceBlock(BaseBlock):
-  Point: type[SequenceProgramPoint] = SequenceProgramPoint
-  Program = SequenceProgram
-
-  def __init__(self, children: list[BaseBlock]):
-    self._children = children
-
-  def __getitem__(self, key):
-    return self._children[key]
-
   def export(self):
     return {
-      "namespace": "sequence",
-      "children": [child.export() for child in self._children]
+      "name": "_",
+      "namespace": namespace,
+      "children": [child.export() for child in self.children]
     }

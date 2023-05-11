@@ -1,7 +1,8 @@
+import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { List, Map as ImMap, Set as ImSet } from 'immutable';
-import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, StoreManagerHookFromEntries, TitleBar, formatDynamicValue, util } from 'pr1';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, Plugin, PluginBlockImpl, StateUnit, StaticSelect, StoreManagerHookFromEntries, TitleBar, formatDynamicValue, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
 import { Component, PropsWithChildren, createRef, useEffect, useRef, useState } from 'react';
 
@@ -63,10 +64,6 @@ export interface ExecutorState {
   root: CollectionNode<DeviceNode>;
 }
 
-export interface State {
-  values: [NodePath, DynamicValue][];
-}
-
 export enum NodeWriteError {
   Disconnected = 0,
   Unclaimable = 1,
@@ -82,8 +79,73 @@ export interface NodeStateLocation {
   value: DynamicValue;
 }
 
-export interface Location {
-  values: [NodePath, NodeStateLocation][];
+
+export interface ApplierBlock extends ProtocolBlock {
+  child: ProtocolBlock;
+}
+
+export interface ApplierLocation {
+  children: { 0: unknown };
+  mode: ApplierLocationMode;
+}
+
+export enum ApplierLocationMode {
+  Applying = 0,
+  Halting = 2,
+  Normal = 1
+}
+
+
+export interface PublisherBlock extends ProtocolBlock {
+  assignments: [NodePath, DynamicValue][];
+  child: ProtocolBlock;
+}
+
+export interface PublisherLocation {
+  children: { 0: unknown; };
+  assignments: [NodePath, DynamicValue | null][];
+  mode: {
+    type: 'failed';
+  } | {
+    type: 'halting';
+  } | {
+    type: 'normal';
+    active: boolean;
+  };
+}
+
+
+export interface NodeState {
+  connected: boolean;
+  value: ContainedValue | null;
+  writable: {
+    owner: {
+      type: 'client';
+      clientId: ClientId;
+    } | {
+      type: 'unknown';
+    } | null;
+    targetValue: ContainedValue;
+  } | null;
+}
+
+
+// User composite node
+interface UserNode {
+  nodes: ImSet<NodePath>;
+}
+
+interface NodePreferences {
+  chartWindowOptionId: number;
+  open: boolean;
+  saved: {
+    open: boolean;
+  };
+}
+
+interface Preferences {
+  nodePrefs: ImMap<NodePath, NodePreferences>;
+  userNodes: List<UserNode>;
 }
 
 export function isCollectionNode(node: BaseNode): node is CollectionNode {
@@ -604,78 +666,77 @@ class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 
 export default {
   namespace,
-
-  createStateFeatures(state, descendantStates, location, context) {
-    let executor = context.host.state.executors[this.namespace] as ExecutorState;
-
-    return state.values.map(([path, stateValue]) => {
-      let parentNode = findNode(executor.root, path.slice(0, -1))!;
-      let node = findNode(executor.root, path)! as ValueNode;
-      let nodeLocation = location?.values.find(([otherPath, _nodeLocation]) => util.deepEqual(otherPath, path))?.[1];
-
-      let errors: Feature['error'][] = [];
-
-      if (nodeLocation?.errors.disconnected) {
-        errors.push({ kind: 'power', message: 'Disconnected' });
-      } if (nodeLocation?.errors.unclaimable) {
-        errors.push({ kind: 'shield', message: 'Unclaimable' });
-      } if (nodeLocation?.errors.evaluation) {
-        errors.push({ kind: 'error', message: 'Expression evaluation error' });
+  blocks: {
+    ['applier' as ProtocolBlockName]: ({
+      getChildren(block, context) {
+        return [block.child];
+      },
+      getChildrenExecution(block, location, context) {
+        return (location.mode === ApplierLocationMode.Normal)
+          ? [{ location: location.children[0] }]
+          : null;
       }
+    } satisfies PluginBlockImpl<ApplierBlock, ApplierLocation>),
+    ['publisher' as ProtocolBlockName]: {
+      getChildren(block, context) {
+        return [block.child];
+      },
+      getChildrenExecution(block, location, context) {
+        return (location.mode.type === 'normal')
+          ? [{ location: location.children[0] }]
+          : null;
+      },
+      createFeatures(block, location, context) {
+        let executor = context.host.state.executors[namespace] as ExecutorState;
 
-      let label: JSX.Element | string;
+        return block.assignments.map(([path, value]) => {
+          let parentNode = findNode(executor.root, path.slice(0, -1))!;
+          let node = findNode(executor.root, path) as ValueNode;
+          let locationValue = location?.assignments.find(([otherPath, value]) => (util.deepEqual(otherPath, path)))?.[1];
 
-      let currentValue = nodeLocation
-        ? nodeLocation.value
-        : stateValue;
-
-      if (currentValue.type === 'expression') {
-        label = formatDynamicValue(currentValue);
-      } else if (currentValue.type === 'none') {
-        label = '[Disabled]';
-      } else {
-        switch (node.value.type) {
-          case 'boolean': {
-            label = formatDynamicValue(currentValue);
-            break;
-          }
-
-          case 'enum': {
-            util.assert((currentValue.type === 'number') || (currentValue.type === 'string'));
-            let innerValue = currentValue.value;
-            let enumCase = node.value.cases.find((enumCase) => (enumCase.id === innerValue))!;
-            label = (enumCase.label ?? enumCase.id.toString());
-
-            break;
-          }
-
-          case 'numeric': {
-            util.assert(currentValue.type === 'quantity');
-            label = formatDynamicValue(currentValue);
-            break;
-          }
-
-          default:
-            throw new Error();
+          return {
+            description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
+            icon: (node.icon ?? 'settings_input_hdmi'),
+            label: formatDynamicValue(locationValue ?? value)
+          };
+        });
+      },
+      createActions(block, location, context) {
+        if (location.mode.type !== 'normal') {
+          return [];
         }
-      }
 
-      return {
-        disabled: descendantStates?.some((descendantState) => {
-          return descendantState?.values.some(([descendantPath, _descendantValue]) => util.deepEqual(path, descendantPath));
-        }),
-        description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
-        error: errors[0] ?? null,
-        icon: node.icon ?? 'settings_input_hdmi',
-        label
-      };
-    }) ?? [];
-  },
+        return location.mode.active
+          ? [{
+            id: 'suspend',
+            icon: 'pause',
+            onTrigger() {
+              context.pool.add(async () => {
+                await context.sendMessage({
+                  type: 'suspend'
+                });
+              });
+            }
+          }]
+          : [{
+            id: 'apply',
+            icon: 'play_arrow',
+            onTrigger() {
+              context.pool.add(async () => {
+                await context.sendMessage({
+                  type: 'apply'
+                });
+              });
+            }
+          }];
+      },
 
-  generalTabs: [{
-    id: 'manual',
-    icon: 'tune',
-    label: 'Device control',
-    component: DeviceControlTab
-  }]
-} satisfies StateUnit<State, Location>
+      // generalTabs: [{
+      //   id: 'manual',
+      //   icon: 'tune',
+      //   label: 'Device control',
+      //   component: DeviceControlTab
+      // }]
+    } satisfies PluginBlockImpl<PublisherBlock, PublisherLocation>
+  }
+} satisfies Plugin

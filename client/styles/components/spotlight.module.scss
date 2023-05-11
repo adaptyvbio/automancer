@@ -2,6 +2,23 @@
 @use "../mixins" as *;
 
 
+.placeholder {
+  display: flex;
+  height: 100%;
+
+  p {
+    width: 100%;
+
+    margin: auto 0;
+    padding: 1rem;
+
+    color: #666;
+    font-weight: 500;
+    text-align: center;
+  }
+}
+
+
 .root {
   height: 100%;
   overflow-y: auto;
@@ -117,6 +134,11 @@
       display: flex;
       align-items: center;
     }
+  }
+
+  &Actions {
+    display: flex;
+    column-gap: 0.4rem;
   }
 
   &Status {

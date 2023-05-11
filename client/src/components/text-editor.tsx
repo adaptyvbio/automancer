@@ -1,5 +1,6 @@
 import { Range } from 'immutable';
 import * as monaco from 'monaco-editor';
+import { concatenateDiagnostics, DiagnosticDocumentReference } from 'pr1-shared';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 
@@ -19,6 +20,9 @@ window.MonacoEnvironment = {
 		return new URL('./vs/editor/editor.worker.js', import.meta.url).href;
 	}
 };
+
+
+export const SEMANTIC_TOKEN_TYPES = ['lead'];
 
 
 export interface TextEditorProps {
@@ -89,7 +93,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       // This breaks the RenameProvider.
       // overflowWidgetsDomNode: this.refWidgetContainer.current!,
       fixedOverflowWidgets: true,
-      readOnly: false // !this.props.draft.writable
+      readOnly: false, // !this.props.draft.writable
+      'semanticHighlighting.enabled': true
     }, {
       storageService: {
         get() {},
@@ -102,8 +107,17 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         onWillSaveState() {},
         onDidChangeStorage() {},
         onDidChangeValue() {}
-    }
+      }
     });
+
+    // @ts-expect-error
+    this.editor._themeService._theme.getTokenStyleMetadata = (type: string, modifiers: never, language) => {
+      if (type === 'lead') {
+        return {
+          underline: true
+        };
+      }
+    };
 
     this.model = this.editor.getModel()!;
 
@@ -136,26 +150,53 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           return null;
         }
 
-        return compilation.analysis.diagnostics.flatMap((diagnostic) => {
-          return diagnostic.ranges.map(([startIndex, endIndex]) => {
-            let start = this.model.getPositionAt(startIndex);
-            let end = this.model.getPositionAt(endIndex);
-
-            return {
-              startColumn: start.column,
-              startLineNumber: start.lineNumber,
-
-              endColumn: end.column,
-              endLineNumber: end.lineNumber,
-
+        return [
+          ...concatenateDiagnostics(compilation.analysis).flatMap(([diagnostic, kind]) => [
+            ...diagnostic.references.map((reference) => ({
               message: diagnostic.message,
+              reference,
               severity: {
                 'error': monaco.MarkerSeverity.Error,
                 'warning': monaco.MarkerSeverity.Warning
-              }[diagnostic.kind]
-            };
-          });
-        });
+              }[kind],
+              tag: null
+            })),
+            ...(diagnostic.trace ?? []).map((reference, index) => ({
+              message: `${diagnostic.message} (${diagnostic.trace!.length - index}/${diagnostic.trace!.length})`,
+              reference,
+              severity: monaco.MarkerSeverity.Hint,
+              tag: null
+            }))
+          ]),
+          ...compilation.analysis.markers.map((marker) => ({
+            message: marker.message,
+            reference: marker.reference,
+            severity: monaco.MarkerSeverity.Hint,
+            tag: {
+              'deprecated': monaco.MarkerTag.Deprecated,
+              'unnecessary': monaco.MarkerTag.Unnecessary
+            }[marker.kind]
+          }))
+        ]
+          .filter((diagnostic) => (diagnostic.reference.type === 'document'))
+          .flatMap((diagnostic) =>
+            (diagnostic.reference as DiagnosticDocumentReference).ranges.map(([startIndex, endIndex]) => {
+              let start = this.model.getPositionAt(startIndex);
+              let end = this.model.getPositionAt(endIndex);
+
+              return {
+                startColumn: start.column,
+                startLineNumber: start.lineNumber,
+
+                endColumn: end.column,
+                endLineNumber: end.lineNumber,
+
+                message: diagnostic.message,
+                severity: diagnostic.severity,
+                tags: (diagnostic.tag !== null) ? [diagnostic.tag] : []
+              };
+            })
+          );
       }
     });
 
@@ -221,11 +262,14 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let relation = compilation.analysis.relations.find((relation) =>
-          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          [relation.definitionName, ...relation.references].some((reference) => {
+            let range = reference.ranges[0];
+            return getModelRangeFromDraftRange(model, range).containsPosition(position)
+          })
         );
 
         return (relation && {
-          range: getModelRangeFromDraftRange(model, relation.definition),
+          range: getModelRangeFromDraftRange(model, relation.definitionBody.ranges[0]),
           uri: model.uri
         }) ?? null;
       },
@@ -269,11 +313,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let relation = compilation.analysis.relations.find((relation) =>
-          [relation.definition, ...relation.references].some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          [relation.definitionName, ...relation.references].some((reference) => getModelRangeFromDraftRange(model, reference.ranges[0]).containsPosition(position))
         );
 
-        return (relation && [relation.definition, ...relation.references].map((range) => ({
-          range: getModelRangeFromDraftRange(model, range),
+        return (relation && [relation.definitionName, ...relation.references].map((reference) => ({
+          range: getModelRangeFromDraftRange(model, reference.ranges[0]),
           uri: model.uri
         }))) ?? null;
       },
@@ -285,15 +329,15 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let rename = compilation.analysis.renames.find((rename) =>
-          rename.ranges.some((range) => getModelRangeFromDraftRange(model, range).containsPosition(position))
+          rename.items.some((item) => getModelRangeFromDraftRange(model, item.ranges[0]).containsPosition(position))
         );
 
         return rename
           ? {
-            edits: rename.ranges.map((range) => ({
+            edits: rename.items.map((item) => ({
               resource: model.uri,
               textEdit: {
-                range: getModelRangeFromDraftRange(model, range),
+                range: getModelRangeFromDraftRange(model, item.ranges[0]),
                 text: newName
               },
               versionId: model.getVersionId()
@@ -322,8 +366,8 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
 
         let range = util.findMap(compilation.analysis.renames, (rename) =>
-          util.findMap(rename.ranges, (range) => {
-            let modelRange = getModelRangeFromDraftRange(model, range);
+          util.findMap(rename.items, (item) => {
+            let modelRange = getModelRangeFromDraftRange(model, item.ranges[0]);
             return modelRange.containsPosition(position)
               ? modelRange
               : null;
@@ -339,6 +383,48 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
             rejectReason: 'You cannot rename this element.'
           } as (monaco.languages.RenameLocation & monaco.languages.Rejection);
       },
+
+      getLegend: () => ({
+        tokenModifiers: [],
+        tokenTypes: SEMANTIC_TOKEN_TYPES
+      }),
+      provideDocumentSemanticTokens: async (model, lastResultId, token) => {
+        let compilation = await this.getCompilation();
+        let lastPosition = new monaco.Position(1, 0);
+
+        let data = compilation.analysis.tokens
+          .map((token) => ({
+            range: token.reference.ranges[0],
+            typeIndex: SEMANTIC_TOKEN_TYPES.indexOf(token.name)
+          }))
+          .filter(({ typeIndex }) => (typeIndex >= 0))
+          .sort((a, b) => (a.range[0] - b.range[0]))
+          .flatMap(({ range: [startOffset, endOffset], typeIndex }) => {
+            let startPosition = this.model.getPositionAt(startOffset);
+            let lineNumberDiff = (startPosition.lineNumber - lastPosition.lineNumber);
+
+            let result = [
+              lineNumberDiff,
+              ((lineNumberDiff < 1)
+                ? (startPosition.column - lastPosition.column)
+                : startPosition.column - 1),
+              (endOffset - startOffset),
+              typeIndex,
+              0
+            ];
+
+            lastPosition = startPosition;
+
+            return result;
+          });
+
+        return {
+          data: new Uint32Array(data)
+        };
+      },
+      releaseDocumentSemanticTokens: (resultId) => {
+
+      }
     }, { signal: this.controller.signal });
   }
 
@@ -394,7 +480,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   render() {
     return (
-      <div className={textEditorStyles.root}>
+      <div className={textEditorStyles.root} onKeyDown={(event) => {
+        if (this.editor.hasTextFocus()) {
+          event.stopPropagation();
+        }
+      }}>
         <div ref={this.ref} onKeyDown={!this.props.autoSave
           ? ((event) => {
             if ((event.key === 's') && (event.ctrlKey || event.metaKey) && !event.shiftKey) {

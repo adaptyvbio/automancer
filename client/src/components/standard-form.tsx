@@ -1,10 +1,12 @@
 import * as React from 'react';
 
+import formStyles from '../../styles/components/form.module.scss';
+import modalStyles from '../../styles/components/modal.module.scss';
+
 import { Icon } from './icon';
 import * as util from '../util';
 
-import formStyles from '../../styles/components/form.module.scss';
-import modalStyles from '../../styles/components/modal.module.scss';
+import { ShortcutGuide } from './shortcut-guide';
 
 
 export function Actions(props: React.PropsWithChildren<{
@@ -20,11 +22,12 @@ export function Actions(props: React.PropsWithChildren<{
 export function Action(props: {
   label: string;
   onClick?(): void;
+  shortcut?: string;
   type?: 'button' | 'submit';
 }) {
   return (
     <button type={props.type ?? 'button'} onClick={props.onClick} className={formStyles.btn}>
-      {props.label}
+      <ShortcutGuide shortcut={props.shortcut ?? ((props.type === 'submit') ? 'Enter' : null)}>{props.label}</ShortcutGuide>
     </button>
   );
 }

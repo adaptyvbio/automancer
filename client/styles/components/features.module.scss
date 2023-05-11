@@ -6,77 +6,42 @@ $divider-height: 20px;
 $entry-height: 30px;
 
 
-.list {
-  display: flex;
-  flex-direction: column;
+/**
 
+.root
+  .entry [+]
+    .features
+      .feature [+]
+        .icon
+        .body
+          .description
+          .label
+        .errorIcon
+        .action [+]
+          :global(.icon)
+    .detail
+
+*/
+
+
+.root {
   margin: 1rem 0;
 }
 
-.divider {
-  &Root {
-    display: grid;
-    align-items: center;
-    column-gap: 1rem;
-    grid-template-columns: 1fr auto 1fr;
-
-    height: $divider-height;
-    margin: -$divider-height * 0.5 0;
-    z-index: 1;
-
-    color: $app-blue;
-
-    > :nth-child(odd) {
-      background-color: currentColor;
-      height: 2px;
-    }
-
-    &:not(:hover, :global(._active)) {
-      > :first-child {
-        grid-column: 1 / -1;
-        height: 1px;
-
-        background-color: #ccc;
-      }
-
-      > :nth-child(n+2), &:is(:first-child, :last-child) > * {
-        display: none;
-      }
-    }
-
-    &:global(._alternate) {
-      color: #999;
-      font-style: italic;
-    }
-  }
-
-  &Label {
-    font-weight: 500;
-  }
-}
-
-.group {
+.root, .features {
   display: flex;
   flex-direction: column;
   row-gap: 0.4rem;
 }
 
-.list .group {
-  padding: 0.6rem 1rem;
-}
-
-.listSimple .group:not(:last-child) {
-  margin-bottom: -1px;
-  border-bottom: 1px solid #ddd;
-}
-
-.entry {
+.feature {
   display: grid;
   align-items: center;
   column-gap: 0.8rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
 
   height: $entry-height;
+  padding: 0 2px;
 
   &Disabled {
     opacity: 0.4;
@@ -99,7 +64,7 @@ $entry-height: 30px;
     'opsz' 20;
 }
 
-.entryAccent .icon {
+.featureAccent .icon {
   background-color: $app-blue;
 }
 
@@ -135,17 +100,28 @@ $entry-height: 30px;
   }
 }
 
-.blank {
-  &Outer {
-    display: flex;
-    height: $entry-height;
+.action {
+  display: flex;
+  padding: 1px;
+
+  border: 1px solid transparent;
+  border-radius: 4px;
+
+  color: #999;
+
+  &:hover {
+    border-color: #ddd;
+    color: #666;
   }
 
-  &Inner {
-    margin: auto 0;
+  :global(.icon) {
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 100,
+      'GRAD' 200,
+      'opsz' 20;
 
-    color: #666;
-    font-style: italic;
+    translate: 0 1px;
   }
 }
 
@@ -156,4 +132,9 @@ $entry-height: 30px;
     'wght' 100,
     'GRAD' 200,
     'opsz' 20;
+}
+
+
+.detail {
+  padding: 1rem 1.2rem 1.6rem 1.2rem;
 }

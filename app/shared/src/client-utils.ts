@@ -1,5 +1,5 @@
 import { createErrorWithCode } from './error';
-import { ClientProtocol, ServerProtocol } from './types/protocol';
+import { ClientProtocol, ServerProtocol } from './types/communication';
 
 
 export async function* splitMessagesOfIterator(iterable: AsyncIterable<{ toString(): string; }>) {

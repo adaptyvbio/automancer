@@ -24,23 +24,71 @@ export interface SidebarProps {
 
 export interface SidebarState {
   collapsed: boolean;
+  manualCollapseControl: boolean;
 }
 
 export class Sidebar extends React.Component<SidebarProps, SidebarState> {
+  private controller = new AbortController();
+
   constructor(props: SidebarProps) {
     super(props);
 
     let collapsed;
+    let manualCollapseControl;
 
     try {
       collapsed = JSON.parse(window.sessionStorage[CollapsedStorageKey]);
+      manualCollapseControl = true;
     } catch (_err) {
       collapsed = false;
+      manualCollapseControl = false;
     }
 
     this.state = {
-      collapsed
+      collapsed,
+      manualCollapseControl
     };
+  }
+
+  componentDidMount() {
+    const AUTO_COLLAPSE_LOWER_WIDTH = 1000;
+    const AUTO_COLLAPSE_UPPER_WIDTH = 1200;
+
+    let rect = document.body.getBoundingClientRect();
+
+    let observer = new ResizeObserver((entries) => {
+      let newRect = entries[0].contentRect;
+
+      if ((newRect.width < AUTO_COLLAPSE_LOWER_WIDTH) && !this.state.collapsed && (!this.state.manualCollapseControl || (rect.width > AUTO_COLLAPSE_LOWER_WIDTH))) {
+        window.sessionStorage[CollapsedStorageKey] = JSON.stringify(true);
+
+        this.setState({
+          collapsed: true,
+          manualCollapseControl: false
+        });
+      }
+
+      if ((newRect.width > AUTO_COLLAPSE_UPPER_WIDTH) && this.state.collapsed && (!this.state.manualCollapseControl || (rect.width < AUTO_COLLAPSE_UPPER_WIDTH))) {
+        window.sessionStorage[CollapsedStorageKey] = JSON.stringify(false);
+
+        this.setState({
+          collapsed: false,
+          manualCollapseControl: false
+        });
+      }
+
+      rect = newRect;
+    });
+
+    observer.observe(document.body);
+
+    this.controller.signal.addEventListener('abort', () => {
+      observer.disconnect();
+    });
+  }
+
+  componentWillUnmount() {
+    this.controller.abort();
   }
 
   render() {
@@ -175,7 +223,10 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               <button type="button" className={util.formatClass(styles.navEntryRoot)} onClick={() => {
                 let collapsed = !this.state.collapsed;
                 window.sessionStorage[CollapsedStorageKey] = JSON.stringify(collapsed);
-                this.setState({ collapsed });
+                this.setState({
+                  collapsed,
+                  manualCollapseControl: true
+                });
               }}>
                 <div className={styles.navEntryIcon}>
                   <div className="material-symbols-sharp">{this.state.collapsed ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left'}</div>

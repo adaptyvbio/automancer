@@ -111,7 +111,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     this.props.selectBlock(path, options);
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     let container = this.refContainer.current!;
 
     // This will immediately call setSize().
@@ -155,11 +155,11 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
-  render() {
+  override render() {
     if (!this.state.size) {
       return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }

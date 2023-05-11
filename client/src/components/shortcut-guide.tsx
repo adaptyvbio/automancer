@@ -1,7 +1,9 @@
-import * as React from 'react';
-import { Fragment, PropsWithChildren, useEffect } from 'react';
+import { Fragment, PropsWithChildren, useContext, useEffect } from 'react';
 
 import styles from '../../styles/components/shortcut-guide.module.scss';
+
+import { ApplicationStoreContext } from '../contexts';
+import { ShortcutDisplayMode } from '../store/values';
 
 
 // @ts-expect-error
@@ -41,6 +43,9 @@ export function ShortcutGuide(props: PropsWithChildren<{
   onTrigger?(): void;
   shortcut: string | null;
 }>) {
+  let store = useContext(ApplicationStoreContext);
+  let [shortcutDisplayMode, _setShortcutDisplayMode] = store.usePersistent(['general', 'shortcut-display-mode']);
+
   let displayShortcuts = true;
   let shortcutSegments = props.shortcut?.split('+');
 
@@ -68,19 +73,25 @@ export function ShortcutGuide(props: PropsWithChildren<{
 
       return () => void controller.abort();
     }
+
+    return undefined;
   }, [props.onTrigger, props.shortcut]);
 
   return (
     <div className={styles.root}>
       {props.children}
-      {displayShortcuts && shortcutSegments && (() => {
+      {displayShortcuts && shortcutSegments && (shortcutDisplayMode !== ShortcutDisplayMode.Disabled) && (() => {
+        let keyDisplayMap = (shortcutDisplayMode === ShortcutDisplayMode.Symbols)
+          ? KEY_DISPLAY_MAP_ADVANCED
+          : KEY_DISPLAY_MAP;
+
         let rawKeySegment = shortcutSegments.at(-1);
-        let keySegment = KEY_DISPLAY_MAP[rawKeySegment] ?? rawKeySegment;
+        let keySegment = keyDisplayMap[rawKeySegment] ?? rawKeySegment;
 
         let displayedSegments = [
           ...['Alt', 'Meta', 'Shift']
             .filter((modifier) => shortcutSegments!.includes(modifier))
-            .map((modifier) => KEY_DISPLAY_MAP[modifier]),
+            .map((modifier) => keyDisplayMap[modifier]),
           keySegment
         ];
 

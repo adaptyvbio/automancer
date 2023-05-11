@@ -1,17 +1,16 @@
-import type { UnionToIntersection } from 'pr1-shared';
+import type { OrdinaryId, UnionToIntersection } from 'pr1-shared';
 import type { SpecializedStoreManagerHook } from './store-manager';
-import type { OrdinaryId } from '../interfaces/util';
 
 
 export enum GraphDirection {
-  Horizontal,
-  Vertical
+  Horizontal = 0,
+  Vertical = 1
 }
 
 export enum ShortcutDisplayMode {
-  Default,
-  Disabled,
-  Symbol
+  Disabled = 0,
+  Normal = 1,
+  Symbols = 2
 }
 
 export type PersistentStoreEntries = [

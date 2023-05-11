@@ -1,20 +1,15 @@
 {
+  "extends": "../shared/tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
     "composite": true,
-    "declaration": true,
-    "declarationMap": true,
     "emitDeclarationOnly": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "jsx": "react",
+    "jsx": "react-jsx",
     "module": "es2020",
     "moduleResolution": "node",
     "outDir": "lib/types",
     "rootDir": "src",
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "es2021"
   },
   "files": [
     "src/index.tsx"

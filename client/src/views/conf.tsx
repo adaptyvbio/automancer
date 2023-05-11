@@ -15,8 +15,7 @@ import { Button } from '../components/button';
 import { ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { Description } from '../components/description';
-import { UnitInfo } from 'pr1-shared';
-import { OrdinaryId } from '../interfaces/util';
+import { OrdinaryId, UnitInfo } from 'pr1-shared';
 import { ApplicationStore } from '../application';
 import { GraphDirection, ShortcutDisplayMode } from '../store/values';
 
@@ -61,11 +60,11 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
     };
   }
 
-  componentDidUpdate(prevProps: Readonly<ViewProps>, prevState: Readonly<ViewConfState>) {
+  override componentDidUpdate(prevProps: Readonly<ViewProps>, prevState: Readonly<ViewConfState>) {
     // TODO: Check that the selected section exists
   }
 
-  render() {
+  override render() {
     let unitsInfo = this.props.host.state.info.units;
 
     let groups: ConfGroup[] = [
@@ -244,7 +243,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
           {this.state.reloadBannerVisible && (
             <div className={styles.reload}>
               <p>Reload the setup to apply changes.</p>
-              <Button>Reload</Button>
+              <Button onClick={() => {}}>Reload</Button>
             </div>
           )}
         </div>
@@ -331,10 +330,10 @@ function GeneralConfPage(props: ConfPageComponentProps) {
         options={[
           { id: ShortcutDisplayMode.Disabled,
             label: 'Disabled' },
-          { id: ShortcutDisplayMode.Default,
-            label: 'Default' },
-          { id: ShortcutDisplayMode.Symbol,
-            label: 'Symbols' }
+          { id: ShortcutDisplayMode.Normal,
+            label: 'Normal' },
+          { id: ShortcutDisplayMode.Symbols,
+            label: 'Advanced symbols' }
         ]} />
     </>
   );

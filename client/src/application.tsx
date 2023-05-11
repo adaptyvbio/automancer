@@ -24,6 +24,7 @@ import { Units } from './interfaces/unit';
 import { ViewUnitTab } from './views/unit-tab';
 import { StoreManager } from './store/store-manager';
 import { PersistentStoreDefaults, PersistentStoreManagerHook, SessionStoreManagerHook } from './store/values';
+import { ApplicationStoreContext } from './contexts';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
@@ -258,7 +259,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
 
-  componentDidMount() {
+  override componentDidMount() {
     window.addEventListener('beforeunload', () => {
       this.state.host?.client.close();
     }, { signal: this.controller.signal });
@@ -365,7 +366,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     });
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
@@ -489,7 +490,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   }
 
 
-  render() {
+  override render() {
     let contents = null;
     let routeData = this.state.currentRouteData;
 
@@ -504,16 +505,18 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       }) ?? '';
 
       contents = (
-        <ErrorBoundary>
-          <Component
-            app={this}
-            host={this.state.host}
-            route={viewRouteMatch}
-            setUnsavedDataCallback={(callback) => {
-              this.unsavedDataCallback = callback;
-            }}
-            key={key} />
-        </ErrorBoundary>
+        <ApplicationStoreContext.Provider value={this.store}>
+          <ErrorBoundary>
+            <Component
+              app={this}
+              host={this.state.host}
+              route={viewRouteMatch}
+              setUnsavedDataCallback={(callback) => {
+                this.unsavedDataCallback = callback;
+              }}
+              key={key} />
+          </ErrorBoundary>
+        </ApplicationStoreContext.Provider>
       );
     }
 

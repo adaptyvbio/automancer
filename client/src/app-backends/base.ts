@@ -1,5 +1,5 @@
 import type { DraftId, DraftPrimitive } from '../draft';
-import type { StoreManager } from '../store/store-manager';
+import { Store } from '../store/base';
 
 
 export interface DraftItem {
@@ -30,8 +30,8 @@ export interface DraftItem {
 }
 
 export interface AppBackend {
-  persistentStoreManager: StoreManager;
-  sessionStoreManager: StoreManager;
+  persistentStore: Store;
+  sessionStore: Store;
 
   initialize(): Promise<void>;
 

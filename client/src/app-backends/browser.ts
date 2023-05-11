@@ -3,8 +3,8 @@ import * as idb from 'idb-keyval';
 import { DraftId, DraftPrimitive } from '../draft';
 import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
-import { StoreManager } from '../store/store-manager';
 import { BrowserStorageStore } from '../store/browser-storage';
+import { Store } from '../store/base';
 
 
 interface MainEntry {
@@ -38,18 +38,15 @@ export class BrowserAppBackend implements AppBackend {
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
-  persistentStoreManager: StoreManager;
-  sessionStoreManager: StoreManager;
+  persistentStore: Store;
+  sessionStore: Store;
 
   constructor() {
-    this.persistentStoreManager = new StoreManager(new BrowserStorageStore(localStorage));
-    this.sessionStoreManager = new StoreManager(new BrowserStorageStore(sessionStorage));
+    this.persistentStore = new BrowserStorageStore(localStorage);
+    this.sessionStore = new BrowserStorageStore(sessionStorage);
   }
 
   async initialize() {
-    await this.persistentStoreManager.initialize();
-    await this.sessionStoreManager.initialize();
-
     // if (Notification.permission === 'default') {
     //   await Notification.requestPermission();
     // }

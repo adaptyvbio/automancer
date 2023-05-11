@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ComponentType, useContext } from 'react';
+import { ComponentType } from 'react';
 import seqOrd from 'seq-ord';
 
 import descriptionStyles from '../../styles/components/description.module.scss';
@@ -18,6 +18,7 @@ import { Description } from '../components/description';
 import { UnitInfo } from 'pr1-shared';
 import { OrdinaryId } from '../interfaces/util';
 import { ApplicationStore } from '../application';
+import { GraphDirection, ShortcutDisplayMode } from '../store/values';
 
 
 export interface ConfGroup {
@@ -71,17 +72,15 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
       {
         id: 'main',
         pages: [
-          {
-            id: 'general',
+          { id: 'general',
             component: GeneralConfPage,
             icon: 'settings',
-            label: 'General'
-          },
-          {
-            id: 'editor',
-            icon: 'edit_note',
-            label: 'Editor'
-          }
+            label: 'General' }
+          // {
+          //   id: 'editor',
+          //   icon: 'edit_note',
+          //   label: 'Editor'
+          // }
         ]
       },
       { id: 'plugins',
@@ -294,15 +293,10 @@ export interface ConfPageComponentProps {
 }
 
 
-enum ShortcutPref {
-  Default,
-  Disabled,
-  Symbol
-}
-
 function GeneralConfPage(props: ConfPageComponentProps) {
-  let [automaticSave, setAutomaticSave] = props.store.usePersistent<boolean>(['editor', 'automatic-save'], false);
-  let [shortcutPref, setShortcutPref] = props.store.usePersistent<ShortcutPref>(['misc', 'shortcut'], ShortcutPref.Disabled);
+  let [automaticSave, setAutomaticSave] = props.store.usePersistent(['editor', 'automatic-save']);
+  let [graphDirection, setGraphDirection] = props.store.usePersistent(['graph', 'direction']);
+  let [shortcutPref, setShortcutPref] = props.store.usePersistent(['general', 'shortcut-display-mode']);
   // let [progressDisplayPref, setProgressDisplayPref] = props.store.usePersistent<>();
 
   return (
@@ -314,21 +308,32 @@ function GeneralConfPage(props: ConfPageComponentProps) {
       <label className={formStyles.checkRoot}>
         <input type="checkbox" checked={automaticSave} onInput={(event) => void setAutomaticSave(!automaticSave)} />
         <div className={formStyles.checkTitle}>Automatic save</div>
-        <p className={formStyles.checkDescription}>The editor's contents will be saved automatically at regular intervals.</p>
+        <p className={formStyles.checkDescription}>Save the editor's contents automatically at regular intervals.</p>
       </label>
+
+      <Form.Select
+        label="Graph direction"
+        value={graphDirection}
+        onInput={setGraphDirection}
+        options={[
+          { id: GraphDirection.Vertical,
+            label: 'Vertical' },
+          { id: GraphDirection.Horizontal,
+            label: 'Horizontal' }
+        ]} />
 
       <h3>Miscellaneous</h3>
 
       <Form.Select
         label="Shortcut display"
         value={shortcutPref}
-        onInput={(value) => void setShortcutPref(value)}
+        onInput={setShortcutPref}
         options={[
-          { id: ShortcutPref.Disabled,
+          { id: ShortcutDisplayMode.Disabled,
             label: 'Disabled' },
-          { id: ShortcutPref.Default,
+          { id: ShortcutDisplayMode.Default,
             label: 'Default' },
-          { id: ShortcutPref.Symbol,
+          { id: ShortcutDisplayMode.Symbol,
             label: 'Symbols' }
         ]} />
     </>

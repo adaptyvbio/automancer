@@ -49,6 +49,11 @@ export * from './components/item-list';
 export * from './components/selector';
 export * from './components/shadow-scrollable';
 export * from './components/static-select';
+export * from './store/base';
+export * from './store/browser-storage';
+export * from './store/idb';
+export * from './store/store-manager';
+export * from './store/values';
 export * from './unit';
 
 export * from './interfaces/host';

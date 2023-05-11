@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { List, Map as ImMap, Set as ImSet } from 'immutable';
-import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, TitleBar, formatDynamicValue, util } from 'pr1';
+import { Application, Button, DynamicValue, Feature, GeneralTabComponentProps, Host, StateUnit, StaticSelect, StoreManagerHookFromEntries, TitleBar, formatDynamicValue, util } from 'pr1';
 import { Brand, ChannelId, ClientId, UnitNamespace } from 'pr1-shared';
 import { Component, PropsWithChildren, createRef, useEffect, useRef, useState } from 'react';
 
@@ -141,6 +141,10 @@ interface Preferences {
 
 const namespace = ('devices' as UnitNamespace);
 
+type PersistentStoreEntries = [
+  [['plugin', typeof namespace, 'selected-entry'], NodePath | null]
+];
+
 function DeviceControlTab(props: GeneralTabComponentProps) {
   let executor = (props.host.state.executors[namespace] as ExecutorState);
 
@@ -149,7 +153,9 @@ function DeviceControlTab(props: GeneralTabComponentProps) {
   //   userNodes: List()
   // }, createSyncSessionStorageStore(namespace + '.preferences'));
 
-  let [selectedNodePath, setSelectedNodePath] = props.app.store.useSession<NodePath | null>(['plugin', namespace, 'selectedEntry'], null);
+  let useSession = props.app.store.useSession as StoreManagerHookFromEntries<PersistentStoreEntries>;
+
+  let [selectedNodePath, setSelectedNodePath] = useSession(['plugin', namespace, 'selected-entry'], null);
   let [nodeStates, setNodeStates] = useState<ImMap<NodePath, NodeState> | null>(null);
 
   let createNodeEntriesFromNodes = (nodes: BaseNode[], parentNodePath: NodePath = List()): HierarchyEntry<NodeId>[] => {

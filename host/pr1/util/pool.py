@@ -1,7 +1,9 @@
 import asyncio
-from asyncio import Event, Task
 import contextlib
+from asyncio import Event, Task
 from typing import Any, Coroutine, Optional, TypeVar
+
+from .asyncio import race
 
 
 PoolExceptionGroup = BaseExceptionGroup
@@ -55,7 +57,7 @@ class Pool:
     for task in self._tasks:
       task.cancel()
 
-    # Used as a signal to wake up wait() and have it return
+    # Wake up wait() and have it return
     self._task_event.set()
 
   def create_child(self):
@@ -90,42 +92,34 @@ class Pool:
     exceptions = list[BaseException]()
 
     while True:
-      while (tasks := self._tasks.copy()):
-        try:
-          await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
-        except asyncio.CancelledError:
-          # Reached when the call to wait() is cancelled
-          cancelled = True
-          self.close()
+      self._task_event.clear()
 
-        for task in tasks:
-          if task.done():
-            try:
-              exc = task.exception()
-            except asyncio.CancelledError:
-              pass
-            else:
-              if exc:
-                exceptions.append(exc)
+      try:
+        await race(
+          self._task_event.wait(),
+          *([asyncio.wait(self._tasks, return_when=asyncio.FIRST_EXCEPTION)] if self._tasks else list())
+        )
+      except asyncio.CancelledError:
+        # Reached when the call to wait() is cancelled
+        cancelled = True
+        self.close()
 
-            self._tasks.remove(task)
+      for task in self._tasks.copy():
+        if task.done():
+          try:
+            exc = task.exception()
+          except asyncio.CancelledError:
+            pass
+          else:
+            if exc:
+              exceptions.append(exc)
 
-        if exceptions and (not self._closing):
-          self.close()
+          self._tasks.remove(task)
 
-      if forever and (not self._closing):
-        self._task_event.clear()
+      if exceptions and (not self._closing):
+        self.close()
 
-        try:
-          await self._task_event.wait()
-        except asyncio.CancelledError:
-          cancelled = True
-          break
-
-        # Used as a signal to stop the loop
-        if not self._tasks:
-          break
-      else:
+      if (not self._tasks) and ((not forever) or self._closing):
         break
 
     self._open = False
@@ -160,7 +154,8 @@ class Pool:
         except:
           pass
         else:
-          self.close()
+          if not self._closing:
+            self.close()
 
       task.add_done_callback(callback)
 

@@ -163,7 +163,8 @@ async def race(*awaitables: Awaitable):
   for task in pending:
     task.cancel()
 
-  await asyncio.wait(pending)
+  if pending:
+    await asyncio.wait(pending)
 
   return tasks.index(done_task), done_task.result()
 

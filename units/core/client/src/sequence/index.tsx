@@ -26,9 +26,8 @@ const namespace = ('sequence' as PluginName);
 
 const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, ancestors, location, options, context) => {
   let vertical = options.settings.vertical;
-  let verticalFlag = vertical ? 1 : 0;
 
-  let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex, location?.children[location.index]));
+  let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex));
   let linksCompact: boolean[] = [];
 
   let inlineDirSize = Math.max(...childrenMetrics.map(({ size }) => vertical ? size.width : size.height));

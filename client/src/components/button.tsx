@@ -9,7 +9,7 @@ import { ShortcutGuide } from './shortcut-guide';
 export function Button(props: React.PropsWithChildren<{
   className?: string;
   onClick(): void;
-  shortcut?: string;
+  shortcut?: string | null;
 }>) {
   return (
     <button

@@ -23,12 +23,10 @@ import { Draft, DraftCompilation, DraftId } from '../draft';
 import * as format from '../format';
 import { Host } from '../host';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
-import { UnitTools } from '../unit';
 import * as util from '../util';
 import { Pool } from '../util';
 import { ViewExecution } from './execution';
 import { ViewDrafts } from './protocols';
-import { getBlockImpl } from '../protocol';
 
 
 export interface ViewDraftProps {
@@ -77,7 +75,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.pool.add(async () => {
       // This immediately updates item.readable, item.writable and item.lastModified
       // and calls setState() to update the analoguous properties on draft.
@@ -97,7 +95,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     });
   }
 
-  componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
+  override componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
     // Trigger a compilation if the external revision changed.
     // if (prevProps.draft.revision && (this.props.draft.revision !== prevProps.draft.revision)) {
     //   this.pool.add(async () => {
@@ -121,7 +119,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     }
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
@@ -186,8 +184,8 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
             break;
           }
 
-          let currentBlockImpl = getBlockImpl(currentBlock, { host: this.props.host });
-          currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
+          // let currentBlockImpl = getBlockImpl(currentBlock, this.globalContext);
+          // currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
         }
 
         if (!currentBlock) {
@@ -213,7 +211,7 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  render() {
+  override render() {
     let component: React.ReactNode;
     let subtitle: React.ReactNode | null = null;
     let subtitleVisible = false;
@@ -377,7 +375,10 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                       host={this.props.host}
                       protocol={this.state.compilation?.protocol ?? null}
                       selectBlock={this.selectBlock.bind(this)}
-                      selectedBlockPath={this.state.selectedBlockPath}
+                      selection={this.state.selectedBlockPath && {
+                        blockPath: this.state.selectedBlockPath,
+                        observed: false
+                      }}
                       summary={summary} />
                   </ErrorBoundary>
                 ) },
@@ -493,13 +494,13 @@ export class ViewDraftWrapper extends React.Component<ViewDraftWrapperProps, {}>
     return this.props.app.state.drafts[this.props.route.params.draftId];
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     if (!this.draft) {
       ViewDrafts.navigate();
     }
   }
 
-  render() {
+  override render() {
     if (!this.draft) {
       return null;
     }

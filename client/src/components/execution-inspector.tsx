@@ -18,6 +18,7 @@ import { FeatureEntry, FeatureList } from './features';
 
 export interface ExecutionInspectorProps {
   activeBlockPaths: ProtocolBlockPath[];
+  blockPath: ProtocolBlockPath | null;
   chip: Chip;
   host: Host;
   location: unknown;
@@ -26,7 +27,7 @@ export interface ExecutionInspectorProps {
 }
 
 export interface ExecutionInspectorState {
-  selectedBlockPathIndex: number;
+
 }
 
 export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
@@ -41,21 +42,27 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
   }
 
   override render() {
+    if (!this.props.blockPath) {
+      return (
+        <div className={spotlightStyles.placeholder}>
+          <p>Nothing selected</p>
+        </div>
+      );
+    }
+
     let context: GlobalContext = {
       host: this.props.host,
       pool: this.pool
     };
 
-    let blockPath = this.props.activeBlockPaths[this.state.selectedBlockPathIndex];
-
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, blockPath, context);
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, this.props.blockPath, context);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
     let leafPair = blockAnalysis.pairs.at(-1);
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
-    let leafBlockContext = createBlockContext(blockPath, this.props.chip.id, context);
+    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.chip.id, context);
 
     return (
       <div className={spotlightStyles.root}>
@@ -80,10 +87,10 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             <h2 className={spotlightStyles.title}>{leafGroup.name ?? <i>{leafBlockImpl.getLabel?.(leafPair.block) ?? 'Untitled'}</i>}</h2>
 
             <div className={spotlightStyles.navigationRoot}>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === 0}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={true}>
                 <Icon name="chevron_left" className={spotlightStyles.navigationIcon} />
               </button>
-              <button type="button" className={spotlightStyles.navigationButton} disabled={this.state.selectedBlockPathIndex === (this.props.activeBlockPaths.length - 1)}>
+              <button type="button" className={spotlightStyles.navigationButton} disabled={-1 !== (this.props.activeBlockPaths.length - 1)}>
                 <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
               </button>
             </div>
@@ -160,7 +167,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
             {leafBlockImpl.createCommands?.(leafPair.block, leafPair.location, leafBlockContext).map((command) => (
               <Button
                 onClick={() => command.onTrigger()}
-                shortcut={command.shortcut}
+                shortcut={command.shortcut ?? null}
                 key={command.id}>
                 {command.label}
               </Button>

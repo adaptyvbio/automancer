@@ -33,7 +33,7 @@ export class BlockInspector extends React.Component<BlockInspectorProps, BlockIn
     this.state = {};
   }
 
-  render() {
+  override render() {
     if (!this.props.blockPath) {
       return (
         <div className={spotlightStyles.placeholder}>

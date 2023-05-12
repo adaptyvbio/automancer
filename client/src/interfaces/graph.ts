@@ -35,7 +35,7 @@ export type ProtocolBlockGraphRenderer<Block extends ProtocolBlock, Location = n
   ancestors: ProtocolBlock[],
   location: Location | null,
   options: {
-    computeMetrics(index: number, location: unknown | null): ProtocolBlockGraphRendererMetrics;
+    computeMetrics(key: number): ProtocolBlockGraphRendererMetrics;
     settings: GraphRenderSettings;
   },
   context: GlobalContext

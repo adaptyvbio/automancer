@@ -1,14 +1,14 @@
 /// <reference path="global-interfaces.d.ts" />
 /// <reference path="types.d.ts" />
 
+import 'material-symbols/rounded.css';
+import 'material-symbols/sharp.css';
+
 import * as React_ from 'react';
 import * as ReactDOM_ from 'react-dom/client';
 import { createRoot } from 'react-dom/client';
 
 import { BrowserApp } from './browser-app';
-
-import 'material-symbols/rounded.css';
-import 'material-symbols/sharp.css';
 
 import '../styles/main.scss';
 

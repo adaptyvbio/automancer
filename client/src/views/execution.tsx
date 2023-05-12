@@ -1,5 +1,6 @@
-import { Chip, ChipId, ExecutionRefPath, PluginName, ProtocolBlock, ProtocolBlockPath, ProtocolLocation } from 'pr1-shared';
-import * as React from 'react';
+import { List } from 'immutable';
+import { Chip, ChipId, PluginName, ProtocolBlockPath } from 'pr1-shared';
+import { Component, createRef } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -9,8 +10,7 @@ import { GraphEditor } from '../components/graph-editor';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
-import { Host } from '../host';
-import { MetadataTools, UnitTools } from '../unit';
+import { MetadataTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
@@ -18,7 +18,7 @@ import { BaseUrl } from '../constants';
 import { ViewChips } from './chips';
 import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
-import { getBlockImpl } from '../protocol';
+import { getCommonBlockPathLength, getRefPaths } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
 import { ErrorBoundary } from '../components/error-boundary';
 
@@ -33,21 +33,24 @@ export interface ViewExecutionRoute {
 export type ViewExecutionProps = ViewProps<ViewExecutionRoute>;
 
 export interface ViewExecutionState {
-  selectedBlockPath: ProtocolBlockPath | null;
+  selection: {
+    blockPath: ProtocolBlockPath;
+    observed: boolean;
+  } | null;
   toolsTabId: string | null;
   toolsOpen: boolean;
 }
 
-export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecutionState> {
-  pool = new Pool();
-  refTitleBar = React.createRef<TitleBar>();
+export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionState> {
+  private pool = new Pool();
+  private refTitleBar = createRef<TitleBar>();
 
   constructor(props: ViewExecutionProps) {
     super(props);
 
     this.state = {
-      selectedBlockPath: null,
-      toolsTabId: 'inspector',
+      selection: null,
+      toolsTabId: 'execution',
       toolsOpen: true
     };
   }
@@ -72,17 +75,31 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     }
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.componentDidRender();
   }
 
-  componentDidUpdate() {
+  override componentDidUpdate() {
     this.componentDidRender();
   }
 
-  selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
+  private get activeBlockPaths() {
+    return getRefPaths(this.master.protocol.root, this.master.location, this.globalContext);
+  }
+
+  private get globalContext(): GlobalContext {
+    return {
+      host: this.props.host,
+      pool: this.pool
+    };
+  }
+
+  selectBlock(blockPath: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
     this.setState({
-      selectedBlockPath: path,
+      selection: blockPath && {
+        blockPath,
+        observed: false
+      },
       toolsTabId: 'inspector'
     });
 
@@ -94,41 +111,17 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
     }
   }
 
-  render() {
+  override render() {
     if (!this.chip?.master) {
       return null;
     }
 
-    let context: GlobalContext = {
-      host: this.props.host,
-      pool: this.pool
-    };
-
     let metadataTools = this.props.host.plugins['metadata' as PluginName] as unknown as MetadataTools;
     let metadata = metadataTools.getChipMetadata(this.chip);
 
-    let getRefPaths = (block: ProtocolBlock, location: unknown): ProtocolBlockPath[] => {
-      let blockImpl = getBlockImpl(block, context);
-      let children = blockImpl.getChildren?.(block, context);
-
-      if (!children) {
-        return [[]];
-      }
-
-      let refs = blockImpl.getChildrenExecution!(block, location, context);
-
-      if (!refs) {
-        return [[]];
-      }
-
-      return Array.from(refs.entries())
-        .filter(([key, ref]) => ref)
-        .flatMap(([key, ref]) =>
-          getRefPaths(children![key], ref!.location).map((path) => [key, ...path])
-        );
-    };
-
-    let activeBlockPaths = getRefPaths(this.master.protocol.root, this.master.location);
+    let activeBlockPaths = this.activeBlockPaths;
+    let selectedBlockPath = (this.state.selection?.blockPath ?? null);
+    let isSelectedBlockActive = selectedBlockPath && activeBlockPaths.some((path) => util.deepEqual(path, selectedBlockPath));
 
     return (
       <main className={viewStyles.root}>
@@ -152,16 +145,16 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                 component: (
                   <ErrorBoundary>
                     <GraphEditor
-                      execution={this}
                       host={this.props.host}
-                      // location={this.master.location}
+                      location={this.master.location}
                       protocol={this.master.protocol}
                       selectBlock={this.selectBlock.bind(this)}
-                      selectedBlockPath={this.state.selectedBlockPath} />
+                      selection={this.state.selection} />
                   </ErrorBoundary>
                 )
               },
-              { nominalSize: CSSNumericValue.parse('400px'),
+              {
+                nominalSize: CSSNumericValue.parse('400px'),
                 onToggle: (open) => void this.setState({ toolsOpen: open }),
                 open: this.state.toolsOpen,
                 component: (
@@ -169,34 +162,37 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
                     activeEntryId={this.state.toolsTabId}
                     setActiveEntryId={(id) => void this.setState({ toolsTabId: id })}
                     entries={[
-                      (() => {
-                        let showDefaultInspector = (this.state.selectedBlockPath) && (selectedActiveBlockPathIndex < 0) // TODO: Improve
-
-                        return {
-                          id: 'inspector',
-                          label: (showDefaultInspector ? 'Inspector' : 'Execution inspector'),
-                          shortcut: 'I',
-                          contents: () => showDefaultInspector
-                            ? (
-                              <BlockInspector
-                                blockPath={this.state.selectedBlockPath}
+                      ...(isSelectedBlockActive
+                        ? [{
+                          id: 'execution',
+                          label: 'Execution',
+                          shortcut: 'E',
+                          contents: () => (
+                            <ErrorBoundary>
+                              <ExecutionInspector
+                                activeBlockPaths={activeBlockPaths}
+                                blockPath={selectedBlockPath}
+                                chip={this.chip}
                                 host={this.props.host}
+                                location={this.master.location}
                                 protocol={this.master.protocol}
                                 selectBlock={this.selectBlock.bind(this)} />
-                            )
-                            : (
-                              <ErrorBoundary>
-                                <ExecutionInspector
-                                  activeBlockPaths={activeBlockPaths}
-                                  chip={this.chip}
-                                  host={this.props.host}
-                                  location={this.master.location}
-                                  protocol={this.master.protocol}
-                                  selectBlock={this.selectBlock.bind(this)} />
-                              </ErrorBoundary>
-                            )
-                        };
-                      })(),
+                            </ErrorBoundary>
+                          )
+                        }]
+                        : []),
+                      {
+                        id: 'inspector',
+                        label: 'Inspector',
+                        shortcut: 'I',
+                        contents: () => (
+                          <BlockInspector
+                            blockPath={selectedBlockPath}
+                            host={this.props.host}
+                            protocol={this.master.protocol}
+                            selectBlock={this.selectBlock.bind(this)} />
+                        )
+                      },
                       {
                         id: 'report',
                         label: 'Report',
@@ -212,6 +208,45 @@ export class ViewExecution extends React.Component<ViewExecutionProps, ViewExecu
         </div>
       </main>
     );
+  }
+
+  static getDerivedStateFromProps(props: ViewExecutionProps, state: ViewExecutionState): Partial<ViewExecutionState> | null {
+    let chip = props.host.state.chips[props.route.params.chipId] as Chip;
+
+    if (!chip?.master) {
+      return null;
+    }
+
+    let globalContext: GlobalContext = {
+      host: props.host,
+      pool: new Pool()
+    };
+
+    let activeBlockPaths = List(getRefPaths(chip.master.protocol.root, chip.master.location, globalContext).map((blockPath) => List(blockPath)));
+    let selectedBlockPath = state.selection && List(state.selection.blockPath);
+
+    if (!selectedBlockPath) {
+      return {
+        selection: {
+          blockPath: activeBlockPaths.first()!.toArray(),
+          observed: true
+        }
+      };
+    }
+
+    if (state.selection!.observed && !activeBlockPaths.includes(selectedBlockPath)) {
+      return {
+        selection: {
+          blockPath: activeBlockPaths.maxBy((blockPath) => getCommonBlockPathLength(
+            blockPath.toArray(),
+            selectedBlockPath!.toArray()
+          ))!.toArray(),
+          observed: true
+        }
+      };
+    }
+
+    return null;
   }
 
 

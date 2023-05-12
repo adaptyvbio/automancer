@@ -59,6 +59,13 @@ export function ShortcutGuide(props: PropsWithChildren<{
 
       document.body.addEventListener('keydown', (event) => {
         if (
+          (
+            (event.target === event.currentTarget) ||
+            (
+              (event.target instanceof HTMLElement) &&
+              (event.target.getAttribute('tabIndex') === '-1')
+            )
+          ) &&
           (segments.includes('Alt') === event.altKey) &&
           (segments.includes('Meta') === (IS_MAC ? event.metaKey : event.ctrlKey)) &&
           (segments.includes('Shift') === event.shiftKey) &&

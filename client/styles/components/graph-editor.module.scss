@@ -174,10 +174,10 @@
   grid-template-columns: 100%;
 
   height: 100%;
+  position: relative;
 
   background-color: #fff;
-  border: 2px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: 2px 3px 2px #0001;
 
   user-select: none;
@@ -187,24 +187,53 @@
   }
 
   &:hover {
-    // TODO: Replace with an outline to avoid the gap between the border and the node's edge.
-    border-color: #999;
+    box-shadow: 0 0 0 2px #999;
   }
 
-  &:global(._active) {
-    border-color: $app-blue;
-    box-shadow: 3px 3px 3px #0003;
+  &:active {
+    box-shadow: 0 0 0 2px $app-blue;
   }
 
-  &:global(._selected) {
-    // background-color: lighten($app-blue, 56%);
-    border-color: $app-blue;
-    outline: 3px solid rgba($app-blue, 20%);
+  &[data-status="observed"] {
+    box-shadow: 0 0 0 5px rgba(#999, 20%), 0 0 0 2px #999;
   }
 
-  &:global(._context) {
-    border-color: #85144b;
+  &[data-status="selected"] {
+    box-shadow: 0 0 0 5px rgba($app-blue, 20%), 0 0 0 2px $app-blue;
   }
+
+  &:global(._active)::after {
+    content: "";
+    position: absolute;
+
+    --height: 4px;
+    --side-margin: 2px;
+
+    left: var(--side-margin);
+    top: 2px;
+
+    width: calc(100% - var(--side-margin) * 2);
+    height: var(--height);
+
+    background-color: #07e7c4;
+    border-radius: calc(var(--height) * 0.5);
+  }
+
+  // &::after {
+  //   content: "";
+  //   position: absolute;
+
+  //   --circle-size: 12px;
+
+  //   right: 1.6rem;
+  //   top: calc((var(--cell-size) - var(--circle-size)) * 0.5);
+
+  //   width: var(--circle-size);
+  //   aspect-ratio: 1;
+
+  //   background-color: $app-blue;
+  //   border-radius: 50%;
+  // }
 }
 
 

@@ -30,17 +30,47 @@ export function createBlockContext(blockPath: ProtocolBlockPath, chipId: ChipId,
   };
 }
 
-
-
 export function getBlockImpl(block: ProtocolBlock, context: GlobalContext) {
   return context.host.plugins[block.namespace].blocks[block.name];
 }
 
-
 export function getBlockName(block: ProtocolBlock) {
   return (block.namespace === 'name')
-    ? (block.value as string)
+    ? (block['value'] as string)
     : null;
+}
+
+export function getCommonBlockPathLength(a: ProtocolBlockPath, b: ProtocolBlockPath) {
+  let index: number;
+
+  for (index = 0; index < Math.min(a.length, a.length); index += 1) {
+    if (a[index] !== b[index]) {
+      break;
+    }
+  }
+
+  return index;
+}
+
+export function getRefPaths(block: ProtocolBlock, location: unknown, context: GlobalContext): ProtocolBlockPath[] {
+  let blockImpl = getBlockImpl(block, context);
+  let children = blockImpl.getChildren?.(block, context);
+
+  if (!children) {
+    return [[]];
+  }
+
+  let refs = blockImpl.getChildrenExecution!(block, location, context);
+
+  if (!refs) {
+    return [[]];
+  }
+
+  return Array.from(refs.entries())
+    .filter(([key, ref]) => ref)
+    .flatMap(([key, ref]) =>
+      getRefPaths(children![key], ref!.location, context).map((path) => [key, ...path])
+    );
 }
 
 
@@ -79,7 +109,7 @@ export function analyzeBlockPath(
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
 
-    currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)[key]?.location ?? null);
+    currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
     currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
 
     pairs.push({

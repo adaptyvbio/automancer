@@ -1,11 +1,11 @@
 import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
-import * as React from 'react';
 
 import { GraphNode } from './components/graph-editor';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
 import { PluginBlockImpl, BlockContext } from './interfaces/plugin';
 import { ComponentType } from 'react';
 import { FeatureDef } from './components/features';
+import { deepEqual } from './util';
 
 
 const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block, path, ancestors, location, options, context) => {
@@ -39,7 +39,14 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
     },
 
     render(position, renderOptions) {
-      let active = false; // (location !== null);
+      let active = (location !== null);
+      let selection = options.settings.editor.props.selection;
+
+      let status = (selection && deepEqual(selection.blockPath, path))
+        ? selection.observed
+          ? ('observed' as const)
+          : ('selected' as const)
+        : ('default' as const);
 
       return {
         element: (
@@ -50,45 +57,19 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
               width,
               height
             }}
-            createMenu={() => {
-              return [
-                ...(active
-                  ? createActiveBlockMenu(block, location!, context)
-                  : []),
-                { id: 'jump', name: 'Jump to', icon: 'move_down' },
-                { id: 'skip', name: 'Skip', icon: 'playlist_remove' }
-              ];
-            }}
             node={{
               id: '_',
-              title: (name !== null) ? { value: name } : null,
+              title: (name !== null)
+                ? {
+                  text: name,
+                  value: name
+                }
+                : null,
               features,
               position
             }}
-            onSelectBlockMenu={(menuPath) => {
-              let message = onSelectBlockMenu(block, location!, menuPath);
-
-              if (message) {
-                // ...
-                return;
-              }
-
-              switch (menuPath.first()) {
-                case 'jump': {
-                  let tree = options.settings.editor.props.tree!;
-
-                  let getChildPoint = (block: ProtocolBlock, path: ProtocolBlockPath): unknown => {
-                    let unit = UnitTools.asBlockUnit(context.host.units[block.namespace])!;
-                    return unit.createDefaultPoint!(block, path[0], (block) => getChildPoint(block, path.slice(1)));
-                  };
-
-                  let point = getChildPoint(tree, path);
-                  options.settings.editor.props.execution.jump(point);
-                }
-              }
-            }}
             path={path}
-            selected={JSON.stringify(options.settings.editor.props.selectedBlockPath) === JSON.stringify(path)}
+            status={status}
             settings={options.settings} />
         ),
         nodes: [{

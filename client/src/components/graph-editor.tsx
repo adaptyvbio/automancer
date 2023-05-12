@@ -1,6 +1,6 @@
-import { List, Map as ImMap } from 'immutable';
+import { Map as ImMap, List } from 'immutable';
 import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
-import * as React from 'react';
+import { Component, ReactNode, createRef } from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
 
@@ -13,20 +13,19 @@ import { GlobalContext, UnknownPluginBlockImpl } from '../interfaces/plugin';
 import { FeatureGroupDef } from '../interfaces/unit';
 import { getBlockName } from '../protocol';
 import * as util from '../util';
-import { ViewExecution } from '../views/execution';
-import { MenuDef, MenuEntryPath } from './context-menu';
-import { ContextMenuArea } from './context-menu-area';
 import { Icon } from './icon';
 
 
 export interface GraphEditorProps {
-  execution?: ViewExecution;
   host: Host;
   protocol: Protocol | null;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
-  selectedBlockPath: ProtocolBlockPath | null;
+  selection: {
+    blockPath: ProtocolBlockPath;
+    observed: boolean;
+  } | null;
   location?: unknown;
-  summary?: React.ReactNode;
+  summary?: ReactNode;
 }
 
 export interface GraphEditorState {
@@ -35,13 +34,13 @@ export interface GraphEditorState {
   size: Size | null;
 }
 
-export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorState> {
+export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
   private controller = new AbortController();
   private initialized = false;
   private lastRenderedNodePositions: ImMap<List<number>, Point> | null = null;
   private pool = new util.Pool();
   private offsetBoundaries: { min: Point; max: Point; } | null = null;
-  private refContainer = React.createRef<HTMLDivElement>();
+  private refContainer = createRef<HTMLDivElement>();
   private settings: GraphRenderSettings | null = null;
 
   private observer = new ResizeObserver((_entries) => {
@@ -170,7 +169,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
     };
 
     let settings = this.settings!;
-    let graphRootElement!: React.ReactNode | null;
+    let graphRootElement!: ReactNode | null;
 
     let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
@@ -187,6 +186,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         let currentBlock = groupRootBlock;
         let currentBlockImpl: UnknownPluginBlockImpl;
         let currentBlockPath = path;
+        let currentLocation = location;
 
         let groupBlocks: ProtocolBlock[] = [];
         let groupName: string | null = null;
@@ -208,6 +208,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
           let key = 0;
           currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
           currentBlockPath.push(key);
+          currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key] ?? null);
         }
 
         let defaultLabelComponents = groupBlocks.flatMap((block) => {
@@ -219,16 +220,18 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
             label: (groupName ?? defaultLabelComponents.join(', '))
           } as any), currentBlockPath.slice(0, -1), [], null, {
             settings,
-            computeMetrics(key, location) {
-              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], null);
+            computeMetrics(key) {
+              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation);
             },
           }, context);
         }
 
         return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], location, {
           settings,
-          computeMetrics: (key, childLocation: unknown | null) => {
+          computeMetrics: (key) => {
             let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
+            let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key] ?? null);
+
             return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
           }
         }, context);
@@ -292,7 +295,7 @@ export class GraphEditor extends React.Component<GraphEditorProps, GraphEditorSt
         event.stopPropagation();
 
         if (this.lastRenderedNodePositions) {
-          let currentPath = this.props.selectedBlockPath && List(this.props.selectedBlockPath);
+          let currentPath = this.props.selection && List(this.props.selection.blockPath);
           let originPosition = currentPath && this.lastRenderedNodePositions.get(currentPath)!;
 
           let minDistance = Infinity;
@@ -410,8 +413,8 @@ type GraphNodeId = string;
 interface GraphNodeDef {
   id: GraphNodeId;
   title: {
-    alternate?: boolean;
-    value: string;
+    text: string;
+    value: ReactNode;
   } | null;
   features: FeatureGroupDef;
   position: {
@@ -424,13 +427,10 @@ export function GraphNode(props: {
   active?: unknown;
   autoMove: unknown;
   cellSize: Size;
-  createMenu(): MenuDef;
   node: GraphNodeDef;
-  onMouseDown?(event: React.MouseEvent): void;
-  onSelectBlockMenu(path: MenuEntryPath): void;
   path: ProtocolBlockPath;
-  selected?: unknown;
   settings: GraphRenderSettings;
+  status: 'default' | 'observed' | 'selected';
 }) {
   let { node, settings } = props;
 
@@ -447,32 +447,27 @@ export function GraphNode(props: {
         width={settings.cellPixelSize * props.cellSize.width}
         height={settings.cellPixelSize * props.cellSize.height}
         className={graphEditorStyles.nodeobject}>
-        <ContextMenuArea
-          createMenu={props.createMenu}
-          onSelect={props.onSelectBlockMenu}>
-          <div
-            className={util.formatClass(graphEditorStyles.node, {
-              '_active': props.active,
-              '_selected': props.selected
-            })}
-            onClick={(event) => {
-              event.stopPropagation();
-              settings.editor.selectBlock(props.path);
-            }}
-            onDoubleClick={() => {
-              settings.editor.selectBlock(props.path, { showInspector: true });
-            }}
-            onMouseDown={props.onMouseDown}>
-            {node.title && (
-              <div className={graphEditorStyles.header}>
-                <div className={graphEditorStyles.title} title={node.title.value}>{node.title.alternate ? <i>{node.title.value}</i> : node.title.value}</div>
-              </div>
-            )}
-            <div className={graphEditorStyles.body}>
-              <FeatureList features={node.features} />
+        <div
+          className={util.formatClass(graphEditorStyles.node, {
+            '_active': props.active
+          })}
+          data-status={props.status}
+          onClick={(event) => {
+            event.stopPropagation();
+            settings.editor.selectBlock(props.path);
+          }}
+          onDoubleClick={() => {
+            settings.editor.selectBlock(props.path, { showInspector: true });
+          }}>
+          {node.title && (
+            <div className={graphEditorStyles.header}>
+              <div className={graphEditorStyles.title} title={node.title.text}>{node.title.value}</div>
             </div>
+          )}
+          <div className={graphEditorStyles.body}>
+            <FeatureList features={node.features} />
           </div>
-        </ContextMenuArea>
+        </div>
       </foreignObject>
     </g>
   );
@@ -559,7 +554,7 @@ export function GraphNodeContainer(props: {
   path: ProtocolBlockPath;
   position: Point;
   settings: GraphRenderSettings;
-  title: React.ReactNode;
+  title: ReactNode;
 }) {
   let { settings } = props;
 
@@ -571,7 +566,8 @@ export function GraphNodeContainer(props: {
       height={settings.cellPixelSize * props.cellSize.height}
       className={graphEditorStyles.groupobject}>
         <div
-          className={util.formatClass(graphEditorStyles.group, { '_selected': util.deepEqual(props.path, settings.editor.props.selectedBlockPath) })}
+          className={graphEditorStyles.group}
+          // className={util.formatClass(graphEditorStyles.group, { '_selected': util.deepEqual(props.path, settings.editor.props.selectedBlockPath) })}
           onClick={(event) => {
             event.stopPropagation();
             settings.editor.selectBlock(props.path);
@@ -588,7 +584,7 @@ export function GraphNodeContainer(props: {
 const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock & {
   label: string;
 }, 0> = (block, path, ancestors, location, options, context) => {
-  let childMetrics = options.computeMetrics(0, null);
+  let childMetrics = options.computeMetrics(0);
 
   let size = {
     width: childMetrics.size.width + 2,

@@ -18,9 +18,10 @@ import { BaseUrl } from '../constants';
 import { ViewChips } from './chips';
 import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
-import { getCommonBlockPathLength, getRefPaths } from '../protocol';
+import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
 import { ErrorBoundary } from '../components/error-boundary';
+import { Button } from '../components/button';
 
 
 export interface ViewExecutionRoute {
@@ -100,12 +101,12 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
         blockPath,
         observed: false
       },
-      toolsTabId: 'inspector'
+      toolsTabId: 'execution'
     });
 
     if (options?.showInspector) {
       this.setState({
-        toolsTabId: 'inspector',
+        toolsTabId: 'execution',
         toolsOpen: true
       });
     }
@@ -188,6 +189,42 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                         contents: () => (
                           <BlockInspector
                             blockPath={selectedBlockPath}
+                            footer={selectedBlockPath && !isSelectedBlockActive
+                              ? [(
+                                <>
+                                  <Button shortcut="J" onClick={() => {
+                                    let targetBlockPath = selectedBlockPath!;
+                                    let commonBlockPath = List(activeBlockPaths)
+                                      .map((blockPath): ProtocolBlockPath => blockPath.slice(0, getCommonBlockPathLength(blockPath, targetBlockPath)))
+                                      .maxBy((commonBlockPath) => commonBlockPath.length)!;
+
+                                    let blockAnalysis = analyzeBlockPath(this.master.protocol, this.master.location, targetBlockPath, this.globalContext);
+                                    let currentPoint: unknown | null = null;
+
+                                    for (let blockIndex = (targetBlockPath.length - 1); blockIndex >= commonBlockPath.length; blockIndex -= 1) {
+                                      let currentPair = blockAnalysis.pairs[blockIndex];
+                                      let currentBlockImpl = getBlockImpl(currentPair.block, this.globalContext);
+
+                                      if (currentBlockImpl.createPoint) {
+                                        currentPoint = currentBlockImpl.createPoint(currentPair.block, currentPair.location, {
+                                          key: targetBlockPath[blockIndex],
+                                          point: currentPoint
+                                        }, this.globalContext);
+                                      }
+                                    }
+
+                                    let commonBlockContext = createBlockContext(commonBlockPath, this.chip.id, this.globalContext);
+
+                                    this.pool.add(async () => {
+                                      await commonBlockContext.sendMessage({
+                                        type: 'jump',
+                                        value: currentPoint
+                                      });
+                                    });
+                                  }}>Jump here</Button>
+                                </>
+                              ), null]
+                              : null}
                             host={this.props.host}
                             protocol={this.master.protocol}
                             selectBlock={this.selectBlock.bind(this)} />

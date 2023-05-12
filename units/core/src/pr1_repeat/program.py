@@ -57,6 +57,8 @@ class ProgramPoint:
 
 class Program(BaseProgram):
   def __init__(self, block: Block, handle):
+    super().__init__(block, handle)
+
     self._block = block
     self._handle = handle
 

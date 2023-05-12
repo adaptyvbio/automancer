@@ -310,6 +310,8 @@ class ShorthandProgramLocation:
 
 class ShorthandProgram(BaseProgram):
   def __init__(self, block: 'ShorthandBlock', handle):
+    super().__init__(block, handle)
+
     self._block = block
     self._handle = handle
 

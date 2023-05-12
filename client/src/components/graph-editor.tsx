@@ -208,7 +208,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           let key = 0;
           currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
           currentBlockPath.push(key);
-          currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key] ?? null);
+          currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
         }
 
         let defaultLabelComponents = groupBlocks.flatMap((block) => {
@@ -230,7 +230,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           settings,
           computeMetrics: (key) => {
             let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
-            let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key] ?? null);
+            let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
 
             return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
           }
@@ -622,13 +622,7 @@ const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock & {
             {childRender.element}
           </>
         ),
-        nodes: childRender.nodes.map((nodeInfo) => ({
-          ...nodeInfo,
-          position: {
-            x: offset.x + nodeInfo.position.x,
-            y: offset.y + nodeInfo.position.y
-          }
-        }))
+        nodes: childRender.nodes
       };
     }
   }

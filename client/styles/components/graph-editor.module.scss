@@ -215,7 +215,7 @@
     width: calc(100% - var(--side-margin) * 2);
     height: var(--height);
 
-    background-color: #07e7c4;
+    background-color: $app-turquoise;
     border-radius: calc(var(--height) * 0.5);
   }
 

@@ -64,6 +64,11 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   createActions?(block: Block, location: Location, context: BlockContext): PluginBlockImplAction[];
   createCommands?(block: Block, location: Location, context: BlockContext): PluginBlockImplCommand[];
   createFeatures?(block: Block, location: Location | null, context: GlobalContext): FeatureDef[];
+
+  // Missing -> inherits child's point
+  // Returns null -> point is null
+  createPoint?(block: Block, location: Location | null, child: { key: number; point: unknown; } | null, context: GlobalContext): unknown | null;
+
   getChildren?(block: Block, context: GlobalContext): ProtocolBlock[];
   getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[] | null;
   getLabel?(block: Block): ReactNode | null;

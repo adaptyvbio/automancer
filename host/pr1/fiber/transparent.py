@@ -3,8 +3,10 @@ from .parser import BaseBlock, BaseProgram
 
 
 class TransparentProgram(BaseProgram):
-  def __init__(self, child: BaseBlock, handle: ProgramHandle):
-    self._child = child
+  def __init__(self, block: BaseBlock, handle: ProgramHandle):
+    super().__init__(block, handle)
+
+    self._child = block
     self._handle = handle
 
     self._owner: ProgramOwner

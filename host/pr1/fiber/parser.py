@@ -140,34 +140,25 @@ ProtocolDetails = dict[str, ProtocolUnitDetails]
 
 class BaseProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
-    pass
-
-  # @property
-  # def busy(self):
-  #   ...
-
-  # def import_message(self, message: Any):
-  #   ...
+    self.__block = block
+    self.__handle = handle
 
   @abstractmethod
   def halt(self):
     ...
 
+  def jump(self, point, /) -> bool:
+    return False
+
   def receive(self, message: Any, /) -> None:
     match message["type"]:
       case "halt":
         self.halt()
+      case "jump":
+        print("Jump", self, message)
+        self.jump(self.__block.import_point(message["value"]))
       case _:
         raise ValueError(f"Unknown message type '{message['type']}'")
-
-  # # def jump(self, point: Any):
-  # #   ...
-
-  # def pause(self):
-  #   ...
-
-  # async def call_resume(self):
-  #   await self._parent.call_resume()
 
   @abstractmethod
   async def run(self, point: 'Optional[BaseProgramPoint]', stack: EvalStack):

@@ -95,7 +95,7 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
         let childMetrics = childrenMetrics[childIndex];
         let childPos = childrenPos[childIndex];
 
-        let childOffset = {
+        let childOffset: GeometryPoint = {
           x: position.x + childPos.x,
           y: position.y + childPos.y
         };
@@ -109,13 +109,7 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
             : renderOptions.attachmentStart
         });
 
-        nodeInfos.push(...childRender.nodes.map((nodeInfo) => ({
-          ...nodeInfo,
-          position: {
-            x: childOffset.x + nodeInfo.position.x,
-            y: childOffset.y + nodeInfo.position.y
-          }
-        })))
+        nodeInfos.push(...childRender.nodes);
 
         return (
           <Fragment key={childIndex}>{childRender.element}</Fragment>
@@ -169,6 +163,12 @@ export default {
   blocks: {
     ['_' as ProtocolBlockName]: {
       computeGraph,
+      createPoint(block, location, child, context): Point {
+        return {
+          child: (child?.point ?? null),
+          index: (child?.key ?? 0)
+        };
+      },
       getChildren(block, context) {
         return block.children;
       },
@@ -184,4 +184,4 @@ export default {
       }
     } satisfies PluginBlockImpl<Block, Location>
   }
-} satisfies Plugin;
+} satisfies Plugin

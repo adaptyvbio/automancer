@@ -75,6 +75,8 @@ class PublisherProgram(BaseProgram):
   def __init__(self, block: PublisherBlock, handle):
     from .runner import Runner
 
+    super().__init__(block, handle)
+
     self._block = block
     self._handle = handle
     self._runner = cast(Runner, handle.master.chip.runners[namespace])
@@ -206,6 +208,8 @@ class ApplierProgramLocation(Exportable):
 class ApplierProgram(BaseProgram):
   def __init__(self, block: ApplierBlock, handle: ProgramHandle):
     from .runner import Runner
+
+    super().__init__(block, handle)
 
     self._block = block
     self._handle = handle

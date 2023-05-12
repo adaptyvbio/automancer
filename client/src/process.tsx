@@ -75,8 +75,8 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
         nodes: [{
           path,
           position: {
-            x: position.x + (width * 0.5),
-            y: position.y + (height * 0.5)
+            x: position.x,// + (width * 0.5),
+            y: position.y,// + (height * 0.5)
           }
         }]
       };

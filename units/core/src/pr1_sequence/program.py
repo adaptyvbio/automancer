@@ -33,6 +33,8 @@ class ProgramPoint:
 @debug
 class Program(BaseProgram):
   def __init__(self, block: Block, handle):
+    super().__init__(block, handle)
+
     self._block = block
     # self._block._children = [x.child for x in block._children]
     self._handle = handle
@@ -48,24 +50,17 @@ class Program(BaseProgram):
     self._halting = True
     self._child_program.halt()
 
-  # def jump(self, point: SequenceProgramPoint):
-  #   if point.index != self._child_index:
-  #     self._point = point
-  #     self.halt()
-  #   elif point.child:
-  #     self._child_program.jump(point.child)
-
-
-  # def set_interrupt(self, value: bool, /):
-  #   self._interrupting = value
-  #   self._iterator.trigger()
-
+  def jump(self, point: ProgramPoint, /):
+    if point.index != self._child_index:
+      self._point = point
+      self._child_program.halt()
+    elif point.child:
+      self._child_program.jump(point.child)
 
   async def run(self, point: ProgramPoint, stack):
     self._point = point or ProgramPoint(child=None, index=0)
 
     while True:
-      assert self._point
       self._child_index = self._point.index
 
       if self._child_index >= len(self._block.children):
@@ -86,6 +81,6 @@ class Program(BaseProgram):
         return
 
       self._handle.collect_children()
-      self._point = ProgramPoint(child=None, index=(self._child_index + 1))
 
-      await self._handle.resume_parent()
+      if not self._point:
+        self._point = ProgramPoint(child=None, index=next_index)

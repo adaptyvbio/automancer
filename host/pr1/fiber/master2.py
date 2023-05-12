@@ -439,6 +439,9 @@ class ProgramOwner:
   def halt(self):
     self._program.halt()
 
+  def jump(self, point, /):
+    self._program.jump(point)
+
   async def run(self, point: Optional[BaseProgramPoint], stack: EvalStack):
     await self._program.run(point, stack)
 

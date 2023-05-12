@@ -11,7 +11,7 @@ import { Host } from '../host';
 import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { GlobalContext, UnknownPluginBlockImpl } from '../interfaces/plugin';
 import { FeatureGroupDef } from '../interfaces/unit';
-import { getBlockName } from '../protocol';
+import { getBlockImpl, getBlockName } from '../protocol';
 import * as util from '../util';
 import { Icon } from './icon';
 import { Application } from '../application';
@@ -31,9 +31,12 @@ export interface GraphEditorProps {
 }
 
 export interface GraphEditorState {
+  self: GraphEditor;
+
   animatingView: boolean;
   offset: Point;
   size: Size | null;
+  trackSelectedBlock: boolean;
 }
 
 export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
@@ -44,6 +47,8 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
   private offsetBoundaries: { min: Point; max: Point; } | null = null;
   private refContainer = createRef<HTMLDivElement>();
   private settings: GraphRenderSettings | null = null;
+
+  private graphRootElement: ReactNode | null;
 
   private observer = new ResizeObserver((_entries) => {
     if (!this.initialized) {
@@ -66,9 +71,12 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     super(props);
 
     this.state = {
+      self: this,
+
       animatingView: false,
       offset: { x: 0, y: 0 },
-      size: null
+      size: null,
+      trackSelectedBlock: true
     };
   }
 
@@ -130,7 +138,8 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           offset: this.getBoundOffset({
             x: state.offset.x + event.deltaX * 1,
             y: state.offset.y + event.deltaY * 1
-          })
+          }),
+          trackSelectedBlock: false
         }));
       }
     }, { passive: false, signal: this.controller.signal });
@@ -225,25 +234,20 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     this.controller.abort();
   }
 
-  override render() {
-    if (!this.state.size) {
-      return <div className={graphEditorStyles.root} ref={this.refContainer} />;
-    }
+  private compute(props: GraphEditorProps, state: GraphEditorState) {
+    if (props.protocol?.root) {
+      let globalContext: GlobalContext = {
+        app: this.props.app,
+        host: props.host,
+        pool: this.pool
+      };
 
-    let context: GlobalContext = {
-      app: this.props.app,
-      host: this.props.host,
-      pool: this.pool
-    };
+      let settings = this.settings!;
 
-    let settings = this.settings!;
-    let graphRootElement!: ReactNode | null;
-
-    let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
-
-    if (this.props.protocolRoot) {
       // console.log(this.props.tree);
       // console.log('---');
+
+      util.assert(state.size);
 
       let computeGraph = (
         groupRootBlock: ProtocolBlock,
@@ -260,7 +264,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         let groupName: string | null = null;
 
         while (true) {
-          currentBlockImpl = getBlockImpl(currentBlock);
+          currentBlockImpl = getBlockImpl(currentBlock, globalContext);
           let currentBlockName = getBlockName(currentBlock);
 
           if (currentBlockImpl.computeGraph || (currentBlockName && groupName)) {
@@ -274,13 +278,13 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           groupBlocks.push(currentBlock);
 
           let key = 0;
-          currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key].block;
+          currentBlock = currentBlockImpl.getChildren!(currentBlock, globalContext)[key].block;
           currentBlockPath.push(key);
-          currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
+          currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, globalContext)?.[key]?.location ?? null);
         }
 
         let defaultLabelComponents = groupBlocks.flatMap((block) => {
-          return getBlockImpl(block).getLabel?.(block) ?? [];
+          return getBlockImpl(block, globalContext).getLabel?.(block) ?? [];
         });
 
         if ((groupBlocks.length > 0) && (groupName || (defaultLabelComponents.length > 0))) {
@@ -291,32 +295,32 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
             computeMetrics(key) {
               return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation);
             },
-          }, context);
+          }, globalContext);
         }
 
         return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation, {
           settings,
           computeMetrics: (key) => {
-            let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key].block;
-            let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
+            let childBlock = currentBlockImpl.getChildren!(currentBlock, globalContext)[key].block;
+            let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, globalContext)?.[key]?.location ?? null);
 
             return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
           }
-        }, context);
+        }, globalContext);
       };
 
 
       // Render graph
 
       let origin: Point = { x: 1, y: 1 };
-      let treeMetrics = computeGraph(this.props.protocolRoot, [], [], this.props.location ?? null);
+      let treeMetrics = computeGraph(props.protocolRoot, [], [], props.location ?? null);
 
       let rendered = treeMetrics.render(origin, {
         attachmentEnd: false,
         attachmentStart: false
       });
 
-      graphRootElement = rendered.element;
+      this.graphRootElement = rendered.element;
 
       this.lastRenderedNodePositions = ImMap(rendered.nodes.map((nodeInfo) => [
         List(nodeInfo.path),
@@ -341,13 +345,23 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       this.offsetBoundaries = {
         min,
         max: {
-          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - this.state.size.width),
-          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - this.state.size.height)
+          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - state.size.width),
+          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - state.size.height)
         }
       };
     } else {
-      graphRootElement = null;
+      this.graphRootElement = null;
     }
+  }
+
+  override render() {
+    if (!this.state.size) {
+      return <div className={graphEditorStyles.root} ref={this.refContainer} />;
+    }
+
+    this.compute(this.props, this.state);
+
+    let settings = this.settings!;
 
     let frac = (x: number) => (x - Math.floor(x));
     let offsetX = this.state.offset.x;
@@ -380,12 +394,17 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           <g transform={`translate(${-offsetX} ${-offsetY})`} onTransitionEnd={() => {
             this.setState({ animatingView: false });
           }}>
-            {graphRootElement}
+            {this.graphRootElement}
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
           <div className={graphEditorStyles.actionsGroup}>
-            <button type="button" className={graphEditorStyles.actionsButton}><Icon name="center_focus_strong" className={graphEditorStyles.actionsIcon} /></button>
+            <button
+              type="button"
+              className={util.formatClass(graphEditorStyles.actionsButton, { '_active': this.state.trackSelectedBlock })}
+              onClick={() => void this.setState({ trackSelectedBlock: !this.state.trackSelectedBlock })}>
+              <Icon name="enable" className={graphEditorStyles.actionsIcon} />
+            </button>
           </div>
           {/* <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="add" className={graphEditorStyles.actionsIcon} /></button>
@@ -399,6 +418,39 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         )}
       </div>
     );
+  }
+
+  static getDerivedStateFromProps(props: GraphEditorProps, state: GraphEditorState): Partial<GraphEditorState> | null {
+    if (state.trackSelectedBlock && state.size && props.selection) {
+      if (state.size) {
+        state.self.compute(props, state);
+
+        // console.log(props.selection.blockPath, state.self.lastRenderedNodePositions?.toJS());
+
+        let position = state.self.lastRenderedNodePositions!.get(List(props.selection.blockPath));
+
+        if (position) {
+          let settings = state.self.settings!;
+
+          // TODO: Problem, 'position' is center
+
+          // TODO: Substract origin
+          let idealOffset: Point = {
+            x: ((position.x - 1) * settings.cellPixelSize),
+            y: ((position.y - 1) * settings.cellPixelSize)
+          };
+
+          // console.log(position, idealOffset, state.offset);
+
+          return {
+            animatingView: true,
+            offset: idealOffset
+          };
+        }
+      }
+    }
+
+    return null;
   }
 }
 

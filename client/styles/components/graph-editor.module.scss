@@ -80,6 +80,13 @@
     &:not(:last-child) {
       border-right: none;
     }
+
+    &:global(._active) {
+      background-color: #666;
+      border-color: transparent;
+
+      color: #fff;
+    }
   }
 
   &Button:has(&Icon) {

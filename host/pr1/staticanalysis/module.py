@@ -1,16 +1,29 @@
 import ast
 from types import EllipsisType, NoneType
-from typing import Any
+from typing import Any, Optional
 
-from .special import CoreVariables
-from .context import StaticAnalysisAnalysis, StaticAnalysisContext
-from .expression import accept_type_as_instantiable, evaluate_type
-from .types import AnyType, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefWithGenerics, Instance, TypeVarDef, TypeVariables, Variables
+from ..analysis import DiagnosticAnalysis
 
+from .type import evaluate_type_expr, instantiate_type
+
+from .special import CoreVariables, GenericClassDef
+from .context import StaticAnalysisAnalysis, StaticAnalysisContext, StaticAnalysisDiagnostic
+from .expression import accept_type_as_instantiable, evaluate_eval_expr
+from .types import AnyType, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefWithGenerics, Instance, InstantiableClassDef, OrderedTypeVariables, TypeDef, TypeVarDef, TypeVariables, UnknownType, Variables
+
+
+# def instantiate_if_necessary(input_type: AnyType):
+#   match input_type:
+#     case ClassDef():
+#       return StaticAnalysisAnalysis(), Instance(InstantiableClassDef(input_type, type_args=([UnknownType()] * len(input_type.type_variables))))
+#     case InstantiableClassDef():
+#       return StaticAnalysisAnalysis(), Instance(input_type)
+#     case _:
+#       return StaticAnalysisAnalysis(), input_type
 
 def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables, context: StaticAnalysisContext):
   analysis = StaticAnalysisAnalysis()
-  module_variables = dict[str, AnyType]()
+  module_variables = dict[str, TypeDef]()
 
   # print(ast.dump(module, indent=2))
 
@@ -19,8 +32,8 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
       case ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()), annotation=ann, value=None, simple=1):
         assert not (name in module_variables)
 
-        ann_type = analysis.add(evaluate_type(ann, foreign_variables | module_variables, TypeVariables(), context))
-        module_variables[name] = Instance(analysis.add(accept_type_as_instantiable(ann_type)))
+        ann_type = analysis.add(evaluate_type_expr(ann, foreign_variables | module_variables, TypeVariables(), context))
+        module_variables[name] = analysis.add(instantiate_type(ann_type, ann, context))
 
       # case ast.Assign(
       #   targets=[ast.Name(name, ctx=ast.Store())],
@@ -36,20 +49,43 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
         targets=[ast.Name(id=name, ctx=ast.Store())],
         value=value
       ):
-        module_variables[name] = analysis.add(evaluate_type(value, foreign_variables | module_variables, TypeVariables(), context))
+        module_variables[name] = analysis.add(evaluate_eval_expr(value, foreign_variables | module_variables, TypeVariables(), context))
 
       case ast.ClassDef(name=class_name, bases=class_bases, body=class_body):
         cls = ClassDef(class_name)
-        type_variables_set = False
+        type_variables: Optional[OrderedTypeVariables] = None
 
         for class_base in class_bases:
-          base_type = analysis.add(evaluate_type(class_base, foreign_variables | module_variables, TypeVariables(), context))
+          if isinstance(class_base, ast.Subscript):
+            class_base_type = analysis.add(evaluate_eval_expr(class_base.value, foreign_variables | module_variables, type_variables or set(), context))
 
-          if isinstance(base_type, GenericClassDefWithGenerics) and (not type_variables_set):
-            cls.type_variables = base_type.type_variables
-            type_variables_set = True
-          else:
-            raise Exception
+            if class_base_type is GenericClassDef:
+              if type_variables is not None:
+                analysis.errors.append(StaticAnalysisDiagnostic("Duplicate type variables definition", class_base, context))
+                continue
+
+              match class_base.slice:
+                case ast.Tuple(subscript_args):
+                  expr_args = subscript_args
+                case _:
+                  expr_args = [class_base.slice]
+
+              potential_type_variables = analysis.add_sequence([evaluate_type_expr(arg, foreign_variables | module_variables, type_variables or set(), context) for arg in expr_args])
+              type_variables = OrderedTypeVariables()
+
+              for potential_type_variable, type_variable_node in zip(potential_type_variables, expr_args):
+                if not isinstance(potential_type_variable, TypeVarDef):
+                  analysis.errors.append(StaticAnalysisDiagnostic("Invalid type variable", type_variable_node, context))
+                elif potential_type_variable in type_variables:
+                  analysis.errors.append(StaticAnalysisDiagnostic("Duplicate type variable", type_variable_node, context))
+                else:
+                  type_variables.append(potential_type_variable)
+
+              print(type_variables)
+              continue
+
+
+          base_type = analysis.add(evaluate_eval_expr(class_base, foreign_variables | module_variables, TypeVariables(), context))
 
           # if not isinstance(base_type, TypeClassRef):
           #   analysis.errors.append(StaticAnalysisDiagnostic("Invalid base value", module_statement, context, name='invalid_base'))
@@ -64,12 +100,13 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
           # else:
           #   cls.bases.append(base_ref)
 
+        cls.type_variables = type_variables or OrderedTypeVariables()
+        unordered_type_variables = set(cls.type_variables)
+
         module_variables[class_name] = cls
 
         init_func = FuncDef()
         cls.instance_attrs['__init__'] = init_func
-
-        type_variables = set(cls.type_variables)
 
         for class_statement in class_body:
           match class_statement:
@@ -78,14 +115,14 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
               if attr_name in cls.class_attrs:
                 raise Exception("Duplicate class attribute")
 
-              cls.class_attrs[attr_name] = analysis.add(evaluate_type(attr_ann, foreign_variables | module_variables, type_variables, context))
+              cls.class_attrs[attr_name] = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, unordered_type_variables, context))
 
             # self.foo: int
             case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
               if attr_name in cls.instance_attrs:
                 raise Exception("Duplicate instance attribute")
 
-              ann_type = analysis.add(evaluate_type(attr_ann, foreign_variables | module_variables, type_variables, context))
+              ann_type = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, unordered_type_variables, context))
               cls.instance_attrs[attr_name] = Instance(analysis.add(accept_type_as_instantiable(ann_type, type_variables)))
 
             case ast.FunctionDef(name=func_name):

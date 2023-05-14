@@ -17,6 +17,7 @@ class TypeVarDef:
 class GenericClassDefWithGenerics:
   type_variables: list[TypeVarDef]
 
+OrderedTypeVariables = list[TypeVarDef]
 TypeVariables = set[TypeVarDef]
 TypeValues = dict[TypeVarDef, 'AnyType']
 
@@ -30,7 +31,7 @@ class ClassDef:
   bases: 'list[InstantiableClassDef]' = field(default_factory=list)
   class_attrs: 'dict[str, AnyType]' = field(default_factory=dict)
   instance_attrs: 'dict[str, AnyType]' = field(default_factory=dict)
-  type_variables: list[TypeVarDef] = field(default_factory=list)
+  type_variables: OrderedTypeVariables = field(default_factory=list)
 
   def __repr__(self):
     type_variables = [typevar.name for typevar in self.type_variables]
@@ -94,12 +95,42 @@ class InstantiableClassDef:
 
 @dataclass
 class Instance:
-  origin: InstantiableClassDef | TypeVarDef
+  origin: 'ClassDef | InstantiableClassDef | TypeVarDef | UnknownType'
 
 
 # Misc
 
-AnyType = Instance | InstantiableClassDef | ClassDef | TypeVarDef
+@dataclass
+class UnionDef:
+  left: 'AnyType'
+  right: 'AnyType'
+
+  def __repr__(self):
+    return f"<{self.__class__.__name__} {self.left!r} | {self.right!r}>"
+
+@dataclass
+class UnknownType:
+  pass
+
+@dataclass
+class UnknownDef:
+  pass
+
+@dataclass
+class ClassConstructorDef:
+  target: ClassDef
+
+@dataclass
+class ClassDefWithTypeArgs:
+  cls: ClassDef
+  type_args: 'list[TypeDef]' # = field(default_factory=list)
+
+
+# Complex types
+
+TypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
+
+AnyType = Instance | InstantiableClassDef | ClassDef | TypeVarDef | UnknownType
 # InstancerType = InstantiableClassDef | ClassDef | TypeVarDef
-InstantiableType = InstantiableClassDef | TypeVarDef
+InstantiableType = InstantiableClassDef | TypeVarDef | UnknownType
 Variables = dict[str, AnyType]

@@ -1,7 +1,16 @@
 from typing import Any, Optional
-from .types import AnyType, ClassDef, FuncDef, TypeDef, TypeValues, TypeVarDef
+
+from .types import ClassDefWithTypeArgs, FuncDef, TypeDef, TypeValues
 
 
+#
+# Checks if lhs >= rhs (lhs at least contains rhs)
+#
+# Examples
+#   class B(A) then B >= A
+#   var: A = B() then B >= A
+#   var: (X | Y) = X() then X >= (X | Y)
+#
 def check_type(lhs: TypeDef, rhs: TypeDef, /):
   # if lhs.cls is UnionType:
   #   assert lhs.arguments
@@ -15,11 +24,17 @@ def check_type(lhs: TypeDef, rhs: TypeDef, /):
   #   if base.cls is rhs.cls:
   #     return True
 
+  match lhs, rhs:
+    case ClassDefWithTypeArgs(lhs_cls, lhs_type_args), ClassDefWithTypeArgs(rhs_cls, rhs_type_args):
+      return (lhs_cls is rhs_cls) and (len(lhs_type_args) == len(rhs_type_args)) and all(check_type(lhs_type_arg, rhs_type_arg) for lhs_type_arg, rhs_type_arg in zip(lhs_type_args, rhs_type_args))
+
   print("!!", lhs, rhs)
 
   return False
 
-def find_overload(func: FuncDef, /, args: list[AnyType], kwargs: dict[str, AnyType]):
+def find_overload(func: FuncDef, /, args: list[TypeDef], kwargs: dict[str, TypeDef], type_values: TypeValues):
+  from .expression import resolve_type_variables
+
   for overload in func.overloads:
     args_pos = overload.args_posonly + overload.args_both
     args_kw = overload.args_kwonly + overload.args_both
@@ -37,7 +52,7 @@ def find_overload(func: FuncDef, /, args: list[AnyType], kwargs: dict[str, AnyTy
       arg = args_pos[args_pos_index]
       args_pos_index += 1
 
-      if (arg.type is not None) and (not check_type(input_arg, arg.type)): # type: ignore
+      if (arg.type is not None) and (not check_type(input_arg, resolve_type_variables(arg.type, type_values))):
         failure = True
         break
 

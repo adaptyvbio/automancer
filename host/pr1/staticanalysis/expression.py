@@ -88,14 +88,10 @@ def evaluate_eval_expr(
         return analysis, UnknownType()
 
       if isinstance(func_type, ClassConstructorDef):
-        # if isinstance(func_type.target, ClassDefWithTypeArgs):
-        #   cls_with_type_args = func_type.target
-        # else:
-        #   cls_with_type_args = ClassDefWithTypeArgs(func_type.target, [UnknownType()] * len(func_type.target.type_variables))
         cls_with_type_args = instantiate_type(func_type.target)
 
         init_func = cls_with_type_args.cls.instance_attrs['__init__']
-        overload = find_overload(init_func, args=args, kwargs=kwargs)
+        overload = find_overload(init_func, args=args, kwargs=kwargs, type_values=cls_with_type_args.type_values)
 
         if not overload:
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid call", node, context))
@@ -103,22 +99,20 @@ def evaluate_eval_expr(
         return analysis, cls_with_type_args
       else:
         assert isinstance(func_type, ClassDefWithTypeArgs) # To be removed
-        print(">>", func_type)
 
         func_ref = func_type.cls.instance_attrs.get('__call__')
-        print(">>", func_ref)
 
         if not func_ref:
           return analysis + StaticAnalysisDiagnostic("Invalid object for call", node, context).analysis(), UnknownType()
 
         assert isinstance(func_ref, FuncDef) # To be removed
-        overload = find_overload(func_ref, args=args, kwargs=kwargs)
+        overload = find_overload(func_ref, args=args, kwargs=kwargs, type_values=func_type.type_values)
 
         if not overload:
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid arguments", node, context))
           return analysis, UnknownType()
 
-        return analysis, overload.return_type or UnknownType()
+        return analysis, resolve_type_variables(overload.return_type, func_type.type_values) or UnknownType()
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), NoneType

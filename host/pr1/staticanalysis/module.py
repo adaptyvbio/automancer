@@ -188,7 +188,7 @@ def evaluate_library_module(
   # pprint(declarations)
 
   return analysis, (
-    module_type_defs,
+    { name: type_def for name, type_def in module_type_defs.items() if not isinstance(type_def, TypeVarDef) },
     module_variables
   )
 

@@ -65,8 +65,6 @@ def evaluate_type_expr(
 
     case ast.Subscript(value=target, slice=subscript, ctx=ast.Load()):
       analysis = StaticAnalysisAnalysis()
-      # subscript_value = variables[name]
-
       subscript_type = analysis.add(evaluate_type_expr(target, variables, type_variables, context))
 
       match subscript:
@@ -99,4 +97,5 @@ def evaluate_type_expr(
       return analysis, ClassDefWithTypeArgs(subscript_type, [instantiate_type(type_arg) for type_arg in type_args])
 
     case _:
-      raise Exception("Missing evaluate_type_expr()", ast.dump(node, indent=2))
+      print("Missing evaluate_type_expr()", ast.dump(node, indent=2))
+      return StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(), UnknownDef()

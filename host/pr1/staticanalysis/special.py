@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from .types import ClassDef, Instance, InstantiableClassDef, TypeDefs, TypeVarDef
+from .types import ClassDef, TypeDefs
 
 
 TypeVarClassDef = ClassDef('TypeVar')

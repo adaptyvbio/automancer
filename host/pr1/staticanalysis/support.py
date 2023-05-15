@@ -1,8 +1,7 @@
 import ast
 
-from .special import CoreTypeDefs, GenericClassDef, TypeVarClassDef
+from .special import CoreTypeDefs
 from ..error import ErrorDocumentReference
-from .types import Variables
 from .module import evaluate_library_module
 from ..document import Document
 from .context import StaticAnalysisContext
@@ -16,7 +15,7 @@ def process_source(contents: str, /):
   document = Document.text(contents)
   context = StaticAnalysisContext(
     input_value=document.source,
-    prelude=Variables()
+    prelude={}
   )
 
   analysis, result = evaluate_library_module(module, CoreTypeDefs, dict(), context)

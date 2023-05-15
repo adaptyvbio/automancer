@@ -26,7 +26,7 @@ class list(Generic[T]):
   self.sample: T
   self.samples: set[T]
 
-  def append(self, item: T) -> float:
+  def append(self, item: T, /) -> T:
     pass
 
 

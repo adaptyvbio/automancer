@@ -14,9 +14,6 @@ class TypeVarDef:
   def __repr__(self):
     return f"<{self.__class__.__name__} {self.name}>"
 
-@dataclass
-class GenericClassDefWithGenerics:
-  type_variables: list[TypeVarDef]
 
 OrderedTypeVariables = list[TypeVarDef]
 TypeVariables = set[TypeVarDef]
@@ -29,7 +26,7 @@ TypeValues = dict[TypeVarDef, 'TypeDef']
 class ClassDef:
   name: str
   _: KW_ONLY
-  bases: 'list[InstantiableClassDef]' = field(default_factory=list)
+  bases: 'list[ClassDefWithTypeArgs]' = field(default_factory=list)
   class_attrs: 'TypeDefs' = field(default_factory=dict)
   instance_attrs: 'TypeDefs' = field(default_factory=dict)
   type_variables: OrderedTypeVariables = field(default_factory=list)
@@ -82,23 +79,6 @@ class FuncDef(ClassDef):
     return f"<{self.__class__.__name__} " + ", ".join(overloads) + ">"
 
 
-# Instances
-
-@dataclass
-class InstantiableClassDef:
-  cls: ClassDef
-  _: KW_ONLY
-  type_args: 'list[InstantiableType]' = field(default_factory=list)
-
-  @property
-  def type_values(self) -> TypeValues:
-    return { type_variable: type_arg for type_variable, type_arg in zip(self.cls.type_variables, self.type_args) }
-
-@dataclass
-class Instance:
-  origin: 'ClassDef | InstantiableClassDef | TypeVarDef | UnknownType'
-
-
 # Misc
 
 @dataclass
@@ -138,11 +118,3 @@ TypeDefs = dict[str, TypeDef]
 
 TypeInstance = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
 TypeInstances = dict[str, TypeInstance]
-
-
-AnyType = Instance | InstantiableClassDef | ClassDef | TypeVarDef | UnknownType
-# InstancerType = InstantiableClassDef | ClassDef | TypeVarDef
-InstantiableType = InstantiableClassDef | TypeVarDef | UnknownType
-
-VarType = ClassDef
-Variables = dict[str, VarType]

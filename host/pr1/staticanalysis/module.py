@@ -2,6 +2,8 @@ import ast
 from types import EllipsisType
 from typing import Optional
 
+from .function import parse_func
+
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
 from .expression import evaluate_eval_expr
@@ -131,7 +133,7 @@ def evaluate_library_module(
               cls.instance_attrs[attr_name] = instantiate_type(analysis.add(evaluate_type_expr(attr_ann, (foreign_type_defs | module_type_defs), unordered_type_variables, context)))
 
             case ast.FunctionDef(name=func_name):
-              overload = analysis.add(parse_func(class_statement, variables | values, context))
+              overload = analysis.add(parse_func(class_statement, (foreign_type_defs | module_type_defs), unordered_type_variables, context))
               assert (overload.args_posonly + overload.args_both)[0].name == 'self'
 
               if overload.args_posonly:
@@ -140,11 +142,10 @@ def evaluate_library_module(
                 overload.args_both = overload.args_both[1:]
 
               if not (func_name in cls.instance_attrs):
-                func = FuncDef(generics=cls.generics)
-                cls.instance_attrs[func_name] = ClassRef(func)
+                func = FuncDef(type_variables=cls.type_variables)
+                cls.instance_attrs[func_name] = func
               else:
-                assert isinstance(func_ref := cls.instance_attrs[func_name], ClassRef)
-                assert isinstance(func := func_ref.cls, FuncDef)
+                assert isinstance(func := cls.instance_attrs[func_name], FuncDef)
 
               func.overloads.append(overload)
 

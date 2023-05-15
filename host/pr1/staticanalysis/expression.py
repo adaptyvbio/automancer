@@ -6,13 +6,13 @@ from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
 from .overloads import find_overload
 from .special import NoneType
 from .type import evaluate_type_expr, instantiate_type
-from .types import (AnyType, ClassConstructorDef, ClassDef,
-                    ClassDefWithTypeArgs, TypeDefs, TypeInstances, TypeValues,
+from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
+                    FuncDef, TypeDef, TypeDefs, TypeInstances, TypeValues,
                     TypeVarDef, TypeVariables, UnionDef, UnknownDef,
                     UnknownType)
 
 
-def resolve_type_variables(input_type: AnyType, type_values: TypeValues):
+def resolve_type_variables(input_type: TypeDef, type_values: TypeValues):
   match input_type:
     case ClassDefWithTypeArgs(cls, type_args):
       return ClassDefWithTypeArgs(cls, type_args=[
@@ -52,6 +52,9 @@ def evaluate_eval_expr(
 
       if not attr:
         return analysis + StaticAnalysisDiagnostic("Invalid reference to missing attribute", node, context).analysis(), UnknownType()
+
+      if isinstance(attr, FuncDef):
+        attr = ClassDefWithTypeArgs(attr, obj_type.type_args)
 
       return analysis, resolve_type_variables(attr, type_values=obj_type.type_values)
 
@@ -99,7 +102,23 @@ def evaluate_eval_expr(
 
         return analysis, cls_with_type_args
       else:
-        raise Exception("Invalid call")
+        assert isinstance(func_type, ClassDefWithTypeArgs) # To be removed
+        print(">>", func_type)
+
+        func_ref = func_type.cls.instance_attrs.get('__call__')
+        print(">>", func_ref)
+
+        if not func_ref:
+          return analysis + StaticAnalysisDiagnostic("Invalid object for call", node, context).analysis(), UnknownType()
+
+        assert isinstance(func_ref, FuncDef) # To be removed
+        overload = find_overload(func_ref, args=args, kwargs=kwargs)
+
+        if not overload:
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid arguments", node, context))
+          return analysis, UnknownType()
+
+        return analysis, overload.return_type or UnknownType()
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), NoneType

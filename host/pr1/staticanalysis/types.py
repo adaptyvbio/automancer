@@ -1,4 +1,5 @@
 from dataclasses import KW_ONLY, dataclass, field
+from typing import Optional
 
 
 # Type variables
@@ -43,7 +44,7 @@ class ClassDef:
 @dataclass(kw_only=True)
 class FuncArgDef:
   name: str
-  type: 'AnyType'
+  type: 'Optional[TypeDef]'
 
 @dataclass(kw_only=True)
 class FuncKwArgDef(FuncArgDef):
@@ -55,7 +56,7 @@ class FuncOverloadDef:
   args_both: list[FuncArgDef]
   args_kwonly: list[FuncKwArgDef]
   default_count: int
-  return_type: 'AnyType'
+  return_type: 'Optional[TypeDef]'
 
   def __repr__(self):
     args = [

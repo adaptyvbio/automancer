@@ -26,6 +26,9 @@ class list(Generic[T]):
   self.sample: T
   self.samples: set[T]
 
+  def append(self, item: T) -> float:
+    pass
+
 
 X = list[int]
 
@@ -54,7 +57,7 @@ print()
 
 
 # document = Document.text("~~~ list[float]().samples.item ~~~")
-document = Document.text("~~~ X().sample ~~~")
+document = Document.text("~~~ X().append(int()) ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4],
   prelude={}

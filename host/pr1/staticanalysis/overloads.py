@@ -1,8 +1,25 @@
 from typing import Any, Optional
-from .types import AnyType, ClassDef, FuncDef, TypeValues, TypeVarDef
+from .types import AnyType, ClassDef, FuncDef, TypeDef, TypeValues, TypeVarDef
 
 
-def find_overload(func: FuncDef, /, args: list[AnyType], kwargs: dict[str, AnyType], *, type_values: Optional[TypeValues] = None):
+def check_type(lhs: TypeDef, rhs: TypeDef, /):
+  # if lhs.cls is UnionType:
+  #   assert lhs.arguments
+  #   return all(check_type(variant, rhs) for variant in lhs.arguments.values())
+
+  # if rhs.cls is UnionType:
+  #   assert lhs.arguments
+  #   return any(check_type(variant, rhs) for variant in lhs.arguments.values())
+
+  # for base in lhs.mro():
+  #   if base.cls is rhs.cls:
+  #     return True
+
+  print("!!", lhs, rhs)
+
+  return False
+
+def find_overload(func: FuncDef, /, args: list[AnyType], kwargs: dict[str, AnyType]):
   for overload in func.overloads:
     args_pos = overload.args_posonly + overload.args_both
     args_kw = overload.args_kwonly + overload.args_both

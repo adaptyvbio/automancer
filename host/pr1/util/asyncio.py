@@ -1,11 +1,12 @@
 import asyncio
-from asyncio import Event, Future, Task
+import sys
+import traceback
+from asyncio import Future, Task
 from dataclasses import dataclass
 from queue import Queue
-import sys
 from threading import Thread
-import traceback
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar, cast
+from typing import (Any, Awaitable, Callable, Coroutine, Generic, Iterable,
+                    Optional, Sequence, TypeVar, cast)
 
 from .types import SimpleAsyncCallbackFunction, SimpleCallbackFunction
 

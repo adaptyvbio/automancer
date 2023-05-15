@@ -16,7 +16,6 @@ class NumericNode(ValueNode[Quantity], ABC):
     *,
     unit: Optional[Unit | str] = None,
     dtype: str = 'f4',
-    factor: float = 1.0,
     max: Optional[Quantity | float] = None,
     min: Optional[Quantity | float] = None,
     **kwargs
@@ -29,8 +28,6 @@ class NumericNode(ValueNode[Quantity], ABC):
 
     self.max = (max * self.unit) if isinstance(max, float) else max
     self.min = (min * self.unit) if isinstance(min, float) else min
-
-    self._factor = factor
 
   async def _read(self):
     old_value = self.value
@@ -45,7 +42,7 @@ class NumericNode(ValueNode[Quantity], ABC):
         self.error = error
         self.value = value
       case float() | int():
-        self.value = (current_time, raw_value * self._factor * self.unit)
+        self.value = (current_time, raw_value * self.unit)
       case _:
         raise ValueError("Invalid read value")
 

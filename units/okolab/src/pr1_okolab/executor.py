@@ -86,5 +86,3 @@ class Executor(BaseExecutor):
         del self._host.devices[device._worker1.id]
       if device._worker2:
         del self._host.devices[device._worker2.id]
-
-      await device.destroy()

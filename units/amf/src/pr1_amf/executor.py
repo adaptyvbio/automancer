@@ -47,7 +47,6 @@ class Executor(BaseExecutor):
   async def destroy(self):
     for device in self._devices.values():
       del self._host.devices[device.id]
-      await device.destroy()
 
   def export(self):
     return {

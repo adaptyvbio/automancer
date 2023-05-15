@@ -268,7 +268,48 @@ async def shield(awaitable: Awaitable[T], /) -> T:
     return await task
 
 
+async def try_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
+  """
+  Wait for all provided coroutines or tasks to complete.
+
+  If an exception is raised by a task, all other tasks are cancelled and the exception is re-raised, along with any other exception that has been raised during cancellation.
+
+  Raises
+    BaseExceptionGroup: If multiple exceptions were raised.
+    BaseException: If a single exception was raised.
+    asyncio.CancelledError: If the coroutine was cancelled and no exception was raised.
+  """
+
+  if not items:
+    return
+
+  cancelled_exc: Optional[asyncio.CancelledError] = None
+  tasks = [item if isinstance(item, Task) else asyncio.create_task(item) for item in items]
+
+  try:
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+  except asyncio.CancelledError as e:
+    cancelled_exc = e
+
+    for task in tasks:
+      task.cancel()
+
+  await wait_all(tasks)
+
+  if cancelled_exc:
+    raise cancelled_exc
+
+
 async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
+  """
+  Waits for all provided coroutines or tasks to complete.
+
+  Raises
+    BaseExceptionGroup: If multiple exceptions were raised.
+    BaseException: If a single exception was raised.
+    asyncio.CancelledError: If the coroutine was cancelled and no exception was raised.
+  """
+
   if not items:
     return
 

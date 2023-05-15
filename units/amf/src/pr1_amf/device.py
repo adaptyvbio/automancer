@@ -1,9 +1,7 @@
 import asyncio
-from asyncio import Event
 from typing import Callable, Optional
 
-from amf_rotary_valve import (AMFDevice, AMFDeviceConnectionError,
-                              AMFDeviceConnectionLostError)
+from amf_rotary_valve import AMFDevice, AMFDeviceConnectionError
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.devices.nodes.primitive import EnumNode, EnumNodeCase
@@ -117,10 +115,8 @@ class RotaryValveDevice(DeviceNode):
             ready()
 
             # Wait for the device to disconnect
-            try:
-              await self._device.wait_error()
-            except AMFDeviceConnectionLostError:
-              logger.warning(f"Lost connection to {self._label}")
+            await self._device.wait_error()
+            logger.warning(f"Lost connection to {self._label}")
         except* (AMFDeviceConnectionError, NodeUnavailableError):
           pass
         finally:
@@ -158,9 +154,9 @@ class RotaryValveDevice(DeviceNode):
       if (not self._serial_number) or (serial_number == self._serial_number):
         return device
     except AMFDeviceConnectionError:
-      await device.close()
+      await shield(device.close())
     except BaseException:
-      await device.close()
+      await shield(device.close())
       raise
 
     return None

@@ -1,32 +1,23 @@
 import ast
-from types import EllipsisType, NoneType
-from typing import Any, Optional
+from types import EllipsisType
+from typing import Optional
 
-from ..analysis import DiagnosticAnalysis
-
-from .type import evaluate_type_expr
-
+from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
+                      StaticAnalysisDiagnostic)
+from .expression import evaluate_eval_expr
 from .special import CoreTypeDefs, GenericClassDef
-from .context import StaticAnalysisAnalysis, StaticAnalysisContext, StaticAnalysisDiagnostic
-from .expression import accept_type_as_instantiable, evaluate_eval_expr
-from .types import AnyType, ClassConstructorDef, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefWithGenerics, Instance, InstantiableClassDef, OrderedTypeVariables, TypeDef, TypeDefs, TypeInstances, TypeVarDef, TypeVariables, UnknownType, Variables
+from .type import evaluate_type_expr, instantiate_type
+from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
+                    FuncDef, FuncOverloadDef, OrderedTypeVariables, TypeDefs,
+                    TypeInstances, TypeVarDef, TypeVariables)
 
-
-# def instantiate_if_necessary(input_type: AnyType):
-#   match input_type:
-#     case ClassDef():
-#       return StaticAnalysisAnalysis(), Instance(InstantiableClassDef(input_type, type_args=([UnknownType()] * len(input_type.type_variables))))
-#     case InstantiableClassDef():
-#       return StaticAnalysisAnalysis(), Instance(input_type)
-#     case _:
-#       return StaticAnalysisAnalysis(), input_type
 
 def evaluate_library_module(
-    module: ast.Module,
-    foreign_type_defs: TypeDefs,
-    foreign_variables: TypeInstances,
-    context: StaticAnalysisContext
-  ):
+  module: ast.Module,
+  foreign_type_defs: TypeDefs,
+  foreign_variables: TypeInstances,
+  context: StaticAnalysisContext
+):
   analysis = StaticAnalysisAnalysis()
 
   module_type_defs = TypeDefs()
@@ -59,7 +50,12 @@ def evaluate_library_module(
         targets=[ast.Name(id=name, ctx=ast.Store())],
         value=value
       ):
-        module_type_defs[name] = analysis.add(evaluate_type_expr(value, (foreign_type_defs | module_type_defs), TypeVariables(), context))
+        assign_type = analysis.add(evaluate_type_expr(value, (foreign_type_defs | module_type_defs), TypeVariables(), context))
+
+        module_type_defs[name] = assign_type
+
+        if isinstance(assign_type, (ClassDef, ClassDefWithTypeArgs)):
+          module_variables[name] = ClassConstructorDef(assign_type)
 
       case ast.ClassDef(name=class_name, bases=class_bases, body=class_body):
         cls = ClassDef(class_name)
@@ -125,14 +121,14 @@ def evaluate_library_module(
               if attr_name in cls.class_attrs:
                 raise Exception("Duplicate class attribute")
 
-              cls.class_attrs[attr_name] = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, TypeVariables(), context))
+              cls.class_attrs[attr_name] = instantiate_type(analysis.add(evaluate_type_expr(attr_ann, foreign_variables | module_variables, TypeVariables(), context)))
 
             # self.foo: int
             case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
               if attr_name in cls.instance_attrs:
                 raise Exception("Duplicate instance attribute")
 
-              cls.instance_attrs[attr_name] = analysis.add(evaluate_type_expr(attr_ann, (foreign_type_defs | module_type_defs), unordered_type_variables, context))
+              cls.instance_attrs[attr_name] = instantiate_type(analysis.add(evaluate_type_expr(attr_ann, (foreign_type_defs | module_type_defs), unordered_type_variables, context)))
 
             case ast.FunctionDef(name=func_name):
               overload = analysis.add(parse_func(class_statement, variables | values, context))

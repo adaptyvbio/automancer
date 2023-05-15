@@ -9,6 +9,19 @@ from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
                     UnknownDef)
 
 
+def instantiate_type(input_type: TypeDef):
+  match input_type:
+    case ClassDef():
+      return ClassDefWithTypeArgs(input_type, [UnknownDef()] * len(input_type.type_variables))
+    case ClassDefWithTypeArgs() | TypeVarDef():
+      return input_type
+    case UnionDef(left, right):
+      return UnionDef(instantiate_type(left), instantiate_type(right))
+    case _:
+      print("Unknown type", input_type)
+      # raise Exception("Unknown type")
+      return UnknownDef()
+
 def evaluate_type_expr(
     node: ast.expr, /,
     variables: TypeDefs,
@@ -80,7 +93,10 @@ def evaluate_type_expr(
 
         return analysis, ClassConstructorDef(type_args[0])
 
-      return analysis, ClassDefWithTypeArgs(subscript_type, type_args)
+      if len(type_args) != len(subscript_type.type_variables):
+        return analysis + StaticAnalysisDiagnostic("Invalid type argument count", node, context).analysis(), UnknownDef()
+
+      return analysis, ClassDefWithTypeArgs(subscript_type, [instantiate_type(type_arg) for type_arg in type_args])
 
     case _:
       raise Exception("Missing evaluate_type_expr()", ast.dump(node, indent=2))

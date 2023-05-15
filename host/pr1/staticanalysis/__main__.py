@@ -9,7 +9,7 @@ from .special import CoreTypeDefs
 from .support import process_source
 
 
-x = process_source("""
+type_defs, variables = process_source("""
 T = TypeVar('T')
 S = T
 
@@ -19,14 +19,19 @@ class int:
 class float:
   pass
 
+class set(Generic[T]):
+  self.item: T | float
+
 class list(Generic[T]):
   self.sample: T
+  self.samples: set[T]
 
 
-x: int | float
-X = int | float
-x2: X
-y: type[float]
+X = list[int]
+
+# int_list = list[int, float]
+# A = int | float
+# A = list[int]
 
 # x: list[int]
 # x: int
@@ -35,14 +40,21 @@ y: type[float]
 # x: list[T]
 """)
 
-pprint(x)
+pprint(type_defs)
+pprint(variables)
 
 
-import sys
-sys.exit()
+# import sys
+# sys.exit()
 
 
-document = Document.text("~~~ x ~~~")
+print()
+print('---')
+print()
+
+
+# document = Document.text("~~~ list[float]().samples.item ~~~")
+document = Document.text("~~~ X().sample ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4],
   prelude={}
@@ -51,7 +63,7 @@ context = StaticAnalysisContext(
 root = ast.parse(context.input_value, mode='eval')
 
 # print(ast.dump(root, indent=2))
-analysis, result = evaluate_eval_expr(root.body, x, set(), context)
+analysis, result = evaluate_eval_expr(root.body, type_defs, variables, context)
 
 for error in analysis.errors:
   print("Error :", error)
@@ -60,7 +72,6 @@ for error in analysis.errors:
     if isinstance(reference, ErrorDocumentReference) and reference.area:
       print(reference.area.format())
 
-print('---')
 pprint(result)
 
 print()

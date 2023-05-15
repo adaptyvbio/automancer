@@ -19,7 +19,7 @@ def process_source(contents: str, /):
     prelude=Variables()
   )
 
-  analysis, result_variables = evaluate_library_module(module, CoreTypeDefs, dict(), context)
+  analysis, result = evaluate_library_module(module, CoreTypeDefs, dict(), context)
 
   for error in analysis.errors:
     print("Error :", error)
@@ -28,4 +28,4 @@ def process_source(contents: str, /):
       if isinstance(reference, ErrorDocumentReference) and reference.area:
         print(reference.area.format())
 
-  return result_variables
+  return result

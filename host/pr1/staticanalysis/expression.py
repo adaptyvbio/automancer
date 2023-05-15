@@ -1,65 +1,59 @@
 import ast
-from typing import Optional, cast
+from typing import Any
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
 from .overloads import find_overload
-from .special import GenericClassDef, NoneType, TypeVarClassDef
-from .types import (AnyType, ClassDef, FuncDef, GenericClassDefWithGenerics,
-                    Instance, InstantiableClassDef, InstantiableType,
-                    TypeValues, TypeVarDef, TypeVariables, UnknownType,
-                    Variables)
-
-
-def accept_type_as_instantiable(input_type: InstantiableType, type_variables: Optional[TypeVariables] = None):
-  # print(">>>>", input_type, type_variables)
-
-  if isinstance(input_type, InstantiableClassDef):
-    return StaticAnalysisAnalysis(), input_type
-  elif isinstance(input_type, ClassDef):
-    return StaticAnalysisAnalysis(), InstantiableClassDef(input_type, type_args=[])
-  elif isinstance(input_type, TypeVarDef) and type_variables and (input_type in type_variables):
-    return StaticAnalysisAnalysis(), input_type
-  else:
-    # return StaticAnalysisDiagnostic("Invalid type for instantiation")
-    raise Exception(f"Invalid type {input_type!r}")
+from .special import NoneType
+from .type import evaluate_type_expr, instantiate_type
+from .types import (AnyType, ClassConstructorDef, ClassDef,
+                    ClassDefWithTypeArgs, TypeDefs, TypeInstances, TypeValues,
+                    TypeVarDef, TypeVariables, UnionDef, UnknownDef,
+                    UnknownType)
 
 
 def resolve_type_variables(input_type: AnyType, type_values: TypeValues):
-  # print(">>", input_type, type_values)
-
   match input_type:
+    case ClassDefWithTypeArgs(cls, type_args):
+      return ClassDefWithTypeArgs(cls, type_args=[
+        resolve_type_variables(type_arg, type_values) for type_arg in type_args
+      ])
     case TypeVarDef():
       return type_values[input_type]
-    case Instance(origin):
-      return Instance(cast(InstantiableClassDef, resolve_type_variables(origin, type_values)))
-    case InstantiableClassDef():
-      return InstantiableClassDef(input_type.cls, type_args=[
-        resolve_type_variables(type_arg, type_values) for type_arg in input_type.type_args
-      ])
+    case UnknownDef():
+      return UnknownDef()
+    case UnionDef(left, right):
+      return UnionDef(
+        resolve_type_variables(left, type_values),
+        resolve_type_variables(right, type_values)
+      )
     case _:
-      raise Exception("Unkown type")
+      print(">>", input_type, type_values)
+      raise Exception("Unknown type")
 
 
 def evaluate_eval_expr(
     node: ast.expr, /,
-    variables: Variables,
-    type_variables: TypeVariables,
+    foreign_type_defs: TypeDefs,
+    foreign_variables: TypeInstances,
     context: StaticAnalysisContext
-) -> tuple[StaticAnalysisAnalysis, AnyType]:
+) -> tuple[StaticAnalysisAnalysis, Any]:
   match node:
     case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
-      analysis, obj_type = evaluate_type_expr(obj, variables, type_variables, context)
+      analysis, obj_type = evaluate_eval_expr(obj, foreign_type_defs, foreign_variables, context)
 
-      if not isinstance(obj_type, Instance):
+      if isinstance(obj_type, UnknownType):
+        return analysis, UnknownType()
+
+      if not isinstance(obj_type, ClassDefWithTypeArgs):
         return analysis + StaticAnalysisDiagnostic("Invalid attribute target", obj, context).analysis(), UnknownType()
 
-      attr = obj_type.origin.cls.instance_attrs.get(attr_name)
+      attr = obj_type.cls.instance_attrs.get(attr_name)
 
       if not attr:
         return analysis + StaticAnalysisDiagnostic("Invalid reference to missing attribute", node, context).analysis(), UnknownType()
 
-      return analysis, resolve_type_variables(attr, type_values=obj_type.origin.type_values)
+      return analysis, resolve_type_variables(attr, type_values=obj_type.type_values)
 
       # if obj_type.cls is UnknownType:
       #   return analysis, ClassRef(UnknownType)
@@ -82,44 +76,65 @@ def evaluate_eval_expr(
 
 
     case ast.Call(func, args, keywords):
-      analysis, func_type = evaluate_eval_expr(func, variables, type_variables, context)
+      analysis, func_type = evaluate_eval_expr(func, foreign_type_defs, foreign_variables, context)
 
-      if func_type is TypeVarClassDef:
-        match args, keywords:
-          case [ast.Constant(str(typevar_name))], []:
-            return analysis, TypeVarDef(typevar_name)
-          case _:
-            raise Exception("Invalid TypeVar arguments")
-      else:
-        args = analysis.add_sequence([evaluate_eval_expr(arg, variables, type_variables, context) for arg in args])
-        kwargs = analysis.add_mapping({ keyword.arg: evaluate_eval_expr(keyword.value, variables, type_variables, context) for keyword in keywords if keyword.arg })
+      args = analysis.add_sequence([evaluate_eval_expr(arg, foreign_type_defs, foreign_variables, context) for arg in args])
+      kwargs = analysis.add_mapping({ keyword.arg: evaluate_eval_expr(keyword.value, foreign_type_defs, foreign_variables, context) for keyword in keywords if keyword.arg })
 
-        if func_type is UnknownType:
-          return analysis, UnknownType()
+      if isinstance(func_type, UnknownType):
+        return analysis, UnknownType()
 
-        instantiable_type = analysis.add(accept_type_as_instantiable(func_type))
-        assert isinstance(instantiable_type, InstantiableClassDef) # ?
+      if isinstance(func_type, ClassConstructorDef):
+        # if isinstance(func_type.target, ClassDefWithTypeArgs):
+        #   cls_with_type_args = func_type.target
+        # else:
+        #   cls_with_type_args = ClassDefWithTypeArgs(func_type.target, [UnknownType()] * len(func_type.target.type_variables))
+        cls_with_type_args = instantiate_type(func_type.target)
 
-        init_func = instantiable_type.cls.instance_attrs['__init__']
-        assert isinstance(init_func, FuncDef)
-
+        init_func = cls_with_type_args.cls.instance_attrs['__init__']
         overload = find_overload(init_func, args=args, kwargs=kwargs)
 
         if not overload:
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid call", node, context))
 
-        return analysis, Instance(instantiable_type)
+        return analysis, cls_with_type_args
+      else:
+        raise Exception("Invalid call")
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), NoneType
 
     case ast.Name(id=name, ctx=ast.Load()):
-      variable_value = variables.get(name)
+      variable_value = foreign_variables.get(name)
 
       if not variable_value:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownType()
 
       return StaticAnalysisAnalysis(), variable_value
+
+    case ast.Subscript(value=target, slice=subscript):
+      analysis, target_type = evaluate_eval_expr(target, foreign_type_defs, foreign_variables, context)
+
+      match subscript:
+        case ast.Tuple(args, ctx=ast.Load()):
+          subscript_items = args
+        case _:
+          subscript_items = [subscript]
+
+      if isinstance(target_type, ClassConstructorDef):
+        target_type = target_type.target
+
+        if not isinstance(target_type, ClassDef):
+          return StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownType()
+
+        type_args = analysis.add_sequence([evaluate_type_expr(item, foreign_type_defs, TypeVariables(), context) for item in subscript_items])
+
+        if len(type_args) != len(target_type.type_variables):
+          return analysis + StaticAnalysisDiagnostic("Invalid type argument count", node, context).analysis(), UnknownDef()
+
+        return analysis, ClassConstructorDef(ClassDefWithTypeArgs(target_type, [instantiate_type(type_arg) for type_arg in type_args]))
+
+      raise Exception("Invalid subscript")
 
     case _:
       print("Missing evaluate_eval_expr()", ast.dump(node, indent=2))

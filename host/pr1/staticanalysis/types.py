@@ -19,7 +19,7 @@ class GenericClassDefWithGenerics:
 
 OrderedTypeVariables = list[TypeVarDef]
 TypeVariables = set[TypeVarDef]
-TypeValues = dict[TypeVarDef, 'AnyType']
+TypeValues = dict[TypeVarDef, 'TypeDef']
 
 
 # Classes
@@ -124,6 +124,10 @@ class ClassConstructorDef:
 class ClassDefWithTypeArgs:
   cls: ClassDef
   type_args: 'list[TypeDef]' # = field(default_factory=list)
+
+  @property
+  def type_values(self) -> TypeValues:
+    return { type_variable: type_arg for type_variable, type_arg in zip(self.cls.type_variables, self.type_args) }
 
 
 # Complex types

@@ -5,7 +5,7 @@ from ..document import Document
 from ..error import ErrorDocumentReference
 from .context import StaticAnalysisContext
 from .expression import evaluate_eval_expr
-from .special import CoreVariables
+from .special import CoreTypeDefs
 from .support import process_source
 
 
@@ -20,15 +20,20 @@ class float:
   pass
 
 class list(Generic[T]):
-  sample: T
+  self.sample: T
+
+
+x: int | float
+X = int | float
+x2: X
+y: type[float]
 
 # x: list[int]
-
 # x: int
 # y: x
 # y: type[x]
 # x: list[T]
-""", CoreVariables)
+""")
 
 pprint(x)
 

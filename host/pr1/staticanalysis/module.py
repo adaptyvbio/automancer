@@ -4,12 +4,12 @@ from typing import Any, Optional
 
 from ..analysis import DiagnosticAnalysis
 
-from .type import evaluate_type_expr, instantiate_type
+from .type import evaluate_type_expr
 
-from .special import CoreVariables, GenericClassDef
+from .special import CoreTypeDefs, GenericClassDef
 from .context import StaticAnalysisAnalysis, StaticAnalysisContext, StaticAnalysisDiagnostic
 from .expression import accept_type_as_instantiable, evaluate_eval_expr
-from .types import AnyType, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefWithGenerics, Instance, InstantiableClassDef, OrderedTypeVariables, TypeDef, TypeVarDef, TypeVariables, UnknownType, Variables
+from .types import AnyType, ClassConstructorDef, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefWithGenerics, Instance, InstantiableClassDef, OrderedTypeVariables, TypeDef, TypeDefs, TypeInstances, TypeVarDef, TypeVariables, UnknownType, Variables
 
 
 # def instantiate_if_necessary(input_type: AnyType):
@@ -21,35 +21,45 @@ from .types import AnyType, ClassDef, FuncDef, FuncOverloadDef, GenericClassDefW
 #     case _:
 #       return StaticAnalysisAnalysis(), input_type
 
-def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables, context: StaticAnalysisContext):
+def evaluate_library_module(
+    module: ast.Module,
+    foreign_type_defs: TypeDefs,
+    foreign_variables: TypeInstances,
+    context: StaticAnalysisContext
+  ):
   analysis = StaticAnalysisAnalysis()
-  module_variables = dict[str, TypeDef]()
+
+  module_type_defs = TypeDefs()
+  module_variables = TypeInstances()
 
   # print(ast.dump(module, indent=2))
 
   for module_statement in module.body:
     match module_statement:
-      case ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()), annotation=ann, value=None, simple=1):
-        assert not (name in module_variables)
+      case ast.AnnAssign(target=ast.Name(id=variable_name, ctx=ast.Store()), annotation=ann, value=None, simple=1):
+        if variable_name in module_variables:
+          analysis.errors.append(StaticAnalysisDiagnostic("Duplicate variable declaration", module_statement.target, context))
+          continue
 
-        ann_type = analysis.add(evaluate_type_expr(ann, foreign_variables | module_variables, TypeVariables(), context))
-        module_variables[name] = analysis.add(instantiate_type(ann_type, ann, context))
+        assert not (variable_name in module_variables)
+
+        module_variables[variable_name] = analysis.add(evaluate_type_expr(ann, foreign_type_defs | module_type_defs, TypeVariables(), context))
 
       # case ast.Assign(
-      #   targets=[ast.Name(name, ctx=ast.Store())],
+      #   targets=[ast.Name(type_var_name, ctx=ast.Store())],
       #   value=ast.Call(
       #     args=[ast.Constant(arg_name)],
       #     func=ast.Name(id='TypeVar', ctx=ast.Load())
       #   )
       # ):
-      #   assert name == arg_name
+      #   assert type_var_name == arg_name
       #   values[name] = TypeVarDef(name)
 
       case ast.Assign(
         targets=[ast.Name(id=name, ctx=ast.Store())],
         value=value
       ):
-        module_variables[name] = analysis.add(evaluate_eval_expr(value, foreign_variables | module_variables, TypeVariables(), context))
+        module_type_defs[name] = analysis.add(evaluate_type_expr(value, (foreign_type_defs | module_type_defs), TypeVariables(), context))
 
       case ast.ClassDef(name=class_name, bases=class_bases, body=class_body):
         cls = ClassDef(class_name)
@@ -57,7 +67,7 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
 
         for class_base in class_bases:
           if isinstance(class_base, ast.Subscript):
-            class_base_type = analysis.add(evaluate_eval_expr(class_base.value, foreign_variables | module_variables, type_variables or set(), context))
+            class_base_type = analysis.add(evaluate_type_expr(class_base.value, (foreign_type_defs | module_type_defs), TypeVariables(), context))
 
             if class_base_type is GenericClassDef:
               if type_variables is not None:
@@ -70,7 +80,7 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
                 case _:
                   expr_args = [class_base.slice]
 
-              potential_type_variables = analysis.add_sequence([evaluate_type_expr(arg, foreign_variables | module_variables, type_variables or set(), context) for arg in expr_args])
+              potential_type_variables = analysis.add_sequence([evaluate_type_expr(arg, (foreign_type_defs | module_type_defs), TypeVariables(), context) for arg in expr_args])
               type_variables = OrderedTypeVariables()
 
               for potential_type_variable, type_variable_node in zip(potential_type_variables, expr_args):
@@ -81,7 +91,6 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
                 else:
                   type_variables.append(potential_type_variable)
 
-              print(type_variables)
               continue
 
 
@@ -103,7 +112,8 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
         cls.type_variables = type_variables or OrderedTypeVariables()
         unordered_type_variables = set(cls.type_variables)
 
-        module_variables[class_name] = cls
+        module_type_defs[class_name] = cls
+        module_variables[class_name] = ClassConstructorDef(cls)
 
         init_func = FuncDef()
         cls.instance_attrs['__init__'] = init_func
@@ -115,15 +125,14 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
               if attr_name in cls.class_attrs:
                 raise Exception("Duplicate class attribute")
 
-              cls.class_attrs[attr_name] = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, unordered_type_variables, context))
+              cls.class_attrs[attr_name] = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, TypeVariables(), context))
 
             # self.foo: int
             case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
               if attr_name in cls.instance_attrs:
                 raise Exception("Duplicate instance attribute")
 
-              ann_type = analysis.add(evaluate_eval_expr(attr_ann, foreign_variables | module_variables, unordered_type_variables, context))
-              cls.instance_attrs[attr_name] = Instance(analysis.add(accept_type_as_instantiable(ann_type, type_variables)))
+              cls.instance_attrs[attr_name] = analysis.add(evaluate_type_expr(attr_ann, (foreign_type_defs | module_type_defs), unordered_type_variables, context))
 
             case ast.FunctionDef(name=func_name):
               overload = analysis.add(parse_func(class_statement, variables | values, context))
@@ -156,7 +165,7 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
             args_kwonly=list(),
             args_posonly=list(),
             default_count=0,
-            return_type=CoreVariables['None']
+            return_type=CoreTypeDefs['None']
           ))
 
       case ast.FunctionDef(name=func_name):
@@ -175,9 +184,15 @@ def evaluate_library_module(module: ast.Module, /, foreign_variables: Variables,
         func.overloads.append(overload)
 
       case _:
+        print("Missing", module_statement)
         raise Exception
 
   # from pprint import pprint
   # pprint(declarations)
 
-  return analysis, Variables({ name: value for name, value in module_variables.items() if not isinstance(value, TypeVarDef) })
+  return analysis, (
+    module_type_defs,
+    module_variables
+  )
+
+  # Variables({ name: value for name, value in module_variables.items() if not isinstance(value, TypeVarDef) })

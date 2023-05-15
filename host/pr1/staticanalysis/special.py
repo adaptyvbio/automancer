@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from .types import ClassDef, Instance, InstantiableClassDef, TypeVarDef
+from .types import ClassDef, Instance, InstantiableClassDef, TypeDefs, TypeVarDef
 
 
 TypeVarClassDef = ClassDef('TypeVar')
@@ -9,11 +9,13 @@ GenericClassDef = ClassDef('Generic')
 FunctionType = ClassDef('function')
 MethodType = ClassDef('method')
 NoneType = ClassDef('None')
+TypeType = ClassDef('type')
 
 
-CoreVariables = {
+CoreTypeDefs: TypeDefs = {
   'Generic': GenericClassDef,
-  'None': Instance(InstantiableClassDef(NoneType)),
+  'None': NoneType,
   'NoneType': NoneType,
-  'TypeVar': TypeVarClassDef
+  'TypeVar': TypeVarClassDef,
+  'type': TypeType
 }

@@ -29,8 +29,8 @@ class ClassDef:
   name: str
   _: KW_ONLY
   bases: 'list[InstantiableClassDef]' = field(default_factory=list)
-  class_attrs: 'dict[str, AnyType]' = field(default_factory=dict)
-  instance_attrs: 'dict[str, AnyType]' = field(default_factory=dict)
+  class_attrs: 'TypeDefs' = field(default_factory=dict)
+  instance_attrs: 'TypeDefs' = field(default_factory=dict)
   type_variables: OrderedTypeVariables = field(default_factory=list)
 
   def __repr__(self):
@@ -102,8 +102,8 @@ class Instance:
 
 @dataclass
 class UnionDef:
-  left: 'AnyType'
-  right: 'AnyType'
+  left: 'TypeDef'
+  right: 'TypeDef'
 
   def __repr__(self):
     return f"<{self.__class__.__name__} {self.left!r} | {self.right!r}>"
@@ -118,7 +118,7 @@ class UnknownDef:
 
 @dataclass
 class ClassConstructorDef:
-  target: ClassDef
+  target: 'TypeDef'
 
 @dataclass
 class ClassDefWithTypeArgs:
@@ -128,9 +128,16 @@ class ClassDefWithTypeArgs:
 
 # Complex types
 
-TypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
+TypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | TypeVarDef | UnionDef | UnknownDef
+TypeDefs = dict[str, TypeDef]
+
+TypeInstance = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
+TypeInstances = dict[str, TypeInstance]
+
 
 AnyType = Instance | InstantiableClassDef | ClassDef | TypeVarDef | UnknownType
 # InstancerType = InstantiableClassDef | ClassDef | TypeVarDef
 InstantiableType = InstantiableClassDef | TypeVarDef | UnknownType
-Variables = dict[str, AnyType]
+
+VarType = ClassDef
+Variables = dict[str, VarType]

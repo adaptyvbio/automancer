@@ -13,7 +13,7 @@ from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.util.pool import Pool
-from pr1.util.asyncio import cancel_task, run_double, shield, wait_all
+from pr1.util.asyncio import aexit_handler, cancel_task, run_double, shield, wait_all
 from pr1.devices.nodes.primitive import BooleanNode
 from pr1.devices.nodes.readable import SubscribableReadableNode
 from pr1.util.batch import BatchWorker
@@ -84,7 +84,8 @@ class OPCUADeviceNode(SubscribableReadableNode):
     else:
       self.connected = True
 
-  async def __aexit__(self, exc_name, exc, exc_type):
+  @aexit_handler
+  async def __aexit__(self):
     self.connected = False
     del self._node
 

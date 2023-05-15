@@ -1,13 +1,14 @@
 import asyncio
+from asyncio import Event
 from typing import Callable, Optional
 
-from amf_rotary_valve import AMFDevice, AMFDeviceConnectionError, AMFDeviceConnectionLostError
+from amf_rotary_valve import (AMFDevice, AMFDeviceConnectionError,
+                              AMFDeviceConnectionLostError)
 from pr1.devices.nodes.collection import DeviceNode
-from pr1.devices.nodes.common import NodeId, NodeUnavailableError, configure
+from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.devices.nodes.primitive import EnumNode, EnumNodeCase
-from pr1.devices.nodes.value import NullType
-from pr1.util.asyncio import cancel_task, run_double
-from pr1.util.types import SimpleCallbackFunction
+from pr1.util.asyncio import aexit_handler, run_double, shield
+from pr1.util.pool import Pool
 
 from . import logger, namespace
 
@@ -17,12 +18,14 @@ class RotaryValvePositionNode(EnumNode[int]):
     self,
     *,
     master: 'RotaryValveDevice',
+    pool: Pool,
     valve_count: int
   ):
     super().__init__(
+      cases=[EnumNodeCase((index + 1), label=f"Valve {index + 1}") for index in range(valve_count)],
+      pool=pool,
       readable=True,
-      writable=True,
-      cases=[EnumNodeCase((index + 1), label=f"Valve {index + 1}") for index in range(valve_count)]
+      writable=True
     )
 
     self.id = NodeId("position")
@@ -32,19 +35,18 @@ class RotaryValvePositionNode(EnumNode[int]):
     self._master = master
     self._valve_count = valve_count
 
-  async def _configure(self):
-    async with configure(super()):
-      assert (device := self._master._device)
+  async def __aenter__(self):
+    assert (device := self._master._device)
 
-      if (observed_valve_count := await device.get_valve_count()) != self._valve_count:
-        logger.error(f"Invalid valve count, found {observed_valve_count}, expected {self._valve_count}")
-        raise NodeUnavailableError
+    if (observed_valve_count := await device.get_valve_count()) != self._valve_count:
+      logger.error(f"Invalid valve count, found {observed_valve_count}, expected {self._valve_count}")
+      raise NodeUnavailableError
 
-      self.connected = True
+    self.connected = True
 
-  async def _unconfigure(self):
+  @aexit_handler
+  async def __aexit__(self):
     self.connected = False
-    await super()._unconfigure()
 
   async def _read_value(self):
     assert (device := self._master._device)
@@ -62,8 +64,6 @@ class RotaryValvePositionNode(EnumNode[int]):
     except AMFDeviceConnectionError as e:
       raise NodeUnavailableError from e
 
-    self.value = value
-
 
 class RotaryValveDevice(DeviceNode):
   model = "LSP rotary valve"
@@ -75,6 +75,7 @@ class RotaryValveDevice(DeviceNode):
     address: Optional[str],
     id: str,
     label: Optional[str],
+    pool: Pool,
     serial_number: Optional[str],
     valve_count: int
   ):
@@ -86,66 +87,70 @@ class RotaryValveDevice(DeviceNode):
 
     self._address = address
     self._serial_number = serial_number
+    self._pool = pool
 
     self._device: Optional[AMFDevice] = None
     self._node = RotaryValvePositionNode(
       master=self,
+      pool=pool,
       valve_count=valve_count
     )
 
     self.nodes = { self._node.id: self._node }
 
-  async def _connect(self, ready: SimpleCallbackFunction):
+  async def _connect(self, ready: Callable[[], bool], /):
     while True:
       self._device = await self._find_device()
 
       if self._device:
         logger.info(f"Configuring {self._label}")
 
-        async with self._device:
-          try:
-            if not await self._device.get_valve():
-              await self._device.home()
+        try:
+          # Initialize the rotary valve
+          if not await self._device.get_valve():
+            await self._device.home()
 
-            self.connected = True
+          self.connected = True
 
+          async with self._node:
+            logger.info(f"Connected to {self._label}")
+            ready()
+
+            # Wait for the device to disconnect
             try:
-              try:
-                await self._node._configure()
-              except NodeUnavailableError:
-                pass
+              await self._device.wait_error()
+            except AMFDeviceConnectionLostError:
+              logger.warning(f"Lost connection to {self._label}")
+        except* (AMFDeviceConnectionError, NodeUnavailableError):
+          pass
+        finally:
+          self.connected = False
+          await shield(self._device.close())
 
-              logger.info(f"Connected to {self._label}")
-              ready()
-
-              try:
-                await self._device.closed()
-              except AMFDeviceConnectionLostError:
-                logger.warning(f"Lost connection to {self._label}")
-              finally:
-                if self._node.connected:
-                  await self._node._unconfigure()
-            finally:
-              self.connected = False
-          except (NodeUnavailableError, AMFDeviceConnectionError):
-            pass
-
+      # If the above failed, still mark the device as ready
       ready()
+
+      # Wait before retrying
       await asyncio.sleep(1.0)
 
   async def _find_device(self):
     if self._address:
       return await self._create_device(lambda address = self._address: AMFDevice(address))
 
-    for info in AMFDevice.list(all=True):
+    for info in AMFDevice.list():
       if device := await self._create_device(info.create):
         return device
     else:
       return None
 
-  async def _create_device(self, create_device: Callable[[], AMFDevice], /):
+  async def _create_device(self, get_device: Callable[[], AMFDevice], /):
     try:
-      device = create_device()
+      device = get_device()
+    except AMFDeviceConnectionError:
+      return None
+
+    try:
+      await device.open()
 
       # Query the serial number even if not needed to detect protocol errors.
       serial_number = await device.get_unique_id()
@@ -153,16 +158,15 @@ class RotaryValveDevice(DeviceNode):
       if (not self._serial_number) or (serial_number == self._serial_number):
         return device
     except AMFDeviceConnectionError:
-      pass
+      await device.close()
+    except BaseException:
+      await device.close()
+      raise
 
     return None
 
   async def initialize(self):
-    self._task = await run_double(self._connect)
+    self._pool.add(await run_double(self._connect))
 
     if not self.connected:
       logger.warning(f"Failed connecting to {self._label}")
-
-  async def destroy(self):
-    await cancel_task(self._task)
-    self._task = None

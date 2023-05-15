@@ -32,6 +32,7 @@ class Executor(BaseExecutor):
           address=(device_conf['address'].value if 'address' in device_conf else None),
           id=device_id.value,
           label=(device_conf['label'].value if 'label' in device_conf else None),
+          pool=self._host.pool,
           serial_number=(device_conf['serial'].value if 'serial' in device_conf else None),
           valve_count=device_conf['valve_count'].value
         )

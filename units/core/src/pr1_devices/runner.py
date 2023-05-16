@@ -18,7 +18,7 @@ from pr1.fiber.master2 import Master
 from pr1.host import Host
 from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.state import StateEvent, StateProgramItem, UnitStateManager
-from pr1.units.base import BaseRunner
+from pr1.units.base import BaseMasterRunner, BaseRunner
 from pr1.util.asyncio import race, run_anonymous, wait_all
 from pr1.util.decorators import provide_logger
 
@@ -50,16 +50,23 @@ class NodeInfo:
 
 
 @provide_logger(logger)
-class Runner(BaseRunner):
-  def __init__(self, chip, *, host: Host):
-    self._chip = chip
-    self._host = host
+class Runner(BaseMasterRunner):
+  def __init__(self, master):
+    self._master = master
 
     self._declarations = list[Declaration]()
     self._node_infos = dict[ValueNode, NodeInfo]()
 
     self._logger: Logger
-    self._master: Master
+
+  async def cleanup(self):
+    for node_info in self._node_infos.values():
+      if node_info.worker_task:
+        node_info.worker_task.cancel()
+        node_info.worker_task = None
+
+    self._node_infos.clear()
+
 
   def add(self, trace: PublisherTrace, assignments: dict[ValueNode, Any]):
     declaration = Declaration(assignments, trace)
@@ -80,13 +87,6 @@ class Runner(BaseRunner):
       node_info = self._node_infos[node]
       node_info.candidate_count -= 1
 
-      if node_info.candidate_count < 1:
-        del self._node_infos[node]
-
-        if node_info.worker_task:
-          node_info.worker_task.cancel()
-
-
   def update(self):
     for node, node_info in self._node_infos.items():
       node_declaration = next((declaration for declaration in self._declarations if declaration.active and (node in declaration.assignments)), None)
@@ -99,9 +99,15 @@ class Runner(BaseRunner):
         node_info.worker_task = self._master.pool.start_soon(self._node_worker(node, node_info))
 
   async def wait(self):
-    for node_info in self._node_infos.values():
+    for node, node_info in list(self._node_infos.items()):
       await node_info.settle_event.wait()
 
+      if node_info.candidate_count < 1:
+        del self._node_infos[node]
+
+        if node_info.worker_task:
+          node_info.worker_task.cancel()
+          node_info.worker_task = None
 
   async def _node_worker(self, node: ValueNode, node_info: NodeInfo):
     self._logger.debug(f"Launching worker of node with id '{node.id}'")

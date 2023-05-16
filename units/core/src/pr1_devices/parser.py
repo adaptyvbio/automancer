@@ -1,7 +1,7 @@
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, Literal, final
+from typing import TYPE_CHECKING, Any, Literal, final
 
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
@@ -25,6 +25,9 @@ from pr1.reader import LocatedValue
 from pr1.util.decorators import debug
 
 from . import namespace
+
+if TYPE_CHECKING:
+  from .runner import Runner
 
 
 EXPR_DEPENDENCY_METADATA_NAME = f"{namespace}.dependencies"
@@ -76,10 +79,10 @@ def wrap_node(node: BaseNode, /):
 class DevicesProtocolDetails(ProtocolUnitDetails):
   env: EvalEnv
 
-  def create_runtime_stack(self, runner: 'DevicesRunner'):
+  def create_runtime_stack(self, runner: 'Runner'):
     return {
       self.env: {
-        'devices': wrap_node(runner._host.root_node)
+        'devices': wrap_node(runner._master.host.root_node)
       }
     }
 

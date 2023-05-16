@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 from asyncio import Event, Task
+from dataclasses import dataclass
 from typing import Any, Coroutine, Optional, TypeVar
 
 from .asyncio import race
@@ -161,6 +162,32 @@ class Pool:
 
     return task
 
+  def start_soon_with_handle(self, coro: Coroutine[Any, Any, Any], /):
+    if (not self._open) and (not self._preopen):
+      raise Exception("Pool not open")
+
+    inner_task = asyncio.create_task(coro)
+    handle = TaskHandle(inner_task)
+
+    async def outer_func():
+      cancelled = False
+
+      while True:
+        try:
+          await asyncio.shield(inner_task)
+        except asyncio.CancelledError:
+          if inner_task.cancelled():
+            return
+
+          if (not handle.interrupted()) or cancelled:
+            inner_task.cancel()
+
+          cancelled = True
+
+    self.start_soon(outer_func())
+
+    return handle
+
   @classmethod
   @contextlib.asynccontextmanager
   async def open(cls, *, forever: bool = False):
@@ -195,6 +222,18 @@ class Pool:
 
     if exception:
       raise exception
+
+
+@dataclass
+class TaskHandle:
+  task: Task
+
+  def interrupt(self):
+    if not self.interrupted():
+      self.task.cancel()
+
+  def interrupted(self):
+    return self.task.cancelling() > 0
 
 
 if __name__ == "__main__":

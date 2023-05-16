@@ -1,24 +1,21 @@
-from asyncio import Event, Future, Lock, Task
+from asyncio import Task
 from logging import Logger
-from pprint import pprint
-from collections import deque
 from dataclasses import dataclass, field
-import functools
 from os import PathLike
 from pathlib import Path
 from traceback import StackSummary
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Optional
 import asyncio
 import traceback
 
+from ..util.asyncio import wait_all
 from ..host import logger
 from ..util.decorators import provide_logger
 from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter
-from ..state import DemoStateInstance, GlobalStateManager, UnitStateManager
-from ..master.analysis import MasterAnalysis, MasterError
+from ..master.analysis import MasterAnalysis
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
@@ -36,11 +33,9 @@ class Master:
     self.host = host
     self.protocol = protocol
 
-    self.state_manager = GlobalStateManager({
-      namespace: (Consumer(runner) if issubclass(Consumer, UnitStateManager) else functools.partial(Consumer, runner)) for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
-      # namespace: DemoStateInstance for namespace, runner in chip.runners.items() if (Consumer := runner.StateConsumer)
-      # 'foo': DemoStateInstance
-    })
+    self.runners = {
+      namespace: unit.MasterRunner(self) for namespace, unit in self.host.units.items() if hasattr(unit, 'MasterRunner')
+    }
 
     self._analysis = MasterAnalysis()
     self._cleanup_callback = cleanup_callback
@@ -105,7 +100,7 @@ class Master:
     }
 
     for namespace, protocol_unit_details in self.protocol.details.items():
-      runtime_stack |= protocol_unit_details.create_runtime_stack(self.chip.runners[namespace])
+      runtime_stack |= protocol_unit_details.create_runtime_stack(self.runners[namespace])
 
     self._update_lock_depth = 0
     self._update_callback = update_callback
@@ -127,7 +122,7 @@ class Master:
         if self._cleanup_callback:
           self._cleanup_callback()
 
-        await self.state_manager.clear()
+        await wait_all([runner.cleanup() for runner in self.runners.values()])
 
     self._pool.start_soon(func())
 

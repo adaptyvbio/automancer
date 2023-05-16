@@ -13,7 +13,7 @@ from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.util.pool import Pool
-from pr1.util.asyncio import aexit_handler, cancel_task, run_double, shield, wait_all
+from pr1.util.asyncio import aexit_handler, cancel_task, race, run_double, shield, wait_all
 from pr1.devices.nodes.primitive import BooleanNode
 from pr1.devices.nodes.readable import SubscribableReadableNode
 from pr1.util.batch import BatchWorker
@@ -98,16 +98,28 @@ class OPCUADeviceNode(SubscribableReadableNode):
     except AsyncUaError as e:
       raise NodeUnavailableError from e
 
+    await self.read()
     yield
 
     try:
       while True:
-        await self._change_event.wait()
+        await race(
+          self._change_event.wait(),
+          self.wait_disconnected()
+        )
+
         self._change_event.clear()
+
+        if not self.connected:
+          raise NodeUnavailableError
+
+        # TODO: Improve / also check whether SubHandler has an initial notification
+        await self.read()
         yield
     finally:
       try:
         await shield(subscription.unsubscribe(handle))
+        await shield(subscription.delete())
       except AsyncUaError as e:
         raise NodeUnavailableError from e
 
@@ -296,6 +308,7 @@ class OPCUADevice(DeviceNode):
               node = (self._client.get_node(ua.ObjectIds.Server_ServerStatus_CurrentTime), ) # type: ignore
 
               await subscription.subscribe_data_change(node)
+              await subscription.delete()
 
               while True:
                 await asyncio.sleep(1)

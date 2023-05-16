@@ -1,11 +1,11 @@
 import asyncio
 import warnings
 from abc import abstractmethod
-from asyncio import Event, Task
+from asyncio import Event
 from typing import AsyncIterator, Optional
 
 from ...util.asyncio import Cancelable
-from ...util.pool import Pool
+from ...util.pool import Pool, TaskHandle
 from .common import NodeListener, NodeUnavailableError
 from .value import NodeRevision, ValueNode
 
@@ -35,9 +35,8 @@ class SubscribableReadableNode(WatchableNode):
   def __init__(self, **kwargs):
     super().__init__(**kwargs)
 
-    self._watch_canceled = False
     self._watch_count = 0
-    self._watch_task: Optional[Task[None]] = None
+    self._watch_handle: Optional[TaskHandle] = None
     self._watching_event = Event()
 
   # Internal
@@ -45,16 +44,17 @@ class SubscribableReadableNode(WatchableNode):
   def _start_watch(self, reg: Cancelable):
     self._watch_count += 1
 
-    if not self._watch_task:
-      self._watch_task = self._pool.start_soon(self._watch())
+    if not self._watch_handle:
+      self._watch_handle = self._pool.start_soon_with_handle(self._watch())
 
     def cancel():
-      # The _watch_task property could already have been set to None if an error occured in _watch().
-      if self._watch_task:
-        self._watch_canceled = True
-        self._watch_task.cancel()
-
       self._watch_count -= 1
+
+      # print("Interrupting", self._watch_count, self._watch_handle)
+
+      # The _watch_handle property could already have been set to None if an error occured in _watch().
+      if self._watch_handle and (self._watch_count < 1):
+        self._watch_handle.interrupt()
 
       reg.cancel()
 
@@ -64,28 +64,21 @@ class SubscribableReadableNode(WatchableNode):
   async def _watch(self):
     try:
       while True:
+        if not self.connected:
+          self._watching_event.set()
+
+        await self.wait_connected()
+
         try:
-          if not self.connected:
+          async for _ in self._subscribe():
+            # Listeners should be called by _subscribe().
             self._watching_event.set()
-
-          await self.wait_connected()
-
-          try:
-            async for _ in self._subscribe():
-              # Listeners should be called by _subscribe().
-              self._watching_event.set()
-          except NodeUnavailableError:
-            pass
-          else:
-            warnings.warn("Subscription ended unexpectedly")
-        except asyncio.CancelledError:
-          if self._watch_canceled and (self._watch_count > 0):
-            self._watch_canceled = False
-          else:
-            raise
+        except NodeUnavailableError:
+          pass
+        else:
+          warnings.warn("Subscription ended unexpectedly")
     finally:
-      self._watch_canceled = False
-      self._watch_task = None
+      self._watch_handle = None
       self._watching_event.clear()
 
   # To be implemented

@@ -248,6 +248,9 @@ class NodeValueWriter(Generic[T]):
           self._change_event.wait()
         )
 
+        # TODO: Handle the case where the value of a stable node changes while disconnected
+        # print("Event", self.node, self.node.id, self.node.connected, self.target_value, self.node.value)
+
         self._change_event.clear()
 
         if self.node.connected:

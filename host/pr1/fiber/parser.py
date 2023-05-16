@@ -18,7 +18,7 @@ from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack
 
 if TYPE_CHECKING:
   from ..host import Host
-  from ..units.base import BaseRunner
+  from ..units.base import BaseMasterRunner
   from .master2 import ProgramHandle
 
 
@@ -101,7 +101,7 @@ class ProtocolUnitDetails:
   def create_adoption_stack(self):
     return EvalStack()
 
-  def create_runtime_stack(self, runner: 'BaseRunner'):
+  def create_runtime_stack(self, runner: 'BaseMasterRunner'):
     return EvalStack()
 
 @dataclass

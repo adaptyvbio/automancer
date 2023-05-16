@@ -79,7 +79,7 @@ class PublisherProgram(BaseProgram):
 
     self._block = block
     self._handle = handle
-    self._runner = cast(Runner, handle.master.chip.runners[namespace])
+    self._runner: Runner = handle.master.runners[namespace]
 
     self._assignments: dict[NodePath, Optional[Any]]
     self._mode: PublisherProgramMode.Any
@@ -133,7 +133,7 @@ class PublisherProgram(BaseProgram):
     for path, evaluable_value in self._block.assignments.items():
       result = analysis.add(evaluable_value.eval(EvalContext(stack), final=True))
 
-      node = self._runner._host.root_node.find(path)
+      node = self._runner._master.host.root_node.find(path)
       assert isinstance(node, ValueNode)
 
       if not isinstance(result, EllipsisType):
@@ -213,7 +213,7 @@ class ApplierProgram(BaseProgram):
 
     self._block = block
     self._handle = handle
-    self._runner = cast(Runner, handle.master.chip.runners[namespace])
+    self._runner: Runner = handle.master.runners[namespace]
 
     self._logger: Logger
     self._mode: ApplierProgramMode.Any

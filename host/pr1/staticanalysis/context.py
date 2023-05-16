@@ -1,6 +1,7 @@
 import ast
 from dataclasses import dataclass
 
+from .types import Symbols
 from ..analysis import DiagnosticAnalysis
 from ..error import Diagnostic, ErrorDocumentReference
 from ..reader import LocatedString
@@ -9,7 +10,7 @@ from ..reader import LocatedString
 @dataclass(kw_only=True)
 class StaticAnalysisContext:
   input_value: LocatedString
-  prelude: dict
+  prelude: Symbols
 
 class StaticAnalysisDiagnostic(Diagnostic):
   def __init__(self, message: str, node: ast.expr | ast.stmt, context: StaticAnalysisContext, *, name: str = 'unknown'):

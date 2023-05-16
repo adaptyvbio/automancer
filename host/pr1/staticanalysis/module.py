@@ -1,16 +1,16 @@
 import ast
+from re import S
 from types import EllipsisType
-from typing import Optional
-
-from .function import parse_func
+from typing import Optional, cast
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
-from .expression import evaluate_eval_expr
+from .function import parse_func
 from .special import CoreTypeDefs, GenericClassDef
 from .type import evaluate_type_expr, instantiate_type
 from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
-                    FuncDef, FuncOverloadDef, OrderedTypeVariables, TypeDefs,
+                    ExportedKnownTypeDef, ExportedTypeDefs, FuncDef, FuncOverloadDef,
+                    Symbols, OrderedTypeVariables, TypeDefs,
                     TypeInstances, TypeVarDef, TypeVariables)
 
 
@@ -19,7 +19,7 @@ def evaluate_library_module(
   foreign_type_defs: TypeDefs,
   foreign_variables: TypeInstances,
   context: StaticAnalysisContext
-):
+) -> tuple[StaticAnalysisAnalysis, Symbols]:
   analysis = StaticAnalysisAnalysis()
 
   module_type_defs = TypeDefs()
@@ -29,27 +29,23 @@ def evaluate_library_module(
 
   for module_statement in module.body:
     match module_statement:
-      case ast.AnnAssign(target=ast.Name(id=variable_name, ctx=ast.Store()), annotation=ann, value=None, simple=1):
-        if variable_name in module_variables:
+      case ast.AnnAssign(target=ast.Name(id=variable_name), annotation=ann, value=None, simple=1):
+        if (variable_name in module_type_defs) or (variable_name in module_variables):
           analysis.errors.append(StaticAnalysisDiagnostic("Duplicate variable declaration", module_statement.target, context))
           continue
 
         assert not (variable_name in module_variables)
 
-        module_variables[variable_name] = analysis.add(evaluate_type_expr(ann, foreign_type_defs | module_type_defs, TypeVariables(), context))
+        variable_type_def = analysis.add(evaluate_type_expr(ann, foreign_type_defs | module_type_defs, TypeVariables(), context))
 
-      # case ast.Assign(
-      #   targets=[ast.Name(type_var_name, ctx=ast.Store())],
-      #   value=ast.Call(
-      #     args=[ast.Constant(arg_name)],
-      #     func=ast.Name(id='TypeVar', ctx=ast.Load())
-      #   )
-      # ):
-      #   assert type_var_name == arg_name
-      #   values[name] = TypeVarDef(name)
+        if isinstance(variable_type_def, TypeVarDef):
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid variable type", ann, context))
+          continue
+
+        module_variables[variable_name] = variable_type_def
 
       case ast.Assign(
-        targets=[ast.Name(id=name, ctx=ast.Store())],
+        targets=[ast.Name(id=name)],
         value=value
       ):
         assign_type = analysis.add(evaluate_type_expr(value, (foreign_type_defs | module_type_defs), TypeVariables(), context))
@@ -90,22 +86,6 @@ def evaluate_library_module(
                   type_variables.append(potential_type_variable)
 
               continue
-
-
-          base_type = analysis.add(evaluate_eval_expr(class_base, foreign_variables | module_variables, TypeVariables(), context))
-
-          # if not isinstance(base_type, TypeClassRef):
-          #   analysis.errors.append(StaticAnalysisDiagnostic("Invalid base value", module_statement, context, name='invalid_base'))
-          #   continue
-
-          # base_ref = cast(ClassRef[InnerType], base_type.extract())
-
-          # if isinstance(base_ref, GenericClassRef):
-          #   assert not generics_set
-          #   cls.generics = base_ref.generics
-          #   generics_set = True
-          # else:
-          #   cls.bases.append(base_ref)
 
         cls.type_variables = type_variables or OrderedTypeVariables()
         unordered_type_variables = set(cls.type_variables)
@@ -154,7 +134,7 @@ def evaluate_library_module(
 
             case _:
               print('Missing', ast.dump(class_statement, indent=2))
-              raise Exception
+              analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", class_statement, context))
 
         if not init_func.overloads:
           init_func.overloads.append(FuncOverloadDef(
@@ -166,30 +146,32 @@ def evaluate_library_module(
           ))
 
       case ast.FunctionDef(name=func_name):
-        overload = analysis.add(parse_func(module_statement, variables | values, context))
+        overload = analysis.add(parse_func(module_statement, (foreign_type_defs | module_type_defs), TypeVariables(), context))
 
-        if not (func_name in values):
+        if func_name in module_type_defs:
+          analysis.errors.append(StaticAnalysisDiagnostic("Duplicate value", module_statement, context))
+          continue
+
+        if not (func_name in module_variables):
           func = FuncDef()
-          values[func_name] = ClassRef(func)
+          module_variables[func_name] = func
         else:
-          func_ref = values[func_name]
-          assert isinstance(func_ref, ClassRef)
+          func = module_variables[func_name]
 
-          func = func_ref.cls
-          assert isinstance(func, FuncDef)
+          if not isinstance(func, FuncDef):
+            analysis.errors.append(StaticAnalysisDiagnostic("Duplicate variable", module_statement, context))
+            continue
 
         func.overloads.append(overload)
 
       case _:
         print("Missing", module_statement)
-        raise Exception
+        analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", module_statement, context))
 
   # from pprint import pprint
   # pprint(declarations)
 
   return analysis, (
-    { name: type_def for name, type_def in module_type_defs.items() if not isinstance(type_def, TypeVarDef) },
+    { name: cast(ExportedKnownTypeDef, type_def) for name, type_def in module_type_defs.items() if not isinstance(type_def, TypeVarDef) },
     module_variables
   )
-
-  # Variables({ name: value for name, value in module_variables.items() if not isinstance(value, TypeVarDef) })

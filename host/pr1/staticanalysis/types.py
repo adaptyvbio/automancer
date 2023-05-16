@@ -1,5 +1,5 @@
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Optional
+from typing import Generic, Mapping, Optional, TypeVar
 
 
 # Type variables
@@ -81,10 +81,12 @@ class FuncDef(ClassDef):
 
 # Misc
 
+T = TypeVar('T')
+
 @dataclass
-class UnionDef:
-  left: 'TypeDef'
-  right: 'TypeDef'
+class UnionDef(Generic[T]):
+  left: T
+  right: T
 
   def __repr__(self):
     return f"<{self.__class__.__name__} {self.left!r} | {self.right!r}>"
@@ -113,8 +115,17 @@ class ClassDefWithTypeArgs:
 
 # Complex types
 
-TypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | TypeVarDef | UnionDef | UnknownDef
+KnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | TypeVarDef | UnionDef['KnownTypeDef']
+TypeDef = KnownTypeDef | UnknownDef
 TypeDefs = dict[str, TypeDef]
+
+ExportedKnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef['ExportedTypeDef']
+ExportedTypeDef = ExportedKnownTypeDef | UnknownDef
+ExportedTypeDefs = dict[str, ExportedTypeDef]
+
 
 TypeInstance = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
 TypeInstances = dict[str, TypeInstance]
+
+
+Symbols = tuple[ExportedTypeDefs, TypeInstances]

@@ -3,8 +3,8 @@ from typing import Optional, cast
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
-from .special import TypeType, TypeVarClassDef
-from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
+from .special import CoreTypeDefs, TypeType, TypeVarClassDef
+from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs, ExportedTypeDefs,
                     TypeDef, TypeDefs, TypeVarDef, TypeVariables, UnionDef,
                     UnknownDef)
 
@@ -54,6 +54,9 @@ def evaluate_type_expr(
             return analysis + StaticAnalysisDiagnostic("Invalid TypeVar arguments", node, context).analysis(), UnknownDef()
 
       return analysis + StaticAnalysisDiagnostic("Invalid call", node, context).analysis(), UnknownDef()
+
+    case ast.Constant(None):
+      return StaticAnalysisAnalysis(), CoreTypeDefs['None']
 
     case ast.Name(id=name, ctx=ast.Load()):
       variable_type = variables.get(name)

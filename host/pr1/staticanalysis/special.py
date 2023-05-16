@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from .types import ClassDef, TypeDefs
+from .types import ClassDef, ExportedTypeDefs
 
 
 TypeVarClassDef = ClassDef('TypeVar')
@@ -12,7 +12,7 @@ NoneType = ClassDef('None')
 TypeType = ClassDef('type')
 
 
-CoreTypeDefs: TypeDefs = {
+CoreTypeDefs: ExportedTypeDefs = {
   'Generic': GenericClassDef,
   'None': NoneType,
   'NoneType': NoneType,

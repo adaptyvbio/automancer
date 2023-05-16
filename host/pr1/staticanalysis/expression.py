@@ -7,9 +7,18 @@ from .overloads import find_overload
 from .special import NoneType
 from .type import evaluate_type_expr, instantiate_type
 from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
-                    FuncDef, TypeDef, TypeDefs, TypeInstances, TypeValues,
+                    FuncDef, TypeDef, TypeDefs, TypeInstance, TypeInstances, TypeValues,
                     TypeVarDef, TypeVariables, UnionDef, UnknownDef,
                     UnknownType)
+
+
+def create_union(types: TypeInstance):
+  current_type = types[0]
+
+  for type in types[1:]:
+    current_type = UnionDef(current_type, type)
+
+  return current_type
 
 
 def resolve_type_variables(input_type: TypeDef, type_values: TypeValues):
@@ -75,9 +84,6 @@ def evaluate_eval_expr(
       #     attr_type = attr.resolve(class_ref.arguments or dict())
       #     return analysis, attr_type
 
-      return analysis + StaticAnalysisDiagnostic("Invalid reference to missing attribute", node, context).analysis(), ClassRef(UnknownType)
-
-
     case ast.Call(func, args, keywords):
       analysis, func_type = evaluate_eval_expr(func, foreign_type_defs, foreign_variables, context)
 
@@ -112,10 +118,17 @@ def evaluate_eval_expr(
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid arguments", node, context))
           return analysis, UnknownType()
 
-        return analysis, resolve_type_variables(overload.return_type, func_type.type_values) or UnknownType()
+        return analysis, resolve_type_variables(instantiate_type(overload.return_type), func_type.type_values)
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), NoneType
+
+    case ast.Constant(int()):
+      return StaticAnalysisAnalysis(), instantiate_type(context.prelude[0]['int'])
+
+    case ast.List(elts):
+      analysis, elts_types = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_type_defs, foreign_variables, context) for elt in elts])
+      return analysis, ClassDefWithTypeArgs(context.prelude[0]['list'], type_args=create_union(elts_types))
 
     case ast.Name(id=name, ctx=ast.Load()):
       variable_value = foreign_variables.get(name)

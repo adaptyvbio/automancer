@@ -1,6 +1,7 @@
 import asyncio
 from asyncio import Event
 from contextlib import AsyncExitStack
+import time
 from typing import Any, Callable, Optional, cast, final
 
 from asyncua import Client, ua
@@ -13,7 +14,7 @@ from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.util.pool import Pool
-from pr1.util.asyncio import aexit_handler, cancel_task, race, run_double, shield, wait_all
+from pr1.util.asyncio import aexit_handler, race, shield, wait_all
 from pr1.devices.nodes.primitive import BooleanNode
 from pr1.devices.nodes.readable import SubscribableReadableNode
 from pr1.util.batch import BatchWorker
@@ -45,6 +46,7 @@ class OPCUADeviceNode(SubscribableReadableNode):
     id: NodeId,
     label: Optional[str],
     location: UANodeId,
+    stable: bool,
     type: str,
     **kwargs
   ):
@@ -54,9 +56,9 @@ class OPCUADeviceNode(SubscribableReadableNode):
     self.id = id
     self.label = label
 
-    self._change_event = Event()
     self._device = device
     self._location = location
+    self._stable = stable
     self._type = type
     self._variant = variants_map[type]
 
@@ -92,40 +94,50 @@ class OPCUADeviceNode(SubscribableReadableNode):
   async def _subscribe(self):
     assert self._device._client
 
-    try:
-      subscription = await self._device._client.create_subscription(500, OPCUADeviceNodeSubHandler(self))
-      handle = cast(int, await subscription.subscribe_data_change(self._node))
-    except AsyncUaError as e:
-      raise NodeUnavailableError from e
+    # If the node is stable, we can just read it once and every time it reconnects.
+    if self._stable:
+      await self.read()
+      yield
 
-    await self.read()
-    yield
+      await self.wait_disconnected()
+      raise NodeUnavailableError
 
-    try:
-      while True:
+    # Otherwise, we need to subscribe to it and wait for changes.
+    else:
+      ready_event = Event()
+
+      try:
+        subscription = await self._device._client.create_subscription(500, OPCUADeviceNodeSubHandler(self, ready_event))
+        await subscription.subscribe_data_change(self._node)
+      except AsyncUaError as e:
+        raise NodeUnavailableError from e
+
+      try:
         await race(
-          self._change_event.wait(),
+          ready_event.wait(),
           self.wait_disconnected()
         )
-
-        self._change_event.clear()
 
         if not self.connected:
           raise NodeUnavailableError
 
-        # TODO: Improve / also check whether SubHandler has an initial notification
-        await self.read()
         yield
-    finally:
-      try:
-        await shield(subscription.unsubscribe(handle))
-        await shield(subscription.delete())
-      except AsyncUaError as e:
-        raise NodeUnavailableError from e
 
-  async def _read_value(self):
+        await self.wait_disconnected()
+        raise NodeUnavailableError
+      finally:
+        # Check the the connection was not lost otherwise subscription.delete() never returns
+        if self.connected:
+          await shield(race(
+            subscription.delete(),
+            self.wait_disconnected()
+          ))
+
+  async def _read(self):
     try:
-      return self._transform_read(await self._device._read_worker.write(self))
+      old_value = self.value
+      self.value = (time.time(), self._transform_read(await self._device._read_worker.write(self)))
+      return (old_value is None) or (self.value != old_value)
     except AsyncUaError as e:
       raise NodeUnavailableError from e
 
@@ -140,6 +152,20 @@ class OPCUADeviceNode(SubscribableReadableNode):
 
   def _transform_write(self, value: Any, /) -> Any:
     return value
+
+class OPCUADeviceNodeSubHandler(SubHandler):
+  def __init__(self, opcua_node: OPCUADeviceNode, ready_event: Event):
+    self._opcua_node = opcua_node
+    self._ready_event = ready_event
+
+  def datachange_notification(self, node: UANode, val, data):
+    # The 'is' operator doesn't work here.
+    # The timestamp will be None if the value was changed by a write.
+    if node == self._opcua_node._node and (change_datetime := data.monitored_item.Value.SourceTimestamp):
+      self._opcua_node.value = (change_datetime.timestamp(), val)
+      self._opcua_node._trigger_listeners(mode='value')
+      self._ready_event.set()
+
 
 @final
 class OPCUADeviceBooleanNode(OPCUADeviceNode, BooleanNode):
@@ -164,7 +190,7 @@ class OPCUADeviceNumericNode(OPCUADeviceNode, NumericNode):
     self._factor = (quantity.magnitude if quantity is not None else 1.0)
 
   def _transform_read(self, value: int | float, /):
-    return value * self._factor
+    return self._transform_numeric_read(value * self._factor)
 
   def _transform_write(self, value: Quantity, /):
     raw_value = value.magnitude / self._factor
@@ -202,15 +228,6 @@ nodes_map: dict[str, type[OPCUADeviceNode]] = {
 }
 
 
-class OPCUADeviceNodeSubHandler(SubHandler):
-  def __init__(self, opcua_node: OPCUADeviceNode):
-    self._opcua_node = opcua_node
-
-  def datachange_notification(self, node: UANode, val, data):
-    if node is self._opcua_node._node:
-      self._opcua_node._change_event.set()
-
-
 class OPCUADevice(DeviceNode):
   description = None
   model = "Generic OPC-UA device"
@@ -222,8 +239,7 @@ class OPCUADevice(DeviceNode):
     address: str,
     id: str,
     label: Optional[str],
-    nodes_conf: Any,
-    pool: Pool
+    nodes_conf: Any
   ):
     super().__init__()
 
@@ -233,7 +249,6 @@ class OPCUADevice(DeviceNode):
 
     self._address = address
     self._client: Optional[Client] = None
-    self._pool = pool
     self._task: Optional[asyncio.Task[None]] = None
 
     self._read_worker = BatchWorker[OPCUADeviceNode, Any](self._commit_read)
@@ -253,7 +268,7 @@ class OPCUADevice(DeviceNode):
       id=node_conf['id'].value,
       label=(node_conf['label'].value if 'label' in node_conf else None),
       location=UANodeId.from_string(node_conf['location'].value),
-      pool=self._pool,
+      stable=(node_conf['stable'].value if 'stable' in node_conf else True),
       type=node_conf['type'].value,
       writable=writable
     )
@@ -274,18 +289,23 @@ class OPCUADevice(DeviceNode):
 
     return Node(**opts)
 
-  async def initialize(self):
-    self._task = await run_double(self._connect)
+  async def start(self):
+    async with Pool.open() as pool:
+      for node in self.nodes.values():
+        pool.start_soon(node.start(), priority=1)
 
-    if not self.connected:
-      logger.warning(f"Failed connecting to {self._label}")
+      await pool.wait_until_ready(self._connect())
 
-  async def destroy(self):
-    await cancel_task(self._task)
+      if not self.connected:
+        logger.warning(f"Failed connecting to {self._label}")
 
-  async def _connect(self, ready: Callable[[], bool]):
+      yield
+
+  async def _connect(self):
     logger.debug(f"Connecting to {self._label}")
+
     keepalive_handler = SubHandler()
+    ready = False
 
     try:
       while True:
@@ -302,13 +322,14 @@ class OPCUADevice(DeviceNode):
               except* NodeUnavailableError:
                 pass
 
-              ready()
+              if not ready:
+                yield
+                ready = True
 
               subscription = await self._client.create_subscription(500, keepalive_handler)
               node = (self._client.get_node(ua.ObjectIds.Server_ServerStatus_CurrentTime), ) # type: ignore
 
               await subscription.subscribe_data_change(node)
-              await subscription.delete()
 
               while True:
                 await asyncio.sleep(1)
@@ -317,7 +338,10 @@ class OPCUADevice(DeviceNode):
           if self.connected:
             logger.error(f"Lost connection to {self._label}")
         finally:
-          ready()
+          if not ready:
+            yield
+            ready = True
+
           self._client = None
           self.connected = False
 

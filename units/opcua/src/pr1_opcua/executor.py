@@ -12,6 +12,8 @@ from pr1.fiber.langservice import (Analysis, ArbitraryQuantityType, Attribute,
                                    StrType)
 from pr1.units.base import BaseExecutor
 from pr1.host import Host
+from pr1.util.asyncio import wait_all
+from pr1.util.pool import Pool
 
 from .device import OPCUADevice, OPCUADeviceNumericNode, nodes_map, variants_map
 
@@ -40,6 +42,7 @@ class Executor(BaseExecutor):
         'location': StrType(),
         'max': Attribute(ArbitraryQuantityType(), optional=True),
         'min': Attribute(ArbitraryQuantityType(), optional=True),
+        'stable': Attribute(BoolType(), optional=True),
         'type': EnumType(*variants_map.keys()),
         'unit': Attribute(ArbitraryQuantityType(), optional=True),
         'writable': Attribute(BoolType(), optional=True)
@@ -84,8 +87,7 @@ class Executor(BaseExecutor):
             address=device_conf['address'].value,
             id=device_id.value,
             label=(device_conf['label'].value if 'label' in device_conf else None),
-            nodes_conf=device_conf['nodes'],
-            pool=self._host.pool
+            nodes_conf=device_conf['nodes']
           )
 
           self._devices[device_id.value] = device
@@ -93,11 +95,10 @@ class Executor(BaseExecutor):
 
     return analysis
 
-  async def initialize(self):
-    for device in self._devices.values():
-      await device.initialize()
+  async def start(self):
+    async with Pool.open() as pool:
+      await wait_all([
+        pool.wait_until_ready(device.start()) for device in self._devices.values()
+      ])
 
-  async def destroy(self):
-    for device in self._devices.values():
-      await device.destroy()
-      del self._host.devices[device.id]
+      yield

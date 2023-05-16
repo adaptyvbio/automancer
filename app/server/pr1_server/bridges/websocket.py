@@ -63,7 +63,7 @@ class WebsocketBridge(BridgeProtocol):
       logger.warn("Not using a secure HTTP connection")
 
 
-  async def start(self, handle_client, ready):
+  async def start(self, handle_client):
     server: Optional[Server] = None
 
     async def handler(conn):
@@ -89,7 +89,7 @@ class WebsocketBridge(BridgeProtocol):
       server = await websockets.serve(handler, host=self._conf.hostname, port=self._conf.port, max_size=(5 * (2 ** 20)), ssl=ssl_context) # type: ignore
       logger.debug(f"Listening on {self._conf.hostname}:{self._conf.port}")
 
-      ready()
+      yield
       await Future()
     finally:
       if server:

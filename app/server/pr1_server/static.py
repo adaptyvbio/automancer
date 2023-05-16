@@ -35,7 +35,7 @@ class StaticServer:
     else:
       self._cert_info = None
 
-  async def start(self, ready: SimpleCallbackFunction):
+  async def start(self):
     @aiohttp.web.middleware
     async def middleware(request, handler):
       res = await handler(request)
@@ -64,7 +64,7 @@ class StaticServer:
 
       self.url = ("https" if self._cert_info else "http") + f"://{hostname}:{port}"
 
-      ready()
+      yield
       await Future()
     finally:
       await runner.cleanup()

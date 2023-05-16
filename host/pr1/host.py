@@ -67,7 +67,7 @@ class Host:
     self.chips_dir.mkdir(exist_ok=True)
 
     self.devices = dict[str, DeviceNode]()
-    self.pool = Pool()
+    self.pool: Pool
     self.root_node = HostRootNode(self.devices)
 
     self.previous_state = {
@@ -162,50 +162,36 @@ class Host:
   def units(self):
     return self.manager.units
 
-  async def initialize(self):
-    logger.info("Initializing host")
-    logger.debug("Initializing executors")
-
-    for executor in self.executors.values():
-      await executor.initialize()
-
-    logger.debug("Initialized executors")
-    logger.info("Node tree")
-
-    for line in self.root_node.format_hierarchy().splitlines():
-      logger.debug(line)
-
-    for path in self.chips_dir.iterdir():
-      if not path.name.startswith("."):
-        chip = Chip.try_unserialize(path, host=self)
-        self.chips[chip.id] = chip
-
-    keywords = ["okay", "partial", "unrunnable", "unsupported", "corrupted"]
-    counts = [sum(chip.condition == condition for chip in self.chips.values()) for condition in ChipCondition]
-
-    logger.debug(f"Loaded {len(self.chips)} existing chips")
-
-    for keyword, count in zip(keywords, counts):
-      if count > 0:
-        logger.debug(f"  including {count} {keyword} chip{'s' if count > 1 else str()}")
-
-    # debug
-    # if not any(chip.condition == ChipCondition.Ok for chip in self.chips.values()):
-      # self.create_chip(name="Default experiment")
-
   async def start(self):
-    try:
-      await asyncio.Future()
-    finally:
-      await self.destroy()
+    logger.info("Initializing host")
 
-  async def destroy(self):
-    logger.debug("Destroying executors")
+    async with Pool.open() as pool:
+      self.pool = pool
 
-    for executor in self.executors.values():
-      await executor.destroy()
+      logger.debug("Initializing executors")
 
-    logger.debug("Destroyed executors")
+      for executor in self.executors.values():
+        await pool.wait_until_ready(executor.start())
+
+      logger.debug("Initialized executors")
+      yield
+
+
+      # Node tree information
+
+      logger.info("Node tree")
+
+      for line in self.root_node.format_hierarchy().splitlines():
+        logger.debug(line)
+
+      for path in self.chips_dir.iterdir():
+        if not path.name.startswith("."):
+          chip = Chip.try_unserialize(path, host=self)
+
+          if isinstance(chip, Chip):
+            self.chips[chip.id] = chip
+
+      logger.debug(f"Loaded {len(self.chips)} chips")
 
   def busy(self):
     return any(chip.master for chip in self.chips.values())
@@ -297,9 +283,6 @@ class Host:
       },
       "chips": {
         chip.id: chip.export() for chip in self.chips.values()
-      },
-      "devices": {
-        device.id: device.export() for executor in self.executors.values() for device in executor.get_devices()
       },
       "executors": {
         namespace: executor.export() for namespace, executor in self.executors.items()

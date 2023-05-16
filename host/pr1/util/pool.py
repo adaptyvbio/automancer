@@ -1,8 +1,8 @@
 import asyncio
 import contextlib
-from asyncio import Event, Task
+from asyncio import Event, Future, Task
 from dataclasses import dataclass
-from typing import Any, Coroutine, Optional, TypeVar
+from typing import Any, AsyncGenerator, Coroutine, Optional, TypeVar
 
 from .asyncio import race
 
@@ -162,6 +162,29 @@ class Pool:
 
     return task
 
+  async def wait_until_ready(self, coro: AsyncGenerator[Any, None], /):
+    ready_event = Event()
+
+    async def wrapper_coro():
+      coro_iter = aiter(coro)
+
+      try:
+        await anext(coro_iter)
+      except StopAsyncIteration:
+        raise Exception("Coroutine did not yield")
+
+      ready_event.set()
+
+      try:
+        await anext(coro_iter)
+      except StopAsyncIteration:
+        pass
+      else:
+        raise Exception("Coroutine did not stop after first yield")
+
+    self.start_soon(wrapper_coro())
+    await ready_event.wait()
+
   def start_soon_with_handle(self, coro: Coroutine[Any, Any, Any], /):
     if (not self._open) and (not self._preopen):
       raise Exception("Pool not open")
@@ -200,9 +223,22 @@ class Pool:
       forever: Whether the pool should stay open once all tasks have finished.
     """
 
+    current_task = asyncio.current_task()
+    assert current_task
+
     pool = cls()
     exception: Optional[Exception] = None
+    current_task_done = False
     wait_task = asyncio.create_task(pool.wait(forever=forever))
+
+    async def current_task_handler():
+      try:
+        await Future()
+      finally:
+        if not current_task_done:
+          current_task.cancel()
+
+    pool.start_soon(current_task_handler())
 
     try:
       yield pool
@@ -212,17 +248,26 @@ class Pool:
       pool.close()
       exception = exc
 
+    current_task_done = True
+
     try:
       await wait_task
     except Exception as exc:
       if exception:
-        raise PoolExceptionGroup("Context manager error", [exc, exception]) from None
+        raise PoolExceptionGroup("Pool.open() exception group", [exc, exception]) from None
       else:
         raise exc from None
 
     if exception:
       raise exception
 
+  @classmethod
+  @contextlib.asynccontextmanager
+  async def split(cls):
+    outer_pool = cls()
+    inner_pool = cls()
+
+    yield outer_pool, inner_pool
 
 @dataclass
 class TaskHandle:

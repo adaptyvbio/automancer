@@ -1,13 +1,15 @@
-from abc import ABC
+import asyncio
 import functools
 import pickle
+from abc import ABC
+from asyncio import Future
 from collections import namedtuple
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Type
+from typing import TYPE_CHECKING, Optional, Protocol
 
-from ..state import UnitStateInstance, UnitStateManager
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
 from ..fiber.process import BaseProcess as ProcessProtocol
+from ..state import UnitStateInstance, UnitStateManager
 
 if TYPE_CHECKING:
   from ..fiber.master2 import Master
@@ -128,15 +130,14 @@ class BaseExecutor:
   async def destroy(self):
     pass
 
-  """
-  Returns the list of devices associated with the executor.
+  async def start(self):
+    await self.initialize()
+    yield
 
-  Returns
-  -------
-  List<DeviceInformation>
-  """
-  def get_devices(self):
-    return list()
+    try:
+      await Future()
+    except asyncio.CancelledError:
+      await self.destroy()
 
   """
   Exports the executor's data.

@@ -12,10 +12,12 @@ import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+
 from .agent import Agent
 
 import zeroconf
 from pr1 import Host
+from pr1.util.asyncio import wait_all
 from pr1.util.misc import log_exception
 from pr1.util.pool import Pool
 from zeroconf import IPVersion
@@ -318,9 +320,31 @@ class App:
     try:
       async with Pool.open() as pool:
         self._pool = pool
-        pool.start_soon(self.host.pool.wait(forever=True))
 
-        await self.host.initialize()
+        await pool.wait_until_ready(self.host.start())
+
+        await wait_all([
+          *[pool.wait_until_ready(bridge.start(self.handle_client)) for bridge in self.bridges],
+          *([pool.wait_until_ready(self.static_server.start())] if self.static_server else [])
+        ])
+
+        pool.start_soon(self.advertise())
+
+
+        bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
+
+        if self.args.local:
+          sys.stdout.write(json.dumps(bridge_infos) + "\n")
+          sys.stdout.flush()
+
+
+        # async def x():
+        #   await asyncio.sleep(1)
+        #   from pprint import pprint
+        #   pprint(asyncio.all_tasks())
+
+        # asyncio.create_task(x())
+
 
         def handle_sigint():
           print("\r", end="", file=sys.stderr)
@@ -335,40 +359,7 @@ class App:
         except NotImplementedError: # For Windows
           pass
 
-        ready_count = 0
-        ready_event = asyncio.Event()
-
-        def item_ready():
-          nonlocal ready_count
-          ready_count += 1
-
-          if ready_count == (len(self.bridges) + (1 if self.static_server else 0)):
-            ready_event.set()
-
-
-        for bridge in self.bridges:
-          pool.start_soon(bridge.start(self.handle_client, item_ready))
-
-        if self.static_server:
-          pool.start_soon(self.static_server.start(item_ready))
-
-        pool.start_soon(self.host.start(), critical=True)
-
-        logger.debug("Starting")
-
-        async def ready_seq():
-          await ready_event.wait()
-          pool.start_soon(self.advertise())
-
-          logger.debug("Started")
-
-          bridge_infos = functools.reduce(lambda infos, bridge: infos + bridge.export_info(), self.bridges, list())
-
-          if self.args.local:
-            sys.stdout.write(json.dumps(bridge_infos) + "\n")
-            sys.stdout.flush()
-
-        pool.start_soon(ready_seq())
+        logger.debug("Started")
     except Exception:
       logger.error("Error")
       log_exception(logger)

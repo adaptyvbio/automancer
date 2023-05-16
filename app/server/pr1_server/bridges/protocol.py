@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from ipaddress import IPv4Address
-from typing import Any, Callable, Coroutine, Protocol
-
-from pr1.util.types import SimpleCallbackFunction
+from typing import Any, AsyncGenerator, Callable, Coroutine, Protocol
 
 
 class ClientClosed(Exception):
@@ -43,5 +41,5 @@ class BridgeProtocol(Protocol):
   def export_info(self) -> list:
     return list()
 
-  async def start(self, handle_client: Callable[[BaseClient], Coroutine], ready: SimpleCallbackFunction):
+  async def start(self, handle_client: Callable[[BaseClient], Coroutine]) -> AsyncGenerator[Any, None]:
     ...

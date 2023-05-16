@@ -5,9 +5,8 @@ from collections import deque
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import socket
 import ssl
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 import uuid
 
 from pr1.util.pool import Pool
@@ -124,7 +123,7 @@ class SocketBridge(BridgeProtocol):
     else:
       return list[BridgeAdvertisementInfo]()
 
-  async def start(self, handle_client, ready):
+  async def start(self, handle_client):
     server: Optional[Server] = None
 
     try:
@@ -176,7 +175,7 @@ class SocketBridge(BridgeProtocol):
 
             logger.debug(f"Listening on {self._effective_options.path}")
 
-        ready()
+        yield
     finally:
       if server:
         server.close()
@@ -199,7 +198,7 @@ class SocketBridge(BridgeProtocol):
         return [{
           "type": "unix",
           "identifier": self._app.conf.identifier,
-          "path": self._effective_options.path,
+          "path": str(self._effective_options.path),
           "password": None,
           "secure": False
         }]

@@ -1,22 +1,14 @@
 import asyncio
 from pathlib import Path
+import subprocess
 from tempfile import NamedTemporaryFile
+from typing import Optional, TypedDict
 
 import numpy as np
+from pr1.fiber.langservice import Attribute, SimpleDictType, StrType
 from pr1.units.base import BaseExecutor
-from pr1.util import schema as sc
 
 from . import logger
-
-
-conf_schema = sc.Schema({
-  'nis_path': sc.Optional(str),
-  'stage_bounds': sc.Optional(sc.Dict({
-    'x': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float))),
-    'y': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float))),
-    'z': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float)))
-  }))
-})
 
 
 macros_dir = Path(__file__).parent / "macros"
@@ -25,29 +17,34 @@ macro_inspect = (macros_dir / "inspect.mac").open().read()
 macro_query = (macros_dir / "query.mac").open().read()
 
 
-class Executor(BaseExecutor):
-  def __init__(self, conf, *, host):
-    conf = conf_schema.transform(conf)
+class Conf(TypedDict):
+  nis_path: str
 
+
+class Executor(BaseExecutor):
+  options_type = SimpleDictType({
+    'nis_path': Attribute(StrType(), optional=True)
+
+    # 'stage_bounds': sc.Optional(sc.Dict({
+    #   'x': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float))),
+    #   'y': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float))),
+    #   'z': sc.ParseTuple((sc.ParseType(float), sc.ParseType(float)))
+    # }))
+  })
+
+  def __init__(self, conf: Conf, *, host):
     self._host = host
     self._elements_path = conf.get('nis_path', r"C:\Program Files\NIS-Elements\nis_ar.exe")
+    self._stage_bounds = None
 
-    stage_bounds = conf.get('stage_bounds')
-    self._stage_bounds = stage_bounds and [
-      stage_bounds['x'],
-      stage_bounds['y'],
-      stage_bounds['z']
-    ]
+    self._objectives: Optional[list[str]] = None
+    self._optconfs: Optional[list[str]] = None
 
-    if not self._stage_bounds:
-      logger.warning("No stage bounds")
-
-    self._objectives = None
-    self._optconfs = None
-
-  async def initialize(self):
+  async def start(self):
     self._objectives, self._optconfs = await self.inspect()
     logger.debug(f"Found {len(self._objectives)} objectives and {len(self._optconfs)} optical configurations")
+
+    yield
 
   def export(self):
     return {
@@ -55,17 +52,23 @@ class Executor(BaseExecutor):
       "optconfs": self._optconfs
     }
 
-  # async def start_elements(self):
-  #   subprocess.Popen(["someprocess"], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+  async def start_elements(self):
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    DETACHED_PROCESS = 0x00000008
 
-  async def run_elements(self, macro_path):
-    return await asyncio.create_subprocess_shell(
-      f""""{self._elements_path}" -mw {macro_path}""",
+    await asyncio.create_subprocess_exec(self._elements_path, creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP))
+    await asyncio.sleep(5)
+
+  async def run_elements(self, macro_path: str):
+    return await asyncio.create_subprocess_exec(
+      self._elements_path,
+      "-mw",
+      macro_path,
       stdout=asyncio.subprocess.PIPE,
       stderr=asyncio.subprocess.PIPE
     )
 
-  async def run_macro(self, raw_source, **kwargs):
+  async def run_macro(self, raw_source: str, **kwargs):
     source = raw_source % kwargs
 
     with NamedTemporaryFile(delete=False, mode="w") as file:
@@ -78,7 +81,7 @@ class Executor(BaseExecutor):
       if stderr:
         raise Exception(stderr.decode("utf-8"))
 
-  async def capture(self, *, chip_count, exposure, objective, optconf, output_path, points):
+  async def capture(self, *, chip_count: int, exposure: float, objective: str, optconf: str, output_path: Path, points: np.ndarray):
     for chip_index in range(chip_count):
       chip_output_path = Path(str(output_path).replace("{}", str(chip_index)))
       chip_output_path.unlink(missing_ok=True)
@@ -118,7 +121,7 @@ class Executor(BaseExecutor):
 
     return objectives, optconfs
 
-  async def query(self, *, chip_count):
+  async def query(self, *, chip_count: int):
     import win32file
 
     file = NamedTemporaryFile(delete=False, mode="w")

@@ -219,7 +219,7 @@ class Pool(HierarchyNode):
 
     return task
 
-  async def wait_until_ready(self, coro: AsyncGenerator[Any, None], /):
+  async def wait_until_ready(self, coro: AsyncGenerator[Any, None], /, *, priority: int = 0):
     ready_event = Event()
 
     async def wrapper_coro():
@@ -239,7 +239,7 @@ class Pool(HierarchyNode):
       else:
         raise Exception("Coroutine did not stop after first yield")
 
-    self.start_soon(wrapper_coro(), frame_skip=1)
+    self.start_soon(wrapper_coro(), frame_skip=1, priority=priority)
     await ready_event.wait()
 
   def start_soon_with_handle(self, coro: Coroutine[Any, Any, Any], /):
@@ -297,6 +297,14 @@ class Pool(HierarchyNode):
         try:
           await asyncio.shield(current_task_future)
         except asyncio.CancelledError:
+          # If the task was cancelled from the outside
+          if current_task_future.done():
+            if pool._closing_priority is None:
+              pool.close()
+
+            raise
+
+          # Otherwise, the pool is being closed
           current_task.cancel()
         else:
           if current_task_future.done():
@@ -309,8 +317,6 @@ class Pool(HierarchyNode):
 
     try:
       yield pool
-    except asyncio.CancelledError:
-      pool.close()
     except BaseException as e:
       current_task_future.set_exception(e)
     else:

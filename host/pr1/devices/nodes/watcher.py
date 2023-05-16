@@ -14,6 +14,16 @@ WatchModes = set[NodeListenerMode]
 WatchEvent = dict[BaseNode, WatchModes]
 
 class Watcher:
+  """
+  A class that watches a set of nodes for changes.
+
+  The possible change modes are:
+  - `connection`: The connection state of the node changed and can be observed on `node.connected`. For one-shot events, use `node.wait_connected()` and `node.wait_disconnected()`.
+  - `content`: The last observation time of the node changed, or its target value changed. These can be observed on `node.value` and `node.target_value` respectively.
+  - `ownership`: The writer ownership state of the node changed.
+  - `value`: The value of the node changed and can be observed on `node.value[1]`.
+  """
+
   def __init__(self, nodes: Sequence[BaseNode], *, modes: WatchModes):
     self._modes = modes
     self._nodes = nodes

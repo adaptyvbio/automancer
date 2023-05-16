@@ -71,7 +71,7 @@ class SubscribableReadableNode(WatchableNode):
 
         try:
           async for _ in self._subscribe():
-            # Listeners should be called by _subscribe().
+            # Listeners are called by _subscribe().
             self._watching_event.set()
         except NodeUnavailableError:
           pass

@@ -76,7 +76,7 @@ class Executor(BaseExecutor):
 
     self._channels.clear()
 
-    return logger.info("Stopped watching all nodes")
+    logger.info("Stopped watching all nodes")
 
   def export(self):
     return {

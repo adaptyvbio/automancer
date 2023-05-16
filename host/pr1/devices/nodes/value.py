@@ -26,9 +26,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
       self,
       *,
       nullable: bool = False,
-      pool: Pool,
       readable: bool = False,
-      stable: bool = True,
       writable: bool = False
     ):
     """
@@ -43,7 +41,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     super().__init__()
 
-    self._pool = pool
+    self._pool: Pool
 
     # This is updated each time _read() returns true, meaning self.value changed.
     self._revision = NodeRevision(0)
@@ -51,7 +49,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
     # None -> value is unknown
     self.value: Optional[tuple[float, T | NullType]] = None
 
-    self.stable = stable
     self.nullable = nullable
     self.readable = readable
     self.writable = writable
@@ -118,14 +115,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
   # Called by the consumer
 
-  @property
-  def writer(self):
-    # Create the writer here to ensure it is done during or after initialization
-    if not self._writer:
-      self._writer = NodeValueWriter(self)
-
-    return self._writer
-
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     if not self.writable:
       raise NotImplementedError
@@ -163,6 +152,13 @@ class ValueNode(BaseNode, ABC, Generic[T]):
           return True
 
     return False
+
+  async def start(self):
+    async with Pool.open() as pool:
+      self._pool = pool
+
+      if self.writable:
+        self.writer = NodeValueWriter(self)
 
   def watch_content(self, listener: NodeListener, /):
     return self._attach_listener(listener, mode='content')
@@ -236,19 +232,13 @@ class NodeValueWriter(Generic[T]):
   async def _worker(self):
     from .watcher import Watcher, WatchModes
 
-    modes = WatchModes({'connection'})
-
-    if not self.node.stable:
-      modes.add('value')
-
-    async with Watcher([self.node], modes=modes) as watcher:
+    async with Watcher([self.node], modes={'connection', 'value'}) as watcher:
       while True:
         await race(
           watcher.wait_event(),
           self._change_event.wait()
         )
 
-        # TODO: Handle the case where the value of a stable node changes while disconnected
         # print("Event", self.node, self.node.id, self.node.connected, self.target_value, self.node.value)
 
         self._change_event.clear()

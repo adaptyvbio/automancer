@@ -265,7 +265,8 @@ async def shield(awaitable: Awaitable[T], /) -> T:
   try:
     return await asyncio.shield(task)
   except asyncio.CancelledError:
-    return await task
+    await task
+    raise
 
 
 async def try_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
@@ -336,3 +337,33 @@ async def wait_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
 
   if cancelled_exc:
     raise cancelled_exc
+
+
+
+if __name__ == "__main__":
+  import contextlib
+
+  @contextlib.asynccontextmanager
+  async def timeout(delay):
+    task = asyncio.current_task()
+    assert task
+
+    async def timeout_coro():
+      await asyncio.sleep(delay)
+      task.cancel()
+
+    timeout_task = asyncio.create_task(timeout_coro())
+
+    yield
+    await cancel_task(timeout_task)
+
+  async def main():
+    async with timeout(10):
+      try:
+        await asyncio.sleep(2)
+      except asyncio.CancelledError:
+        print("Cancelled")
+      else:
+        print("Done")
+
+  asyncio.run(main())

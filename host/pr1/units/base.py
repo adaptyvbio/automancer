@@ -4,7 +4,7 @@ import pickle
 from abc import ABC
 from asyncio import Future
 from collections import namedtuple
-from typing import TYPE_CHECKING, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from .. import logger as root_logger
 from ..fiber.langservice import AnyType
@@ -177,4 +177,7 @@ class BaseMasterRunner(ABC):
     ...
 
   async def cleanup(self):
+    ...
+
+  def command(self, data: Any, /):
     ...

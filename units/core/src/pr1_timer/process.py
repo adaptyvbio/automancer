@@ -43,7 +43,7 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
   name = "_"
   namespace = namespace
 
-  def __init__(self, data: ProcessData, /):
+  def __init__(self, data: ProcessData, /, master):
     self._data = data
 
     self._progress: Optional[float] = None

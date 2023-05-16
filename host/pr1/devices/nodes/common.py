@@ -61,6 +61,8 @@ class BaseNode(HierarchyNode, ABC):
     return Cancelable(cancel)
 
   def _trigger_listeners(self, *, mode: NodeListenerMode):
+    # TODO: Trigger a 'content' event when receiving a 'value' event
+
     if (listeners := self._listeners.get(mode)):
       for listener in listeners:
         listener(self, mode=mode)

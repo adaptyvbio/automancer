@@ -58,9 +58,6 @@ class Master:
   def pool(self):
     return self._pool
 
-  def done(self):
-    return self._pool.wait()
-
   def halt(self):
     self._handle._program.halt()
 
@@ -124,7 +121,9 @@ class Master:
 
         await wait_all([runner.cleanup() for runner in self.runners.values()])
 
-    self._pool.start_soon(func())
+    async with Pool.open() as pool:
+      self._pool = pool
+      self._pool.start_soon(func())
 
   def receive(self, exec_path: list[int], message: Any):
     current_handle = self._handle
@@ -136,7 +135,8 @@ class Master:
 
 
   def export(self):
-    assert self._location
+    if not self._location:
+      return None
 
     return {
       "analysis": self._analysis.export(),

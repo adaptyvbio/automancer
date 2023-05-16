@@ -165,7 +165,7 @@ class Host:
   async def start(self):
     logger.info("Initializing host")
 
-    async with Pool.open() as pool:
+    async with Pool.open("Host pool") as pool:
       self.pool = pool
 
       logger.debug("Initializing executors")
@@ -298,7 +298,6 @@ class Host:
 
     state_update.update({
       "chips": state["chips"],
-      "devices": state["devices"],
       "executors": state["executors"]
     })
 
@@ -405,29 +404,24 @@ class Host:
 
         logger.info(f"Running protocol on chip '{chip.id}'")
 
-        async def func(ready):
+        async def func():
           assert compilation.protocol
 
           chip.master = Master(compilation.protocol, chip, cleanup_callback=cleanup_callback, host=self)
-          done_coro = chip.master.done()
-          await chip.master.run(update_callback)
-
-          ready()
-
-          done = asyncio.create_task(done_coro)
+          run_task = asyncio.create_task(chip.master.run(update_callback))
 
           try:
-            await asyncio.shield(done)
+            await asyncio.shield(run_task)
           except asyncio.CancelledError:
             logger.info(f"Halting protocol on chip '{chip.id}'")
             chip.master.halt()
 
-            await done
+            await run_task
 
           logger.info(f"Ran protocol on chip '{chip.id}'")
           self.update_callback()
 
-        self.pool.add(await run_double(func))
+        self.pool.start_soon(func(), priority=10)
 
       case "upgradeChip":
         chip = self.chips[request["chipId"]]

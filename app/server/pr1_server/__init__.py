@@ -321,7 +321,7 @@ class App:
       async with Pool.open() as pool:
         self._pool = pool
 
-        await pool.wait_until_ready(self.host.start())
+        await pool.wait_until_ready(self.host.start(), priority=10)
 
         await wait_all([
           *[pool.wait_until_ready(bridge.start(self.handle_client)) for bridge in self.bridges],

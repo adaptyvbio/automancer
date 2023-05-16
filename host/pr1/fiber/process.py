@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from asyncio import Event
 from dataclasses import dataclass, field
 import time
-from typing import Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
+from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
 
 from ..host import logger
 from ..master.analysis import MasterAnalysis, MasterError
@@ -11,6 +11,9 @@ from ..util.decorators import provide_logger
 from ..util.misc import Exportable, UnreachableError
 from .eval import EvalStack
 from .parser import BaseBlock, HeadProgram
+
+if TYPE_CHECKING:
+  from .master2 import Master
 
 
 DateLike = datetime.datetime | float
@@ -85,7 +88,7 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   name: ClassVar[str]
   namespace: ClassVar[str]
 
-  def __init__(self, data: T_ProcessData, /):
+  def __init__(self, data: T_ProcessData, /, master: 'Master'):
     ...
 
   def halt(self) -> Optional[bool]:
@@ -301,7 +304,7 @@ class ProcessProgram(HeadProgram):
 
       self._mode = Mode.Starting()
       self._point = None
-      self._process = self._block._ProcessType(self._block._data)
+      self._process = self._block._ProcessType(self._block._data, master=self._handle.master)
       self._process_location = None
       self._process_pausable = False
 

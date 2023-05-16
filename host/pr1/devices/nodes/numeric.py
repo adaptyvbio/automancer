@@ -23,33 +23,21 @@ class NumericNode(ValueNode[Quantity], ABC):
     super().__init__(**kwargs)
 
     self.dtype = dtype
-    self.error: Optional[Quantity] = None
     self.unit: Unit = self._ureg.Unit(unit or 'dimensionless')
 
     self.max = (max * self.unit) if isinstance(max, float) else max
     self.min = (min * self.unit) if isinstance(min, float) else min
 
-  async def _read(self):
-    old_value = self.value
-    raw_value = await self._read_value()
-    current_time = time.time()
-
+  def _transform_numeric_read(self, raw_value: Measurement | Quantity | float | int, /):
     match raw_value:
       case Quantity():
-        self.error = None
-        self.value = (current_time, raw_value)
+        return raw_value
       case Measurement(error=error, value=value):
-        self.error = error
-        self.value = value
+        return value
       case float() | int():
-        self.value = (current_time, raw_value * self.unit)
+        return (raw_value * self.unit)
       case _:
         raise ValueError("Invalid read value")
-
-    return (old_value is None) or (self.value[1] != old_value[1])
-
-  async def _read_value(self) -> Measurement | Quantity | float | int:
-    raise NotImplementedError
 
   async def write_quantity(self, raw_value: Quantity | NullType | float, /):
     if not isinstance(raw_value, NullType):

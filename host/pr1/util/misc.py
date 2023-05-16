@@ -6,7 +6,7 @@ from io import IOBase
 import itertools
 import logging
 import traceback
-from typing import Awaitable, Generic, Optional, Protocol, Self, Sequence, TypeVar
+from typing import Iterable, Protocol, Self, Sequence, TypeVar
 import typing
 
 
@@ -69,17 +69,17 @@ class HierarchyNode:
   def __get_node_name__(self) -> list[str] | str:
     return self.__class__.__name__
 
-  def __get_node_children__(self) -> Sequence[Self]:
+  def __get_node_children__(self) -> Iterable[Self | list[str]]:
     return list()
 
   def format_hierarchy(self, *, prefix: str = str()):
-    children = self.__get_node_children__()
+    children = list(self.__get_node_children__())
     raw_name = self.__get_node_name__()
     name = raw_name if isinstance(raw_name, list) else [raw_name]
 
     return ("\n" + prefix).join(name) + str().join([
       "\n" + prefix
         + ("└── " if (last := (index == (len(children) - 1))) else "├── ")
-        + child.format_hierarchy(prefix=(prefix + ("    " if last else "│   ")))
+        + (child.format_hierarchy(prefix=(prefix + ("    " if last else "│   "))) if isinstance(child, HierarchyNode) else ("\n" + prefix + ("    " if last else "│   ")).join(child))
         for index, child in enumerate(children)
     ])

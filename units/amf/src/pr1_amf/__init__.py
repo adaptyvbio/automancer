@@ -17,7 +17,7 @@ metadata = Metadata(
   description="Advanced microfluidics",
   icon=MetadataIcon(kind='bitmap', value=logo.to_url()),
   title="AMF",
-  version="5.0"
+  version="6.0"
 )
 
 client_path = files(__name__ + '.client')

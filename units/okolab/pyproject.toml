@@ -1,3 +1,24 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=66", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "pr1-okolab"
+dynamic = ["version"]
+requires-python = ">3.11"
+
+dependencies=[
+  "okolab==0.2.0"
+]
+
+[project.entry-points."pr1.units"]
+okolab = "pr1_okolab"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"pr1_okolab.client" = ["*"]
+
+[tool.setuptools_scm]
+root = "../.."

@@ -3,6 +3,8 @@ from typing import Any
 from pr1.fiber.langservice import Attribute, DictType, EnumType, IdentifierType, ListType, PrimitiveType, StrType
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
+from pr1.util.asyncio import try_all
+from pr1.util.pool import Pool
 
 from .device import MasterDevice, WorkerDevice
 
@@ -74,15 +76,10 @@ class Executor(BaseExecutor):
         if 'device2' in device_conf:
           create_worker(device_conf['device2'], index=2)
 
-  async def initialize(self):
-    for device in self._devices.values():
-      await device.initialize()
+  async def start(self):
+    async with Pool.open() as pool:
+      await try_all([
+        pool.wait_until_ready(device.start()) for device in self._devices.values()
+      ])
 
-  async def destroy(self):
-    for device in self._devices.values():
-      del self._host.devices[device.id]
-
-      if device._worker1:
-        del self._host.devices[device._worker1.id]
-      if device._worker2:
-        del self._host.devices[device._worker2.id]
+      yield

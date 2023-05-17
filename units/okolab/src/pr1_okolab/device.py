@@ -11,7 +11,7 @@ from pr1.devices.nodes.common import (ConfigurableNode, NodeId,
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.devices.nodes.value import NullType
-from pr1.util.asyncio import run_double, shield, try_all, wait_all
+from pr1.util.asyncio import shield, try_all, wait_all
 from pr1.util.pool import Pool
 
 from . import logger, namespace
@@ -22,7 +22,6 @@ class BoardTemperatureNode(PollableReadableNode, NumericNode):
     super().__init__(
       readable=True,
       interval=0.2,
-      pool=master._pool,
       unit="degC"
     )
 
@@ -45,7 +44,6 @@ class TemperatureReadoutNode(PollableReadableNode, NumericNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
       interval=0.2,
-      pool=worker._master._pool,
       readable=True,
       unit="degC"
     )
@@ -68,7 +66,6 @@ class TemperatureSetpointNode(NumericNode):
       max=60.0,
       min=25.0,
       nullable=True,
-      pool=worker._master._pool,
       readable=True,
       unit="degC",
       writable=True
@@ -99,7 +96,6 @@ class MasterDevice(DeviceNode):
     address: Optional[str],
     id: str,
     label: Optional[str],
-    pool: Pool,
     serial_number: Optional[str]
   ):
     super().__init__()
@@ -110,7 +106,6 @@ class MasterDevice(DeviceNode):
     self.label = label
 
     self._address = address
-    self._pool = pool
     self._serial_number = serial_number
 
     self._device: Optional[OkolabDevice] = None
@@ -125,7 +120,10 @@ class MasterDevice(DeviceNode):
       self._node_board_temperature.id: self._node_board_temperature
     }
 
-  async def _connect(self, ready: Callable[[], bool]):
+  async def _connect(self):
+    logger.debug(f"Connecting to {self._label}")
+    ready = False
+
     while True:
       self._device = await self._find_device()
 
@@ -146,11 +144,12 @@ class MasterDevice(DeviceNode):
               *([self._worker2.configure()] if self._worker2 else list())
             ])
 
-            logger.info(f"Connected to {self._label}")
-            ready()
+            if not ready:
+              yield
+              ready = True
 
             try:
-              await asyncio.shield(self._device.closed())
+              await self._device.closed()
             except OkolabDeviceConnectionLostError:
               logger.warning(f"Lost connection to {self._label}")
           finally:
@@ -165,7 +164,9 @@ class MasterDevice(DeviceNode):
         finally:
           await shield(self._device.close())
 
-      ready()
+      if not ready:
+        yield
+        ready = True
 
       # Wait 1 second before retrying
       await asyncio.sleep(1.0)
@@ -202,11 +203,21 @@ class MasterDevice(DeviceNode):
 
     return None
 
-  async def initialize(self):
-    self._task = self._pool.add(await run_double(self._connect))
+  async def start(self):
+    async with Pool.open() as pool:
+      if self._worker1:
+        pool.start_soon(self._worker1.start(), priority=1)
+      if self._worker2:
+        pool.start_soon(self._worker2.start(), priority=1)
 
-    if not self.connected:
-      logger.warning(f"Failed connecting to {self._label}")
+      pool.start_soon(self._node_board_temperature.start(), priority=1)
+
+      await pool.wait_until_ready(self._connect())
+
+      if not self.connected:
+        logger.warning(f"Failed connecting to {self._label}")
+
+      yield
 
 
 class WorkerDevice(DeviceNode, ConfigurableNode):
@@ -243,7 +254,7 @@ class WorkerDevice(DeviceNode, ConfigurableNode):
     self.nodes = { node.id: node for node in {self._node_readout, self._node_setpoint} }
 
   async def configure(self):
-    await self._set_enabled(False)
+    await self._set_enabled(True)
 
   async def unconfigure(self):
     # The connection may have been lost already.
@@ -251,6 +262,11 @@ class WorkerDevice(DeviceNode, ConfigurableNode):
       await self._set_enabled(False)
     except OkolabDeviceConnectionError:
       pass
+
+  async def start(self):
+    async with Pool.open() as pool:
+      pool.start_soon(self._node_readout.start())
+      pool.start_soon(self._node_setpoint.start())
 
   async def _get_temperature_readout(self):
     assert (device := self._master._device)

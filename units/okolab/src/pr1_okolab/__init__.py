@@ -8,7 +8,7 @@ metadata = Metadata(
   description="Okolab",
   icon=MetadataIcon(kind='icon', value="description"),
   title="Okolab",
-  version="2.0"
+  version="3.0"
 )
 
 logger = parent_logger.getChild(namespace)

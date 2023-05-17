@@ -16,12 +16,10 @@ class RotaryValvePositionNode(EnumNode[int]):
     self,
     *,
     master: 'RotaryValveDevice',
-    pool: Pool,
     valve_count: int
   ):
     super().__init__(
       cases=[EnumNodeCase((index + 1), label=f"Valve {index + 1}") for index in range(valve_count)],
-      pool=pool,
       readable=True,
       writable=True
     )
@@ -73,7 +71,6 @@ class RotaryValveDevice(DeviceNode):
     address: Optional[str],
     id: str,
     label: Optional[str],
-    pool: Pool,
     serial_number: Optional[str],
     valve_count: int
   ):
@@ -85,18 +82,18 @@ class RotaryValveDevice(DeviceNode):
 
     self._address = address
     self._serial_number = serial_number
-    self._pool = pool
 
     self._device: Optional[AMFDevice] = None
     self._node = RotaryValvePositionNode(
       master=self,
-      pool=pool,
       valve_count=valve_count
     )
 
     self.nodes = { self._node.id: self._node }
 
-  async def _connect(self, ready: Callable[[], bool], /):
+  async def _connect(self):
+    ready = False
+
     while True:
       self._device = await self._find_device()
 
@@ -112,7 +109,10 @@ class RotaryValveDevice(DeviceNode):
 
           async with self._node:
             logger.info(f"Connected to {self._label}")
-            ready()
+
+            if not ready:
+              ready = True
+              yield
 
             # Wait for the device to disconnect
             await self._device.wait_error()
@@ -124,7 +124,9 @@ class RotaryValveDevice(DeviceNode):
           await shield(self._device.close())
 
       # If the above failed, still mark the device as ready
-      ready()
+      if not ready:
+        ready = True
+        yield
 
       # Wait before retrying
       await asyncio.sleep(1.0)
@@ -161,8 +163,13 @@ class RotaryValveDevice(DeviceNode):
 
     return None
 
-  async def initialize(self):
-    self._pool.add(await run_double(self._connect))
+  async def start(self):
+    async with Pool.open() as pool:
+      pool.start_soon(self._node.start())
 
-    if not self.connected:
-      logger.warning(f"Failed connecting to {self._label}")
+      await pool.wait_until_ready(self._connect())
+
+      if not self.connected:
+        logger.warning(f"Failed connecting to {self._label}")
+
+      yield

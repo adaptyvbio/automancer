@@ -1,5 +1,5 @@
 import { Set as ImSet } from 'immutable';
-import { Client, UnitNamespace } from 'pr1-shared';
+import { Client } from 'pr1-shared';
 import * as React from 'react';
 
 import styles from '../styles/components/application.module.scss';
@@ -20,11 +20,11 @@ import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
-import { Units } from './interfaces/unit';
 import { ViewUnitTab } from './views/unit-tab';
-import { StoreManager } from './store/store-manager';
-import { PersistentStoreDefaults, PersistentStoreManagerHook, SessionStoreManagerHook } from './store/values';
+import { concatStoreEntryKeys, StoreManager } from './store/store-manager';
+import { ApplicationStoreConsumer, ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreEntries, ApplicationSessionStoreDefaults } from './store/application';
 import { ApplicationStoreContext } from './contexts';
+import { Plugins, UnknownPlugin } from './interfaces/plugin';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
@@ -65,12 +65,6 @@ function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch
 }
 
 
-export interface ApplicationStore {
-  usePersistent: PersistentStoreManagerHook;
-  useSession: SessionStoreManagerHook;
-}
-
-
 export interface ApplicationProps {
   appBackend: AppBackend;
   client: Client;
@@ -94,9 +88,9 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   pool = new Pool();
   unsavedDataCallback: UnsavedDataCallback | null = null;
 
-  persistentStoreManager: StoreManager;
-  sessionStoreManager: StoreManager;
-  store: ApplicationStore;
+  persistentStoreManager: StoreManager<ApplicationPersistentStoreEntries>;
+  sessionStoreManager: StoreManager<ApplicationSessionStoreEntries>;
+  store: ApplicationStoreConsumer;
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -115,8 +109,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     this.sessionStoreManager = new StoreManager(this.appBackend.sessionStore);
 
     this.store = {
-      usePersistent: (this.persistentStoreManager.useEntry as unknown as PersistentStoreManagerHook),
-      useSession: (this.sessionStoreManager.useEntry as unknown as SessionStoreManagerHook)
+      usePersistent: this.persistentStoreManager.useEntry,
+      useSession: this.sessionStoreManager.useEntry
     };
   }
 
@@ -153,17 +147,17 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let host: Host = {
       client,
       clientId: client.info!.clientId,
-      plugins: (null as unknown as Host['plugins']),
+      plugins: (null as any),
       state: client.state!,
       staticUrl: client.info!.staticUrl,
-      units: (null as unknown as Host['units'])
+      units: (null as any)
     };
 
     this.setState({ host }, () => {
       this.props.onHostStarted?.();
     });
 
-    this.pool.add(async () => void await this.loadUnitClients(host));
+    let plugins = await this.loadUnitClients(host);
 
     client.closed
       .catch((err) => {
@@ -174,61 +168,62 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         this.setState({ host: null });
       });
 
-    return client.state;
+    return [client.state, plugins] as const;
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
     let targetUnitsInfo = Object.values(host.state.info.units)
       .filter((unitInfo) => unitInfo.enabled && (!options?.development || unitInfo.development));
 
-    if (host.units) {
+    if (host.plugins) {
       let expiredStyleSheets = targetUnitsInfo.flatMap((unitInfo) => {
-        let unit = host.units[unitInfo.namespace];
-        return unit?.styleSheets ?? [];
+        return host.plugins[unitInfo.namespace]?.styleSheets ?? [];
       });
 
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => !expiredStyleSheets.includes(sheet));
     }
 
-    let units: Units = Object.fromEntries(
+    let plugins: Plugins = Object.fromEntries(
       (await Promise.all(
         targetUnitsInfo
-          .filter((unitInfo) => (unitInfo.hasClient && host.staticUrl))
-          .map(async (unitInfo) => {
-            console.log(`%cLoading unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+          .filter((pluginInfo) => (pluginInfo.hasClient && host.staticUrl))
+          .map(async (pluginInfo) => {
+            console.log(`%cLoading unit %c${pluginInfo.namespace}%c (${pluginInfo.version})`, '', 'font-weight: bold;', '');
 
             try {
-              let url = new URL(`./${unitInfo.namespace}/${unitInfo.version}/index.js?${Date.now()}`, host.staticUrl!);
+              let url = new URL(`./${pluginInfo.namespace}/${pluginInfo.version}/index.js?${Date.now()}`, host.staticUrl!);
               let imported = await import(url.href);
 
-              let unit = imported.default ?? imported;
+              let plugin: UnknownPlugin = imported.default ?? imported;
 
-              return [unitInfo.namespace, unit];
+              return [[pluginInfo.namespace, plugin] as const];
             } catch (err) {
-              console.error(`%cFailed to load unit %c${unitInfo.namespace}%c (${unitInfo.version})`, '', 'font-weight: bold;', '');
+              console.error(`%cFailed to load unit %c${pluginInfo.namespace}%c (${pluginInfo.version})`, '', 'font-weight: bold;', '');
               console.error(err);
 
-              return [unitInfo.namespace, null];
+              return [];
             }
           })
-      )).filter(([_namespace, unit]) => unit)
+      )).flat()
     );
 
-    document.adoptedStyleSheets.push(...Object.values(units).flatMap((unit) => unit.styleSheets ?? []));
+    document.adoptedStyleSheets.push(...Object.values(plugins).flatMap((plugin) => plugin.styleSheets ?? []));
 
     this.setState((state) => ({
       host: {
         ...state.host!,
         plugins: {
           ...state.host!.plugins,
-          ...(units as any)
+          ...plugins
         },
         units: {
           ...state.host!.units,
-          ...units
+          ...(plugins as any)
         }
       }
     }));
+
+    return plugins;
   }
 
 
@@ -322,23 +317,32 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
       await this.appBackend.initialize();
 
 
-      // Initialize stores
-
-      await this.persistentStoreManager.initialize();
-      await this.sessionStoreManager.initialize();
-
-      for (let [key, value] of PersistentStoreDefaults) {
-        this.persistentStoreManager.initializeEntry(key, value);
-      }
-
-
       // Initialize the host communication
 
-      let state = await this.initializeHost();
+      let result = await this.initializeHost();
 
-      if (!state) {
+      if (!result) {
         return;
       }
+
+      let [state, plugins] = result;
+
+
+      // Initialize stores
+
+      await this.persistentStoreManager.initialize([
+        ...ApplicationPersistentStoreDefaults,
+        ...Object.entries(plugins).flatMap(([namespace, plugin]) => {
+          return (plugin.persistentStoreDefaults ?? []).map(([key, value]) => [
+            concatStoreEntryKeys(['plugin', namespace] as const, key),
+            value
+          ] as const)
+        })
+      ]);
+
+      await this.sessionStoreManager.initialize([
+        ...ApplicationSessionStoreDefaults
+      ]);
 
 
       // List and compile known drafts if available

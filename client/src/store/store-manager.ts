@@ -1,7 +1,9 @@
+import { OrdinaryId } from 'pr1-shared';
 import { useCallback, useSyncExternalStore } from 'react';
+
 import { Pool } from '../util';
 import { Store } from './base';
-import { OrdinaryId } from '../interfaces/util';
+import { StoreEntries, StoreEntryKey, StoreManagerHookFromEntries } from './types';
 
 
 export interface StoreManagerEntryInfo {
@@ -9,10 +11,9 @@ export interface StoreManagerEntryInfo {
   value: unknown;
 }
 
-export type StoreManagerHook = <T>(key: OrdinaryId[], defaultValue?: T | (() => T)) => readonly [T, (newValue: T) => void];
-export type SpecializedStoreManagerHook<K, V> = (key: K, defaultValue?: V | (() => V)) => readonly [V, (newValue: V) => void];
+export type SpecializedStoreManagerHook<K, V> = (key: K) => readonly [V, (newValue: V) => void];
 
-export class StoreManager {
+export class StoreManager<Entries extends StoreEntries> {
   private entryInfos = new Map<string, StoreManagerEntryInfo>();
   private pool = new Pool();
 
@@ -20,20 +21,20 @@ export class StoreManager {
 
   }
 
-  async initialize() {
+  async initialize(defaultValues: Entries) {
     for await (let [key, value] of this.store.readAll()) {
       this.entryInfos.set(key, {
         listeners: new Set(),
         value
       });
     }
-  }
 
-  initializeEntry(rawKey: OrdinaryId[], value: unknown) {
-    let key = JSON.stringify(rawKey);
+    for (let [rawKey, value] of defaultValues) {
+      let key = JSON.stringify(transformEntryKey(rawKey));
 
-    if (!this.entryInfos.has(key)) {
-      this.writeEntry(key, value);
+      if (!this.entryInfos.has(key)) {
+        this.writeEntry(key, value);
+      }
     }
   }
 
@@ -58,10 +59,10 @@ export class StoreManager {
     }
   }
 
-  useEntry: StoreManagerHook = <T>(rawKey: OrdinaryId[], defaultValue?: T | (() => T)) => {
-    let key = JSON.stringify(rawKey);
+  useEntry = ((rawKey: StoreEntryKey) => {
+    let key = JSON.stringify(transformEntryKey(rawKey));
 
-    let value = useSyncExternalStore<T>(useCallback((listener) => {
+    let value = useSyncExternalStore<unknown>(useCallback((listener) => {
       let entryInfo = this.entryInfos.get(key)!;
       entryInfo.listeners.add(listener);
 
@@ -69,26 +70,23 @@ export class StoreManager {
         entryInfo.listeners.delete(listener);
       };
     }, [key]), () => {
-      if (!this.entryInfos.has(key)) {
-        if (defaultValue === undefined) {
-          throw new Error('Missing default value');
-        }
-
-        let initialValue = (typeof defaultValue === 'function')
-          ? (defaultValue as (() => T))()
-          : defaultValue;
-
-        this.writeEntry(key, initialValue);
-      }
-
-      return this.entryInfos.get(key)!.value as T;
+      return this.entryInfos.get(key)!.value;
     });
 
     return [
       value,
-      (newValue: T) => {
+      (newValue: unknown) => {
         this.writeEntry(key, newValue);
       }
     ] as const;
-  }
+  }) as StoreManagerHookFromEntries<Entries>
+}
+
+
+export function concatStoreEntryKeys<Prefix extends readonly OrdinaryId[], Key extends StoreEntryKey>(prefix: Prefix, key: Key) {
+  return [...prefix, ...(Array.isArray(key) ? key : [key])] as (Key extends OrdinaryId[] ? [...Prefix, ...Key] : [...Prefix, Key]);
+}
+
+export function transformEntryKey(key: StoreEntryKey): OrdinaryId[] {
+  return Array.isArray(key) ? key : [key];
 }

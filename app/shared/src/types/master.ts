@@ -1,11 +1,11 @@
 import type { DiagnosticReference } from './analysis';
+import type { PluginName } from './plugin';
 import type { Protocol } from './protocol';
-import type { UnitNamespace } from './unit';
 
 
 /** @deprecated */
 export interface ProtocolBlock {
-  namespace: UnitNamespace;
+  namespace: PluginName;
   [key: string]: unknown;
 }
 
@@ -14,10 +14,10 @@ export type ProtocolBlockPath = unknown[];
 
 export interface ProtocolProcess {
   data: unknown;
-  namespace: UnitNamespace;
+  namespace: PluginName;
 }
 
-export type ProtocolState = Record<UnitNamespace, unknown>;
+export type ProtocolState = Record<PluginName, unknown>;
 
 
 export interface ProtocolBlockAggregate {
@@ -57,4 +57,4 @@ export interface MasterProcessState {
   [key: string]: unknown;
 }
 
-export type MasterStateLocation = Record<UnitNamespace, unknown> | null;
+export type MasterStateLocation = Record<PluginName, unknown> | null;

@@ -3,7 +3,7 @@ import { Fragment, PropsWithChildren, useContext, useEffect } from 'react';
 import styles from '../../styles/components/shortcut-guide.module.scss';
 
 import { ApplicationStoreContext } from '../contexts';
-import { ShortcutDisplayMode } from '../store/values';
+import { ShortcutDisplayMode } from '../store/application';
 
 
 // @ts-expect-error
@@ -44,7 +44,7 @@ export function ShortcutGuide(props: PropsWithChildren<{
   shortcut: string | null;
 }>) {
   let store = useContext(ApplicationStoreContext);
-  let [shortcutDisplayMode, _setShortcutDisplayMode] = store.usePersistent(['general', 'shortcut-display-mode']);
+  let [shortcutDisplayMode, _setShortcutDisplayMode] = store.usePersistent('general.shortcutDisplayMode');
 
   let displayShortcuts = true;
   let shortcutSegments = props.shortcut?.split('+');

@@ -15,9 +15,10 @@ import { Button } from '../components/button';
 import { ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { Description } from '../components/description';
-import { OrdinaryId, UnitInfo } from 'pr1-shared';
-import { ApplicationStore } from '../application';
-import { GraphDirection, ShortcutDisplayMode } from '../store/values';
+import { OrdinaryId, PluginInfo } from 'pr1-shared';
+import { GraphDirection, ShortcutDisplayMode } from '../store/application';
+import { createPluginContext } from '../plugin';
+import { Application } from '../application';
 
 
 export interface ConfGroup {
@@ -65,7 +66,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
   }
 
   override render() {
-    let unitsInfo = this.props.host.state.info.units;
+    let pluginInfos = this.props.host.state.info.units;
 
     let groups: ConfGroup[] = [
       {
@@ -75,17 +76,23 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
             component: GeneralConfPage,
             icon: 'settings',
             label: 'General' }
-          // {
-          //   id: 'editor',
-          //   icon: 'edit_note',
-          //   label: 'Editor'
-          // }
         ]
       },
-      { id: 'plugins',
-        pages: Object.values(unitsInfo)
-          .map((unitInfo) => ({
+      { id: 'plugin',
+        pages: Object.values(pluginInfos)
+          .map((pluginInfo) => [pluginInfo, this.props.host.plugins[pluginInfo.namespace]?.SettingsComponent] as const)
+          .filter(([unitInfo, component]) => component)
+          .map(([unitInfo, component]): ConfPage => ({
             id: unitInfo.namespace,
+            component: (props) => {
+              let Component = component!;
+
+              return (
+                <Component
+                  app={this.props.app}
+                  context={createPluginContext(this.props.app, this.props.host, unitInfo.namespace)} />
+              );
+            },
             icon: 'extension',
             label: unitInfo.metadata.title ?? unitInfo.namespace
           }))
@@ -93,16 +100,16 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
             yield rules.text(a.label, b.label);
           }))
       },
-      {
-        id: 'add-unit',
+/*       {
+        id: 'add-plugin',
         pages: [
           {
-            id: 'add-unit',
+            id: 'add-plugin',
             icon: 'add',
-            label: 'Add module'
+            label: 'Add plugin'
           }
         ]
-      }
+      } */
     ];
 
     let route = this.props.route;
@@ -194,8 +201,8 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
             <div className={styles.contentsOuter}>
               <div className={util.formatClass(styles.contentsInner, descriptionStyles.root)}>
                 <CurrentPageComponent
-                  setReloadRequired={() => void this.setState({ reloadBannerVisible: true })}
-                  store={this.props.app.store} />
+                  app={this.props.app}
+                  setReloadRequired={() => void this.setState({ reloadBannerVisible: true })} />
               </div>
             </div>
           )}
@@ -260,7 +267,7 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
 
 
 function UnitIcon(props: {
-  value: NonNullable<UnitInfo['metadata']['icon']>;
+  value: NonNullable<PluginInfo['metadata']['icon']>;
 }) {
   let icon = props.value;
 
@@ -287,16 +294,15 @@ function UnitIcon(props: {
 export type ConfPageComponent = ComponentType<ConfPageComponentProps>;
 
 export interface ConfPageComponentProps {
+  app: Application;
   setReloadRequired(): void;
-  store: ApplicationStore;
 }
 
 
 function GeneralConfPage(props: ConfPageComponentProps) {
-  let [automaticSave, setAutomaticSave] = props.store.usePersistent(['editor', 'automatic-save']);
-  let [graphDirection, setGraphDirection] = props.store.usePersistent(['graph', 'direction']);
-  let [shortcutPref, setShortcutPref] = props.store.usePersistent(['general', 'shortcut-display-mode']);
-  // let [progressDisplayPref, setProgressDisplayPref] = props.store.usePersistent<>();
+  let [automaticSave, setAutomaticSave] = props.app.store.usePersistent('editor.automaticSave');
+  let [graphDirection, setGraphDirection] = props.app.store.usePersistent('graph.direction');
+  let [shortcutDisplayMode, setShortcutDisplayMode] = props.app.store.usePersistent('general.shortcutDisplayMode');
 
   return (
     <>
@@ -321,12 +327,12 @@ function GeneralConfPage(props: ConfPageComponentProps) {
             label: 'Horizontal' }
         ]} />
 
-      <h3>Miscellaneous</h3>
+      <h3>Shortcuts</h3>
 
       <Form.Select
-        label="Shortcut display"
-        value={shortcutPref}
-        onInput={setShortcutPref}
+        label="Display mode"
+        value={shortcutDisplayMode}
+        onInput={setShortcutDisplayMode}
         options={[
           { id: ShortcutDisplayMode.Disabled,
             label: 'Disabled' },

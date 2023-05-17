@@ -1,8 +1,8 @@
-import { ChannelId, ClientId } from '../client';
-import { ChipId, HostIdentifier, HostState } from './host';
-import { ProtocolBlockPath } from './protocol';
-import { UnitNamespace } from './unit';
-import { UnionToIntersection } from './util';
+import type { ChannelId, ClientId } from '../client';
+import type { ChipId, HostIdentifier, HostState } from './host';
+import type { PluginName } from './plugin';
+import type { ProtocolBlockPath } from './protocol';
+import type { UnionToIntersection } from './util';
 
 
 export type RequestFunc = UnionToIntersection<
@@ -17,7 +17,7 @@ export type RequestFunc = UnionToIntersection<
       type: 'command';
       chipId: ChipId;
       command: unknown;
-      namespace: UnitNamespace;
+      namespace: PluginName;
     }) => Promise<void>
   ) | (
     (options: {
@@ -49,7 +49,7 @@ export type RequestFunc = UnionToIntersection<
     (options: {
       type: 'requestExecutor';
       data: unknown;
-      namespace: UnitNamespace;
+      namespace: PluginName;
     }) => Promise<unknown>
   ) | (
     (options: {

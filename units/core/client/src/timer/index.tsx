@@ -1,4 +1,4 @@
-import { DynamicValue, Plugin, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue } from 'pr1';
+import { DynamicValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
@@ -64,5 +64,34 @@ export default {
         return 'Wait';
       }
     })
-  }
-} satisfies Plugin
+  },
+
+  SettingsComponent(props) {
+    let [shortcutPref, setShortcutPref] = props.context.store.usePersistent('progressDisplayMode');
+
+    return (
+      <>
+        <h2>Timer</h2>
+
+        <Form.Select
+          label="Progress display mode"
+          value={shortcutPref}
+          onInput={setShortcutPref}
+          options={[
+            { id: ProgressDisplayMode.Fraction,
+              label: 'Fraction' },
+            { id: ProgressDisplayMode.TimeElapsed,
+              label: 'Time elapsed' },
+            { id: ProgressDisplayMode.TimeRemaining,
+              label: 'Time remaining' }
+          ]} />
+      </>
+    );
+  },
+
+  persistentStoreDefaults: [
+    ['progressDisplayMode', ProgressDisplayMode.Fraction]
+  ]
+} satisfies Plugin<[
+  ['progressDisplayMode', ProgressDisplayMode]
+]>

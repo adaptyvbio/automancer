@@ -1,13 +1,11 @@
-import { Brand } from './util';
+import type { PluginName } from './plugin';
 
 
-export type UnitNamespace = Brand<string, 'UnitNamespace'>;
-
-export interface UnitInfo {
+export interface PluginInfo {
   development: boolean;
   enabled: boolean;
   hasClient: boolean;
-  namespace: UnitNamespace;
+  namespace: PluginName;
   version: number;
 
   metadata: {

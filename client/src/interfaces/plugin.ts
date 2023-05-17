@@ -1,33 +1,41 @@
-import type { OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName, UnitNamespace } from 'pr1-shared';
-import type { ComponentType, ReactElement, ReactNode } from 'react';
+import type { OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import type { ComponentType, ReactNode } from 'react';
 
 import type { Application } from '../application';
 import type { Host } from '../host';
 import type { ProtocolBlockGraphRenderer } from './graph';
-import { FeatureDef } from '../components/features';
-import { Pool } from '../util';
+import type { FeatureDef } from '../components/features';
+import type { Pool } from '../util';
+import type { StoreConsumer, StoreEntries } from '../store/types';
 
 
-export interface PluginOptionsComponentProps {
+export interface PluginSettingsComponentProps<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries> {
   app: Application;
-  baseUrl: string;
-  context: GlobalContext;
-  pathname: string;
+  context: PluginContext<PersistentStoreEntries, SessionStoreEntries>;
 }
 
-export interface Plugin {
-  OptionsComponent?: ReactElement<PluginOptionsComponentProps>;
-  namespace: UnitNamespace;
+export interface Plugin<PersistentStoreEntries extends StoreEntries = [], SessionStoreEntries extends StoreEntries = []> {
+  namespace: PluginName;
   styleSheets?: CSSStyleSheet[];
 
   blocks: Record<ProtocolBlockName, UnknownPluginBlockImpl>;
+  persistentStoreDefaults?: PersistentStoreEntries;
+  sessionStoreDefaults?: SessionStoreEntries;
+
+  SettingsComponent?: ComponentType<PluginSettingsComponentProps<PersistentStoreEntries, SessionStoreEntries>>;
 }
 
-export type Plugins = Record<PluginName, Plugin>;
+export type UnknownPlugin = Plugin<StoreEntries, StoreEntries>;
+export type Plugins = Record<PluginName, UnknownPlugin>;
+
 
 export interface GlobalContext {
   host: Host;
   pool: Pool;
+}
+
+export interface PluginContext<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries> extends GlobalContext {
+  store: StoreConsumer<PersistentStoreEntries, SessionStoreEntries>;
 }
 
 export interface BlockContext extends GlobalContext {

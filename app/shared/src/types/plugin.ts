@@ -1,4 +1,4 @@
-import type { UnitNamespace } from './unit';
+import type { Brand } from './util';
 
 
-export type PluginName = UnitNamespace;
+export type PluginName = Brand<string, 'PluginName'>;

@@ -1,5 +1,6 @@
-import { Master } from './master';
-import { UnitInfo, UnitNamespace } from './unit';
+import type { Master } from './master';
+import type { PluginName } from './plugin';
+import type { PluginInfo } from './unit';
 import type { Brand } from './util';
 
 
@@ -28,8 +29,8 @@ export interface Chip {
   issues: ChipIssue[];
   master: Master | null;
   readable: true;
-  runners: Record<UnitNamespace, unknown>;
-  unitList: UnitNamespace[];
+  runners: Record<PluginName, unknown>;
+  unitList: PluginName[];
 }
 
 export interface UnreadableChip {
@@ -55,7 +56,7 @@ export interface ChipIssue {
 }
 
 
-export type ExecutorStates = Record<UnitNamespace, unknown>;
+export type ExecutorStates = Record<PluginName, unknown>;
 
 
 /**
@@ -73,7 +74,7 @@ export interface HostState {
     instanceRevision: number;
     name: string;
     startTime: number;
-    units: Record<string, UnitInfo>;
+    units: Record<string, PluginInfo>;
   };
 
   chips: Record<ChipId, GeneralChip>;

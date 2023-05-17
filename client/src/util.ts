@@ -42,7 +42,7 @@ export function findLastEntry<T>(arr: T[], fn: (item: T, index: number, arr: T[]
 }
 
 
-export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) => S | null) : S | undefined {
+export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) => S | null): S | undefined {
   for (let [index, item] of arr.entries()) {
     let value = fn(item, index, arr);
 
@@ -52,6 +52,14 @@ export function findMap<T, S>(arr: T[], fn: (item: T, index: number, arr: T[]) =
   }
 
   return undefined;
+}
+
+export function findWithIndex<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => unknown): readonly [number, T] | null {
+  let index = arr.findIndex(fn);
+
+  return (index >= 0)
+    ? [index, arr[index]] as const
+    : null;
 }
 
 

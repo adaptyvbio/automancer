@@ -1,5 +1,5 @@
 import { Set as ImSet } from 'immutable';
-import { Client } from 'pr1-shared';
+import { Client, OrdinaryId, PluginName } from 'pr1-shared';
 import * as React from 'react';
 
 import styles from '../styles/components/application.module.scss';
@@ -336,12 +336,18 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
           return (plugin.persistentStoreDefaults ?? []).map(([key, value]) => [
             concatStoreEntryKeys(['plugin', namespace] as const, key),
             value
-          ] as const)
+          ] as [['plugin', PluginName, ...OrdinaryId[]], unknown])
         })
       ]);
 
       await this.sessionStoreManager.initialize([
-        ...ApplicationSessionStoreDefaults
+        ...ApplicationSessionStoreDefaults,
+        ...Object.entries(plugins).flatMap(([namespace, plugin]) => {
+          return (plugin.sessionStoreDefaults ?? []).map(([key, value]) => [
+            concatStoreEntryKeys(['plugin', namespace] as const, key),
+            value
+          ] as [['plugin', PluginName, ...OrdinaryId[]], unknown])
+        })
       ]);
 
 

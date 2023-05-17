@@ -19,6 +19,7 @@ import { OrdinaryId, PluginInfo } from 'pr1-shared';
 import { GraphDirection, ShortcutDisplayMode } from '../store/application';
 import { createPluginContext } from '../plugin';
 import { Application } from '../application';
+import { findWithIndex } from '../util';
 
 
 export interface ConfGroup {
@@ -52,6 +53,8 @@ export interface ViewConfState {
 }
 
 export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
+  private controller = new AbortController();
+
   constructor(props: ViewConfProps) {
     super(props);
 
@@ -61,88 +64,84 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
     };
   }
 
-  override componentDidUpdate(prevProps: Readonly<ViewProps>, prevState: Readonly<ViewConfState>) {
-    // TODO: Check that the selected section exists
+  private checkCurrentPair() {
+    let currentPair = ViewConf.getCurrentPair(this.props, this.state);
+
+    if ((this.props.route.id === 'page') && !currentPair) {
+      ViewConf.navigate();
+    }
+  }
+
+  override componentDidMount() {
+    this.checkCurrentPair();
+
+    document.body.addEventListener('keydown', (event) => {
+      if ((event.target === event.currentTarget) && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+        event.stopPropagation();
+
+        let down = (event.key === 'ArrowDown');
+        let delta1 = down ? 1 : -1;
+        let delta2 = down ? 0 : -1;
+
+        let currentPair = ViewConf.getCurrentPair(this.props, this.state);
+        let groups = ViewConf.getGroups(this.props, this.state);
+
+        if (currentPair) {
+          let newPage = currentPair.group.pages[currentPair.pageIndex + delta1];
+
+          if (newPage) {
+            ViewConf.navigateToPage(currentPair.group.id, newPage.id);
+          } else {
+            let newGroup = groups[currentPair.groupIndex + delta1];
+
+            if (newGroup) {
+              let newPage = newGroup.pages.at(delta2)!;
+              ViewConf.navigateToPage(newGroup.id, newPage.id);
+            }
+          }
+        } else {
+          let newGroup = groups.at(delta2)!;
+          let newPage = newGroup.pages.at(delta2)!;
+
+          ViewConf.navigateToPage(newGroup.id, newPage.id);
+        }
+      }
+    }, { signal: this.controller.signal });
+  }
+
+  override componentDidUpdate() {
+    this.checkCurrentPair();
+  }
+
+  override componentWillUnmount() {
+    this.controller.abort();
   }
 
   override render() {
-    let pluginInfos = this.props.host.state.info.units;
-
-    let groups: ConfGroup[] = [
-      {
-        id: 'main',
-        pages: [
-          { id: 'general',
-            component: GeneralConfPage,
-            icon: 'settings',
-            label: 'General' }
-        ]
-      },
-      { id: 'plugin',
-        pages: Object.values(pluginInfos)
-          .map((pluginInfo) => [pluginInfo, this.props.host.plugins[pluginInfo.namespace]?.SettingsComponent] as const)
-          .filter(([unitInfo, component]) => component)
-          .map(([unitInfo, component]): ConfPage => ({
-            id: unitInfo.namespace,
-            component: (props) => {
-              let Component = component!;
-
-              return (
-                <Component
-                  app={this.props.app}
-                  context={createPluginContext(this.props.app, this.props.host, unitInfo.namespace)} />
-              );
-            },
-            icon: 'extension',
-            label: unitInfo.metadata.title ?? unitInfo.namespace
-          }))
-          .sort(seqOrd(function* (a, b, rules) {
-            yield rules.text(a.label, b.label);
-          }))
-      },
-/*       {
-        id: 'add-plugin',
-        pages: [
-          {
-            id: 'add-plugin',
-            icon: 'add',
-            label: 'Add plugin'
-          }
-        ]
-      } */
-    ];
-
     let route = this.props.route;
 
-    let currentPage: ConfPage | null;
-
-    if (route.id === 'page') {
-      let { groupId, pageId } = route.params;
-
-      currentPage = groups
-        .find((group) => group.id === groupId)?.pages
-        .find((page) => page.id === pageId) ?? null;
-    } else {
-      currentPage = null;
-    }
-
-    let CurrentPageComponent = currentPage?.component;
+    let groups = ViewConf.getGroups(this.props, this.state);
+    let currentPair = ViewConf.getCurrentPair(this.props, this.state);
+    let CurrentPageComponent = currentPair?.page.component;
 
 
     return (
       <main className={viewStyles.root}>
-        <TitleBar title={currentPage?.label ?? 'Settings'} />
+        <TitleBar title={currentPair?.page.label ?? 'Settings'} />
         <div className={util.formatClass(viewStyles.contents, styles.root)}>
           <div className={styles.selectorRoot}>
             <div className={styles.selectorListRoot}>
-              {groups.map((group) => (
+              {groups.map((group, groupIndex) => (
                 <div className={styles.selectorListGroup} key={group.id}>
-                  {group.pages.map((page) => (
-                    <a href={`${BaseUrl}/settings/${group.id}/${page.id}`} className={util.formatClass(styles.selectorListEntry, {
-                      '_selected': (route.id === 'page')
-                        && (route.params.groupId === group.id)
-                        && (route.params.pageId === page.id)
-                    })} key={page.id}>
+                  {group.pages.map((page, pageIndex) => (
+                    <a
+                      href={`${BaseUrl}/settings/${group.id}/${page.id}`}
+                      className={util.formatClass(styles.selectorListEntry, {
+                        '_selected': (route.id === 'page')
+                          && (route.params.groupId === group.id)
+                          && (route.params.pageId === page.id)
+                      })}
+                      key={page.id}>
                       <Icon name={page.icon} className={styles.selectorListIcon} />
                       <div className={styles.selectorListLabel}>{page.label}</div>
                     </a>
@@ -258,6 +257,90 @@ export class ViewConf extends React.Component<ViewConfProps, ViewConfState> {
     );
   }
 
+
+  static getCurrentPair(props: ViewConfProps, state: ViewConfState) {
+    if (props.route.id === 'page') {
+      let { groupId, pageId } = props.route.params;
+      let groups = ViewConf.getGroups(props, state);
+
+      let groupEntry = findWithIndex(groups, (group) => (group.id === groupId));
+
+      if (groupEntry) {
+        let [groupIndex, group] = groupEntry;
+
+        let pageEntry = findWithIndex(group.pages, (page) => (page.id === pageId));
+
+        if (pageEntry) {
+          let [pageIndex, page] = pageEntry;
+
+          return {
+            group,
+            groupIndex,
+            page,
+            pageIndex
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static getGroups(props: ViewConfProps, state: ViewConfState): ConfGroup[] {
+    let pluginInfos = props.host.state.info.units;
+
+    return [
+      {
+        id: 'main',
+        pages: [
+          { id: 'general',
+            component: GeneralConfPage,
+            icon: 'settings',
+            label: 'General' }
+        ]
+      },
+      { id: 'plugin',
+        pages: Object.values(pluginInfos)
+          .map((pluginInfo) => [pluginInfo, props.host.plugins[pluginInfo.namespace]?.SettingsComponent] as const)
+          .filter(([pluginInfo, component]) => component)
+          .map(([unitInfo, component]): ConfPage => ({
+            id: unitInfo.namespace,
+            component: (_pageProps) => {
+              let Component = component!;
+
+              return (
+                <Component
+                  app={props.app}
+                  context={createPluginContext(props.app, props.host, unitInfo.namespace)} />
+              );
+            },
+            icon: 'extension',
+            label: unitInfo.metadata.title ?? unitInfo.namespace
+          }))
+          .sort(seqOrd(function* (a, b, rules) {
+            yield rules.text(a.label, b.label);
+          }))
+      },
+/*       {
+        id: 'add-plugin',
+        pages: [
+          {
+            id: 'add-plugin',
+            icon: 'add',
+            label: 'Add plugin'
+          }
+        ]
+      } */
+    ];
+  }
+
+  static navigate() {
+    return navigation.navigate(`${BaseUrl}/settings`);
+  }
+
+  static navigateToPage(groupId: OrdinaryId, pageId: OrdinaryId) {
+    return navigation.navigate(`${BaseUrl}/settings/${groupId}/${pageId}`);
+  }
 
   static routes = [
     { id: 'main', pattern: '/settings' },

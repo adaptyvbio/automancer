@@ -9,9 +9,21 @@ import type { Pool } from '../util';
 import type { StoreConsumer, StoreEntries } from '../store/types';
 
 
-export interface PluginSettingsComponentProps<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries> {
+export interface PluginSettingsComponentProps<Context extends AnyPluginContext> {
   app: Application;
-  context: PluginContext<PersistentStoreEntries, SessionStoreEntries>;
+  context: Context;
+}
+
+export interface PluginViewEntry<Context extends AnyPluginContext> {
+  id: OrdinaryId;
+  icon: string;
+  label: string;
+
+  Component: ComponentType<PluginViewComponentProps<Context>>;
+}
+
+export interface PluginViewComponentProps<Context extends AnyPluginContext> {
+  context: Context;
 }
 
 export interface Plugin<PersistentStoreEntries extends StoreEntries = [], SessionStoreEntries extends StoreEntries = []> {
@@ -22,7 +34,9 @@ export interface Plugin<PersistentStoreEntries extends StoreEntries = [], Sessio
   persistentStoreDefaults?: PersistentStoreEntries;
   sessionStoreDefaults?: SessionStoreEntries;
 
-  SettingsComponent?: ComponentType<PluginSettingsComponentProps<PersistentStoreEntries, SessionStoreEntries>>;
+  SettingsComponent?: ComponentType<PluginSettingsComponentProps<PluginContext<PersistentStoreEntries, SessionStoreEntries>>>;
+
+  views?: PluginViewEntry<PluginContext<PersistentStoreEntries, SessionStoreEntries>>[];
 }
 
 export type UnknownPlugin = Plugin<StoreEntries, StoreEntries>;
@@ -30,13 +44,16 @@ export type Plugins = Record<PluginName, UnknownPlugin>;
 
 
 export interface GlobalContext {
+  app: Application;
   host: Host;
   pool: Pool;
 }
 
-export interface PluginContext<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries> extends GlobalContext {
+export interface PluginContext<PersistentStoreEntries extends StoreEntries = [], SessionStoreEntries extends StoreEntries = []> extends GlobalContext {
   store: StoreConsumer<PersistentStoreEntries, SessionStoreEntries>;
 }
+
+export type AnyPluginContext = PluginContext<any, any>;
 
 export interface BlockContext extends GlobalContext {
   sendMessage(message: unknown): Promise<void>;

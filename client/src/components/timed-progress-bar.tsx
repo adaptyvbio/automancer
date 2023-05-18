@@ -8,6 +8,7 @@ import { formatDuration } from '../format';
 
 export interface TimedProgressBarProps {
   date: number;
+  displayMode?: ProgressDisplayMode;
   duration: number;
   paused?: unknown;
   setValue?(newValue: number): void;
@@ -15,18 +16,10 @@ export interface TimedProgressBarProps {
 }
 
 export interface TimedProgressBarState {
-  displayMode: ProgressDisplayMode;
+
 }
 
 export class TimedProgressBar extends React.Component<TimedProgressBarProps, TimedProgressBarState> {
-  constructor(props: TimedProgressBarProps) {
-    super(props);
-
-    this.state = {
-      displayMode: ProgressDisplayMode.Fraction
-    };
-  }
-
   private getStats() {
     let nowDate = Date.now();
     let currentValue = Math.min(1, this.props.value + (!this.props.paused ? ((nowDate - this.props.date) / this.props.duration) : 0));
@@ -42,7 +35,7 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
     return (
       <ProgressBar
         description={(selectValue) => {
-          switch (this.state.displayMode) {
+          switch (this.props.displayMode ?? ProgressDisplayMode.Fraction) {
             case ProgressDisplayMode.Fraction:
               return (
                 <div>

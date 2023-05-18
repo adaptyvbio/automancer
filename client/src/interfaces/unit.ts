@@ -71,6 +71,7 @@ export interface OptionsComponentProps {
   pathname: string;
 }
 
+/** @deprecated */
 export interface TabEntry<Props> {
   id: string;
   disabled?: unknown;
@@ -79,6 +80,7 @@ export interface TabEntry<Props> {
   component: React.ComponentType<Props>;
 }
 
+/** @deprecated */
 export interface GeneralTabComponentProps {
   app: Application;
   host: Host;

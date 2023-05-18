@@ -8,6 +8,7 @@ import { concatStoreEntryKeys } from './store/store-manager';
 
 export function createPluginContext<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries>(app: Application, host: Host, namespace: PluginName): PluginContext<PersistentStoreEntries, SessionStoreEntries> {
   return {
+    app,
     host: host,
     pool: app.pool,
     store: {

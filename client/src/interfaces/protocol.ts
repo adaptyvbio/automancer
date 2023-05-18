@@ -3,26 +3,32 @@ import type { UnitNamespace } from 'pr1-shared';
 import type { DraftRange } from '../draft';
 
 
+/** @deprecated */
 export interface Protocol {
   name: string | null;
   root: ProtocolBlock;
 }
 
+/** @deprecated */
 export interface ProtocolBlock {
   namespace: UnitNamespace;
   [key: string]: unknown;
 }
 
+/** @deprecated */
 export type ProtocolBlockPath = unknown[];
 
+/** @deprecated */
 export interface ProtocolProcess {
   data: unknown;
   namespace: UnitNamespace;
 }
 
+/** @deprecated */
 export type ProtocolState = Record<UnitNamespace, unknown>;
 
 
+/** @deprecated */
 export interface ProtocolBlockAggregate {
   blocks: ProtocolBlock[];
   offset: number;

@@ -1,15 +1,13 @@
-import { List, Set as ImSet } from 'immutable';
-import * as React from 'react';
+import { OrdinaryId } from 'pr1-shared';
+import { Component } from 'react';
 
-import type { Route } from '../application';
-import type { Draft, DraftId } from '../draft';
+import styles from '../../styles/components/sidebar.module.scss';
+
+import { BaseUrl } from '../constants';
 import type { Host } from '../host';
 import { HostInfo } from '../interfaces/host';
 import * as util from '../util';
 import { ContextMenuArea } from './context-menu-area';
-import { BaseUrl } from '../constants';
-
-import styles from '../../styles/components/sidebar.module.scss';
 
 
 const CollapsedStorageKey = 'sidebarCollapsed';
@@ -27,7 +25,7 @@ export interface SidebarState {
   manualCollapseControl: boolean;
 }
 
-export class Sidebar extends React.Component<SidebarProps, SidebarState> {
+export class Sidebar extends Component<SidebarProps, SidebarState> {
   private controller = new AbortController();
 
   constructor(props: SidebarProps) {
@@ -50,7 +48,7 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     const AUTO_COLLAPSE_LOWER_WIDTH = 1000;
     const AUTO_COLLAPSE_UPPER_WIDTH = 1200;
 
@@ -87,24 +85,24 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
     });
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
-  render() {
+  override render() {
     let url = navigation.currentEntry.url;
 
-    let unitEntries = this.props.host?.units && Object.values(this.props.host.units)
-      .flatMap((unit) => (unit.generalTabs ?? []).map((entry) => ({
+    let pluginEntries = this.props.host?.plugins && Object.values(this.props.host.plugins)
+      .flatMap((plugin) => (plugin.views ?? []).map((entry) => ({
         ...entry,
-        id: 'unit.' + entry.id,
-        route: `/unit/${unit.namespace}/${entry.id}`
+        id: `plugin.${entry.id}`,
+        route: `/unit/${plugin.namespace}/${entry.id}`
       })));
 
     let groups: {
-      id: string;
+      id: OrdinaryId;
       entries: {
-        id: string;
+        id: OrdinaryId;
         label: string;
         icon: string;
         route: string | null;
@@ -127,8 +125,8 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
               icon: 'settings',
               route: '/settings' }
         ] },
-        ...(unitEntries && (unitEntries?.length > 0)
-          ? [{ id: 'unit', entries: unitEntries }]
+        ...(pluginEntries && (pluginEntries?.length > 0)
+          ? [{ id: 'unit', entries: pluginEntries }]
           : []),
 //         { id: 'last',
 //           entries: [
@@ -239,20 +237,4 @@ export class Sidebar extends React.Component<SidebarProps, SidebarState> {
       </ContextMenuArea>
     );
   }
-}
-
-
-// Is 'a' a superset of 'b'
-function isSuperset<T>(a: T[], b: T[]): boolean {
-  if (a.length < b.length) {
-    return false;
-  }
-
-  for (let index = 0; index < b.length; index += 1) {
-    if (a[index] !== b[index]) {
-      return false;
-    }
-  }
-
-  return true;
 }

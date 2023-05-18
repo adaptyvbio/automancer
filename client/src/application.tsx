@@ -20,14 +20,14 @@ import { HostInfo } from './interfaces/host';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ErrorBoundary } from './components/error-boundary';
-import { ViewUnitTab } from './views/unit-tab';
+import { ViewPluginView } from './views/plugin-view';
 import { concatStoreEntryKeys, StoreManager } from './store/store-manager';
 import { ApplicationStoreConsumer, ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreEntries, ApplicationSessionStoreDefaults } from './store/application';
 import { ApplicationStoreContext } from './contexts';
 import { Plugins, UnknownPlugin } from './interfaces/plugin';
 
 
-const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewUnitTab];
+const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewPluginView];
 
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({
@@ -504,7 +504,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     let contents = null;
     let routeData = this.state.currentRouteData;
 
-    if (routeData && this.state.host?.units) {
+    if (routeData && this.state.host?.plugins) {
       let Component = routeData.route.component;
       let viewRouteMatch = createViewRouteMatchFromRouteData(routeData);
 

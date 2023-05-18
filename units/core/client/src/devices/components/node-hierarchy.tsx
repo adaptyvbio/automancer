@@ -46,7 +46,7 @@ export function NodeHierarchy<HierarchyEntryId extends OrdinaryId>(props: NodeHi
 
       <ShadowScrollable direction="vertical" className={styles.contentsContainer}>
         <div className={styles.contentsRoot}>
-          <div className={styles.groupRoot}>
+          {/* <div className={styles.groupRoot}>
             <div className={styles.groupHeader}>Saved devices</div>
             <div className={styles.groupList}>
               {props.entries.map((entry) => (
@@ -59,7 +59,7 @@ export function NodeHierarchy<HierarchyEntryId extends OrdinaryId>(props: NodeHi
                   key={entry.id} />
               ))}
             </div>
-          </div>
+          </div> */}
           <div className={styles.groupRoot}>
             <div className={styles.groupHeader}>All devices</div>
             <div className={styles.groupList}>

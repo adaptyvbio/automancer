@@ -1,15 +1,16 @@
-import { Set as ImSet, List } from 'immutable';
+import { Map as ImMap, Set as ImSet, List } from 'immutable';
 import { ShadowScrollable, util, Icon } from 'pr1';
+import { useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
-import { BaseNode, Context, NodePath, NodePreference } from '../types';
-import { isCollectionNode } from '../util';
+import { BaseNode, CollectionNode, Context, NodePath, NodePreference } from '../types';
+import { isCollectionNode, iterNodes } from '../util';
 
 
 export interface NodeHierarchyProps {
   context: Context;
-  nodes: BaseNode[];
+  rootNode: CollectionNode;
 }
 
 export function NodeHierarchy(props: NodeHierarchyProps) {
@@ -25,10 +26,30 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
     open: false
   };
 
+  let [query, setQuery] = useState('');
+
+  let allNodes = ImMap(iterNodes(props.rootNode));
+  let trimmedQuery = query.trim().toLowerCase();
+
+  let queriedNodePaths = (trimmedQuery.length > 0)
+    ? ImSet(
+      allNodes
+        .filter((node, nodePath) => {
+          return node.id.toLowerCase().includes(trimmedQuery) || node.label?.toLowerCase().includes(trimmedQuery);
+        })
+        .keys()
+    )
+    : null;
+
   return (
     <div className={styles.root}>
       <div className={styles.search}>
-        <input type="text" placeholder="Search..." autoCorrect="off" /> {/* ??? */}
+        <input
+          type="text"
+          placeholder="Search..."
+          spellCheck={false}
+          onInput={(event) => void setQuery(event.currentTarget.value)}
+          value={query} />
       </div>
 
       <ShadowScrollable direction="vertical" className={styles.contentsContainer}>
@@ -50,25 +71,27 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
           <div className={styles.groupRoot}>
             <div className={styles.groupHeader}>All devices</div>
             <div className={styles.groupList}>
-              {props.nodes.map((node) => (
-                <NodeHierarchyNode
-                  node={node}
-                  nodePath={List([node.id])}
-                  // onSelectEntry={props.onSelectEntry}
-                  openNode={(path) => {
-                    let nodePref = getNodePref(path);
+              {Object.values(props.rootNode.nodes)
+                .map((childNode) => [List([childNode.id]), childNode] as const)
+                .filter(([childNodePath, childNode]) => !queriedNodePaths || isNodeQueried(childNodePath, queriedNodePaths))
+                .map(([childNodePath, childNode]) => (
+                  <NodeHierarchyNode
+                    node={childNode}
+                    nodePath={childNodePath}
+                    openNode={(path) => {
+                      let nodePref = getNodePref(path);
 
-                    setNodePrefs(nodePrefs.set(path, {
-                      ...nodePref,
-                      open: !nodePref.open
-                    }))
-                  }}
-                  openNodePaths={openNodePaths}
-                  selectNode={(path) => void setSelectedNodePath(path)}
-                  selectedNodePaths={ImSet(selectedNodePath ? [selectedNodePath] : [])}
-                  // setOpenEntryPaths={setOpenEntryPaths}
-                  key={node.id} />
-              ))}
+                      setNodePrefs(nodePrefs.set(path, {
+                        ...nodePref,
+                        open: !nodePref.open
+                      }))
+                    }}
+                    queriedNodePaths={queriedNodePaths}
+                    openNodePaths={openNodePaths}
+                    selectNode={(path) => void setSelectedNodePath(path)}
+                    selectedNodePaths={ImSet(selectedNodePath ? [selectedNodePath] : [])}
+                    key={childNode.id} />
+                ))}
             </div>
           </div>
         </div>
@@ -80,6 +103,7 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
 export function NodeHierarchyNode(props: {
   node: BaseNode;
   nodePath: NodePath;
+  queriedNodePaths: ImSet<NodePath> | null;
 
   openNode(path: NodePath): void;
   openNodePaths: ImSet<NodePath>;
@@ -102,15 +126,19 @@ export function NodeHierarchyNode(props: {
           </button>
         </div>
         <div className={styles.collectionList}>
-          {Object.values(props.node.nodes).map((childNode) => (
-            <NodeHierarchyNode
-              node={childNode}
-              nodePath={props.nodePath.push(childNode.id)}
-              selectNode={props.selectNode}
-              selectedNodePaths={props.selectedNodePaths}
-              openNodePaths={props.openNodePaths}
-              openNode={props.openNode}
-              key={childNode.id} />)
+          {Object.values(props.node.nodes)
+            .map((childNode) => [props.nodePath.push(childNode.id), childNode] as const)
+            .filter(([childNodePath, childNode]) => !props.queriedNodePaths || isNodeQueried(childNodePath, props.queriedNodePaths))
+            .map(([childNodePath, childNode]) => (
+              <NodeHierarchyNode
+                node={childNode}
+                nodePath={childNodePath}
+                queriedNodePaths={props.queriedNodePaths}
+                selectNode={props.selectNode}
+                selectedNodePaths={props.selectedNodePaths}
+                openNodePaths={props.openNodePaths}
+                openNode={props.openNode}
+                key={childNode.id} />)
           )}
         </div>
       </div>
@@ -133,4 +161,9 @@ export function NodeHierarchyNode(props: {
       {/* {!!props.node.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />} */}
     </div>
   );
+}
+
+
+function isNodeQueried(nodePath: NodePath, queriedNodePaths: ImSet<NodePath>) {
+  return queriedNodePaths.some((queriedNodePath) => queriedNodePath.slice(0, nodePath.size).equals(nodePath));
 }

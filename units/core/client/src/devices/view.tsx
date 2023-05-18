@@ -9,8 +9,8 @@ import styles from './styles.module.scss';
 
 import { NodeDetail } from './components/node-detail';
 import { NodeHierarchy } from './components/node-hierarchy';
-import { BaseNode, Context, ExecutorState, NodeId, NodePath, NodeState, namespace } from './types';
-import { findNode, isCollectionNode } from './util';
+import { Context, ExecutorState, NodeId, NodePath, NodeState, namespace } from './types';
+import { findNode } from './util';
 
 
 // type PersistentStoreEntries = [
@@ -58,7 +58,7 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
         <div className={styles.list}>
           <NodeHierarchy
             context={props.context}
-            nodes={Object.values(executor.root.nodes)} />
+            rootNode={executor.root} />
         </div>
         {(() => {
           if (!selectedNodePath || !nodeStates) {

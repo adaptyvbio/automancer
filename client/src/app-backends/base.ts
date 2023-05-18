@@ -30,9 +30,6 @@ export interface DraftItem {
 }
 
 export interface AppBackend {
-  persistentStore: Store;
-  sessionStore: Store;
-
   initialize(): Promise<void>;
 
   createDraft(options: { directory: boolean; source: string; }): Promise<DraftItem | null>;
@@ -41,6 +38,7 @@ export interface AppBackend {
   loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;
   requestDraft?(draftId: DraftId): Promise<void>;
 
+  createStore(name: string, options: { type: 'persistent' | 'session' }): Store;
   notify(message: string): Promise<void>;
 }
 

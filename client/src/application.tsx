@@ -1,30 +1,30 @@
 import { Set as ImSet } from 'immutable';
-import { Client, OrdinaryId, PluginName } from 'pr1-shared';
-import * as React from 'react';
+import { Client, PluginName } from 'pr1-shared';
+import { Component } from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
 import type { AppBackend } from './app-backends/base';
+import { ErrorBoundary } from './components/error-boundary';
 import { Sidebar } from './components/sidebar';
-import { createDraftFromItem, Draft, DraftCompilation, DraftId, DraftsRecord } from './draft';
+import { BaseUrl, BaseUrlPathname } from './constants';
+import { ApplicationStoreContext } from './contexts';
+import { Draft, DraftCompilation, DraftId, DraftsRecord, createDraftFromItem } from './draft';
 import type { Host } from './host';
+import { HostInfo } from './interfaces/host';
+import { Plugins, UnknownPlugin } from './interfaces/plugin';
+import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
+import { ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreDefaults, ApplicationSessionStoreEntries, ApplicationStoreConsumer } from './store/application';
+import { StoreManager } from './store/store-manager';
+import { Pool } from './util';
 import { ViewChip } from './views/chip';
 import { ViewChips } from './views/chips';
-import { ViewDesign } from './views/test/design';
+import { ViewConf } from './views/conf';
 import { ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
-import { ViewDrafts } from './views/protocols';
-import { ViewConf } from './views/conf';
-import { Pool } from './util';
-import { HostInfo } from './interfaces/host';
-import { BaseUrl, BaseUrlPathname } from './constants';
-import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-import { ErrorBoundary } from './components/error-boundary';
 import { ViewPluginView } from './views/plugin-view';
-import { concatStoreEntryKeys, StoreManager } from './store/store-manager';
-import { ApplicationStoreConsumer, ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreEntries, ApplicationSessionStoreDefaults } from './store/application';
-import { ApplicationStoreContext } from './contexts';
-import { Plugins, UnknownPlugin } from './interfaces/plugin';
+import { ViewDrafts } from './views/protocols';
+import { ViewDesign } from './views/test/design';
 
 
 const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewPluginView];
@@ -83,7 +83,7 @@ export interface ApplicationState {
   currentRouteData: RouteData | null;
 }
 
-export class Application extends React.Component<ApplicationProps, ApplicationState> {
+export class Application extends Component<ApplicationProps, ApplicationState> {
   controller = new AbortController();
   pool = new Pool();
   unsavedDataCallback: UnsavedDataCallback | null = null;
@@ -91,6 +91,11 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
   persistentStoreManager: StoreManager<ApplicationPersistentStoreEntries>;
   sessionStoreManager: StoreManager<ApplicationSessionStoreEntries>;
   store: ApplicationStoreConsumer;
+
+  pluginStores: Record<PluginName, {
+    persistent: StoreManager<object>;
+    session: StoreManager<object>;
+  }> = {};
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -105,8 +110,8 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
     };
 
 
-    this.persistentStoreManager = new StoreManager(this.appBackend.persistentStore);
-    this.sessionStoreManager = new StoreManager(this.appBackend.sessionStore);
+    this.persistentStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'persistent' }));
+    this.sessionStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'session' }));
 
     this.store = {
       usePersistent: this.persistentStoreManager.useEntry,
@@ -168,7 +173,7 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
         this.setState({ host: null });
       });
 
-    return [client.state, plugins] as const;
+    return [client.state!, plugins] as const;
   }
 
   async loadUnitClients(host: Host = this.state.host!, options?: { development?: unknown; }) {
@@ -330,25 +335,30 @@ export class Application extends React.Component<ApplicationProps, ApplicationSt
 
       // Initialize stores
 
-      await this.persistentStoreManager.initialize([
-        ...ApplicationPersistentStoreDefaults,
-        ...Object.entries(plugins).flatMap(([namespace, plugin]) => {
-          return (plugin.persistentStoreDefaults ?? []).map(([key, value]) => [
-            concatStoreEntryKeys(['plugin', namespace] as const, key),
-            value
-          ] as [['plugin', PluginName, ...OrdinaryId[]], unknown])
-        })
-      ]);
+      await this.persistentStoreManager.initialize(ApplicationPersistentStoreDefaults);
+      await this.sessionStoreManager.initialize(ApplicationSessionStoreDefaults);
 
-      await this.sessionStoreManager.initialize([
-        ...ApplicationSessionStoreDefaults,
-        ...Object.entries(plugins).flatMap(([namespace, plugin]) => {
-          return (plugin.sessionStoreDefaults ?? []).map(([key, value]) => [
-            concatStoreEntryKeys(['plugin', namespace] as const, key),
-            value
-          ] as [['plugin', PluginName, ...OrdinaryId[]], unknown])
-        })
-      ]);
+      for (let plugin of Object.values(plugins)) {
+        let pluginInfo = state.info.units[plugin.namespace];
+
+        if (plugin.persistentStoreDefaults || plugin.sessionStoreDefaults) {
+          let persistentStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}:${pluginInfo.version}`, { type: 'persistent' }));
+          let sessionStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}:${pluginInfo.version}`, { type: 'session' }));
+
+          this.pluginStores[plugin.namespace] = {
+            persistent: persistentStore,
+            session: sessionStore
+          };
+
+          if (plugin.persistentStoreDefaults) {
+            await persistentStore.initialize(plugin.persistentStoreDefaults);
+          }
+
+          if (plugin.sessionStoreDefaults) {
+            await sessionStore.initialize(plugin.sessionStoreDefaults);
+          }
+        }
+      }
 
 
       // List and compile known drafts if available

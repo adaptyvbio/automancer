@@ -25,7 +25,7 @@ await esbuild.build({
 	bundle: true,
 	entryNames: '[name]',
 	format: 'esm',
-	minify: true,
+	minify: !watch,
 	outdir: 'dist/libraries',
 	splitting: true
 });

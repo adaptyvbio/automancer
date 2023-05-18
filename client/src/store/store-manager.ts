@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 
 import { Pool } from '../util';
 import { Store } from './base';
-import { StoreEntries, StoreEntryKey, StoreManagerHookFromEntries } from './types';
+import { StoreEntries, StoreManagerHookFromEntries } from './types';
 
 
 export interface StoreManagerEntryInfo {
@@ -29,9 +29,7 @@ export class StoreManager<Entries extends StoreEntries> {
       });
     }
 
-    for (let [rawKey, value] of defaultValues) {
-      let key = JSON.stringify(transformEntryKey(rawKey));
-
+    for (let [key, value] of Object.entries(defaultValues)) {
       if (!this.entryInfos.has(key)) {
         this.writeEntry(key, value);
       }
@@ -59,9 +57,7 @@ export class StoreManager<Entries extends StoreEntries> {
     }
   }
 
-  useEntry = ((rawKey: StoreEntryKey) => {
-    let key = JSON.stringify(transformEntryKey(rawKey));
-
+  useEntry = ((key: string) => {
     let value = useSyncExternalStore<unknown>(useCallback((listener) => {
       let entryInfo = this.entryInfos.get(key)!;
       entryInfo.listeners.add(listener);
@@ -80,13 +76,4 @@ export class StoreManager<Entries extends StoreEntries> {
       }
     ] as const;
   }) as StoreManagerHookFromEntries<Entries>
-}
-
-
-export function concatStoreEntryKeys<Prefix extends readonly OrdinaryId[], Key extends StoreEntryKey>(prefix: Prefix, key: Key) {
-  return [...prefix, ...(Array.isArray(key) ? key : [key])] as (Key extends OrdinaryId[] ? [...Prefix, ...Key] : [...Prefix, Key]);
-}
-
-export function transformEntryKey(key: StoreEntryKey): OrdinaryId[] {
-  return Array.isArray(key) ? key : [key];
 }

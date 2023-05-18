@@ -38,12 +38,8 @@ export class BrowserAppBackend implements AppBackend {
   #store = idb.createStore('pr1', 'data');
   #storage!: FileSystemDirectoryHandle;
 
-  persistentStore: Store;
-  sessionStore: Store;
-
-  constructor() {
-    this.persistentStore = new BrowserStorageStore(localStorage);
-    this.sessionStore = new BrowserStorageStore(sessionStorage);
+  createStore(name: string, options: { type: 'persistent' | 'session'; }) {
+    return new BrowserStorageStore(options.type === 'persistent' ? localStorage : sessionStorage, name);
   }
 
   async initialize() {

@@ -2,8 +2,7 @@ import { PluginName } from 'pr1-shared';
 import { Application } from './application';
 import { Host } from './host';
 import { PluginContext } from './interfaces/plugin';
-import { StoreConsumer, StoreEntries, StoreEntryKey } from './store/types';
-import { concatStoreEntryKeys } from './store/store-manager';
+import { StoreConsumer, StoreEntries } from './store/types';
 
 
 export function createPluginContext<PersistentStoreEntries extends StoreEntries, SessionStoreEntries extends StoreEntries>(app: Application, host: Host, namespace: PluginName): PluginContext<PersistentStoreEntries, SessionStoreEntries> {
@@ -12,10 +11,8 @@ export function createPluginContext<PersistentStoreEntries extends StoreEntries,
     host: host,
     pool: app.pool,
     store: {
-      usePersistent: (key: StoreEntryKey) =>
-        app.store.usePersistent(concatStoreEntryKeys(['plugin', namespace] as const, key)),
-      useSession: (key: StoreEntryKey) =>
-        app.store.useSession(['plugin', namespace, ...(Array.isArray(key) ? key : [key])])
+      usePersistent: app.pluginStores[namespace]?.persistent.useEntry,
+      useSession: app.pluginStores[namespace]?.session.useEntry
     } as StoreConsumer<PersistentStoreEntries, SessionStoreEntries>
   };
 }

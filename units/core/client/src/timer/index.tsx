@@ -89,9 +89,9 @@ export default {
     );
   },
 
-  persistentStoreDefaults: [
-    ['progressDisplayMode', ProgressDisplayMode.Fraction]
-  ]
-} satisfies Plugin<[
-  ['progressDisplayMode', ProgressDisplayMode]
-]>
+  persistentStoreDefaults: {
+    progressDisplayMode: ProgressDisplayMode.Fraction
+  }
+} satisfies Plugin<{
+  progressDisplayMode: ProgressDisplayMode;
+}>

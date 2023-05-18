@@ -1,4 +1,3 @@
-import { OrdinaryId, PluginName } from 'pr1-shared';
 import { StoreConsumer } from './types';
 
 
@@ -13,27 +12,26 @@ export enum ShortcutDisplayMode {
   Symbols = 2
 }
 
-export type ApplicationPersistentStoreEntries = [
-  ['general.shortcutDisplayMode', ShortcutDisplayMode],
-  ['graph.direction', GraphDirection],
-  ['editor.automaticSave', boolean],
-  ...[['plugin', PluginName, ...OrdinaryId[]], unknown][]
-];
+export interface ApplicationPersistentStoreEntries {
+  'general.shortcutDisplayMode': ShortcutDisplayMode,
+  'graph.direction': GraphDirection,
+  'editor.automaticSave': boolean
+}
 
-export const ApplicationPersistentStoreDefaults: ApplicationPersistentStoreEntries = [
-  ['general.shortcutDisplayMode', ShortcutDisplayMode.Disabled],
-  ['graph.direction', GraphDirection.Vertical],
-  ['editor.automaticSave', false]
-];
+export const ApplicationPersistentStoreDefaults: ApplicationPersistentStoreEntries = {
+  'general.shortcutDisplayMode': ShortcutDisplayMode.Disabled,
+  'graph.direction': GraphDirection.Vertical,
+  'editor.automaticSave': false
+};
 
 
-export type ApplicationSessionStoreEntries = [
-  ...[['plugin', PluginName, ...OrdinaryId[]], unknown][]
-];
+export interface ApplicationSessionStoreEntries {
 
-export const ApplicationSessionStoreDefaults: ApplicationSessionStoreEntries = [
+}
 
-];
+export const ApplicationSessionStoreDefaults: ApplicationSessionStoreEntries = {
+
+};
 
 
 export type ApplicationStoreConsumer = StoreConsumer<ApplicationPersistentStoreEntries, ApplicationSessionStoreEntries>;

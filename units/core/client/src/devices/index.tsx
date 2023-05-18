@@ -1,9 +1,10 @@
+import { Map as ImMap, List } from 'immutable';
 import { Plugin } from 'pr1';
 import { ProtocolBlockName } from 'pr1-shared';
 
 import applierBlock from './blocks/applier';
 import publisherBlock from './blocks/publisher';
-import { namespace } from './types';
+import { PersistentStoreEntries, SessionStoreEntries, namespace } from './types';
 import { DeviceControlView } from './view';
 
 
@@ -19,5 +20,13 @@ export default {
     icon: 'tune',
     label: 'Device control',
     Component: DeviceControlView
-  }]
-} satisfies Plugin
+  }],
+
+  persistentStoreDefaults: {
+    nodePrefs: ImMap(),
+    userNodes: List()
+  },
+  sessionStoreDefaults: {
+    selectedNodePath: null
+  }
+} satisfies Plugin<PersistentStoreEntries, SessionStoreEntries>

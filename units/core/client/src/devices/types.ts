@@ -3,7 +3,7 @@ import { DynamicValue, PluginContext } from 'pr1';
 import { Brand, ClientId, PluginName } from 'pr1-shared';
 
 
-export type Context = PluginContext;
+export type Context = PluginContext<PersistentStoreEntries, SessionStoreEntries>;
 
 export const namespace = ('devices' as PluginName);
 
@@ -77,24 +77,6 @@ export interface NodeState {
 }
 
 
-// User composite node
-interface UserNode {
-  nodes: ImSet<NodePath>;
-}
-
-interface NodePreferences {
-  chartWindowOptionId: number;
-  open: boolean;
-  saved: {
-    open: boolean;
-  };
-}
-
-interface Preferences {
-  nodePrefs: ImMap<NodePath, NodePreferences>;
-  userNodes: List<UserNode>;
-}
-
 export type ContainedValue = {
   time: number;
   value: {
@@ -121,19 +103,23 @@ export interface NodeState {
 
 
 // User composite node
-interface UserNode {
+export interface UserNode {
   nodes: ImSet<NodePath>;
 }
 
-interface NodePreferences {
-  chartWindowOptionId: number;
+export interface NodePreference {
+  // chartWindowOptionId: number;
   open: boolean;
-  saved: {
-    open: boolean;
-  };
+  // saved: {
+  //   open: boolean;
+  // };
 }
 
-interface Preferences {
-  nodePrefs: ImMap<NodePath, NodePreferences>;
+export interface PersistentStoreEntries {
+  nodePrefs: ImMap<NodePath, NodePreference>;
   userNodes: List<UserNode>;
+};
+
+export interface SessionStoreEntries {
+  selectedNodePath: NodePath | null;
 }

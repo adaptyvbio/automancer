@@ -62,10 +62,28 @@
 
 .entry {
   &Root {
-    display: grid;
-    align-items: center;
-    column-gap: 1rem;
-    grid-template-columns: 1fr $icon-size;
+    display: flex;
+    height: 40px;
+
+    border-radius: 4px;
+  }
+
+  &Collapse {
+    display: flex;
+    aspect-ratio: 1;
+    width: auto;
+
+    border: 1px solid transparent;
+    border-radius: 4px;
+
+    &:hover {
+      border-color: #eee;
+    }
+  }
+
+  &Chevron {
+    @include icon();
+    margin: auto;
   }
 
   &Button {
@@ -74,39 +92,15 @@
     column-gap: 0.6rem;
     grid-template-columns: auto 1fr auto;
 
-    height: 40px;
     padding: 0 0.6rem;
-    border: 1px solid transparent;
-    border-radius: 4px;
   }
-
-/* &Connection {
-    width: 1ch;
-    aspect-ratio: 1;
-
-    background-color: $app-green;
-    border-radius: 50%;
-  } */
 
   &Body {
     line-height: 1.2;
   }
 
   &Icon {
-    font-variation-settings:
-      'FILL' 0,
-      'wght' 100,
-      'GRAD' 200,
-      'opsz' 24;
-  }
-
-  &Label {
-    // font-weight: 500;
-
-    // &::after {
-    //   content: " ●";
-    //   color: #0074d9;
-    // }
+    @include icon($weight: 100);
   }
 
   &Sublabel {
@@ -121,23 +115,6 @@
       'wght' 200,
       'GRAD' 200,
       'opsz' 24;
-  }
-
-  &Button:global(._selected) {
-    // background-color: #fafafa;
-    border: 1px solid #eee;
-  }
-
-  &Button:global(._selected) &Icon {
-    font-variation-settings:
-      'FILL' 0,
-      'wght' 200,
-      'GRAD' 200,
-      'opsz' 24;
-  }
-
-  &Button:global(._selected) &Label {
-    font-weight: 600;
   }
 }
 
@@ -161,12 +138,21 @@
   display: none;
 }
 
-.collectionRoot:global(._open) > .entryRoot .entryIcon {
+.collectionRoot:global(._open) > .entryRoot .entryChevron {
   rotate: 90deg;
 }
 
+:is(:not(.collectionRoot), .collectionRoot:not(:has(.entryCollapse:hover))) > .entryRoot:is(:hover, :global(._selected)) {
+  outline: 1px solid #eee;
+  outline-offset: -1px;
+}
 
-.collectionRoot:global(._open) > .entryButton, .entryButton:not(:global(._selected)):hover {
-  // background-color: #fafafa;
-  border-color: #0001;
+.entryRoot:global(._selected) {
+  .entryIcon {
+    @include icon();
+  }
+
+  .entryLabel {
+    font-weight: 600;
+  }
 }

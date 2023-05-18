@@ -1,3 +1,6 @@
+@use "sass:math";
+
+
 @mixin border-radius($top: -1, $right: -1, $bottom: -1, $left: -1) {
   @if $top >= 0 and $bottom >= 0 {
     border-radius: $top $top $bottom $bottom;
@@ -18,6 +21,19 @@
     border-top-right-radius: $right;
     border-bottom-right-radius: $right;
   }
+}
+
+@mixin icon($fill: false, $size: 24px, $style: "sharp", $weight: 200) {
+  font-family: map-get((
+    "rounded": "Material Symbols Rounded",
+    "sharp": "Material Symbols Sharp",
+  ), $style);
+  font-size: $size;
+  font-variation-settings:
+    "FILL" if($fill, 1, 0),
+    "wght" $weight,
+    "GRAD" 200,
+    "opsz" math.div($size, 1px);
 }
 
 @mixin no-scrollbar() {

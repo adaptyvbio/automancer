@@ -111,18 +111,34 @@ export function NodeHierarchyNode(props: {
   selectNode(path: NodePath): void;
   selectedNodePaths: ImSet<NodePath>;
 }) {
+  let isSelected = props.selectedNodePaths.has(props.nodePath);
+
   if (isCollectionNode(props.node)) {
+    let isOpen = props.openNodePaths.has(props.nodePath);
+
     return (
-      <div className={util.formatClass(styles.collectionRoot, { '_open': props.openNodePaths.has(props.nodePath) })}>
-        <div className={styles.entryRoot}>
-          <button type="button" className={styles.entryButton} onClick={() => void props.openNode(props.nodePath)}>
-            <Icon name="chevron_right" style="sharp" className={styles.entryIcon} />
+      <div className={util.formatClass(styles.collectionRoot, { '_open': isOpen })}>
+        <div className={util.formatClass(styles.entryRoot, { '_selected': isSelected })}>
+          <button type="button" className={styles.entryCollapse} onClick={() => void props.openNode(props.nodePath)}>
+            <Icon name="chevron_right" style="sharp" className={styles.entryChevron} />
+          </button>
+          <button
+            type="button"
+            className={styles.entryButton}
+            onClick={() => {
+              props.selectNode(props.nodePath);
+
+              if (!isOpen || isSelected) {
+                props.openNode(props.nodePath);
+              }
+            }}>
+            <Icon name={props.node.icon ?? 'settings_input_hdmi'} className={styles.entryIcon} />
             <div className={styles.entryBody}>
               <div className={styles.entryLabel}>{props.node.label ?? props.node.id}</div>
               {props.node.description && <div className={styles.entrySublabel}>{props.node.description}</div>}
             </div>
             <div className={styles.entryValue}></div>
-            {/* <Icon name="error" style="sharp" className={styles.entryErrorIcon} /> */}
+            {/* <Icon name="error" className={styles.entryErrorIcon} /> */}
           </button>
         </div>
         <div className={styles.collectionList}>
@@ -146,16 +162,18 @@ export function NodeHierarchyNode(props: {
   }
 
   return (
-    <div className={styles.entryRoot}>
+    <div className={util.formatClass(styles.entryRoot, { '_selected': isSelected })}>
       <button
         type="button"
-        className={util.formatClass(styles.entryButton, { '_selected': props.selectedNodePaths.has(props.nodePath) })}
+        className={styles.entryButton}
         onClick={() => void props.selectNode(props.nodePath)}>
-        <Icon name={props.node.icon ?? 'settings_input_hdmi'} style="sharp" className={styles.entryIcon} />
+        <Icon name={props.node.icon ?? 'settings_input_hdmi'} className={styles.entryIcon} />
         <div className={styles.entryBody}>
           <div className={styles.entryLabel}>{props.node.label ?? props.node.id}</div>
           {props.node.description && <div className={styles.entrySublabel}>{props.node.description}</div>}
+          {/* {<Icon name="error" className={styles.entryErrorIcon} />} */}
         </div>
+        <div className={styles.entryValue}>13ºC</div>
         {/* {props.node.detail && <div className={styles.entryValue}>{props.node.detail}</div>} */}
       </button>
       {/* {!!props.node.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />} */}

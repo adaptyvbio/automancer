@@ -8,7 +8,7 @@ from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import NodeId
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
-from pr1.devices.nodes.value import NullType
+from pr1.devices.nodes.value import NullType, ValueNode
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
 
@@ -21,28 +21,33 @@ from . import namespace
 class SystemNode(DeviceNode):
   owner = namespace
 
-  def __init__(self, *, pool: Pool):
+  def __init__(self):
     super().__init__()
 
     self.connected = True
-    self.description = None
+    self.icon = "storage"
     self.id = NodeId("System")
     self.label = "System device"
 
-    self.nodes = {
+    self.nodes: dict[NodeId, ValueNode] = {
       node.id: node for node in {
-        EpochNode(pool=pool),
-        ProcessMemoryUsageNode(pool=pool),
-        RandomNode(pool=pool)
+        EpochNode(),
+        ProcessMemoryUsageNode(),
+        RandomNode()
       }
     }
 
-class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
-  def __init__(self, *, pool: Pool):
+  async def start(self):
+    async with Pool.open() as pool:
+      for node in self.nodes.values():
+        pool.start_soon(node.start())
+
+
+class ProcessMemoryUsageNode(NumericNode, PollableReadableNode):
+  def __init__(self):
     super().__init__(
       dtype='u4',
-      interval=0.3,
-      pool=pool,
+      poll_interval=0.3,
       readable=True,
       unit=ureg.MB
     )
@@ -54,34 +59,33 @@ class ProcessMemoryUsageNode(PollableReadableNode, NumericNode):
 
     self._process = psutil.Process()
 
-  async def _read_value(self):
+  async def _read(self):
     memory_info = self._process.memory_info()
-    return memory_info.rss * ureg.byte
+    self.value = (time.time(), memory_info.rss * ureg.byte)
 
-class EpochNode(PollableReadableNode, NumericNode):
-  def __init__(self, *, pool: Pool):
+class EpochNode(NumericNode, PollableReadableNode):
+  def __init__(self):
     super().__init__(
       dtype='u8',
-      interval=0.3,
-      pool=pool,
+      poll_interval=0.3,
       readable=True,
       unit=ureg.year
     )
 
     self.connected = True
     self.description = "Time since Jan 1st, 1970"
+    self.icon = "schedule"
     self.id = NodeId('epoch')
     self.label = "Unix epoch"
 
-  async def _read_value(self):
-    return time.time() * ureg.sec
+  async def _read(self):
+    self.value = (time.time(), time.time() * ureg.sec)
 
-class RandomNode(PollableReadableNode, NumericNode):
-  def __init__(self, *, pool: Pool):
+class RandomNode(NumericNode, PollableReadableNode):
+  def __init__(self):
     super().__init__(
       dtype='f4',
-      interval=0.2,
-      pool=pool,
+      poll_interval=0.2,
       readable=True
     )
 
@@ -89,11 +93,16 @@ class RandomNode(PollableReadableNode, NumericNode):
     self.id = NodeId('random')
     self.label = "Random"
 
-  async def _read_value(self):
-    return random.random()
+  async def _read(self):
+    self.value = (time.time(), random.random() * ureg.dimensionless)
 
 
 class Executor(BaseExecutor):
-  def __init__(self, conf: Any, *, host: Host):
-    self._device = SystemNode(pool=host.pool)
+  def __init__(self, conf: Any, *, host):
+    self._device = SystemNode()
     host.devices[self._device.id] = self._device
+
+  async def start(self):
+    async with Pool.open() as pool:
+      pool.start_soon(self._device.start())
+      yield

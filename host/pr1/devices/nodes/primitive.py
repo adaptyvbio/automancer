@@ -37,15 +37,6 @@ class EnumNode(ValueNode[T], Generic[T]):
     super().__init__(**kwargs)
     self.cases = cases
 
-  async def _read(self):
-    old_value = self.value
-    self.value = (time.time(), await self._read_value())
-
-    return (old_value is None) or (self.value[1] != old_value[1])
-
-  async def _read_value(self) -> T:
-    raise NotImplementedError
-
   def _export_spec(self):
     return {
       "type": "enum",

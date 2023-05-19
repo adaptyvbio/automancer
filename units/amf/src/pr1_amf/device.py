@@ -1,17 +1,19 @@
 import asyncio
+import time
 from typing import Callable, Optional
 
 from amf_rotary_valve import AMFDevice, AMFDeviceConnectionError
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
 from pr1.devices.nodes.primitive import EnumNode, EnumNodeCase
+from pr1.devices.nodes.readable import PollableReadableNode, StableReadableNode
 from pr1.util.asyncio import aexit_handler, run_double, shield
 from pr1.util.pool import Pool
 
 from . import logger, namespace
 
 
-class RotaryValvePositionNode(EnumNode[int]):
+class RotaryValvePositionNode(EnumNode[int], StableReadableNode):
   def __init__(
     self,
     *,
@@ -44,11 +46,11 @@ class RotaryValvePositionNode(EnumNode[int]):
   async def __aexit__(self):
     self.connected = False
 
-  async def _read_value(self):
+  async def _read(self):
     assert (device := self._master._device)
 
     try:
-      return await device.get_valve()
+      self.value = (time.time(), await device.get_valve())
     except AMFDeviceConnectionError as e:
       raise NodeUnavailableError from e
 
@@ -62,7 +64,6 @@ class RotaryValvePositionNode(EnumNode[int]):
 
 
 class RotaryValveDevice(DeviceNode):
-  model = "LSP rotary valve"
   owner = namespace
 
   def __init__(
@@ -77,6 +78,7 @@ class RotaryValveDevice(DeviceNode):
     super().__init__()
 
     self.connected = False
+    self.description = "AMF rotary valve"
     self.id = NodeId(id)
     self.label = label
 
@@ -101,27 +103,30 @@ class RotaryValveDevice(DeviceNode):
         logger.info(f"Configuring {self._label}")
 
         try:
-          # Initialize the rotary valve
-          if not await self._device.get_valve():
-            await self._device.home()
+          try:
+            # Initialize the rotary valve
+            if not await self._device.get_valve():
+              await self._device.home()
 
-          self.connected = True
+            self.connected = True
 
-          async with self._node:
-            logger.info(f"Connected to {self._label}")
+            async with self._node:
+              logger.info(f"Connected to {self._label}")
 
-            if not ready:
-              ready = True
-              yield
+              if not ready:
+                ready = True
+                yield
 
-            # Wait for the device to disconnect
-            await self._device.wait_error()
-            logger.warning(f"Lost connection to {self._label}")
+              # Wait for the device to disconnect
+              await self._device.wait_error()
+              logger.warning(f"Lost connection to {self._label}")
+          finally:
+            self.connected = False
+
+            await shield(self._device.close())
+            self._device = None
         except* (AMFDeviceConnectionError, NodeUnavailableError):
           pass
-        finally:
-          self.connected = False
-          await shield(self._device.close())
 
       # If the above failed, still mark the device as ready
       if not ready:

@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Event, Future, Lock
 from enum import IntEnum
-from typing import Any, Generic, NewType, Optional, TypeVar, final
+from typing import Any, Awaitable, Generic, Optional, TypeVar, final
 
 from ...util.asyncio import DualEvent, race
 from ...util.pool import Pool
@@ -106,6 +106,13 @@ class ValueNode(BaseNode, ABC, Generic[T]):
     ...
 
   # Called by the consumer
+
+  async def _set_value_at_half_time(self, coro: Awaitable[T], /):
+    time_before = time.time()
+    value = await coro
+    time_after = time.time()
+
+    self.value = ((time_before + time_after) * 0.5, value)
 
   def claim(self, marker: Optional[Any] = None, *, force: bool = False):
     if not self.writable:

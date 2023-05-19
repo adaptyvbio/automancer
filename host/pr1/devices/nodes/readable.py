@@ -121,14 +121,14 @@ class PollableReadableNode(SubscribableReadableNode):
   A readable node which whose changes can only be detected by polling.
   """
 
-  def __init__(self, *, interval: float = 1.0, **kwargs):
+  def __init__(self, *, poll_interval: float = 1.0, **kwargs):
     """
     Parameters
       min_interval: The minimal delay, in seconds, to wait between two calls to `_read()`.
     """
 
     super().__init__(**kwargs)
-    self._interval = interval
+    self.__poll_interval = poll_interval
 
   # Internal
 
@@ -141,7 +141,16 @@ class PollableReadableNode(SubscribableReadableNode):
 
       yield
 
-      delay = self._interval - (time.time() - before_time)
+      delay = self.__poll_interval - (time.time() - before_time)
 
       if delay > 0:
         await asyncio.sleep(delay)
+
+
+class StableReadableNode(SubscribableReadableNode):
+  async def _subscribe(self):
+    await self.read()
+    yield
+
+    await self.wait_disconnected()
+    raise NodeUnavailableError

@@ -143,9 +143,9 @@ def aexit_handler(func: Callable[[Any], Awaitable[None]], /):
       exceptions.append(e)
 
     if len(exceptions) > 1:
-      raise BaseExceptionGroup("Asynchronous exit handler", exceptions)
+      raise BaseExceptionGroup("Asynchronous exit handler", exceptions) from None
     elif exceptions:
-      raise exceptions[0]
+      raise exceptions[0] from None
 
   return new_func
 

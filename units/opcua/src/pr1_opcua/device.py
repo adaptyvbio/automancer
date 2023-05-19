@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, cast, final
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
 from asyncua.ua.uatypes import NodeId as UANodeId
-from asyncua.ua.uaerrors import UaStatusCodeError
+from asyncua.ua.uaerrors import BadNodeIdUnknown, UaStatusCodeError
 from asyncua.common.subscription import SubHandler
 from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
@@ -78,10 +78,10 @@ class OPCUADeviceNode(SubscribableReadableNode):
         logger.error(f"Type mismatch of {self._long_label}, expected {self._type}, found {found_type}")
 
         raise NodeUnavailableError
-    except AsyncUaError as e:
-      raise NodeUnavailableError from e
-    except ua.uaerrors._auto.BadNodeIdUnknown as e: # type: ignore
+    except BadNodeIdUnknown as e:
       logger.error(f"Missing {self._long_label}")
+      raise NodeUnavailableError from e
+    except AsyncUaError as e:
       raise NodeUnavailableError from e
     else:
       self.connected = True
@@ -134,10 +134,11 @@ class OPCUADeviceNode(SubscribableReadableNode):
           ))
 
   async def _read(self):
+    async def read():
+      return self._transform_read(await self._device._read_worker.write(self))
+
     try:
-      old_value = self.value
-      self.value = (time.time(), self._transform_read(await self._device._read_worker.write(self)))
-      return (old_value is None) or (self.value != old_value)
+      await self._set_value_at_half_time(read())
     except AsyncUaError as e:
       raise NodeUnavailableError from e
 
@@ -162,7 +163,7 @@ class OPCUADeviceNodeSubHandler(SubHandler):
     # The 'is' operator doesn't work here.
     # The timestamp will be None if the value was changed by a write.
     if node == self._opcua_node._node and (change_datetime := data.monitored_item.Value.SourceTimestamp):
-      self._opcua_node.value = (change_datetime.timestamp(), val)
+      self._opcua_node.value = (change_datetime.timestamp(), self._opcua_node._transform_read(val))
       self._opcua_node._trigger_listeners(mode='value')
       self._ready_event.set()
 

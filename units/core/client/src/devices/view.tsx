@@ -9,22 +9,19 @@ import styles from './styles.module.scss';
 
 import { NodeDetail } from './components/node-detail';
 import { NodeHierarchy } from './components/node-hierarchy';
-import { Context, ExecutorState, NodeId, NodePath, NodeState, namespace } from './types';
+import { Context, ExecutorState, NodeId, NodePath, NodeState, NodeStateChange, NodeStates, namespace } from './types';
 import { findNode } from './util';
-
-
-// type PersistentStoreEntries = [
-//   [['plugin', typeof namespace, 'selected-entry'], NodePath | null]
-// ];
 
 
 export function DeviceControlView(props: PluginViewComponentProps<Context>) {
   let executor = (props.context.host.state.executors[namespace] as ExecutorState);
 
   let [selectedNodePath, setSelectedNodePath] = props.context.store.useSession('selectedNodePath');
-  let [nodeStates, setNodeStates] = useState<ImMap<NodePath, NodeState> | null>(null);
+  let [nodeStates, setNodeStates] = useState<NodeStates | null>(null);
 
   useEffect(() => {
+    let controller = new AbortController();
+
     props.context.pool.add(async () => {
       let { channelId } = (await props.context.host.client.request({
         type: 'requestExecutor',
@@ -34,21 +31,30 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
         }
       }) as { channelId: ChannelId; });
 
-      let channel = props.context.host.client.listen<[NodeId[], NodeState][], {}>(channelId);
+      let channel = props.context.host.client.listen<[NodeId[], NodeStateChange][], {}>(channelId);
 
-      for await (let change of channel) {
-        setNodeStates((nodeStates) => (nodeStates ?? ImMap()).withMutations((nodeStatesMut) => {
-          for (let [nodePath, nodeState] of change) {
-            nodeStatesMut.set(List(nodePath), nodeState);
-          }
-        }));
-      }
-
-      return () => {
+      controller.signal.addEventListener('abort', () => {
         channel.send({});
         channel.close();
-      };
+      });
+
+      for await (let nodeStateChanges of channel) {
+        setNodeStates((nodeStates) => (nodeStates ?? ImMap<NodePath, NodeState>()).merge(ImMap<NodePath, NodeState>(
+          nodeStateChanges.map(([rawNodePath, nodeStateChange]) => {
+            let nodePath = List(rawNodePath);
+            let nodeState = nodeStates?.get(nodePath);
+
+            return [nodePath, {
+              connected: nodeStateChange.connected,
+              history: (nodeState?.history ?? []),
+              value: nodeStateChange.value
+            }];
+          })
+        )));
+      }
     });
+
+    return () => void controller.abort();
   }, []);
 
   return (
@@ -58,10 +64,11 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
         <div className={styles.list}>
           <NodeHierarchy
             context={props.context}
+            nodeStates={nodeStates}
             rootNode={executor.root} />
         </div>
         {(() => {
-          if (!selectedNodePath || !nodeStates) {
+          if (!selectedNodePath || !nodeStates || 1) {
             return null;
           }
 

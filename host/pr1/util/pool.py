@@ -190,19 +190,29 @@ class Pool(HierarchyNode):
     if cancelled:
       raise asyncio.CancelledError
 
-  def start_soon(self, coro: Coroutine[Any, Any, T], /, *, critical: bool = False, frame_skip: int = 0, priority: int = 0) -> Task[T]:
+  def start_soon(
+    self,
+    coro: Coroutine[Any, Any, T],
+    /, *,
+    critical: bool = False,
+    frame_skip: int = 0,
+    name: Optional[str] = None,
+    priority: int = 0
+  ) -> Task[T]:
     """
     Creates a task from the provided coroutine and adds it to the pool.
 
     Parameters:
       coro: The coroutine to be started soon.
       critical: Whether to close the pool when this task finishes.
+      name: The name of the task.
+      priority: The priority of the task. Tasks with a lower priority will only be cancelled once all tasks with a higher priority have finished.
     """
 
     if (not self._open) and (not self._preopen):
       raise Exception("Pool not open")
 
-    task = asyncio.create_task(coro)
+    task = asyncio.create_task(coro, name=name)
     self.add(task, frame_skip=(frame_skip + 1), priority=priority)
 
     if critical:
@@ -242,7 +252,7 @@ class Pool(HierarchyNode):
     self.start_soon(wrapper_coro(), frame_skip=1, priority=priority)
     await ready_event.wait()
 
-  def start_soon_with_handle(self, coro: Coroutine[Any, Any, Any], /):
+  def start_soon_with_handle(self, coro: Coroutine[Any, Any, Any], /, *, name: Optional[str] = None, priority: int = 0):
     if (not self._open) and (not self._preopen):
       raise Exception("Pool not open")
 
@@ -257,14 +267,14 @@ class Pool(HierarchyNode):
           await asyncio.shield(inner_task)
         except asyncio.CancelledError:
           if inner_task.cancelled():
-            return
+            raise
 
           if (not handle.interrupted()) or cancelled:
             inner_task.cancel()
 
           cancelled = True
 
-    self.start_soon(outer_func())
+    self.start_soon(outer_func(), name=name, priority=priority)
 
     return handle
 

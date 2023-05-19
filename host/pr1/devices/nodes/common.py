@@ -75,8 +75,11 @@ class BaseNode(HierarchyNode, ABC):
 
   @connected.setter
   def connected(self, value: bool, /):
+    was_connected = self.connected
     self._connected_event.toggle(value)
-    self._trigger_listeners(mode='connection')
+
+    if value != was_connected:
+      self._trigger_listeners(mode='connection')
 
   def export(self):
     return {

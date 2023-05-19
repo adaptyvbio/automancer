@@ -1,15 +1,17 @@
 import { Map as ImMap, Set as ImSet, List } from 'immutable';
 import { ShadowScrollable, util, Icon } from 'pr1';
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
-import { BaseNode, CollectionNode, Context, NodePath, NodePreference } from '../types';
-import { isCollectionNode, iterNodes } from '../util';
+import { BaseNode, CollectionNode, Context, NodePath, NodePreference, NodeStates } from '../types';
+import { isCollectionNode, isValueNode, iterNodes } from '../util';
+import { formatQuantity } from '../format';
 
 
 export interface NodeHierarchyProps {
   context: Context;
+  nodeStates: NodeStates | null;
   rootNode: CollectionNode;
 }
 
@@ -78,6 +80,7 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
                   <NodeHierarchyNode
                     node={childNode}
                     nodePath={childNodePath}
+                    nodeStates={props.nodeStates}
                     openNode={(path) => {
                       let nodePref = getNodePref(path);
 
@@ -103,6 +106,7 @@ export function NodeHierarchy(props: NodeHierarchyProps) {
 export function NodeHierarchyNode(props: {
   node: BaseNode;
   nodePath: NodePath;
+  nodeStates: NodeStates | null;
   queriedNodePaths: ImSet<NodePath> | null;
 
   openNode(path: NodePath): void;
@@ -135,7 +139,7 @@ export function NodeHierarchyNode(props: {
             <Icon name={props.node.icon ?? 'settings_input_hdmi'} className={styles.entryIcon} />
             <div className={styles.entryBody}>
               <div className={styles.entryLabel}>{props.node.label ?? props.node.id}</div>
-              {props.node.description && <div className={styles.entrySublabel}>{props.node.description}</div>}
+              {props.node.description && <div className={styles.entryDescription}>{props.node.description}</div>}
             </div>
             <div className={styles.entryValue}></div>
             {/* <Icon name="error" className={styles.entryErrorIcon} /> */}
@@ -148,6 +152,7 @@ export function NodeHierarchyNode(props: {
             .map(([childNodePath, childNode]) => (
               <NodeHierarchyNode
                 node={childNode}
+                nodeStates={props.nodeStates}
                 nodePath={childNodePath}
                 queriedNodePaths={props.queriedNodePaths}
                 selectNode={props.selectNode}
@@ -161,6 +166,19 @@ export function NodeHierarchyNode(props: {
     );
   }
 
+  let nodeState = props.nodeStates?.get(props.nodePath);
+  let entryValue: ReactNode = null;
+
+  if (isValueNode(props.node)) {
+    if (nodeState?.value?.value && (nodeState.value.value.type === 'default')) {
+      if (props.node.spec?.type === 'numeric') {
+        entryValue = formatQuantity((nodeState.value.value.value as { magnitude: number; }).magnitude, props.node.spec.dimensionality, { style: 'short' });
+      }
+    } else {
+      entryValue = '–';
+    }
+  }
+
   return (
     <div className={util.formatClass(styles.entryRoot, { '_selected': isSelected })}>
       <button
@@ -170,11 +188,10 @@ export function NodeHierarchyNode(props: {
         <Icon name={props.node.icon ?? 'settings_input_hdmi'} className={styles.entryIcon} />
         <div className={styles.entryBody}>
           <div className={styles.entryLabel}>{props.node.label ?? props.node.id}</div>
-          {props.node.description && <div className={styles.entrySublabel}>{props.node.description}</div>}
+          {props.node.description && <div className={styles.entryDescription}>{props.node.description}</div>}
           {/* {<Icon name="error" className={styles.entryErrorIcon} />} */}
         </div>
-        <div className={styles.entryValue}>13ºC</div>
-        {/* {props.node.detail && <div className={styles.entryValue}>{props.node.detail}</div>} */}
+        <div className={styles.entryValue}>{entryValue}</div>
       </button>
       {/* {!!props.node.error && <Icon name="error" style="sharp" className={styles.entryErrorIcon} />} */}
     </div>

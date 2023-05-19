@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from asyncio import Event, Lock
+from asyncio import Event, Future, Lock
 from enum import IntEnum
 from typing import Any, Generic, NewType, Optional, TypeVar, final
 
@@ -18,8 +18,6 @@ Null = NullType()
 
 
 T = TypeVar('T')
-
-NodeRevision = NewType('NodeRevision', int)
 
 class ValueNode(BaseNode, ABC, Generic[T]):
   def __init__(
@@ -42,9 +40,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
     super().__init__()
 
     self._pool: Pool
-
-    # This is updated each time _read() returns true, meaning self.value changed.
-    self._revision = NodeRevision(0)
 
     # None -> value is unknown
     self.value: Optional[tuple[float, T | NullType]] = None
@@ -76,14 +71,11 @@ class ValueNode(BaseNode, ABC, Generic[T]):
       NodeUnavailableError
     """
 
-  async def _read(self) -> bool:
+  async def _read(self) -> None:
     """
     Updates the node's value.
 
     There will never be two concurrent calls to this method nor any call when the node is disconnected. The node may however be disconnected during the call, in which it might be cancelled; if not, this method should raise a `NodeUnavailableError` upon reaching a disconnection error.
-
-    Returns
-      `True` if the node's value has changed, `False` otherwise.
 
     Raises
       asyncio.CancelledError
@@ -138,16 +130,16 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
     async with self._read_lock:
       if self.connected:
+        old_value = self.value
+
         try:
-          changed = await self._read()
+          await self._read()
         except NodeUnavailableError:
           pass
         else:
-          if changed:
-            self._revision = NodeRevision(self._revision + 1)
+          if self.value != old_value:
             self._trigger_listeners(mode='value')
-
-          self._trigger_listeners(mode='content')
+          # self._trigger_listeners(mode='content')
 
           return True
 
@@ -159,6 +151,8 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
       if self.writable:
         self.writer = NodeValueWriter(self)
+
+      await Future()
 
   def watch_content(self, listener: NodeListener, /):
     return self._attach_listener(listener, mode='content')
@@ -230,7 +224,7 @@ class NodeValueWriter(Generic[T]):
     self._change_event.set()
 
   async def _worker(self):
-    from .watcher import Watcher, WatchModes
+    from .watcher import Watcher
 
     async with Watcher([self.node], modes={'connection', 'value'}) as watcher:
       while True:

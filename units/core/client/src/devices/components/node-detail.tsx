@@ -3,10 +3,10 @@ import * as fc from 'd3fc';
 import { Button, StaticSelect } from 'pr1';
 import { Component, createRef } from 'react';
 
+import styles from '../styles.module.scss';
+
 import { BaseNode, Context, ExecutorState, NodePath, NodeState, namespace } from '../types';
 import { isValueNode } from '../util';
-
-import styles from '../styles.module.scss';
 
 
 export interface WindowOption {

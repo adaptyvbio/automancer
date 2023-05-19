@@ -44,9 +44,6 @@ class Agent:
 
 
 class Channel(Protocol):
-  def __init__(self, send: Callable[[Any], Awaitable[None]]):
-    ...
-
   async def close(self):
     ...
 
@@ -57,17 +54,15 @@ class Channel(Protocol):
 class GeneratorChannel(Channel):
   def __init__(self, generator: AsyncGenerator[Any, None], /, agent: Agent, id: ChannelId):
     self.id = id
-    self._task: Task[None]
 
-    async def loop():
+    async def job():
       async for message in generator:
         await agent._send(message, channel_id=self.id)
 
-    self._task = asyncio.create_task(loop())
-    agent.pool.add(self._task)
+    self._handle = agent.pool.start_soon_with_handle(job(), name=f"Channel {self.id})")
 
   async def close(self):
-    self._task.cancel()
+    self._handle.interrupt()
 
   async def receive(self, data: Any, /):
     await self.close()

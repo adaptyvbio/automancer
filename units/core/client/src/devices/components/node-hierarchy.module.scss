@@ -95,17 +95,21 @@
     padding: 0 0.6rem;
   }
 
-  &Body {
-    line-height: 1.2;
-  }
-
   &Icon {
     @include icon($weight: 100);
   }
 
-  &Sublabel {
+  &Body {
+    line-height: 1.2;
+  }
+
+  &Description {
     color: #666;
     font-size: 0.85em;
+  }
+
+  &Value {
+    font-variant-numeric: tabular-nums;
   }
 
   &ErrorIcon {
@@ -128,7 +132,7 @@
   }
 }
 
-.collectionList {
+.collectionList, .groupList {
   display: flex;
   flex-direction: column;
   row-gap: 0.2rem;
@@ -154,5 +158,9 @@
 
   .entryLabel {
     font-weight: 600;
+  }
+
+  .entryDescription {
+    font-weight: 500;
   }
 }

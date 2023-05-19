@@ -160,6 +160,9 @@ class BaseExecutor:
   async def instruct(self, instruction):
     pass
 
+  async def request(self, request: Any, /, agent):
+    ...
+
   """
   Hashes this executor options of this setup.
 

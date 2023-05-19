@@ -61,11 +61,11 @@ class NumericNode(ValueNode[Quantity], ABC):
   def _export_spec(self):
     return {
       "type": "numeric",
-      "dimensionality": dict(self.unit.dimensionality), # type: ignore
+      "dimensionality": { dimension[1:-1]: factor for dimension, factor in self.unit.dimensionality.items() },
       "unitFormatted": (f"{self.unit:~H}" or None)
     }
 
   def _export_value(self, value: Quantity, /):
     return {
-      "magnitude": value.m_as(self.unit)
+      "magnitude": value.to_base_units().magnitude
     }

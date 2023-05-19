@@ -1,13 +1,14 @@
 import asyncio
+import time
 import warnings
 from abc import abstractmethod
 from asyncio import Event
 from typing import AsyncIterator, Optional
 
 from ...util.asyncio import Cancelable
-from ...util.pool import Pool, TaskHandle
+from ...util.pool import TaskHandle
 from .common import NodeListener, NodeUnavailableError
-from .value import NodeRevision, ValueNode
+from .value import ValueNode
 
 
 class WatchableNode(ValueNode):
@@ -132,14 +133,15 @@ class PollableReadableNode(SubscribableReadableNode):
   # Internal
 
   async def _subscribe(self):
-    last_revision: Optional[NodeRevision] = None
-
     while True:
+      before_time = time.time()
+
       if not await self.read():
         raise NodeUnavailableError
 
-      if self._revision != last_revision:
-        last_revision = self._revision
-        yield
+      yield
 
-      await asyncio.sleep(self._interval)
+      delay = self._interval - (time.time() - before_time)
+
+      if delay > 0:
+        await asyncio.sleep(delay)

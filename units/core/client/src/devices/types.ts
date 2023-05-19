@@ -62,7 +62,7 @@ export interface NodeStateLocation {
 }
 
 
-export interface NodeState {
+export interface NodeStateChange {
   connected: boolean;
   value: ContainedValue | null;
   writable: {
@@ -76,28 +76,22 @@ export interface NodeState {
   } | null;
 }
 
+export interface NodeState {
+  connected: boolean;
+  history: ContainedValue[];
+  value: ContainedValue | null;
+}
 
-export type ContainedValue = {
+export type NodeStates = ImMap<NodePath, NodeState>;
+
+
+export interface ContainedValue {
   time: number;
   value: {
     type: 'null';
   } | {
     type: 'default';
     value: unknown;
-  } | null;
-}
-
-export interface NodeState {
-  connected: boolean;
-  value: ContainedValue | null;
-  writable: {
-    owner: {
-      type: 'client';
-      clientId: ClientId;
-    } | {
-      type: 'unknown';
-    } | null;
-    targetValue: ContainedValue;
   } | null;
 }
 

@@ -47,7 +47,7 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
             return [nodePath, {
               connected: nodeStateChange.connected,
               history: (nodeState?.history ?? []),
-              value: nodeStateChange.value
+              lastValueEvent: nodeStateChange.valueEvent
             }];
           })
         )));
@@ -68,28 +68,27 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
             rootNode={executor.root} />
         </div>
         {(() => {
-          if (!selectedNodePath || !nodeStates || 1) {
+          if (!selectedNodePath || !nodeStates) {
             return null;
           }
 
-          let nodePath = selectedNodePath;
-          let node = findNode(executor.root, nodePath);
+          let node = findNode(executor.root, selectedNodePath);
 
           if (!node) {
             setSelectedNodePath(null);
             return null;
           }
 
-          let nodeState = nodeStates.get(nodePath)!;
+          let nodeState = nodeStates.get(selectedNodePath)!;
 
           return (
             <NodeDetail
               context={props.context}
               executor={executor}
               node={node}
-              nodePath={nodePath}
+              nodePath={selectedNodePath}
               nodeState={nodeState}
-              key={nodePath.join('.')} />
+              key={selectedNodePath.join('.')} />
           );
         })()}
 

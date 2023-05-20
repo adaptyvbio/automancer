@@ -1,12 +1,14 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
 import { Button, StaticSelect } from 'pr1';
-import { Component, createRef } from 'react';
+import { Component, ReactNode, createRef } from 'react';
 
 import styles from '../styles.module.scss';
 
 import { BaseNode, Context, ExecutorState, NodePath, NodeState, namespace } from '../types';
 import { isValueNode } from '../util';
+import { NumericValue } from '../types';
+import { formatQuantity } from '../format';
 
 
 export interface WindowOption {
@@ -240,9 +242,8 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                       <p className={styles.detailConnectionMessage}>The device is disconnected.</p>
                     </div> */}
           </div>
-          <div className={styles.detailChartRoot}>
+          {/* <div className={styles.detailChartRoot}>
             <div className={styles.detailChartToolbar}>
-              {/* <div>Frequency: 50 Hz</div> */}
               <StaticSelect
                 options={ChartWindowOptions}
                 selectOption={(chartWindowOption) => void this.setState({ chartWindowOption })}
@@ -261,33 +262,42 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                   </div>
                 )}
             </div>
-          </div>
+          </div> */}
           {isValueNode(node) && (
             <div className={styles.detailValues}>
               <div className={styles.detailValueRoot}>
                 <div className={styles.detailValueLabel}>{nodeState.connected ? 'Current value' : 'Last known value'}</div>
                 <div className={styles.detailValueQuantity}>
-                  <div className={styles.detailValueMagnitude}>
-                    {(() => {
-                      let container = nodeState.value;
+                  {(() => {
+                    let lastValueEvent = nodeState.lastValueEvent;
 
-                      if (!container?.value) {
-                        // The value is unknown.
-                        return '–';
-                      } if (container.value.type === 'null') {
-                        // The device is disabled.
-                        return '[disabled]';
-                      }
+                    let magnitude: ReactNode;
+                    let unit: ReactNode | null = null;
 
+                    if (!lastValueEvent?.value) {
+                      // The value is unknown.
+                      magnitude = '–';
+                    } else if (lastValueEvent.value.type === 'null') {
+                      // The device is disabled.
+                      magnitude = '[disabled]';
+                    } else {
                       switch (node.spec.type) {
                         case 'numeric':
-                          return (container.value.value as { magnitude: number; }).magnitude.toFixed(2);
+                          [magnitude, unit] = formatQuantity((lastValueEvent.value.innerValue as NumericValue).magnitude, node.spec.dimensionality, { sign: true, style: 'short' });
+                          break;
                         default:
-                          return '[unknown]';
+                          magnitude = '[unknown]';
+                          break;
                       }
-                    })()}
-                  </div>
-                  {(node.spec.type === 'numeric') && node.spec.unitFormatted && (nodeState.value?.value?.type === 'default') && <div className={styles.detailValueUnit}>{node.spec.unitFormatted}</div>}
+                    }
+
+                    return (
+                      <>
+                        <div className={styles.detailValueMagnitude}>{magnitude}</div>
+                        {unit && <div className={styles.detailValueUnit}>{unit}</div>}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <div className={styles.detailValueRoot}>

@@ -1,10 +1,10 @@
 import { Map as ImMap, Set as ImSet, List } from 'immutable';
 import { ShadowScrollable, util, Icon } from 'pr1';
-import { ReactNode, useState } from 'react';
+import { Fragment, ReactNode, useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
-import { BaseNode, CollectionNode, Context, NodePath, NodePreference, NodeStates } from '../types';
+import { BaseNode, CollectionNode, Context, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
 import { isCollectionNode, isValueNode, iterNodes } from '../util';
 import { formatQuantity } from '../format';
 
@@ -170,9 +170,18 @@ export function NodeHierarchyNode(props: {
   let entryValue: ReactNode = null;
 
   if (isValueNode(props.node)) {
-    if (nodeState?.value?.value && (nodeState.value.value.type === 'default')) {
+    let lastValue = nodeState?.lastValueEvent?.value;
+
+    if (lastValue && (lastValue.type === 'default')) {
       if (props.node.spec?.type === 'numeric') {
-        entryValue = formatQuantity((nodeState.value.value.value as { magnitude: number; }).magnitude, props.node.spec.dimensionality, { style: 'short' });
+        let [magnitude, unit] = formatQuantity((lastValue.innerValue as NumericValue).magnitude, props.node.spec.dimensionality, { style: 'short' });
+
+        entryValue = [magnitude, (unit ? <Fragment key="0">&nbsp;{unit}</Fragment> : [])];
+      } else if (props.node.spec?.type === 'enum') {
+        let caseId = lastValue.innerValue as (number | string);
+        let specCase = props.node.spec.cases.find((specCase) => (specCase.id === caseId))!;
+
+        entryValue = (specCase.label ?? specCase.id);
       }
     } else {
       entryValue = '–';

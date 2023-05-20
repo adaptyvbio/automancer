@@ -2,7 +2,7 @@ import { Map as ImMap } from 'immutable';
 import { Fragment, ReactNode } from 'react';
 
 
-export type Dimension = 'byte' | 'length' | 'mass' | 'time';
+export type Dimension = 'length' | 'mass' | 'temperature' | 'time';
 export type RawDimensionality = Partial<Record<Dimension, number>>;
 export type Dimensionality = ImMap<Dimension, number>;
 export const Dimensionality = ImMap<Dimension, number>;
@@ -30,10 +30,10 @@ export const Units = ImMap<Dimensionality, UnitDef>([
     { long: 'pascal', short: 'Pa' }
   ], [
     Dimensionality({ length: 1, mass: 1, time: -2 }),
-    { long: 'Newton', short: 'N' }
+    { long: 'newton', short: 'N' }
   ], [
-    Dimensionality({ byte: 1 }),
-    { long: 'byte', short: 'B' }
+    Dimensionality({ temperature: 1 }),
+    { long: 'kelvin', short: 'K' }
   ]
 ]);
 
@@ -64,7 +64,7 @@ export const Prefixes = [
 ];
 
 
-export function formatQuantity(value: number, rawDimensionality: RawDimensionality, options: { style: 'long' | 'short' }): ReactNode {
+export function formatQuantity(value: number, rawDimensionality: RawDimensionality, options: { sign?:  boolean; style: 'long' | 'short' }) {
   let valueLog = Math.floor(Math.log10(Math.abs(value)) / 3);
   let prefix = Prefixes[BasePrefixIndex - valueLog];
   let valueScaled = value * (10 ** (-valueLog * 3));
@@ -72,44 +72,49 @@ export function formatQuantity(value: number, rawDimensionality: RawDimensionali
   let dimensionality = Dimensionality(rawDimensionality).filter((factor) => (factor !== 0));
   let unitDef = Units.get(dimensionality)!;
 
-  let output: ReactNode[] = [];
+  let magnitudeOutput: ReactNode[] = [];
+  let unitOutput: ReactNode[] | null;
 
   if (valueScaled < 0) {
-    output.push(<Fragment key="0">&minus;&thinsp;</Fragment>);
+    magnitudeOutput.push(<Fragment key="0">&minus;&thinsp;</Fragment>);
+  } else if (options.sign) {
+    magnitudeOutput.push(<Fragment key="0">+&thinsp;</Fragment>);
   }
 
-  output.push(Math.abs(valueScaled).toFixed(2));
+  magnitudeOutput.push(Math.abs(valueScaled).toFixed(2));
 
   if (prefix || !dimensionality.isEmpty()) {
-    output.push(<Fragment key="1">&nbsp;</Fragment>);
-  }
+    unitOutput = [];
 
-  if (prefix) {
-    output.push(`${prefix[options.style]}`);
-  }
+    if (prefix) {
+      unitOutput.push(`${prefix[options.style]}`);
+    }
 
-  if (unitDef) {
-    output.push(unitDef[options.style]);
-  } else {
-    for (let [index, [dimension, factor]] of dimensionality.sortBy((factor) => -factor).toArray().entries()) {
-      let isFirst = (index === 0);
-      let unitDef = Units.get(Dimensionality({ [dimension]: 1 }))!;
+    if (unitDef) {
+      unitOutput.push(unitDef[options.style]);
+    } else {
+      for (let [index, [dimension, factor]] of dimensionality.sortBy((factor) => -factor).toArray().entries()) {
+        let isFirst = (index === 0);
+        let unitDef = Units.get(Dimensionality({ [dimension]: 1 }))!;
 
-      if (!isFirst && (factor !== 1)) {
-        output.push((factor > 0) ? '·' : '/');
-      }
+        if (!isFirst && (factor !== 1)) {
+          unitOutput.push((factor > 0) ? '·' : '/');
+        }
 
-      output.push(unitDef[options.style]);
+        unitOutput.push(unitDef[options.style]);
 
-      if ((factor !== 1) && (isFirst || (factor !== -1))) {
-        output.push(
-          <sup key={dimension}>{isFirst ? factor : Math.abs(factor)}</sup>
-        );
+        if ((factor !== 1) && (isFirst || (factor !== -1))) {
+          unitOutput.push(
+            <sup key={dimension}>{isFirst ? factor : Math.abs(factor)}</sup>
+          );
+        }
       }
     }
+  } else {
+    unitOutput = null;
   }
 
-  return output;
+  return [magnitudeOutput, unitOutput] as const;
 }
 
 // console.log(format(2.3451e-6, { length: 2, time: -1 }, { style: 'short' }))

@@ -35,6 +35,12 @@ export interface ValueNode extends BaseNode {
   spec: {
     type: 'boolean';
   } | {
+    type: 'enum';
+    cases: {
+      id: number | string;
+      label: string | null;
+    }[];
+  } | {
     type: 'numeric';
     dimensionality: Record<`[${string}]`, number>;
     unitFormatted: string | null;
@@ -46,12 +52,14 @@ export interface ExecutorState {
   root: CollectionNode<DeviceNode>;
 }
 
+/** @deprecated */
 export enum NodeWriteError {
   Disconnected = 0,
   Unclaimable = 1,
   ExprError = 2
 }
 
+/** @deprecated */
 export interface NodeStateLocation {
   errors: {
     disconnected: boolean;
@@ -64,7 +72,7 @@ export interface NodeStateLocation {
 
 export interface NodeStateChange {
   connected: boolean;
-  value: ContainedValue | null;
+  valueEvent: ValueEvent | null;
   writable: {
     owner: {
       type: 'client';
@@ -72,27 +80,31 @@ export interface NodeStateChange {
     } | {
       type: 'unknown';
     } | null;
-    targetValue: ContainedValue;
+    targetValueEvent: ValueEvent;
   } | null;
 }
 
 export interface NodeState {
   connected: boolean;
-  history: ContainedValue[];
-  value: ContainedValue | null;
+  history: ValueEvent[];
+  lastValueEvent: ValueEvent | null;
 }
 
 export type NodeStates = ImMap<NodePath, NodeState>;
 
 
-export interface ContainedValue {
+export interface ValueEvent {
   time: number;
   value: {
     type: 'null';
   } | {
     type: 'default';
-    value: unknown;
+    innerValue: unknown;
   } | null;
+}
+
+export interface NumericValue {
+  magnitude: number;
 }
 
 

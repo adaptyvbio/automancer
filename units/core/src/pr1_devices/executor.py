@@ -87,13 +87,13 @@ class Executor(BaseExecutor):
 def export_node_state(node: BaseNode, /):
   state = {
     "connected": node.connected,
-    "value": None,
+    "valueEvent": None,
     "writable": None
   }
 
   if isinstance(node, ValueNode):
     state |= {
-      "value": (node.value and {
+      "valueEvent": (node.value and {
         "time": (node.value[0] * 1000),
         "value": node.export_value(node.value[1])
       })
@@ -105,7 +105,7 @@ def export_node_state(node: BaseNode, /):
       state |= {
         "writable": {
           "owner": (export_claim_marker(owner.marker) if owner else None),
-          "targetValue": node.export_value(node.writer.target_value)
+          "targetValueEvent": node.export_value(node.writer.target_value)
         }
       }
 

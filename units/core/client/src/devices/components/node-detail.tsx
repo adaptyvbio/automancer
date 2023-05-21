@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { Button, StaticSelect } from 'pr1';
-import { Component, ReactNode, createRef } from 'react';
+import { Button, Icon, StaticSelect, util } from 'pr1';
+import { Component, ReactNode, createRef, useEffect, useRef, useState } from 'react';
 
 import styles from '../styles.module.scss';
 
@@ -36,6 +36,11 @@ export interface NodeDetailProps {
 export interface NodeDetailState {
   chartReady: boolean;
   chartWindowOption: WindowOption;
+
+  numericRawTargetValue: {
+    input: string;
+    unit: number;
+  } | null;
 }
 
 export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
@@ -53,7 +58,8 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 
     this.state = {
       chartReady: false,
-      chartWindowOption: ChartWindowOptions[1]
+      chartWindowOption: ChartWindowOptions[1],
+      numericRawTargetValue: null
     };
 
     let xScale = d3.scaleLinear();
@@ -302,11 +308,13 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
               </div>
               <div className={styles.detailValueRoot}>
                 <div className={styles.detailValueLabel}>Target value</div>
-                <div className={styles.detailValueQuantity}>
-                  <div className={styles.detailValueMagnitude} contentEditable={false}>34.7</div>
-                  <div className={styles.detailValueUnit}>ºC</div>
-                </div>
-                <p className={styles.detailValueError}>The target value must be in the range 15.2 – 34.7ºC.</p>
+                {(() => {
+                  // console.log(node);
+
+                  return (
+                    <NumericValueEditor />
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -314,4 +322,163 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
       </div>
     );
   }
+}
+
+
+function NumericValueEditor() {
+  let [rawValue, setRawValue] = useState<{
+    input: string;
+    unitIndex: number;
+  } | null>(null);
+
+  let refInput = useRef<HTMLInputElement>(null);
+
+  let unitExpressions = [
+    { id: 'Pa', label: 'Pa', value: 1 },
+    { id: 'kPa', label: 'kPa', value: 1e3 },
+    { id: 'MPa', label: 'MPa', value: 1e6 }
+  ];
+
+
+  useEffect(() => {
+    if (!rawValue) {
+      refInput.current!.blur();
+    }
+  }, [rawValue]);
+
+  return (
+    <>
+      <div className={util.formatClass(styles.detailValueQuantity, { '_active': rawValue })}>
+        <div className={styles.detailValueBackground}>
+          {rawValue?.input ?? '12.5'}
+        </div>
+        <input
+          type="text"
+          className={styles.detailValueMagnitude}
+          spellCheck={false}
+          value={rawValue?.input ?? '12.5'}
+          onFocus={(event) => {
+            if (!rawValue) {
+              event.currentTarget.select();
+
+              setRawValue({
+                input: '12.5',
+                unitIndex: 0
+              });
+            }
+          }}
+          onInput={(event) => {
+            // let match;
+
+            // let inputValue = event.currentTarget.value;
+            // let regexp = /-/;
+
+            // while ((match = regexp.exec(event.currentTarget.value)) !== null) {
+            //   console.log(match);
+            //   break;
+            //   if (match.index === regexp.lastIndex) {
+            //     regexp.lastIndex++;
+            //   }
+            // }
+
+            let el = event.currentTarget;
+            let value = el.value;
+            // let index = value.indexOf('-');
+
+            let selectionStart = event.currentTarget.selectionStart;
+
+
+            let index: number;
+
+            while ((index = value.indexOf('-')) >= 0) {
+              value = value.replace('-', '− ');
+
+              if ((selectionStart !== null) && (selectionStart > index)) {
+                selectionStart += 1;
+              }
+            }
+
+            value = value.replaceAll(/−(?! )|(?<!−) /g, '');
+
+            el.value = value;
+            el.selectionStart = selectionStart;
+            el.selectionEnd = selectionStart;
+
+            setRawValue((rawValue) => ({
+              ...rawValue!,
+              input: value
+            }));
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+
+            if (event.key === 'Escape') {
+              setRawValue(null);
+            }
+
+            if (event.key === 'Enter') {
+              setRawValue(null);
+            }
+          }}
+          ref={refInput} />
+        <div className={styles.detailValueRight}>
+          <StaticSelect
+            disabled={!rawValue}
+            options={unitExpressions}
+            rootClassName={styles.detailValueUnitSelectRoot}
+            selectOption={(option, optionIndex) => void setRawValue({ ...rawValue!, unitIndex: optionIndex })}
+            selectedOption={unitExpressions[rawValue?.unitIndex ?? 0]}
+            selectionClassName={styles.detailValueUnitSelectSelection}>
+            <div className={styles.detailValueUnit}>{unitExpressions[rawValue?.unitIndex ?? 0].label}</div>
+            {rawValue && <Icon name="height" className={styles.detailValueUnitSelectIcon} />}
+          </StaticSelect>
+        </div>
+      </div>
+      {rawValue && (() => {
+        let strValue = rawValue.input.replaceAll('− ', '-');
+
+        let min = 0;
+        let max = 10_000;
+
+        let error: ReactNode = null;
+
+        if (!/^-?\d+(?:\.\d+)?$/.test(strValue)) {
+          error = 'This value is not valid.';
+        } else {
+          let floatValue = parseFloat(strValue) * unitExpressions[rawValue.unitIndex].value;
+
+          if ((floatValue < min) || (floatValue > max)) {
+            error = (
+              <>
+                The target value must be in the range 15.2 – {formatQuantity(max, { temperature: 1 }, { style: 'short' })}.
+              </>
+            );
+          }
+        }
+
+        return (
+          <>
+            <div className={styles.detailValueActions}>
+              <Button
+                shortcut="Escape"
+                onClick={() => {
+                  setRawValue(null);
+                }}>
+                Cancel
+              </Button>
+              <Button
+                disabled={error}
+                shortcut="Enter"
+                onClick={() => {
+                  setRawValue(null);
+                }}>
+                Confirm
+              </Button>
+            </div>
+            <p className={styles.detailValueError}>{error}</p>
+          </>
+        );
+      })()}
+    </>
+  );
 }

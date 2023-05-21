@@ -394,7 +394,7 @@ function GeneralConfPage(props: ConfPageComponentProps) {
       <h3>Editor</h3>
 
       <label className={formStyles.checkRoot}>
-        <input type="checkbox" checked={automaticSave} onInput={(event) => void setAutomaticSave(!automaticSave)} />
+        <input type="checkbox" checked={automaticSave} onChange={(event) => void setAutomaticSave(!automaticSave)} />
         <div className={formStyles.checkTitle}>Automatic save</div>
         <p className={formStyles.checkDescription}>Save the editor's contents automatically at regular intervals.</p>
       </label>

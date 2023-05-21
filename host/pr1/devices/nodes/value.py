@@ -198,7 +198,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
       case _:
         return {
           "type": "default",
-          "value": self._export_value(value)
+          "innerValue": self._export_value(value)
         }
 
 

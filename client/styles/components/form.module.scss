@@ -258,12 +258,19 @@ $field-hgap: 0.8rem;
   background-color: #f6f8fa;
   border: 1px solid $border-color;
   border-radius: 4px;
-  box-shadow: 0 1px 0 #0000000f;
 
   font-size: 0.9rem;
   font-weight: 500;
 
   width: auto;
+
+  &:not(:disabled) {
+    box-shadow: 0 1px 0 #0000000f;
+  }
+
+  &:disabled {
+    color: #8c959f;
+  }
 
   &:hover {
     background-color: darken(#f6f8fa, 1%);

@@ -1,4 +1,5 @@
 @use "pr1/styles/constants" as *;
+@use "pr1/styles/mixins" as *;
 
 
 .root {
@@ -158,33 +159,92 @@
     }
 
     &Quantity {
-      display: flex;
-      align-items: baseline;
-      column-gap: 0.4rem;
+      display: grid;
+      // align-items: baseline;
+      grid-template-columns: auto minmax(0, 1fr);
     }
 
     &Magnitude {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+
+    &Background, &Magnitude {
+      padding: 0.2rem 0.4rem;
+
       font-size: 1.8rem;
-      font-variant-numeric: tabular-nums;
       font-weight: 600;
       line-height: 1.2;
+    }
 
-      &[contenteditable] {
-        padding: 0.2rem 0.4rem;
-        background-color: #eee;
-        border-radius: 4px;
-      }
+    &Quantity:not(:has(input)) &Magnitude {
+      font-variant-numeric: tabular-nums;
+    }
+
+    &Background {
+      grid-column: 1;
+      grid-row: 1;
+
+      overflow: hidden;
+      min-width: 1ch;
+
+      background-color: #f6f6f6;
+      border-radius: 4px;
+
+      color: transparent;
+      white-space: nowrap;
+
+      pointer-events: none;
+      user-select: none;
+    }
+
+    &Quantity:global(._active) &Background, &Quantity:has(&Magnitude:hover) &Background {
+      background-color: #eee;
+    }
+
+    &Right {
+      align-self: end;
+      grid-column: 2;
+      grid-row: 1;
+
+      padding-left: 0.6rem;
+      padding-bottom: 0.4rem;
     }
 
     &Unit {
       color: #666;
     }
 
+    &UnitSelect {
+      &Root {
+        width: fit-content;
+      }
+
+      &Selection {
+        display: flex;
+        align-items: center;
+        min-height: 20px;
+        // column-gap: 0.5ch;
+      }
+
+      &Icon {
+        @include icon($size: 20px);
+        color: #666;
+      }
+    }
+
     &Error {
-      margin-top: 0.4rem;
+      margin: 0.4rem 0;
 
       color: $app-red;
       font-size: 0.9rem;
+    }
+
+    &Actions {
+      display: flex;
+      column-gap: 0.4rem;
+
+      margin-top: 0.6rem;
     }
   }
 }

@@ -92,7 +92,7 @@ export function ShortcutGuide(props: PropsWithChildren<{
           ? KEY_DISPLAY_MAP_ADVANCED
           : KEY_DISPLAY_MAP;
 
-        let rawKeySegment = shortcutSegments.at(-1);
+        let rawKeySegment = shortcutSegments.at(-1)!;
         let keySegment = keyDisplayMap[rawKeySegment] ?? rawKeySegment;
 
         let displayedSegments = [

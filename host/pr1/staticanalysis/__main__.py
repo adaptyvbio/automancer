@@ -17,8 +17,12 @@ X = list[int]
 
 T = TypeVar('T')
 
-class A:
-  x: int
+class A(Generic[T]):
+  def x(self) -> T:
+    ...
+
+# scalar: float | int
+# scalar: int
 
 # int_list = list[int, float]
 # A = int | float
@@ -44,8 +48,7 @@ print('---')
 print()
 
 
-# document = Document.text("~~~ X().append(34) ~~~")
-document = Document.text("~~~ [3, 4] ~~~")
+document = Document.text("~~~ A[int]().x() ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4],
   prelude=prelude

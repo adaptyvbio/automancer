@@ -1,5 +1,5 @@
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Generic, Mapping, Optional, TypeVar, TypedDict
+from typing import Any, Generator, Generic, Mapping, Optional, Sequence, TypeVar, TypedDict
 
 
 # Type variables
@@ -90,6 +90,28 @@ class UnionDef(Generic[T]):
 
   def __repr__(self):
     return f"<{self.__class__.__name__} {self.left!r} | {self.right!r}>"
+
+  @classmethod
+  def iter(cls, item: T, /) -> 'Generator[T, None, None]':
+    if isinstance(item, UnionDef):
+      yield from cls.iter(item.left)
+      yield from cls.iter(item.right)
+    else:
+      yield item
+
+  @classmethod
+  def from_iter(cls, items_iter: Sequence[T], /):
+    items = list(items_iter)
+
+    if len(items) == 1:
+      return items[0]
+
+    union = cls(items[0], items[1])
+
+    for item in items[2:]:
+      union = cls(union, item)
+
+    return union
 
 @dataclass
 class UnknownDef:

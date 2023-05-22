@@ -34,10 +34,14 @@ def process_source(contents: str, /, prelude: Symbols):
 def create_prelude():
   type_defs, type_instances = process_source("""
 class float:
-  pass
+  def __add__(self, other: float, /) -> float:
+    ...
 
 class int:
-  pass
+  self.x: float
+
+  def __add__(self, other: float, /) -> int:
+    ...
 
 class str:
   pass

@@ -1,5 +1,4 @@
 import ast
-from typing import Any, overload
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
@@ -68,6 +67,80 @@ def resolve_type_variables(input_type: TypeDef, type_values: TypeValues) -> Type
       raise Exception("Unknown type")
 
 
+def get_attribute(origin_type: TypeInstance, name: str):
+  result = list[TypeInstance]()
+
+  for child_type in UnionDef.iter(origin_type):
+    match child_type:
+      case ClassConstructorDef(cls):
+        instantiated = instantiate_type_instance(cls)
+
+        if isinstance(instantiated, UnknownDef):
+          return UnknownDef()
+
+        type_inner = instantiated.cls.class_attrs.get(name)
+
+        if type_inner:
+          result.append(resolve_type_variables(type_inner, type_values=instantiated.type_values))
+        else:
+          return None
+      case ClassDefWithTypeArgs(cls, type_args):
+        attr = cls.instance_attrs.get(name)
+
+        # if type_inner:
+        #   result.append(ClassDefWithTypeArgs(type_inner, type_args=cls.type_args))
+
+        if attr:
+          if isinstance(attr, FuncDef):
+            attr = ClassDefWithTypeArgs(attr, type_args)
+
+          result.append(resolve_type_variables(attr, child_type.type_values))
+        else:
+          return None
+      case UnknownDef():
+        return UnknownDef()
+
+  return UnionDef.from_iter(result)
+
+def call(callee: TypeDef, args: list[TypeDef], kwargs: dict[str, TypeDef], node: ast.expr | ast.stmt, context: StaticAnalysisContext) -> tuple[StaticAnalysisAnalysis, TypeInstance]:
+  result: list[TypeDef] = []
+
+  for item in UnionDef.iter(callee):
+    func_ref = item.cls.instance_attrs.get('__call__')
+
+    if not func_ref:
+      return StaticAnalysisDiagnostic("Invalid object for call", node, context).analysis(), UnknownDef()
+
+    assert isinstance(func_ref, FuncDef) # To be removed
+    overload = find_overload(func_ref, args=args, kwargs=kwargs, type_values=item.type_values)
+
+    if not overload:
+      return StaticAnalysisDiagnostic("Invalid arguments", node, context).analysis(), UnknownDef()
+
+    result.append(overload.return_type)
+
+  return StaticAnalysisAnalysis(), UnionDef.from_iter(result)
+
+
+
+BinOpMethodMap: dict[type[ast.operator], str] = {
+  ast.Add: 'add',
+  ast.BitAnd: 'and',
+  ast.Mod: 'divmod',
+  ast.FloorDiv: 'floordiv',
+  ast.LShift: 'lshift',
+  ast.MatMult: 'matmul',
+  ast.Mod: 'mod',
+  ast.Mult: 'mul',
+  ast.BitOr: 'or',
+  ast.Pow: 'pow',
+  ast.RShift: 'rshift',
+  ast.Sub: 'sub',
+  ast.Div: 'truediv',
+  ast.BitXor: 'xor'
+}
+
+
 def evaluate_eval_expr(
     node: ast.expr, /,
     foreign_symbols: Symbols,
@@ -81,38 +154,30 @@ def evaluate_eval_expr(
     case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
       analysis, obj_type = evaluate_eval_expr(obj, foreign_symbols, prelude_symbols, context)
 
-      if isinstance(obj_type, UnknownDef):
-        return analysis, UnknownDef()
+      attr_type = get_attribute(obj_type, attr_name)
 
-      if not isinstance(obj_type, ClassDefWithTypeArgs):
-        return analysis + StaticAnalysisDiagnostic("Invalid attribute target", obj, context).analysis(), UnknownDef()
+      if not attr_type:
+        return analysis + StaticAnalysisDiagnostic("Invalid attribute name", obj, context).analysis(), UnknownDef()
 
-      attr = obj_type.cls.instance_attrs.get(attr_name)
+      return analysis, attr_type
 
-      if not attr:
-        return analysis + StaticAnalysisDiagnostic("Invalid reference to missing attribute", node, context).analysis(), UnknownDef()
+    case ast.BinOp(left=left, right=right, op=op):
+      analysis = StaticAnalysisAnalysis()
 
-      if isinstance(attr, FuncDef):
-        attr = ClassDefWithTypeArgs(attr, obj_type.type_args)
+      left_type = analysis.add(evaluate_eval_expr(left, foreign_symbols, prelude_symbols, context))
+      right_type = analysis.add(evaluate_eval_expr(right, foreign_symbols, prelude_symbols, context))
 
-      return analysis, resolve_type_variables(attr, obj_type.type_values)
+      operator_name = BinOpMethodMap[op.__class__]
 
-      # if obj_type.cls is UnknownDef:
-      #   return analysis, ClassRef(UnknownDef)
+      if (method := get_attribute(left_type, f"__{operator_name}__")):
+        result = analysis.add(call(method, [right_type], dict(), node, context))
+        return analysis, result
 
-      # if isinstance(obj_type, TypeClassRef):
-      #   obj_type = cast(OuterType, obj_type.extract())
-      # else:
-      #   for class_ref in obj_type.mro():
-      #     if attr := class_ref.cls.instance_attrs.get(attr_name):
-      #       attr_type = attr.resolve(class_ref.arguments or dict())
-      #       analysis += attr_type.analyze_access()
-      #       return analysis, attr_type
+      if (method := get_attribute(right_type, f"__r{operator_name}__")):
+        result = analysis.add(call(method, [left_type], dict(), node, context))
+        return analysis, result
 
-      # for class_ref in obj_type.mro():
-      #   if attr := class_ref.cls.class_attrs.get(attr_name):
-      #     attr_type = attr.resolve(class_ref.arguments or dict())
-      #     return analysis, attr_type
+      return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(warning=True)), UnknownDef()
 
     case ast.Call(func, args, keywords):
       analysis, func_type = evaluate_eval_expr(func, foreign_symbols, prelude_symbols, context)
@@ -162,6 +227,9 @@ def evaluate_eval_expr(
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), instantiate_type_instance(NoneType)
 
+    case ast.Constant(float()):
+      return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['float'])
+
     case ast.Constant(int()):
       return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['int'])
 
@@ -192,7 +260,7 @@ def evaluate_eval_expr(
         if not isinstance(target_type, ClassDef):
           return StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownDef()
 
-        type_args = analysis.add_sequence([evaluate_type_expr(item, foreign_type_defs, TypeVariables(), context) for item in subscript_items])
+        type_args = analysis.add_sequence([evaluate_type_expr(item, (foreign_type_defs | prelude_type_defs), None, context) for item in subscript_items])
 
         if len(type_args) != len(target_type.type_variables):
           return analysis + StaticAnalysisDiagnostic("Invalid type argument count", node, context).analysis(), UnknownDef()

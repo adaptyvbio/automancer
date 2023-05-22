@@ -38,7 +38,7 @@ def evaluate_library_module(
 
         variable_type_def = analysis.add(evaluate_type_expr(ann, foreign_type_defs | module_type_defs, TypeVariables(), context))
 
-        module_variables[variable_name] = variable_type_def # type: ignore
+        module_variables[variable_name] = instantiate_type(variable_type_def)
 
       case ast.Assign(
         targets=[ast.Name(id=name)],

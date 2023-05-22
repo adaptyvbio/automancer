@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from .types import ClassDefWithTypeArgs, FuncDef, TypeDef, TypeValues
+from .types import ClassDefWithTypeArgs, FuncDef, TypeDef, TypeInstance, TypeValues
 
 
 #

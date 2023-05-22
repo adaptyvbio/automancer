@@ -6,7 +6,7 @@ from typing import Optional, cast
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
 from .function import parse_func
-from .special import CoreTypeDefs, GenericClassDef
+from .special import CoreTypeDefs, GenericClassDef, NoneType
 from .type import evaluate_type_expr, instantiate_type
 from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
                     ExportedKnownTypeDef, ExportedTypeDefs, FuncDef, FuncOverloadDef,
@@ -38,11 +38,7 @@ def evaluate_library_module(
 
         variable_type_def = analysis.add(evaluate_type_expr(ann, foreign_type_defs | module_type_defs, TypeVariables(), context))
 
-        if isinstance(variable_type_def, TypeVarDef):
-          analysis.errors.append(StaticAnalysisDiagnostic("Invalid variable type", ann, context))
-          continue
-
-        module_variables[variable_name] = variable_type_def
+        module_variables[variable_name] = variable_type_def # type: ignore
 
       case ast.Assign(
         targets=[ast.Name(id=name)],
@@ -74,7 +70,7 @@ def evaluate_library_module(
                 case _:
                   expr_args = [class_base.slice]
 
-              potential_type_variables = analysis.add_sequence([evaluate_type_expr(arg, (foreign_type_defs | module_type_defs), TypeVariables(), context) for arg in expr_args])
+              potential_type_variables = analysis.add_sequence([evaluate_type_expr(arg, (foreign_type_defs | module_type_defs), None, context) for arg in expr_args])
               type_variables = OrderedTypeVariables()
 
               for potential_type_variable, type_variable_node in zip(potential_type_variables, expr_args):
@@ -103,7 +99,7 @@ def evaluate_library_module(
               if attr_name in cls.class_attrs:
                 raise Exception("Duplicate class attribute")
 
-              cls.class_attrs[attr_name] = instantiate_type(analysis.add(evaluate_type_expr(attr_ann, foreign_variables | module_variables, TypeVariables(), context)))
+              cls.class_attrs[attr_name] = instantiate_type(analysis.add(evaluate_type_expr(attr_ann, (foreign_type_defs | module_type_defs), None, context)))
 
             # self.foo: int
             case ast.AnnAssign(target=ast.Attribute(attr=attr_name, value=ast.Name(id='self')), annotation=attr_ann, simple=0):
@@ -142,7 +138,7 @@ def evaluate_library_module(
             args_kwonly=list(),
             args_posonly=list(),
             default_count=0,
-            return_type=CoreTypeDefs['None']
+            return_type=NoneType
           ))
 
       case ast.FunctionDef(name=func_name):
@@ -154,7 +150,7 @@ def evaluate_library_module(
 
         if not (func_name in module_variables):
           func = FuncDef()
-          module_variables[func_name] = func
+          module_variables[func_name] = ClassDefWithTypeArgs(func, type_args=list())
         else:
           func = module_variables[func_name]
 

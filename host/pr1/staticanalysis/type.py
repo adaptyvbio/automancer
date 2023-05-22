@@ -25,7 +25,7 @@ def instantiate_type(input_type: TypeDef):
 def evaluate_type_expr(
     node: ast.expr, /,
     variables: TypeDefs,
-    type_variables: TypeVariables,
+    type_variables: Optional[TypeVariables],
     context: StaticAnalysisContext,
 ) -> tuple[StaticAnalysisAnalysis, TypeDef]:
   match node:
@@ -63,6 +63,9 @@ def evaluate_type_expr(
 
       if not variable_type:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
+
+      if isinstance(variable_type, TypeVarDef) and (type_variables is not None) and not (variable_type in type_variables):
+        return StaticAnalysisDiagnostic("Invalid type variable", node, context).analysis(), UnknownDef()
 
       return StaticAnalysisAnalysis(), variable_type
 

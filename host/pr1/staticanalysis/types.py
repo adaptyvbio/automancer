@@ -1,5 +1,5 @@
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Generic, Mapping, Optional, TypeVar
+from typing import Generic, Mapping, Optional, TypeVar, TypedDict
 
 
 # Type variables
@@ -53,7 +53,7 @@ class FuncOverloadDef:
   args_both: list[FuncArgDef]
   args_kwonly: list[FuncKwArgDef]
   default_count: int
-  return_type: 'Optional[TypeDef]'
+  return_type: 'TypeDef'
 
   def __repr__(self):
     args = [
@@ -92,21 +92,17 @@ class UnionDef(Generic[T]):
     return f"<{self.__class__.__name__} {self.left!r} | {self.right!r}>"
 
 @dataclass
-class UnknownType:
-  pass
-
-@dataclass
 class UnknownDef:
   pass
 
 @dataclass
-class ClassConstructorDef:
-  target: 'TypeDef'
+class ClassConstructorDef(Generic[T]):
+  target: T
 
 @dataclass
 class ClassDefWithTypeArgs:
   cls: ClassDef
-  type_args: 'list[TypeDef]' # = field(default_factory=list)
+  type_args: 'list[TypeDef]'
 
   @property
   def type_values(self) -> TypeValues:
@@ -115,17 +111,31 @@ class ClassDefWithTypeArgs:
 
 # Complex types
 
-KnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | TypeVarDef | UnionDef['KnownTypeDef']
+KnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef['TypeDef'] | TypeVarDef | UnionDef['TypeDef']
 TypeDef = KnownTypeDef | UnknownDef
 TypeDefs = dict[str, TypeDef]
 
-ExportedKnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef['ExportedTypeDef']
+ExportedKnownTypeDef = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef['ExportedKnownTypeDef'] | UnionDef['ExportedTypeDef']
 ExportedTypeDef = ExportedKnownTypeDef | UnknownDef
 ExportedTypeDefs = dict[str, ExportedTypeDef]
 
 
-TypeInstance = ClassDef | ClassDefWithTypeArgs | ClassConstructorDef | UnionDef | UnknownDef
+KnownTypeInstance = ClassDefWithTypeArgs | ClassConstructorDef[ClassDefWithTypeArgs | ClassDef] | UnionDef['TypeInstance']
+TypeInstance = KnownTypeInstance | UnknownDef
 TypeInstances = dict[str, TypeInstance]
 
 
 Symbols = tuple[ExportedTypeDefs, TypeInstances]
+
+
+# Prelude
+
+class PreludeTypeDefs(TypedDict):
+  float: ClassDef
+  int: ClassDef
+  list: ClassDef
+
+class PreludeTypeInstances(TypedDict):
+  float: ClassDefWithTypeArgs
+  int: ClassDefWithTypeArgs
+  list: ClassDef

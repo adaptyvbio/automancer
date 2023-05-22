@@ -15,6 +15,11 @@ prelude = create_prelude()
 type_defs, type_instances = process_source("""
 X = list[int]
 
+T = TypeVar('T')
+
+class A:
+  x: int
+
 # int_list = list[int, float]
 # A = int | float
 # A = list[int]
@@ -49,7 +54,7 @@ context = StaticAnalysisContext(
 root = ast.parse(context.input_value, mode='eval')
 
 # print(ast.dump(root, indent=2))
-analysis, result = evaluate_eval_expr(root.body, (prelude[0] | type_defs), (prelude[1] | type_instances), context)
+analysis, result = evaluate_eval_expr(root.body, (type_defs, type_instances), prelude, context)
 
 for error in analysis.errors:
   print("Error :", error)

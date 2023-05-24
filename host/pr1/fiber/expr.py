@@ -8,17 +8,19 @@ from pint import Quantity
 from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
+from ..langservice import LanguageServiceAnalysis
+
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..host import logger
 from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
-from ..reader import LocatedString, LocatedValue, LocationArea
+from ..reader import LocatedString, LocatedValue, LocationArea, PossiblyLocatedValue
 from ..util.decorators import debug
 from ..util.misc import Exportable, log_exception
 
 if TYPE_CHECKING:
-  from ..input import Analysis, Type
+  from ..input import Type
 
 
 expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
@@ -133,7 +135,7 @@ class PythonExpr:
 
   @classmethod
   def _parse_match(cls, match: re.Match):
-    from ..input import Analysis
+    from ..input import LanguageServiceAnalysis
 
     match match.group(1):
       case None:
@@ -147,7 +149,7 @@ class PythonExpr:
       case _:
         raise ValueError()
 
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     contents = unescape(LocatedString.from_match_group(match, 2).strip())
 
     try:
@@ -175,9 +177,9 @@ class PythonExpr:
 
   @classmethod
   def parse_mixed(cls, raw_str: LocatedString, /):
-    from ..input import Analysis
+    from ..langservice import LanguageServiceAnalysis
 
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     output = list()
 
     index = 0
@@ -197,23 +199,23 @@ class PythonExpr:
     return analysis, output
 
 
-T = TypeVar('T', bound=LocatedValue, covariant=True)
+T = TypeVar('T', bound=PossiblyLocatedValue, covariant=True)
 
 class Evaluable(Exportable, ABC, Generic[T]):
   @abstractmethod
-  def evaluate(self, context: EvalContext) -> 'tuple[Analysis, Evaluable[T] | T | EllipsisType]':
+  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
     ...
 
   @overload
-  def eval(self, context: EvalContext, *, final: Literal[False]) -> 'tuple[Analysis, Evaluable[T] | EllipsisType]':
+  def eval(self, context: EvalContext, *, final: Literal[False]) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     ...
 
   @overload
-  def eval(self, context: EvalContext, *, final: Literal[True]) -> 'tuple[Analysis, T | EllipsisType]':
+  def eval(self, context: EvalContext, *, final: Literal[True]) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
     ...
 
   # @overload
-  # def eval(self, context: EvalContext, *, final: Optional[bool] = None) -> 'tuple[Analysis, Evaluable[T] | T | EllipsisType]':
+  # def eval(self, context: EvalContext, *, final: Optional[bool] = None) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
   #   ...
 
   def eval(self, context: EvalContext, *, final: bool):
@@ -245,7 +247,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     self.metadata = dict[str, StaticAnalysisMetadata]()
 
   def analyze(self):
-    from ..input import Analysis
+    from ..langservice import LanguageServiceAnalysis
 
     variables = EvalVariables()
 
@@ -259,17 +261,17 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
       ))
     except Exception:
       log_exception(logger)
-      return Analysis()
+      return LanguageServiceAnalysis()
 
     self.metadata = static_analysis.metadata
 
-    return Analysis(
+    return LanguageServiceAnalysis(
       errors=static_analysis.errors,
       warnings=static_analysis.warnings
     )
 
   def evaluate(self, context):
-    from ..input import Analysis
+    from ..input import LanguageServiceAnalysis
     from .parser import AnalysisContext
 
     variables = dict[str, Any]()
@@ -283,7 +285,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     try:
       result = self._expr.evaluate(options)
     except EvalError as e:
-      return Analysis(errors=[e]), Ellipsis
+      return LanguageServiceAnalysis(errors=[e]), Ellipsis
     else:
       analysis, result = self._type.analyze(result, AnalysisContext(eval_context=context, symbolic=True))
       return analysis, ValueAsPythonExpr.new(result, depth=self._depth)
@@ -295,7 +297,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     return f"{self.__class__.__name__}({repr(self._expr)}, depth={self._depth})"
 
 
-S = TypeVar('S', bound=(Evaluable | LocatedValue))
+S = TypeVar('S', bound=(Evaluable | PossiblyLocatedValue))
 
 class ValueAsPythonExpr(Evaluable[S], Generic[S]):
   def __init__(self, value: S | EllipsisType, /, *, depth: int):
@@ -303,8 +305,8 @@ class ValueAsPythonExpr(Evaluable[S], Generic[S]):
     self._value = value
 
   def evaluate(self, context):
-    from ..input import Analysis
-    return Analysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
+    from ..langservice import LanguageServiceAnalysis
+    return LanguageServiceAnalysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
 
   def export(self):
     return export_value(self._value)

@@ -67,7 +67,7 @@ class UnitManager:
     if hasattr(info.unit, 'Executor'):
       Executor = info.unit.Executor
 
-      if info.options:
+      if info.options.value:
         analysis, conf = Executor.options_type.analyze(info.options, analysis_context)
       else:
         analysis, conf = DiagnosticAnalysis(), None
@@ -90,16 +90,20 @@ class UnitManager:
     units_info = list()
 
     for namespace, unit_conf in conf.items():
-      if 'module' in unit_conf:
-        module = unit_conf['module'].value
-
+      if (module := unit_conf.module) is not None:
         if 'path' in unit_conf:
-          spec = importlib.util.spec_from_file_location(module, unit_conf['path'].value)
+          spec = importlib.util.spec_from_file_location(module, unit_conf.path)
+
+          assert spec
+          assert spec.loader
+
           unit = importlib.util.module_from_spec(spec)
           sys.modules[module] = unit
           spec.loader.exec_module(unit)
         else:
           unit = importlib.import_module(module)
+
+        assert unit.__file__ is not None
 
         units_info.append(UnitInfo(
           module=module,
@@ -136,9 +140,9 @@ class UnitManager:
 
       if namespace in conf:
         unit_conf = conf[namespace]
-        unit_info.development = unit_conf.get('development', False)
-        unit_info.enabled = unit_conf.get('enabled', True)
-        unit_info.options = unit_conf.get('options')
+        unit_info.development = unit_conf.development
+        unit_info.enabled = unit_conf.enabled
+        unit_info.options = unit_conf.options
 
       self.units_info[namespace] = unit_info
 

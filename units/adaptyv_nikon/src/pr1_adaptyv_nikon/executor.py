@@ -5,7 +5,7 @@ from tempfile import NamedTemporaryFile
 from typing import Optional, TypedDict
 
 import numpy as np
-from pr1.input import Attribute, SimpleDictType, StrType
+from pr1.input import Attribute, RecordType, StrType
 from pr1.units.base import BaseExecutor
 
 from . import logger
@@ -22,7 +22,7 @@ class Conf(TypedDict):
 
 
 class Executor(BaseExecutor):
-  options_type = SimpleDictType({
+  options_type = RecordType({
     'nis_path': Attribute(StrType(), optional=True)
 
     # 'stage_bounds': sc.Optional(sc.Dict({

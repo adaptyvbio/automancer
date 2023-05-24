@@ -1,15 +1,18 @@
 import datetime
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractstaticmethod
 from asyncio import Event
 from dataclasses import dataclass, field
 import time
+from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
 
+from ..reader import PossiblyLocatedValue
+from .expr import Evaluable
 from ..host import logger
 from ..master.analysis import MasterAnalysis, MasterError
 from ..util.decorators import provide_logger
 from ..util.misc import Exportable, ExportableABC, UnreachableError
-from .eval import EvalStack
+from .eval import EvalContext, EvalStack
 from .parser import BaseBlock, HeadProgram
 
 if TYPE_CHECKING:
@@ -71,17 +74,8 @@ class BaseProcessPoint(ABC):
   pass
 
 
+T_ProcessData = TypeVar('T_ProcessData')
 S_ProcessPoint = TypeVar('S_ProcessPoint', bound=BaseProcessPoint)
-
-class BaseProcessData(ExportableABC, Generic[S_ProcessPoint]):
-  @abstractmethod
-  def export(self) -> Any:
-    ...
-
-  def import_point(self, data: Any, /) -> S_ProcessPoint:
-    ...
-
-T_ProcessData = TypeVar('T_ProcessData', bound=BaseProcessData)
 
 class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   name: ClassVar[str]
@@ -106,9 +100,13 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   def run(self, point: Optional[S_ProcessPoint], stack: EvalStack) -> AsyncIterator[ProcessEvent]:
     ...
 
+  @abstractstaticmethod
+  def export_data(data: Any, /) -> Any:
+    ...
+
 
 class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
-  def __init__(self, data: T_ProcessData, ProcessType: type[BaseProcess[T_ProcessData, S_ProcessPoint]], /):
+  def __init__(self, data: Evaluable[PossiblyLocatedValue[T_ProcessData]], ProcessType: type[BaseProcess[T_ProcessData, S_ProcessPoint]], /):
     self._data = data
     self._ProcessType = ProcessType
 
@@ -122,7 +120,7 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
     return {
       "name": self._ProcessType.name,
       "namespace": self._ProcessType.namespace,
-      "data": self._data.export()
+      "data": self._ProcessType.export_data(self._data)
     }
 
 
@@ -294,6 +292,25 @@ class ProcessProgram(HeadProgram):
     global ProcessProgramMode
     Mode = ProcessProgramMode
 
+    analysis, data = self._block._data.eval(EvalContext(stack), final=True)
+
+    if isinstance(data, EllipsisType):
+      self._mode = Mode.Broken()
+      self._handle.send(ProgramExecEvent(
+        analysis=MasterAnalysis.cast(analysis),
+        location=ProcessProgramLocation(
+          mode=self._mode,
+          pausable=False,
+          process=None,
+          time=time.time()
+        )
+      ))
+
+      await self._mode.event.wait()
+
+      del self._mode
+      return
+
     initial_iteration = True
     self._point = point or None
 
@@ -303,7 +320,7 @@ class ProcessProgram(HeadProgram):
 
       self._mode = Mode.Starting()
       self._point = None
-      self._process = self._block._ProcessType(self._block._data, master=self._handle.master)
+      self._process = self._block._ProcessType(data.dislocate(), master=self._handle.master)
       self._process_location = None
       self._process_pausable = False
 

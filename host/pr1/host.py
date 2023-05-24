@@ -6,7 +6,9 @@ import time
 import uuid
 from graphlib import TopologicalSorter
 from types import EllipsisType
-from typing import Any, Optional, cast
+from typing import Any, Optional, Protocol, cast
+
+from .util.misc import BaseDataInstance, create_datainstance
 
 from .langservice import LanguageServiceAnalysis
 from .analysis import DiagnosticAnalysis
@@ -17,7 +19,7 @@ from .devices.nodes.common import BaseNode, NodeId, NodePath
 from .document import Document
 from .draft import Draft, DraftCompilation
 from .input import (Attribute, BoolType, KVDictType,
-                                PrimitiveType, SimpleDictType, StrType)
+                                PrimitiveType, RecordType, StrType)
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext
 from .unit import UnitManager
@@ -75,17 +77,29 @@ class Host:
 
     # -- Load configuration -------------------------------
 
-    conf_type = SimpleDictType({
+    class PluginConf(Protocol):
+      development: str
+      enabled: bool
+      module: Optional[str]
+      options: Optional[dict[str, Any]]
+      path: Optional[str]
+
+    class HostConf(Protocol):
+      id: str
+      name: str
+      units: dict[str, PluginConf]
+
+    conf_type = RecordType({
       'id': StrType(),
       'name': StrType(),
       'units': KVDictType(
         StrType(),
-        SimpleDictType({
-          'development': Attribute(BoolType(), optional=True),
-          'enabled': Attribute(BoolType(), optional=True),
-          'module': Attribute(StrType(), optional=True),
-          'options': Attribute(PrimitiveType(dict), optional=True),
-          'path': Attribute(StrType(), optional=True)
+        RecordType({
+          'development': Attribute(BoolType(), default=False),
+          'enabled': Attribute(BoolType(), default=True),
+          'module': Attribute(StrType(), default=None),
+          'options': Attribute(PrimitiveType(dict), default=None),
+          'path': Attribute(StrType(), default=None)
         })
       ),
       'version': PrimitiveType(int)
@@ -104,26 +118,27 @@ class Host:
       if isinstance(raw_conf, EllipsisType) or analysis.errors:
         sys.exit(1)
 
-      conf = cast(reader.LocatedValue, raw_conf).dislocate()
+      conf: HostConf = cast(reader.LocatedValue, raw_conf).dislocate()
+
       units_conf = {
-        namespace: {
-          **conf['units'][namespace],
-          'options': raw_unit_conf.get('options')
-        } for namespace, raw_unit_conf in (raw_conf['units'] or dict()).items()
+        namespace: create_datainstance({
+          **conf.units[namespace]._asdict(),
+          'options': raw_unit_conf.value.options
+        }) for namespace, raw_unit_conf in (raw_conf.value.units or dict()).items()
       }
     else:
-      conf = {
+      conf: HostConf = create_datainstance({
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
         'units': {},
         'version': 1
-      }
+      })
 
       units_conf = dict()
       conf_path.open("w").write(reader.dumps(conf))
 
-    self.id = conf['id']
-    self.name = conf['name']
+    self.id = conf.id
+    self.name = conf.name
     self.start_time = round(time.time() * 1000)
 
 

@@ -1,20 +1,19 @@
-from abc import ABC, abstractmethod
-from asyncio import Future
-import asyncio
-from dataclasses import dataclass, field
 import hashlib
-from io import IOBase
 import itertools
 import logging
 import traceback
-from typing import Any, Iterable, Protocol, Self, Sequence, TypeVar
 import typing
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass
+from io import IOBase
+from typing import Any, Iterable, Protocol, Self, Sequence, TypeVar
 
 
 FileObject = IOBase
 
-def fast_hash(input: str):
-  return hashlib.sha256(input.encode("utf-8")).hexdigest()
+def fast_hash(data: bytes | str, /):
+  return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
 
 def log_exception(logger, *, level = logging.DEBUG):
   for line in traceback.format_exc().split("\n"):
@@ -89,3 +88,42 @@ class HierarchyNode:
         + (child.format_hierarchy(prefix=(prefix + ("    " if last else "│   "))) if isinstance(child, HierarchyNode) else ("\n" + prefix + ("    " if last else "│   ")).join(child))
         for index, child in enumerate(children)
     ])
+
+
+class BaseDataInstance(ABC):
+  __slots__ = ()
+
+  @abstractmethod
+  def _asdict(self) -> Mapping[str, Any]:
+    ...
+
+def create_datainstance(data: Mapping[str, Any]) -> Any:
+  # return type(
+  #   "FlexibleDataclass",
+  #   (BaseFlexibleDataclass,),
+  #   {
+  #     "__slots__": tuple(data.keys()),
+  #     "_asdict": lambda self: data,
+  #     "__getitem__": lambda self, key: getattr(self, key),
+  #     # **data
+  #   }
+  # )
+
+  class DataInstance(BaseDataInstance):
+    __slots__ = tuple(data.keys())
+
+    def _asdict(self):
+      return data
+
+    def __getitem__(self, key: str, /):
+      return getattr(self, key)
+
+    def __repr__(self):
+      return f"{self.__class__.__name__}({', '.join(f'{key}={data[key]!r}' for key in self.__slots__)})"
+
+  obj = DataInstance()
+
+  for key, value in data.items():
+    setattr(obj, key, value)
+
+  return obj

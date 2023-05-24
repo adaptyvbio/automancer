@@ -9,7 +9,7 @@ from pr1 import input as lang
 from pr1.fiber.eval import EvalContext, EvalEnvs, EvalStack
 from pr1.fiber.expr import Evaluable
 from pr1.input import (Analysis, Attribute, EnumType, IntType,
-                                   PathType, QuantityType, SimpleDictType)
+                                   PathType, QuantityType, RecordType)
 from pr1.fiber.parser import (Attrs, BaseBlock, BaseLeadTransformer,
                               BaseParser, LeadTransformerPreparationResult)
 from pr1.fiber.process import BaseProcessData, ProcessBlock
@@ -63,7 +63,7 @@ class Transformer(BaseLeadTransformer):
     self.attributes = {
       'capture': Attribute(
         description="Captures images on the Nikon Ti-2E microscope",
-        type=SimpleDictType({
+        type=RecordType({
           'exposure': QuantityType('millisecond'),
           'objective': EnumType(*objectives),
           'optconf': EnumType(*optconfs),

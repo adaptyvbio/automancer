@@ -1,7 +1,7 @@
 from types import EllipsisType
 from typing import Any, TypedDict
 
-from pr1 import input as lang
+import pr1 as am
 from pr1.fiber.parser import (BasePassiveTransformer, BaseParser, FiberParser,
                               Layer, TransformerAdoptionResult,
                               PassiveTransformerPreparationResult)
@@ -15,7 +15,7 @@ class Attributes(TypedDict, total=False):
 class Transformer(BasePassiveTransformer):
   priority = 1000
   attributes = {
-    'outer': lang.Attribute(lang.AnyType())
+    'outer': am.AnyType()
   }
 
   def __init__(self, fiber: FiberParser):
@@ -34,7 +34,7 @@ class Transformer(BasePassiveTransformer):
         runtime_envs=layer.runtime_envs
       )
     else:
-      return lang.Analysis(), None
+      return am.DiagnosticAnalysis(), None
 
   def adopt(self, data: Layer, /, adoption_stack, trace):
     analysis, (adopted_transforms, adoption_stack) = data.adopt(adoption_stack, trace)

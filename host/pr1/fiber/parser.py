@@ -307,13 +307,12 @@ BaseTransformers = list[BaseTransformer]
 
 
 @final
-class SimpleProcessTransformer(BaseLeadTransformer):
-  def __init__(self, Process: 'type[BaseProcess]', attributes: dict[str, lang.Attribute], *, export: Callable[[Any], Any], parser: 'FiberParser'):
+class ProcessTransformer(BaseLeadTransformer):
+  def __init__(self, Process: 'type[BaseProcess]', attributes: dict[str, lang.Attribute], *, parser: 'FiberParser'):
     assert attributes and (len(attributes) == 1)
     super().__init__(attributes)
 
     self._Process = Process
-    self._export = export
     self._parser = parser
 
   def prepare(self, data: dict[LocatedString, LocatedValue], /, adoption_envs, runtime_envs):
@@ -324,22 +323,12 @@ class SimpleProcessTransformer(BaseLeadTransformer):
       return LanguageServiceAnalysis(), list()
 
   def adopt(self, data, /, adoption_stack, trace):
-    from .process import BaseProcessData, ProcessBlock
+    from .process import ProcessBlock
 
-    # analysis, duration = data.eval(EvalContext(adoption_stack), final=False)
-
-    # if isinstance(duration, EllipsisType):
-      # return analysis, Ellipsis
-
-    analysis = LanguageServiceAnalysis()
-
-    # @dataclass
-    # class ProcessData(BaseProcessData):
-    #   def __init__()
-
+    analysis, evaluated_data = data.eval(EvalContext(adoption_stack), final=False)
 
     block = analysis.add(self._parser.wrap(ProcessBlock(
-      data,
+      evaluated_data,
       self._Process
     )))
 
@@ -530,7 +519,7 @@ class FiberParser:
     }, key=0)
 
     for parser in self._parsers:
-      root_type.add(parser.root_attributes, key=parser)
+      root_type.add(parser.root_attributes, key=parser, optional=True)
 
     context = AnalysisContext()
     root_result = analysis.add(root_type.analyze(data, context))
@@ -555,7 +544,7 @@ class FiberParser:
     self.block_type = lang.DivisibleCompositeDictType()
 
     for transformer in self.transformers:
-      self.block_type.add(transformer.attributes, key=transformer)
+      self.block_type.add(transformer.attributes, key=transformer, optional=True)
 
 
     # Root unit attributes
@@ -588,10 +577,10 @@ class FiberParser:
 
     for parser in self._parsers:
       if parser.layer_attributes is not None:
-        self.block_type.add(parser.layer_attributes, key=parser)
+        self.block_type.add(parser.layer_attributes, key=parser, optional=True)
 
     for transformer in self.transformers:
-      self.block_type.add(transformer.attributes, key=transformer)
+      self.block_type.add(transformer.attributes, key=transformer, optional=True)
 
 
     # Root block

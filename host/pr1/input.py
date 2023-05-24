@@ -22,10 +22,10 @@ from .langservice import *
 from .error import Diagnostic, Diagnostic, DiagnosticDocumentReference, Trace
 from .reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
                       LocatedValue, LocatedValueContainer, LocationArea,
-                      LocationRange, ReliableLocatedDict, ReliableLocatedList)
+                      LocationRange, PossiblyLocatedValue, ReliableLocatedDict, ReliableLocatedList, UnlocatedValue)
 from .ureg import ureg
-from .util.misc import Exportable
-from .util.parser import check_identifier
+from .util.misc import Exportable, create_datainstance
+from .util.parser import is_identifier
 from .fiber.expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
                    ValueAsPythonExpr)
 
@@ -122,7 +122,7 @@ class Attribute:
       signature: The attribute's signature, displayed with a monospace font. Optional.
     """
 
-    self._optional = optional or isinstance(default, EllipsisType)
+    self._optional = optional or not isinstance(default, EllipsisType)
 
     self._decisive = (not self._optional) or decisive
     self._default = default
@@ -156,6 +156,7 @@ class Attribute:
     return (analysis + value_analysis), value
 
 
+# @deprecated
 class CompositeDict:
   _native_namespace = "_"
   _separator = "/"
@@ -298,6 +299,7 @@ class CompositeDict:
     }
 
 
+# @deprecated
 class SimpleDict(CompositeDict):
   def __init__(self, attrs: dict[str, Attribute | Type], /, *, foldable = False, strict = False):
     super().__init__(attrs, foldable=foldable, strict=strict)
@@ -307,6 +309,7 @@ class SimpleDict(CompositeDict):
 
     return analysis, LocatedDict(output[self._native_namespace], obj.area) if not isinstance(output, EllipsisType) else Ellipsis
 
+# @deprecated
 class DictType(SimpleDict):
   def __init__(self, attrs, *, foldable = False):
     super().__init__(attrs, foldable=foldable, strict=True)
@@ -346,7 +349,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     return completion_items
 
-  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], /, key: T, prefix: Optional[str] = None):
+  def add(self, attrs: dict[str, Attribute | Type] | dict[str, Attribute], /, key: T, prefix: Optional[str] = None, *, optional: bool = False):
     assert not (key in self._attributes_by_key)
     assert key is not None
 
@@ -357,6 +360,9 @@ class DivisibleCompositeDictType(Type, Generic[T]):
         attr = raw_attr
       else:
         attr = Attribute(cast(Type, raw_attr))
+
+      if optional:
+        attr._optional = True
 
       if prefix:
         attr = copy.copy(attr)
@@ -399,7 +405,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     analysis.selections.append(LanguageServiceSelection(obj.full_area.enclosing_range()))
 
-    attr_values = { key: dict[str, Any]() for key in self._attributes_by_key.keys() }
+    attr_values = { key: dict[LocatedString, Any]() for key in self._attributes_by_key.keys() }
 
     for obj_key, obj_value in obj.items():
       unique_attr = self._attributes_by_unique_name.get(obj_key)
@@ -443,10 +449,10 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     return analysis, (attr_values if not failure else Ellipsis)
 
-  def analyze_namespace(self, attr_values: dict[T, dict[str, Any]], /, context: 'AnalysisContext', *, key: T):
+  def analyze_namespace(self, attr_values: dict[T, dict[LocatedString, Any]], /, context: 'AnalysisContext', *, key: T):
     analysis = LanguageServiceAnalysis()
     failure = False
-    result = dict[str, Any]()
+    result = dict[PossiblyLocatedValue[str], Any]()
 
     for attr_name, attr_value in attr_values[key].items():
       attr = self._attributes_by_key[key][attr_name]
@@ -457,7 +463,14 @@ class DivisibleCompositeDictType(Type, Generic[T]):
       elif attr._decisive:
         failure = True
 
-    return analysis, (result if not failure else Ellipsis)
+    if failure:
+      return analysis, Ellipsis
+
+    for attr_name, attr in self._attributes_by_key[key].items():
+      if not (attr_name in attr_values[key]) and not isinstance(attr._default, EllipsisType):
+        result[UnlocatedValue(attr_name)] = ValueAsPythonExpr.new(UnlocatedValue(attr._default), depth=context.eval_depth)
+
+    return analysis, result
 
   def copy(self):
     output = DivisibleCompositeDictType.__new__(self.__class__)
@@ -471,12 +484,13 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     return output
 
-class SimpleDictType(DivisibleCompositeDictType):
+
+class RecordType(DivisibleCompositeDictType):
   def __init__(self, attrs: dict[str, Attribute | Type]):
     super().__init__()
     self.add(attrs, key=0)
 
-  def analyze(self, obj, /, context):
+  def analyze(self, obj, /, context) -> tuple[LanguageServiceAnalysis, Any | EllipsisType]:
     analysis, global_result = super().analyze(obj, context)
 
     if isinstance(global_result, EllipsisType):
@@ -487,19 +501,23 @@ class SimpleDictType(DivisibleCompositeDictType):
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
-    return analysis, SimpleDictAsPythonExpr.new(located_result, depth=context.eval_depth)
+    # located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
 
-class SimpleDictAsPythonExpr(Evaluable):
-  def __init__(self, value: LocatedDict, /, *, depth: int):
+    return analysis, EvaluableRecordType.new(LocatedValue(result, obj.area), depth=context.eval_depth)
+
+class EvaluableRecordType(Evaluable):
+  def __init__(self, value: LocatedValue[dict[PossiblyLocatedValue[str], Evaluable[PossiblyLocatedValue[Any]]]], /, *, depth: int):
     self._depth = depth
     self._value = value
 
+  def __getitem__(self, key: str, /):
+    return self._value.value[key] # type: ignore
+
   def evaluate(self, context):
     analysis = LanguageServiceAnalysis()
-    result = dict[str, Any]()
+    result = dict[PossiblyLocatedValue[str], Any]()
 
-    for key, value in self._value.items():
+    for key, value in self._value.value.items():
       item_result = analysis.add(value.evaluate(context))
 
       # TODO: Same as lists
@@ -508,7 +526,7 @@ class SimpleDictAsPythonExpr(Evaluable):
 
       result[key] = item_result
 
-    return analysis, self.new(LocatedDict(result, self._value.area), depth=(self._depth - 1))
+    return analysis, self.new(LocatedValue(result, self._value.area), depth=(self._depth - 1))
 
   def export(self):
     raise NotImplementedError
@@ -517,8 +535,8 @@ class SimpleDictAsPythonExpr(Evaluable):
     return f"{self.__class__.__name__}({self._value!r}, depth={self._depth})"
 
   @classmethod
-  def new(cls, value: LocatedDict, /, *, depth: int):
-    return cls(value, depth=depth) if depth > 0 else value
+  def new(cls, value: LocatedValue[dict[PossiblyLocatedValue[str], Any]], /, *, depth: int):
+    return cls(value, depth=depth) if depth > 0 else LocatedValue(create_datainstance({ item_key.value: item_value for item_key, item_value in value.value.items() }), value.area)
 
 
 class InvalidPrimitiveError(Diagnostic):
@@ -926,7 +944,7 @@ class IdentifierType(Type):
       return analysis, Ellipsis
 
     try:
-      check_identifier(obj_new, allow_leading_digit=self._allow_leading_digit)
+      is_identifier(obj_new, allow_leading_digit=self._allow_leading_digit)
     except LocatedError:
       analysis.errors.append(InvalidIdentifierError(obj))
       return analysis, Ellipsis
@@ -1293,5 +1311,22 @@ class DataTypeType(Type):
 
 
 __all__ = [
-  'Type'
+  'AnyType',
+  'Attribute',
+  'BoolType',
+  'DataTypeType',
+  'DeferredAnalysisType',
+  'DictType',
+  'EllipsisType',
+  'EvaluableContainerType',
+  'HasAttrType',
+  'IntType',
+  'KVDictType',
+  'ListType',
+  'PotentialExprType',
+  'PrimitiveType',
+  'ReadableDataRefType',
+  'RecordType',
+  'StrType',
+  'Type',
 ]

@@ -1,4 +1,3 @@
-from collections import namedtuple
 from dataclasses import dataclass, field
 from enum import Enum
 import ast
@@ -8,6 +7,7 @@ import re
 import sys
 from typing import Any, Generic, Optional, TypeVar, cast
 
+from .util.misc import BaseDataInstance, create_datainstance
 from .error import Diagnostic, DiagnosticDocumentReference
 from .util.decorators import deprecated
 
@@ -263,9 +263,9 @@ class LocatedValue(Generic[T]):
     self.full_area = full_area or area
     self.value = value
 
-  # @deprecated
-  def error(self, message):
-    return LocatedError(message, self.area.ranges[0])
+  # # @deprecated
+  # def error(self, message):
+  #   return LocatedError(message, self.area.ranges[0])
 
   @property
   def source(self):
@@ -291,6 +291,10 @@ class LocatedValue(Generic[T]):
 
   def dislocate(self) -> Any:
     match self.value:
+      case BaseDataInstance():
+        return create_datainstance({
+          key: value.dislocate() for key, value in self.value._asdict().items()
+        })
       case dict():
         return { key.dislocate(): value.dislocate() for key, value in self.value.items() }
       case list():
@@ -300,41 +304,20 @@ class LocatedValue(Generic[T]):
       case _:
         return self.value
 
-  # @deprecated
-  @staticmethod
-  def create_error(message, object):
-    if isinstance(object, LocatedValue):
-      return object.error(message)
-    else:
-      return Exception(message)
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.value!r})"
 
-  # @deprecated
-  @staticmethod
-  def extract(object):
-    if isinstance(object, LocatedValue):
-      return object.value
-    else:
-      return object
 
-  # @deprecated
-  @staticmethod
-  def locate(object, area):
-    if isinstance(object, dict):
-      return LocatedDict(object, area)
-    elif isinstance(object, list):
-      return LocatedList(object, area)
-    elif isinstance(object, str):
-      return LocatedString(object, area)
-    else:
-      return LocatedValue(object, area)
 
-  # @deprecated
-  @staticmethod
-  def transfer(dest, source):
-    if (not isinstance(dest, LocatedValue)) and isinstance(source, LocatedValue):
-      return LocatedValue.locate(dest, source.area)
+class UnlocatedValue(Generic[T]):
+  def __init__(self, value: T):
+    self.value = value
 
-    return dest
+  def dislocate(self):
+    return self.value
+
+
+PossiblyLocatedValue = LocatedValue[T] | UnlocatedValue[T]
 
 
 class LocatedValueContainer(LocatedValue[T], Generic[T]):
@@ -371,6 +354,9 @@ class LocatedString(str, LocatedValue[str]):
         return LocatedString(self.value[key], self.area, absolute=False)
     else:
       return self[key:(key + 1)] if key >= 0 else self[key:((key - 1) if key < -1 else None)]
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.value!r})"
 
   def split(self, sep: Optional[str], maxsplit: int = -1):
     if sep is None:

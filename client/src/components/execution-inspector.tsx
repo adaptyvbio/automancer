@@ -60,7 +60,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1);
 
-    let leafPair = blockAnalysis.pairs.at(-1);
+    let leafPair = blockAnalysis.pairs.at(-1)!;
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
     let leafBlockContext = createBlockContext(this.props.blockPath, this.props.chip.id, context);
 

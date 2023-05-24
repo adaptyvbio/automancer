@@ -11,7 +11,7 @@ from .expr import Evaluable
 from ..host import logger
 from ..master.analysis import MasterAnalysis, MasterError
 from ..util.decorators import provide_logger
-from ..util.misc import Exportable, ExportableABC, UnreachableError
+from ..util.misc import Exportable, UnreachableError, log_exception
 from .eval import EvalContext, EvalStack
 from .parser import BaseBlock, HeadProgram
 
@@ -218,7 +218,13 @@ class ProcessProgram(HeadProgram):
     self._process_pausable: bool
 
   def halt(self):
-    self._process.halt()
+    match self._mode:
+      case ProcessProgramMode.Broken(event):
+        event.set()
+      case ProcessProgramMode.Normal() | ProcessProgramMode.Pausing() | ProcessProgramMode.Paused() | ProcessProgramMode.Resuming():
+        self._process.halt()
+
+    self._mode = ProcessProgramMode.Halting()
 
   def jump(self, point, /):
     if not self._process.jump(point):
@@ -292,7 +298,7 @@ class ProcessProgram(HeadProgram):
     global ProcessProgramMode
     Mode = ProcessProgramMode
 
-    analysis, data = self._block._data.eval(EvalContext(stack), final=True)
+    analysis, data = self._block._data.eval(EvalContext(stack, cwd_path=self._handle.master.chip.dir), final=True)
 
     if isinstance(data, EllipsisType):
       self._mode = Mode.Broken()
@@ -383,6 +389,7 @@ class ProcessProgram(HeadProgram):
             self._process_pausable = event.pausable
         except (ProcessInternalError, ProcessProtocolError) as e:
           logger.error(f"Process protocol error: {e}")
+          log_exception(logger)
 
           if self._mode == Mode.Terminated:
             logger.error(f"This error cannot be reported to the user.")

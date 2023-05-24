@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import KW_ONLY, dataclass, field
-from io import FileIO, IOBase, TextIOBase
+from io import BytesIO, FileIO, IOBase, TextIOBase
 from logging import Logger
 from os import PathLike
 from pathlib import Path
@@ -18,19 +18,19 @@ import numpy as np
 import pint
 from pint import Quantity, Unit
 
-from .langservice import *
-from .error import Diagnostic, Diagnostic, DiagnosticDocumentReference, Trace
-from .reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
+from ..langservice import *
+from ..error import Diagnostic, Diagnostic, DiagnosticDocumentReference, Trace
+from ..reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
                       LocatedValue, LocatedValueContainer, LocationArea,
                       LocationRange, PossiblyLocatedValue, ReliableLocatedDict, ReliableLocatedList, UnlocatedValue)
-from .ureg import ureg
-from .util.misc import Exportable, create_datainstance
-from .util.parser import is_identifier
-from .fiber.expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
+from ..ureg import ureg
+from ..util.misc import Exportable, create_datainstance
+from ..util.parser import is_identifier
+from ..fiber.expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
                    ValueAsPythonExpr)
 
 if TYPE_CHECKING:
-  from .fiber.parser import AnalysisContext
+  from ..fiber.parser import AnalysisContext
 
 
 class AmbiguousKeyError(Diagnostic):
@@ -422,7 +422,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
         # e.g. 'bar' where only 'a/bar' exists
         if unprefixed_key is not None:
           key = unprefixed_key
-          attr_name = obj_key
+          attr_name = obj_key.value
         # e.g. 'bar' where 'a/bar' and 'b/bar' both exist, but not '_/bar'
         else:
           analysis.errors.append(AmbiguousKeyError(obj_key))
@@ -580,18 +580,6 @@ class InvalidExprKind(Diagnostic):
       "Invalid expression kind",
       references=[DiagnosticDocumentReference.from_value(target)]
     )
-
-class InvalidFileObject(Diagnostic):
-  def __init__(self, target: LocatedValue, /):
-    super().__init__(
-      "Invalid file object",
-      references=[DiagnosticDocumentReference.from_value(target)]
-    )
-
-class PathOutsideDirError(Diagnostic):
-  def __init__(self, target: LocatedValue[Path], dir_path: Path, /):
-    delta = os.path.relpath(target.value, dir_path)
-    super().__init__(f"Path '{str(delta)}' is outside target directory", references=[DiagnosticDocumentReference.from_value(target)])
 
 class OutOfBoundsQuantityError(Diagnostic):
   def __init__(self, target: LocatedValue, /, min: Optional[Quantity], max: Optional[Quantity]):
@@ -992,48 +980,7 @@ class UnionType(Type):
 
     return analysis, Ellipsis
 
-class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
-  def __init__(self, value: LocatedValue[Path], /, *, depth: int):
-    self._depth = depth
-    self._ensure_inside_cwd = True
-    self._path = value
 
-  def evaluate(self, context):
-    if context.cwd_path:
-      path = (context.cwd_path / self._path.value).resolve()
-
-      if self._ensure_inside_cwd and (not path.is_relative_to(context.cwd_path)):
-        return LanguageServiceAnalysis(errors=[PathOutsideDirError(LocatedValueContainer(path, self._path.area), context.cwd_path)]), Ellipsis
-
-      return LanguageServiceAnalysis(), LocatedValueContainer(path, self._path.area)
-
-    return LanguageServiceAnalysis(), self._path
-
-  @classmethod
-  def new(cls, value: LocatedValue[Path], /, *, depth: int):
-    return cls(value, depth=depth) if depth > 0 else value
-
-class PathType(Type):
-  def __init__(self, *, resolve_cwd: bool = True):
-    self._resolve_cwd = resolve_cwd
-    self._type = UnionType(
-      PrimitiveType(PathLike),
-      PrimitiveType(str)
-    )
-
-  def analyze(self, obj, /, context):
-    analysis, result = self._type.analyze(obj, context)
-
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
-
-    result = LocatedValueContainer(Path(result.value), result.area)
-
-    if context.eval_context:
-      eval_analysis, eval_result = EvaluableRelativePath(result, depth=(context.eval_depth + 1)).evaluate(context.eval_context)
-      return (analysis + eval_analysis), eval_result
-    else:
-      return analysis, EvaluableRelativePath.new(result, depth=context.eval_depth)
 
 # class PathInDirType(Type):
 #   def __init__(self, dir_path: Path):
@@ -1054,95 +1001,6 @@ class PathType(Type):
 #     return analysis, LocatedValueContainer(new_path, result.area)
 
 
-class FileRef(ABC):
-  @abstractmethod
-  def close_file(self):
-    ...
-
-  @abstractmethod
-  def open_file(self, mode: str) -> IOBase:
-    ...
-
-  @contextmanager
-  def open(self, mode: str):
-    file = self.open_file(mode)
-
-    try:
-      yield file
-    finally:
-      self.close_file()
-
-class IOBaseFileRef(FileRef):
-  def __init__(self, file: IOBase, /):
-    self._file = file
-
-  def close_file(self):
-    pass
-
-  def open_file(self, mode: str):
-    if isinstance(self._file, FileIO):
-      assert self._file.mode == mode
-
-    return self._file
-
-class PathFileRef(FileRef):
-  def __init__(self, path: Path, /):
-    self._file: Optional[IOBase] = None
-    self._path = path
-
-  def path(self):
-    return self._path
-
-  def close_file(self):
-    assert self._file
-    self._file.close()
-
-  def open_file(self, mode: str):
-    file = self._path.open(mode)
-
-    assert isinstance(file, IOBase)
-    self._file = file
-
-    return file
-
-  def __repr__(self):
-    return f"{self.__class__.__name__}({str(self._path)!r})"
-
-class FileRefType(Type):
-  def __init__(self, *, text: Optional[bool] = None):
-    self._text = text
-    self._type = UnionType(
-      PathType(),
-      PrimitiveType(IOBase)
-    )
-
-  def analyze(self, obj, /, context):
-    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
-
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
-
-    if (self._text is not None) and isinstance(result.value, IOBase) and (isinstance(result.value, TextIOBase) != self._text):
-      analysis.errors.append(InvalidFileObject(result))
-      return analysis, Ellipsis
-
-    if isinstance(result.value, Path):
-      ref = PathFileRef(result.value)
-    else:
-      ref = IOBaseFileRef(result.value)
-
-    return analysis, ValueAsPythonExpr.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
-
-class ReadableDataRefType(Type):
-  def __init__(self, *, text: Optional[bool] = None):
-    self._type = UnionType(
-      FileRefType(text=text),
-      PrimitiveType(bytes)
-    )
-
-  def analyze(self, obj, context):
-    return self._type.analyze(obj, context)
-
 # class WritableDataRefType(Type):
 #   def __init__(self, *, text: Optional[bool] = None):
 #     self._type = UnionType(
@@ -1153,7 +1011,7 @@ class ReadableDataRefType(Type):
 
 class BindingType(Type):
   def analyze(self, obj, /, context):
-    from .fiber.binding import Binding
+    from ..fiber.binding import Binding
 
     if not isinstance(obj, str):
       return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
@@ -1272,7 +1130,7 @@ class DeferredAnalysisValueAsPythonExpr(Evaluable):
     self._obj = obj
 
   def evaluate(self, context):
-    from .fiber.parser import AnalysisContext
+    from ..fiber.parser import AnalysisContext
     return self._type.analyze(self._obj, AnalysisContext(eval_context=context, eval_depth=self._depth, symbolic=True))
 
 class HasAttrType(Type):
@@ -1325,7 +1183,6 @@ __all__ = [
   'ListType',
   'PotentialExprType',
   'PrimitiveType',
-  'ReadableDataRefType',
   'RecordType',
   'StrType',
   'Type',

@@ -316,13 +316,22 @@ class UnlocatedValue(Generic[T]):
   def dislocate(self):
     return self.value
 
+  def __hash__(self):
+    return hash(self.value)
+
+  def __eq__(self, other, /):
+    return self.value == other
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.value!r})"
+
 
 PossiblyLocatedValue = LocatedValue[T] | UnlocatedValue[T]
 
 
 class LocatedValueContainer(LocatedValue[T], Generic[T]):
   def __repr__(self):
-    return repr(self.value)
+    return f"{self.__class__.__name__}({self.value!r})"
 
 
 class LocatedString(str, LocatedValue[str]):

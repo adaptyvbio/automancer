@@ -10,9 +10,12 @@ import math
 import os
 
 import boto3
+import pr1 as am
+from pr1.error import Diagnostic
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.expr import export_value
-from pr1.fiber.process import BaseProcess, BaseProcessPoint, ProcessExecEvent, ProcessTerminationEvent
+from pr1.fiber.process import BaseProcess, BaseProcessPoint, ProcessExecEvent, ProcessFailureEvent, ProcessTerminationEvent
+from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.units.base import BaseProcessRunner
 from pr1.util.asyncio import AsyncIteratorThread
 from pr1.util.misc import FileObject, UnreachableError
@@ -33,8 +36,17 @@ class ProcessData(Protocol):
   credentials: Optional[AWSCredentials]
   multipart: bool
   region: str
-  source: Path | bytes
+  source: am.FileRef
   target: str
+
+
+class BotoError(MasterError):
+  def __init__(self, exception: Exception, /):
+    super().__init__(exception.args[0])
+
+class SourceError(MasterError):
+  def __init__(self, exception: OSError, /):
+    super().__init__(str(exception))
 
 
 @dataclass(kw_only=True)
@@ -62,126 +74,81 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
     self._data = data
 
   async def run(self, point, stack):
-    yield ProcessExecEvent(location=ProcessLocation(
-      phase='create',
-      progress=0.0
-    ))
+    try:
+      with self._data.source.open("rb") as source_file:
+        source_size = self._data.source.get_size()
 
-    await asyncio.sleep(5)
+        part_size = MIN_PART_SIZE
+        part_count = math.floor(source_size / part_size) if self._data.multipart else 1
 
-    yield ProcessTerminationEvent(location=ProcessLocation(
-      phase='create',
-      progress=0.0
-    ))
+        assert part_count <= 10000
 
+        config = Config(
+          retries=dict(
+            mode='standard'
+          )
+        )
 
-    # if isinstance(self._data.source, PythonExprAugmented):
-    #   analysis, source_result = self._data.source.evaluate(stack)
+        client_args = dict(
+          config=config,
+          region_name=self._data.region,
+          service_name="s3"
+        )
 
-    #   if isinstance(source_result, EllipsisType):
-    #     # Abort
-    #     print("Abort", analysis)
-    #     return
+        if (credentials := self._data.credentials):
+          client_args |= dict(
+            aws_access_key_id=credentials.access_key_id,
+            aws_secret_access_key=credentials.secret_access_key,
+            aws_session_token=credentials.session_token
+          )
 
-    #   source_value = source_result.value
-    # else:
-    #   source_value = self._data.source
-
-    # source_data: FileObject | bytes
-    # source_file: io.IOBase
-    # source_size: int
-
-    # match source_value:
-    #   case bytes():
-    #     source_data = source_value
-    #     source_file = io.BytesIO(source_value)
-    #     source_size = len(source_value)
-    #   case Path():
-    #     if not source_value.is_absolute():
-    #       source_value = self._runner._chip.dir / source_value
-
-    #     if not source_value.exists():
-    #       raise Exception("Missing file")
-
-    #     try:
-    #       source_data = source_value.open('rb')
-    #     except OSError:
-    #       raise Exception("Error")
-
-    #     source_file = source_data
-    #     source_size = source_value.stat().st_size
-    #   case FileObject():
-    #     # TODO: Do something else if fileno() does not exist
-    #     source_data = source_value
-    #     source_file = source_value
-    #     source_size = os.fstat(source_value.fileno()).st_size
-    #   case _:
-    #     raise UnreachableError()
-
-    # part_size = MIN_PART_SIZE
-    # part_count = math.floor(source_size / part_size) if self._data.multipart else 1
-
-    # print("Count", part_count)
-
-    # assert part_count <= 10000
-
-    # config = Config(
-    #   retries=dict(
-    #     mode='standard'
-    #   )
-    # )
-
-    # client_args = dict(
-    #   config=config,
-    #   region_name=self._data.region,
-    #   service_name="s3"
-    # )
-
-    # if (credentials := self._data.credentials):
-    #   client_args |= dict(
-    #     aws_access_key_id=credentials.access_key_id,
-    #     aws_secret_access_key=credentials.secret_access_key,
-    #     aws_session_token=credentials.session_token
-    #   )
-
-    # client = boto3.client(**client_args)
+        client = boto3.client(**client_args)
 
 
-    # # Single upload
-    # if part_count <= 1:
-    #   yield ProcessExecEvent(
-    #     location=ProcessLocation(
-    #       phase='upload',
-    #       progress=0.0
-    #     )
-    #   )
+        # Single upload
+        if part_count <= 1:
+          yield ProcessExecEvent(
+            location=ProcessLocation(
+              phase='upload',
+              progress=0.0
+            )
+          )
 
-    #   def run_upload(callback):
-    #     return client.upload_fileobj(
-    #       source_file,
-    #       Bucket=self._data.bucket,
-    #       Key=self._data.target,
-    #       Callback=callback
-    #     )
+          def run_upload(callback):
+            return client.upload_fileobj(
+              source_file,
+              Bucket=self._data.bucket,
+              Key=self._data.target,
+              Callback=callback
+            )
 
-    #   thread = AsyncIteratorThread[None, int](run_upload)
+          thread = AsyncIteratorThread[None, int](run_upload)
+          uploaded_byte_count = 0
 
-    #   uploaded_byte_count = 0
+          async for chunk_byte_count in thread:
+            uploaded_byte_count += chunk_byte_count
 
-    #   async for chunk_byte_count in thread:
-    #     uploaded_byte_count += chunk_byte_count
+            yield ProcessExecEvent(
+              location=ProcessLocation(
+                phase='upload',
+                progress=(uploaded_byte_count / source_size)
+              )
+            )
 
-    #     yield ProcessExecEvent(
-    #       location=ProcessLocation(
-    #         phase='upload',
-    #         progress=(uploaded_byte_count / source_size)
-    #       )
-    #     )
+          try:
+            thread.result()
+          except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
+            yield ProcessFailureEvent(
+              analysis=MasterAnalysis(errors=[BotoError(e)])
+            )
 
-    #   try:
-    #     thread.result()
-    #   except botocore.exceptions.ClientError as e:
-    #     print("Client error:", e)
+            return
+    except OSError as e:
+      yield ProcessFailureEvent(
+        analysis=MasterAnalysis(errors=[SourceError(e)])
+      )
+
+      return
 
     # # Multipart upload
     # else:
@@ -281,17 +248,14 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
     #     ))
 
     # client.close()
-    # source_file.close()
 
-    # yield ProcessExecEvent(
-    #   location=ProcessLocation(
-    #     paused=False,
-    #     phase='done',
-    #     progress=1.0
-    #   ),
-    #   stopped=True,
-    #   terminated=True
-    # )
+    yield ProcessTerminationEvent(
+      location=ProcessLocation(
+        paused=False,
+        phase='done',
+        progress=1.0
+      )
+    )
 
   @staticmethod
   def export_data(data):

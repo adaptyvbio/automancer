@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
-from .error import ErrorDocumentReference
+from .error import DiagnosticDocumentReference
 from .reader import LocationArea, Source
 
 

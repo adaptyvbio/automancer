@@ -5,7 +5,7 @@ from types import EllipsisType
 from typing import Literal, Optional, cast
 
 from pr1.devices.nodes.readable import WatchableNode
-from pr1.error import Error
+from pr1.error import Diagnostic
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable, PythonExprObject
 from pr1.master.analysis import MasterAnalysis
@@ -19,7 +19,7 @@ from pr1.util.pool import Pool
 from .parser import StateData
 
 
-class ExpectError(Error):
+class ExpectError(Diagnostic):
   def __init__(self, message: str):
     super().__init__(message)
 

@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, TypedDict
 
+import pr1 as am
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, PotentialExprType,
+from pr1.input import (Attribute, PotentialExprType,
                                    StrType)
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
                               PassiveTransformerPreparationResult,
@@ -19,19 +20,19 @@ class Attributes(TypedDict, total=False):
   name: Evaluable[LocatedString]
 
 class Transformer(BasePassiveTransformer):
-  priority = 800
-  attributes = {
-    'name': Attribute(
-      description="Sets the block's name.",
-      type=PotentialExprType(StrType(), static=True)
-    )
-  }
+  def __init__(self):
+    super().__init__({
+      'name': Attribute(
+        description="Sets the block's name.",
+        type=PotentialExprType(StrType(), static=True)
+      )
+    }, priority=800)
 
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     if (attr := data.get('name')):
-      return Analysis(), PassiveTransformerPreparationResult(attr)
+      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr)
     else:
-      return Analysis(), None
+      return am.LanguageServiceAnalysis(), None
 
   def adopt(self, data: Evaluable[LocatedString], /, adoption_stack, trace):
     analysis, result = data.eval(EvalContext(adoption_stack), final=True)
@@ -42,7 +43,7 @@ class Transformer(BasePassiveTransformer):
     return analysis, TransformerAdoptionResult(result)
 
   def execute(self, data: LocatedString, /, block):
-    return Analysis(), NameBlock(block, name=data.value)
+    return am.LanguageServiceAnalysis(), NameBlock(block, name=data.value)
 
 
 class Parser(BaseParser):

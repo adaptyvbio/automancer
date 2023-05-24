@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from asyncio import Future
 import asyncio
 from dataclasses import dataclass, field
@@ -6,7 +7,7 @@ from io import IOBase
 import itertools
 import logging
 import traceback
-from typing import Iterable, Protocol, Self, Sequence, TypeVar
+from typing import Any, Iterable, Protocol, Self, Sequence, TypeVar
 import typing
 
 
@@ -40,7 +41,12 @@ def split_sequence(sequence: Sequence[T], func: SequenceSplitter[T], /):
 
 @typing.runtime_checkable
 class Exportable(Protocol):
-  def export(self) -> object:
+  def export(self) -> Any:
+    ...
+
+class ExportableABC(ABC):
+  @abstractmethod
+  def export(self) -> Any:
     ...
 
 class UnreachableError(Exception):

@@ -1,9 +1,9 @@
 import asyncio
+import time
 from asyncio import Task
 from typing import Callable, Optional
 
-from okolab import (OkolabDevice, OkolabDeviceConnectionError,
-                    OkolabDeviceConnectionLostError)
+from okolab import OkolabDevice, OkolabDeviceConnectionError
 from pint import Quantity
 from pr1.devices.nodes.collection import DeviceNode
 from pr1.devices.nodes.common import (ConfigurableNode, NodeId,
@@ -11,17 +11,18 @@ from pr1.devices.nodes.common import (ConfigurableNode, NodeId,
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import PollableReadableNode
 from pr1.devices.nodes.value import NullType
+from pr1.ureg import ureg
 from pr1.util.asyncio import shield, try_all, wait_all
 from pr1.util.pool import Pool
 
 from . import logger, namespace
 
 
-class BoardTemperatureNode(PollableReadableNode, NumericNode):
+class BoardTemperatureNode(NumericNode, PollableReadableNode):
   def __init__(self, *, master: 'MasterDevice'):
     super().__init__(
       readable=True,
-      interval=0.2,
+      poll_interval=1.0,
       unit="degC"
     )
 
@@ -31,19 +32,22 @@ class BoardTemperatureNode(PollableReadableNode, NumericNode):
 
     self._master = master
 
-  async def _read_value(self):
+  async def _read(self):
     assert (device := self._master._device)
 
+    async def read():
+      return (await device.get_board_temperature()) * ureg.degC
+
     try:
-      return await device.get_board_temperature()
+      await self._set_value_at_half_time(read())
     except OkolabDeviceConnectionError as e:
       raise NodeUnavailableError from e
 
 
-class TemperatureReadoutNode(PollableReadableNode, NumericNode):
+class TemperatureReadoutNode(NumericNode, PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
-      interval=0.2,
+      poll_interval=0.2,
       readable=True,
       unit="degC"
     )
@@ -54,18 +58,22 @@ class TemperatureReadoutNode(PollableReadableNode, NumericNode):
 
     self._worker = worker
 
-  async def _read_value(self):
+  async def _read(self):
+    async def read():
+      return (await self._worker._get_temperature_readout()) * ureg.degC
+
     try:
-      return await self._worker._get_temperature_readout()
+      await self._set_value_at_half_time(read())
     except OkolabDeviceConnectionError as e:
       raise NodeUnavailableError from e
 
-class TemperatureSetpointNode(NumericNode):
+class TemperatureSetpointNode(NumericNode, PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
       max=60.0,
       min=25.0,
       nullable=True,
+      poll_interval=5.0,
       readable=True,
       unit="degC",
       writable=True
@@ -77,8 +85,14 @@ class TemperatureSetpointNode(NumericNode):
 
     self._worker = worker
 
-  async def _read_value(self):
-    return await self._worker._get_temperature_setpoint()
+  async def _read(self):
+    async def read():
+      return (await self._worker._get_temperature_setpoint()) * ureg.degC
+
+    try:
+      await self._set_value_at_half_time(read())
+    except OkolabDeviceConnectionError as e:
+      raise NodeUnavailableError from e
 
   async def _write(self, value: Quantity | NullType, /):
     try:
@@ -121,7 +135,6 @@ class MasterDevice(DeviceNode):
     }
 
   async def _connect(self):
-    logger.debug(f"Connecting to {self._label}")
     ready = False
 
     while True:
@@ -137,6 +150,7 @@ class MasterDevice(DeviceNode):
             await self._device.set_device2(None)
 
           self.connected = True
+          self._node_board_temperature.connected = True
 
           try:
             await try_all([
@@ -144,25 +158,28 @@ class MasterDevice(DeviceNode):
               *([self._worker2.configure()] if self._worker2 else list())
             ])
 
+            logger.info(f"Connected to {self._label}")
+
             if not ready:
               yield
               ready = True
 
-            try:
-              await self._device.closed()
-            except OkolabDeviceConnectionLostError:
-              logger.warning(f"Lost connection to {self._label}")
+            await self._device.closed()
+            logger.warning(f"Lost connection to {self._label}")
           finally:
             self.connected = False
+            self._node_board_temperature.connected = False
 
+            # Problem with shield()
             await shield(wait_all([
               *([self._worker1.unconfigure()] if self._worker1 else list()),
               *([self._worker2.unconfigure()] if self._worker2 else list())
             ]))
+
+            await shield(self._device.close())
+            self._device = None
         except* (NodeUnavailableError, OkolabDeviceConnectionError):
           pass
-        finally:
-          await shield(self._device.close())
 
       if not ready:
         yield
@@ -256,7 +273,13 @@ class WorkerDevice(DeviceNode, ConfigurableNode):
   async def configure(self):
     await self._set_enabled(True)
 
+    self._node_readout.connected = True
+    self._node_setpoint.connected = True
+
   async def unconfigure(self):
+    self._node_readout.connected = False
+    self._node_setpoint.connected = False
+
     # The connection may have been lost already.
     try:
       await self._set_enabled(False)

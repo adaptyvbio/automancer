@@ -2,11 +2,12 @@ import logging
 from types import EllipsisType
 from typing import Any
 
+import pr1 as am
 from pint import Quantity
 from pr1.ureg import ureg
 from pr1.reader import LocatedValue
-from pr1.error import Diagnostic, ErrorDocumentReference
-from pr1.fiber.langservice import (Analysis, ArbitraryQuantityType, Attribute,
+from pr1.error import Diagnostic, DiagnosticDocumentReference
+from pr1.input import (ArbitraryQuantityType, Attribute,
                                    BoolType, DictType, EnumType,
                                    IdentifierType, ListType, QuantityType,
                                    StrType)
@@ -25,7 +26,7 @@ class OPCUAConfigurationError(Diagnostic):
   def __init__(self, message: str, target: LocatedValue, /):
     super().__init__(
       message,
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
@@ -55,7 +56,7 @@ class Executor(BaseExecutor):
     self._host = host
 
   def load(self, context):
-    analysis = Analysis()
+    analysis = am.DiagnosticAnalysis()
 
     self._devices = dict[str, OPCUADevice]()
 

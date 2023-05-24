@@ -1,5 +1,5 @@
 from typing import Any
-from pr1.fiber.langservice import Attribute, DictType, IdentifierType, ListType, PrimitiveType, StrType
+from pr1.input import Attribute, DictType, IdentifierType, ListType, PrimitiveType, StrType
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
 from pr1.util.asyncio import try_all

@@ -1,7 +1,7 @@
 from types import EllipsisType
 from typing import Any, TypedDict
 
-from pr1.fiber import langservice as lang
+from pr1 import input as lang
 from pr1.fiber.parser import (BasePassiveTransformer, BaseParser, FiberParser,
                               Layer, TransformerAdoptionResult,
                               PassiveTransformerPreparationResult)

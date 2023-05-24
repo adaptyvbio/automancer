@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Literal, NotRequired, TypedDict
 
-from pr1.fiber import langservice as lang
+from pr1 import input as lang
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable, PythonExprObject
 from pr1.fiber.parser import BaseParser, BlockUnitData, BlockUnitPreparationData, BlockUnitState

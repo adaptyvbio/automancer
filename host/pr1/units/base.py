@@ -7,7 +7,7 @@ from collections import namedtuple
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from .. import logger as root_logger
-from ..fiber.langservice import AnyType
+from ..input import AnyType
 from ..fiber.process import BaseProcess as ProcessProtocol
 from ..state import UnitStateInstance, UnitStateManager
 

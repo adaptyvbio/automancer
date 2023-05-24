@@ -4,16 +4,16 @@ from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar
 
-from ..error import Error, ErrorReference
+from ..error import Diagnostic, DiagnosticReference
 from ..util.misc import Exportable
 
 if TYPE_CHECKING:
-  from ..fiber.langservice import Analysis
+  from ..langservice import LanguageServiceAnalysis
 
 
 @dataclass
 class Effect(ABC, Exportable):
-  references: list[ErrorReference] = field(default_factory=list, kw_only=True)
+  references: list[DiagnosticReference] = field(default_factory=list, kw_only=True)
 
   @abstractmethod
   def export(self) -> Any:
@@ -37,7 +37,7 @@ class GenericEffect(Effect):
 
 
 @dataclass(kw_only=True)
-class MasterError(Error):
+class MasterError(Diagnostic):
   id: str = field(default_factory=lambda: str(uuid.uuid4()))
   path: list[int] = field(default_factory=list)
   time: Optional[float] = None
@@ -52,7 +52,7 @@ class MasterError(Error):
       "path": self.path
     }
 
-class MasterErrorReference(ErrorReference):
+class MasterErrorReference(DiagnosticReference):
   target_id: str
   _: KW_ONLY
   relation: Literal['default', 'close'] = 'default'
@@ -83,11 +83,11 @@ class MasterAnalysis(Exportable):
     )
 
   def add(self, value: 'tuple[Analysis | MasterAnalysis, T]', /) -> T:
-    from ..fiber.langservice import Analysis
+    from ..langservice import LanguageServiceAnalysis
 
     analysis, result = value
 
-    if isinstance(analysis, Analysis):
+    if isinstance(analysis, LanguageServiceAnalysis):
       return self.add((MasterAnalysis.cast(analysis), result))
 
     self.effects += analysis.effects
@@ -109,7 +109,7 @@ class MasterAnalysis(Exportable):
     }
 
   @classmethod
-  def cast(cls, analysis: 'Analysis'):
+  def cast(cls, analysis: 'LanguageServiceAnalysis'):
     return MasterAnalysis(
       errors=[error.as_master() for error in analysis.errors],
       warnings=[warning.as_master() for warning in analysis.warnings]

@@ -5,6 +5,7 @@ from logging import Logger
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Optional, cast, final
 
+import pr1 as am
 from pr1.devices.nodes.common import NodePath
 from pr1.fiber.expr import export_value
 from pr1.master.analysis import MasterAnalysis
@@ -13,7 +14,6 @@ from pr1.util.decorators import provide_logger
 from pr1.util.misc import Exportable
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext
-from pr1.fiber.langservice import Analysis
 from pr1.fiber.master2 import ProgramHandle, ProgramOwner
 from pr1.fiber.parser import BaseProgram, BaseProgramPoint
 
@@ -125,7 +125,7 @@ class PublisherProgram(BaseProgram):
   async def run(self, point: Optional[PublisherProgramPoint], stack):
     trace = cast(list[PublisherProgram], self._handle.ancestors(include_self=True))
 
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     assignments = dict[ValueNode, Any]()
     location_assignments = dict[NodePath, Optional[Any]]()
     failure = False

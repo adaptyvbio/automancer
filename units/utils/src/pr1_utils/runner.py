@@ -8,7 +8,7 @@ from types import EllipsisType
 from typing import Literal, Optional, TypedDict, cast
 import asyncio
 
-from pr1.error import Error, ErrorDocumentReference
+from pr1.error import Diagnostic, DiagnosticDocumentReference
 from pr1.fiber.binding import BindingWriter
 from pr1.fiber.eval import EvalStack
 from pr1.fiber.process import ProcessExecEvent, ProcessFailureEvent, ProcessTerminationEvent
@@ -20,15 +20,15 @@ from . import namespace
 from .parser import ProcessData
 
 
-class InvalidCommandArgumentsError(Error):
+class InvalidCommandArgumentsError(Diagnostic):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Invalid command arguments", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid command arguments", references=[DiagnosticDocumentReference.from_value(target)])
 
-class InvalidCommandExecutableError(Error):
+class InvalidCommandExecutableError(Diagnostic):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Invalid command executable", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid command executable", references=[DiagnosticDocumentReference.from_value(target)])
 
-class NonZeroExitCodeError(Error):
+class NonZeroExitCodeError(Diagnostic):
   def __init__(self, exit_code: int, /):
     super().__init__(f"Non-zero exit code ({exit_code})")
 

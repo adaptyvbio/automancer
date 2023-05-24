@@ -4,7 +4,7 @@ from pr1.devices.claim import Claim
 from pr1.devices.nodes.common import BaseNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.devices.nodes.watcher import Watcher
-from pr1.fiber.langservice import DictType
+from pr1.input import DictType
 from pr1.host import Host
 from pr1.units.base import BaseExecutor
 

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optiona
 from ..host import logger
 from ..master.analysis import MasterAnalysis, MasterError
 from ..util.decorators import provide_logger
-from ..util.misc import Exportable, UnreachableError
+from ..util.misc import Exportable, ExportableABC, UnreachableError
 from .eval import EvalStack
 from .parser import BaseBlock, HeadProgram
 
@@ -73,12 +73,11 @@ class BaseProcessPoint(ABC):
 
 S_ProcessPoint = TypeVar('S_ProcessPoint', bound=BaseProcessPoint)
 
-class BaseProcessData(Exportable, ABC, Generic[S_ProcessPoint]):
+class BaseProcessData(ExportableABC, Generic[S_ProcessPoint]):
   @abstractmethod
   def export(self) -> Any:
     ...
 
-  @abstractmethod
   def import_point(self, data: Any, /) -> S_ProcessPoint:
     ...
 

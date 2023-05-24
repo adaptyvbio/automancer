@@ -7,7 +7,7 @@ from types import EllipsisType
 from typing import Any, ClassVar, Optional, TypedDict
 
 from pr1.fiber.eval import EvalStack
-from pr1.fiber.langservice import Analysis, Attribute, BoolType
+from pr1.input import Analysis, Attribute, BoolType
 from pr1.fiber.master2 import ProgramHandle, ProgramOwner
 from pr1.fiber.parser import (BaseBlock, BaseParser, BaseDefaultTransform, BlockState,
                               BlockUnitData, FiberParser, HeadProgram,

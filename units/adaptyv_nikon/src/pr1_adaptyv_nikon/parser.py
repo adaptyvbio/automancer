@@ -5,10 +5,10 @@ from typing import Any, cast
 
 from pint import Quantity
 from pr1.error import Trace
-from pr1.fiber import langservice as lang
+from pr1 import input as lang
 from pr1.fiber.eval import EvalContext, EvalEnvs, EvalStack
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, EnumType, IntType,
+from pr1.input import (Analysis, Attribute, EnumType, IntType,
                                    PathType, QuantityType, SimpleDictType)
 from pr1.fiber.parser import (Attrs, BaseBlock, BaseLeadTransformer,
                               BaseParser, LeadTransformerPreparationResult)

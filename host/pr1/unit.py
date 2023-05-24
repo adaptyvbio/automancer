@@ -8,7 +8,7 @@ from types import EllipsisType
 from typing import Any
 
 from . import logger
-from .fiber.langservice import Analysis
+from .analysis import DiagnosticAnalysis
 from .fiber.parser import AnalysisContext
 
 
@@ -70,7 +70,7 @@ class UnitManager:
       if info.options:
         analysis, conf = Executor.options_type.analyze(info.options, analysis_context)
       else:
-        analysis, conf = Analysis(), None
+        analysis, conf = DiagnosticAnalysis(), None
 
       if isinstance(conf, EllipsisType):
         logger.error(f"Failed to load configuration of unit '{namespace}'")
@@ -84,7 +84,7 @@ class UnitManager:
 
       return analysis, executor
 
-    return Analysis(), None
+    return DiagnosticAnalysis(), None
 
   def load(self, conf):
     units_info = list()

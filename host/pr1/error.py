@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(kw_only=True)
-class ErrorReference(Exportable):
+class DiagnosticReference(Exportable):
   id: str
   label: Optional[str] = None
 
@@ -20,7 +20,7 @@ class ErrorReference(Exportable):
     }
 
 @dataclass(kw_only=True)
-class ErrorDocumentReference(ErrorReference, Exportable):
+class DiagnosticDocumentReference(DiagnosticReference, Exportable):
   area: 'Optional[LocationArea]'
   document_id: str
 
@@ -52,7 +52,7 @@ class ErrorDocumentReference(ErrorReference, Exportable):
     return cls.from_area(value.area, id=id)
 
 @dataclass(kw_only=True)
-class ErrorFileReference(ErrorReference):
+class ErrorFileReference(DiagnosticReference):
   path: str
 
   def export(self):
@@ -62,16 +62,16 @@ class ErrorFileReference(ErrorReference):
       "path": self.path
     }
 
-Trace = list[ErrorReference]
+Trace = list[DiagnosticReference]
 
 @dataclass
-class Error(Exportable):
+class Diagnostic(Exportable):
   message: str
   _: KW_ONLY
   description: list[str] = field(default_factory=list)
   id: Optional[str] = None
   name: str = 'unknown'
-  references: list[ErrorReference] = field(default_factory=list)
+  references: list[DiagnosticReference] = field(default_factory=list)
   trace: Optional[Trace] = None
 
   def as_master(self, *, time: Optional[float] = None):
@@ -95,6 +95,3 @@ class Error(Exportable):
       "references": [ref.export() for ref in self.references],
       "trace": [ref.export() for ref in self.trace] if (self.trace is not None) else None
     }
-
-
-Diagnostic = Error

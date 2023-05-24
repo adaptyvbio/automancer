@@ -8,22 +8,20 @@ from graphlib import TopologicalSorter
 from types import EllipsisType
 from typing import Any, Optional, cast
 
-from .util.asyncio import run_double
-
+from .langservice import LanguageServiceAnalysis
+from .analysis import DiagnosticAnalysis
 from . import logger, reader
 from .chip import Chip, ChipCondition
 from .devices.nodes.collection import CollectionNode, DeviceNode
 from .devices.nodes.common import BaseNode, NodeId, NodePath
 from .document import Document
 from .draft import Draft, DraftCompilation
-from .fiber.langservice import (Analysis, Attribute, BoolType, KVDictType,
-                                PrimitiveType, SimpleDictType, StrType,
-                                print_analysis)
+from .input import (Attribute, BoolType, KVDictType,
+                                PrimitiveType, SimpleDictType, StrType)
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext
 from .unit import UnitManager
 from .ureg import ureg
-from .util.asyncio import run_double
 from .util.pool import Pool
 
 
@@ -101,7 +99,7 @@ class Host:
       analysis, conf_data = reader.loads2(document.source)
       raw_conf: Any = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
 
-      print_analysis(analysis, logger)
+      analysis.log_diagnostics(logger)
 
       if isinstance(raw_conf, EllipsisType) or analysis.errors:
         sys.exit(1)
@@ -138,7 +136,7 @@ class Host:
 
     self.ureg = ureg
 
-    analysis = Analysis()
+    analysis = DiagnosticAnalysis()
 
     for namespace in self.manager.units.keys():
       unit_analysis, executor = self.manager.create_executor(namespace, host=self)
@@ -147,7 +145,7 @@ class Host:
       if executor and not isinstance(executor, EllipsisType):
         self.executors[namespace] = executor
 
-    print_analysis(analysis, logger=logger)
+    analysis.log_diagnostics(logger)
 
 
   @property
@@ -212,7 +210,7 @@ class Host:
 
     self.manager.reload()
 
-    analysis = Analysis()
+    analysis = DiagnosticAnalysis()
 
     for unit_info in self.manager.units_info.values():
       namespace = unit_info.namespace
@@ -250,7 +248,7 @@ class Host:
 
         #   # <- Save chip
 
-    print_analysis(analysis, logger=logger)
+    analysis.log_diagnostics(logger)
 
   def get_state(self):
     return {
@@ -337,9 +335,8 @@ class Host:
           import traceback
           traceback.print_exc()
 
-          from .fiber import langservice as lang
           compilation = DraftCompilation(
-            analysis=lang.Analysis(),
+            analysis=LanguageServiceAnalysis(),
             document_paths={draft.entry_document.path},
             draft_id=draft.id,
             protocol=None

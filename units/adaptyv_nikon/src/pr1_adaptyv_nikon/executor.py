@@ -5,7 +5,7 @@ from tempfile import NamedTemporaryFile
 from typing import Optional, TypedDict
 
 import numpy as np
-from pr1.fiber.langservice import Attribute, SimpleDictType, StrType
+from pr1.input import Attribute, SimpleDictType, StrType
 from pr1.units.base import BaseExecutor
 
 from . import logger

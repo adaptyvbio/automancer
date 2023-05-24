@@ -12,9 +12,9 @@ from pr1.devices.nodes.common import NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.readable import WatchableNode
 from pr1.devices.nodes.value import NullType
-from pr1.error import Error, ErrorDocumentReference
+from pr1.error import Diagnostic, DiagnosticDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
-from pr1.fiber.langservice import PathFileRef
+from pr1.input import PathFileRef
 from pr1.master.analysis import MasterAnalysis, MasterError, SystemMasterError
 from pr1.reader import LocatedString, LocatedValue
 from pr1.state import StateEvent, UnitStateInstance
@@ -29,23 +29,23 @@ from .parser import OutputFormat, RecordState
 
 class MissingNodeError(MasterError):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Missing node", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Missing node", references=[DiagnosticDocumentReference.from_value(target)])
 
 class InvalidNodeError(MasterError):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Invalid node", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid node", references=[DiagnosticDocumentReference.from_value(target)])
 
 class InvalidDataTypeError(MasterError):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Invalid data type", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid data type", references=[DiagnosticDocumentReference.from_value(target)])
 
 class MissingFormatError(MasterError):
   def __init__(self, target: LocatedValue, /):
-    super().__init__("Missing format", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Missing format", references=[DiagnosticDocumentReference.from_value(target)])
 
 class UnknownExtensionError(MasterError):
   def __init__(self, target: LocatedString, /):
-    super().__init__("Unknown extension", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Unknown extension", references=[DiagnosticDocumentReference.from_value(target)])
 
 
 EXTENSIONS: dict[str, OutputFormat] = {

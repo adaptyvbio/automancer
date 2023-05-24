@@ -18,241 +18,75 @@ import numpy as np
 import pint
 from pint import Quantity, Unit
 
-from ..error import Diagnostic, Error, ErrorDocumentReference, Trace
-from ..reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
+from .langservice import *
+from .error import Diagnostic, Diagnostic, DiagnosticDocumentReference, Trace
+from .reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
                       LocatedValue, LocatedValueContainer, LocationArea,
                       LocationRange, ReliableLocatedDict, ReliableLocatedList)
-from ..ureg import ureg
-from ..util.misc import Exportable
-from ..util.parser import check_identifier
-from .expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
+from .ureg import ureg
+from .util.misc import Exportable
+from .util.parser import check_identifier
+from .fiber.expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
                    ValueAsPythonExpr)
 
 if TYPE_CHECKING:
-  from .parser import AnalysisContext
-
-
-@dataclass
-class AnalysisMarker(Exportable):
-  message: str
-  reference: ErrorDocumentReference
-  _: KW_ONLY
-  kind: Literal['deprecated', 'unnecessary']
-
-  def export(self):
-    return {
-      "kind": self.kind,
-      "message": self.message,
-      "reference": self.reference.export()
-    }
-
-@dataclass
-class AnalysisRelation(Exportable):
-  definition_body: ErrorDocumentReference
-  definition_name: ErrorDocumentReference
-  references: list[ErrorDocumentReference]
-
-  def export(self):
-    return {
-      "definitionBody": self.definition_body.export(),
-      "definitionName": self.definition_name.export(),
-      "references": [ref.export() for ref in self.references]
-    }
-
-@dataclass
-class AnalysisRename(Exportable):
-  items: list[ErrorDocumentReference]
-
-  def export(self):
-    return {
-      "items": [ref.export() for ref in self.items]
-    }
-
-@dataclass
-class AnalysisSelection(Exportable):
-  range: LocationRange
-
-  def export(self):
-    return [self.range.start, self.range.end]
-
-@dataclass
-class AnalysisToken(Exportable):
-  name: str
-  reference: ErrorDocumentReference
-
-  def export(self):
-    return {
-      "name": self.name,
-      "reference": self.reference.export()
-    }
-
-
-T = TypeVar('T')
-
-@dataclass(kw_only=True)
-class Analysis:
-  errors: list[Diagnostic] = field(default_factory=list)
-  warnings: list[Diagnostic] = field(default_factory=list)
-
-  completions: list[Any] = field(default_factory=list)
-  folds: list[Any] = field(default_factory=list)
-  hovers: list[Any] = field(default_factory=list)
-  markers: list[AnalysisMarker] = field(default_factory=list)
-  relations: list[AnalysisRelation] = field(default_factory=list)
-  renames: list[AnalysisRename] = field(default_factory=list)
-  selections: list[AnalysisSelection] = field(default_factory=list)
-  tokens: list[AnalysisToken] = field(default_factory=list)
-
-  def add(self, other: tuple['Analysis', T], /, trace: Optional[Trace] = None) -> T:
-    analysis, value = other
-
-    if trace:
-      for error in analysis.errors:
-        # The isinstance() test is for compatibility.
-        if isinstance(error, Error) and (not error.trace):
-          error.trace = trace
-
-    self.errors += analysis.errors
-    self.warnings += analysis.warnings
-    self.completions += analysis.completions
-    self.folds += analysis.folds
-    self.hovers += analysis.hovers
-    self.markers += analysis.markers
-    self.relations += analysis.relations
-    self.renames += analysis.renames
-    self.selections += analysis.selections
-    self.tokens += analysis.tokens
-
-    return value
-
-  def __add__(self, other: 'Analysis'):
-    return self.__class__(
-      errors=(self.errors + other.errors),
-      warnings=(self.warnings + other.warnings),
-      completions=(self.completions + other.completions),
-      folds=(self.folds + other.folds),
-      hovers=(self.hovers + other.hovers),
-      markers=(self.markers + other.markers),
-      relations=(self.relations + other.relations),
-      renames=(self.renames + other.renames),
-      selections=(self.selections + other.selections),
-      tokens=(self.tokens + other.tokens)
-    )
-
-  def __repr__(self):
-    return f"{self.__class__.__name__}(errors={self.errors!r})"
-
-
-@dataclass(kw_only=True)
-class CompletionItem:
-  documentation: Optional[str]
-  kind: str
-  label: str
-  namespace: Optional[str]
-  signature: Optional[str]
-  sublabel: Optional[str]
-  text: str
-
-class Completion:
-  def __init__(self, *, items: list[CompletionItem], ranges: list[LocationRange]):
-    self.items = items
-    self.ranges = ranges
-
-  def export(self):
-    return {
-      "items": [{
-        "documentation": item.documentation,
-        "kind": item.kind,
-        "label": item.label,
-        "namespace": item.namespace,
-        "signature": item.signature,
-        "sublabel": item.sublabel,
-        "text": item.text
-      } for item in self.items],
-      "ranges": [[range.start, range.end] for range in self.ranges]
-    }
-
-  def __repr__(self):
-    return f"Completion(items={repr(self.items)}, ranges={repr(self.ranges)})"
-
-
-class FoldingRange:
-  def __init__(self, range, *, kind = 'region'):
-    self.kind = kind
-    self.range = range
-
-  def export(self):
-    return {
-      "kind": self.kind,
-      "range": [self.range.start, self.range.end]
-    }
-
-class Hover:
-  def __init__(self, contents, range):
-    self.contents = contents
-    self.range = range
-
-  def export(self):
-    return {
-      "contents": self.contents,
-      "range": [self.range.start, self.range.end]
-    }
+  from .fiber.parser import AnalysisContext
 
 
 class AmbiguousKeyError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       f"Ambiguous key '{target}'",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class DuplicateKeyError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       f"Duplicate key '{target}'",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class ExtraneousKeyError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       f"Unrecognized key '{target}'",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class MissingKeyError(Diagnostic):
   def __init__(self, target: LocatedValue, /, key: str):
     super().__init__(
       f"Missing key '{key}'",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidIdentifierError(Diagnostic):
   def __init__(self, target: LocatedValue):
     super().__init__(
       "Invalid identifier",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidEnumValueError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
-    super().__init__(f"Invalid enum value", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__(f"Invalid enum value", references=[DiagnosticDocumentReference.from_value(target)])
 
 class MissingAttributeError(Diagnostic):
   def __init__(self, target: LocatedValue, attribute: str, /):
-    super().__init__(f"Missing attribute '{attribute}'", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__(f"Missing attribute '{attribute}'", references=[DiagnosticDocumentReference.from_value(target)])
 
 class InvalidDataTypeError(Diagnostic):
   def __init__(self, target: LocatedValue, /, message: str):
-    super().__init__(f"Invalid data type: {message}", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__(f"Invalid data type: {message}", references=[DiagnosticDocumentReference.from_value(target)])
 
 class InvalidIntegerError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
-    super().__init__(f"Invalid integer", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__(f"Invalid integer", references=[DiagnosticDocumentReference.from_value(target)])
 
 
 class Type(Protocol):
-  def analyze(self, obj: LocatedValue, /, context: 'AnalysisContext') -> tuple[Analysis, Any | EllipsisType]:
+  def analyze(self, obj: LocatedValue, /, context: 'AnalysisContext') -> tuple[LanguageServiceAnalysis, Any | EllipsisType]:
     ...
 
 CompletionKind = Literal['class', 'constant', 'enum', 'field', 'property']
@@ -263,25 +97,40 @@ class Attribute:
     type: Type,
     *,
     decisive: bool = False,
+    default: Any | EllipsisType = Ellipsis,
     deprecated: bool = False,
     description: Optional[str] = None,
     documentation: Optional[list[str]] = None,
     kind: CompletionKind = 'field',
     label: Optional[str] = None,
     optional: bool = False,
-    required: bool = False,
     signature: Optional[str] = None
   ):
-    assert not (optional and required)
+    """
+    Creates an `Attribute` instance.
 
-    self._decisive = required or decisive
+    Parameters
+      type: The attribute's type.
+      decisive: Whether the parent dictionary's analysis should fail when this attribute is itself missing. Always `True` for required attributes, otherwise defaults to `False`.
+      default: The attribute's default value. Defaults to no default value.
+      deprecated: Whether the attribute is deprecated. Defaults to `False`.
+      description: The attribute's description. Optional.
+      documentation: Additional information on the attribute. Optional.
+      kind: The attribute's completion kind, which determines which icon to display when completing with this attributes. See [the Monaco Editor's documentation](https://microsoft.github.io/monaco-editor/docs.html#enums/languages.CompletionItemKind.html) for the full list. Defaults to `field`.
+      label: The attribute's label. Defaults to the attribute's name in uppercase.
+      optional: Whether the attribute is optional. Defaults to `False`.
+      signature: The attribute's signature, displayed with a monospace font. Optional.
+    """
+
+    self._optional = optional or isinstance(default, EllipsisType)
+
+    self._decisive = (not self._optional) or decisive
+    self._default = default
     self._deprecated = deprecated
     self._description = description
     self._documentation = documentation
     self._kind = kind
     self._label = label
-    self._optional = optional
-    self._required = required
     self._signature = signature
     self._type = type
 
@@ -289,19 +138,18 @@ class Attribute:
   def type(self):
     return self._type
 
-  def analyze(self, obj, key, context):
-    analysis = Analysis()
+  def analyze(self, obj: Any, key: LocatedString, context: 'AnalysisContext'):
+    analysis = LanguageServiceAnalysis()
     key_range = key.area.single_range()
 
     if self._description or self._documentation or self._label:
-      analysis.hovers.append(Hover(
+      analysis.hovers.append(LanguageServiceHover(
         contents=([f"#### {self._label or key.upper()}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
         range=key_range
       ))
 
-    # if self._deprecated:
-      # TODO: Use a deprecation flag
-      # analysis.warnings.append(DraftGenericError("This attribute is deprecated", ranges=[key_range]))
+    if self._deprecated:
+      analysis.markers.append(LanguageServiceMarker("Deprecated attribute", DiagnosticDocumentReference.from_value(key), kind='deprecated'))
 
     value_analysis, value = self._type.analyze(obj, context)
 
@@ -324,7 +172,7 @@ class CompositeDict:
 
   @property
   def completion_items(self):
-    completion_items = list[CompletionItem]()
+    completion_items = list[LanguageServiceCompletionItem]()
 
     for attr_name, attr_entries in self._attributes.items():
       ambiguous = (len(attr_entries) > 1)
@@ -332,7 +180,7 @@ class CompositeDict:
       for namespace, attr in attr_entries.items():
         native = (namespace == self._native_namespace)
 
-        completion_items.append(CompletionItem(
+        completion_items.append(LanguageServiceCompletionItem(
           documentation=attr._description,
           kind=attr._kind,
           label=attr_name,
@@ -366,8 +214,8 @@ class CompositeDict:
 
     return namespace, attr_name, attr_entries
 
-  def analyze(self, obj, context) -> tuple[Analysis, LocatedDict | EllipsisType]:
-    analysis = Analysis()
+  def analyze(self, obj, context) -> tuple[LanguageServiceAnalysis, LocatedDict | EllipsisType]:
+    analysis = LanguageServiceAnalysis()
     strict_failed = False
 
     primitive_analysis, obj = PrimitiveType(dict).analyze(obj, context)
@@ -379,9 +227,9 @@ class CompositeDict:
     assert isinstance(obj, ReliableLocatedDict)
 
     if self._foldable:
-      analysis.folds.append(FoldingRange(obj.fold_range))
+      analysis.folds.append(LanguageServiceFoldingRange(obj.fold_range))
 
-    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
+    analysis.selections.append(LanguageServiceSelection(obj.full_area.enclosing_range()))
 
     attr_values = { namespace: dict() for namespace in self._namespaces }
 
@@ -434,7 +282,7 @@ class CompositeDict:
           analysis.errors.append(MissingKeyError(obj, (f"{namespace}{self._separator}" if namespace != self._native_namespace else str()) + attr_name))
           strict_failed = True
 
-    analysis.completions.append(Completion(
+    analysis.completions.append(LanguageServiceCompletion(
       items=self.completion_items,
       ranges=[
         *[obj_key.area.single_range() for obj_key in obj.keys()],
@@ -464,6 +312,8 @@ class DictType(SimpleDict):
     super().__init__(attrs, foldable=foldable, strict=True)
 
 
+T = TypeVar('T')
+
 class DivisibleCompositeDictType(Type, Generic[T]):
   def __init__(self, *, foldable: bool = True, separator: str = "/"):
     self._attributes_by_key = dict[T, dict[str, Attribute]]()
@@ -480,11 +330,11 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
   @property
   def completion_items(self):
-    completion_items = list[CompletionItem]()
+    completion_items = list[LanguageServiceCompletionItem]()
 
     for namespace, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        completion_items.append(CompletionItem(
+        completion_items.append(LanguageServiceCompletionItem(
           documentation=attr._description,
           kind=attr._kind,
           label=attr_name,
@@ -537,9 +387,9 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     if isinstance(obj, ReliableLocatedDict) and self._foldable:
       if self._foldable:
-        analysis.folds.append(FoldingRange(obj.fold_range))
+        analysis.folds.append(LanguageServiceFoldingRange(obj.fold_range))
 
-      analysis.completions.append(Completion(
+      analysis.completions.append(LanguageServiceCompletion(
         items=self.completion_items,
         ranges=[
           *[obj_key.area.single_range() for obj_key in obj.keys()],
@@ -547,7 +397,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
         ]
       ))
 
-    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
+    analysis.selections.append(LanguageServiceSelection(obj.full_area.enclosing_range()))
 
     attr_values = { key: dict[str, Any]() for key in self._attributes_by_key.keys() }
 
@@ -587,14 +437,14 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     for prefix, attrs in self._attributes_by_key.items():
       for attr_name, attr in attrs.items():
-        if attr._required and not (attr_name in attr_values[prefix]):
+        if (not attr._optional) and not (attr_name in attr_values[prefix]):
           analysis.errors.append(MissingKeyError(obj, attr_name))
           failure = True
 
     return analysis, (attr_values if not failure else Ellipsis)
 
   def analyze_namespace(self, attr_values: dict[T, dict[str, Any]], /, context: 'AnalysisContext', *, key: T):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     failure = False
     result = dict[str, Any]()
 
@@ -646,7 +496,7 @@ class SimpleDictAsPythonExpr(Evaluable):
     self._value = value
 
   def evaluate(self, context):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     result = dict[str, Any]()
 
     for key, value in self._value.items():
@@ -675,61 +525,61 @@ class InvalidPrimitiveError(Diagnostic):
   def __init__(self, target: LocatedValue, primitive: Callable):
     super().__init__(
       f"Invalid primitive, expected {primitive.__name__}",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class MissingUnitError(Diagnostic):
   def __init__(self, target: LocatedValue, /, unit: Unit):
     super().__init__(
       f"Missing unit, expected {unit:~P}",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidUnitError(Diagnostic):
   def __init__(self, target: LocatedValue, /, unit: Unit):
     super().__init__(
       f"Invalid unit, expected {unit:P}",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class UnknownUnitError(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Unknown unit",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidExpr(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid value, expected expression",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidExprKind(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid expression kind",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidFileObject(Diagnostic):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid file object",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
-class PathOutsideDirError(Error):
+class PathOutsideDirError(Diagnostic):
   def __init__(self, target: LocatedValue[Path], dir_path: Path, /):
     delta = os.path.relpath(target.value, dir_path)
-    super().__init__(f"Path '{str(delta)}' is outside target directory", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__(f"Path '{str(delta)}' is outside target directory", references=[DiagnosticDocumentReference.from_value(target)])
 
-class OutOfBoundsQuantityError(Error):
+class OutOfBoundsQuantityError(Diagnostic):
   def __init__(self, target: LocatedValue, /, min: Optional[Quantity], max: Optional[Quantity]):
     super().__init__(
       "Out of bounds value",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
@@ -738,7 +588,7 @@ class AnyType(Type):
     pass
 
   def analyze(self, obj, /, context):
-    return Analysis(), ValueAsPythonExpr.new(obj, depth=context.eval_depth)
+    return LanguageServiceAnalysis(), ValueAsPythonExpr.new(obj, depth=context.eval_depth)
 
 class PrimitiveType(Type):
   def __init__(self, primitive: Any, /):
@@ -756,31 +606,31 @@ class PrimitiveType(Type):
         elif re.compile(r"^-?[0-9]+$").match(obj.value):
           value = int(obj.value)
         else:
-          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+          return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
 
-        return Analysis(), LocatedValue.new(value, area=obj.area)
+        return LanguageServiceAnalysis(), LocatedValue.new(value, area=obj.area)
       case builtins.float if isinstance(obj, str):
         assert isinstance(obj, LocatedString)
 
         try:
           value = float(obj.value)
         except (TypeError, ValueError):
-          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+          return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
         else:
-          return Analysis(), LocatedValue.new(value, area=obj.area)
+          return LanguageServiceAnalysis(), LocatedValue.new(value, area=obj.area)
       case builtins.bool if isinstance(obj, str):
         assert isinstance(obj, LocatedString)
 
         if obj.value in ("true", "false"):
-          return Analysis(), LocatedValue.new((obj.value == "true"), area=obj.area)
+          return LanguageServiceAnalysis(), LocatedValue.new((obj.value == "true"), area=obj.area)
         else:
-          return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+          return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case _ if not isinstance(obj.value, self._primitive):
-        return Analysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, self._primitive)]), Ellipsis
       case builtins.int if isinstance(obj.value, int): # Convert booleans to ints
-        return Analysis(), LocatedValue.new(int(obj.value), obj.area)
+        return LanguageServiceAnalysis(), LocatedValue.new(int(obj.value), obj.area)
       case _:
-        return Analysis(), obj
+        return LanguageServiceAnalysis(), obj
 
   def analyze(self, obj, /, context):
     analysis, result = self._analyze(obj, context)
@@ -809,9 +659,9 @@ class ListType(Type):
     assert isinstance(obj, LocatedList)
 
     if isinstance(obj, ReliableLocatedList) and self._foldable:
-      analysis.folds.append(FoldingRange(obj.fold_range))
+      analysis.folds.append(LanguageServiceFoldingRange(obj.fold_range))
 
-    analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
+    analysis.selections.append(LanguageServiceSelection(obj.full_area.enclosing_range()))
 
     result = list()
 
@@ -836,10 +686,10 @@ class ListType(Type):
       if isinstance(item, LocatedString):
         completion_ranges.append(item.area.single_range())
 
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
 
     if completion_ranges:
-      analysis.completions.append(Completion(
+      analysis.completions.append(LanguageServiceCompletion(
         items=item_type.completion_items,
         ranges=completion_ranges
       ))
@@ -855,7 +705,7 @@ class ListAsPythonExpr(Evaluable[LocatedList[S]], Generic[S]):
     self._value = value
 
   def evaluate(self, context):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     result = list[Any]()
 
     for item in self._value:
@@ -910,7 +760,7 @@ class LiteralOrExprType(Type):
 
         return analysis, LocatedValue.new(expr, area=obj.area)
       elif self._force_expr:
-        return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[InvalidExpr(obj)]), Ellipsis
 
     return self._type.analyze(obj, context)
 
@@ -954,7 +804,7 @@ class PotentialExprType(Type):
     if self._literal:
       return self._type.analyze(obj, context.update(eval_depth=eval_depth))
     else:
-      return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidExpr(obj)]), Ellipsis
 
 class ExprType(LiteralOrExprType):
   def __init__(self, obj_type: Optional[Type] = None, /, *, dynamic: bool = False, expr_type: Optional[Type] = None, field: bool = False, static: bool = False):
@@ -982,7 +832,7 @@ class QuantityType(Type):
       (context.symbolic and (obj.value == None))
     ):
       result = LocatedValue.new(None, area=obj.area)
-      return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
+      return LanguageServiceAnalysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
     if isinstance(obj.value, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
@@ -990,11 +840,11 @@ class QuantityType(Type):
       try:
         value = ureg.Quantity(obj.value)
       except pint.errors.UndefinedUnitError:
-        return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
       except (pint.PintError, TokenError):
-        return Analysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
       except Exception:
-        return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
     elif isinstance(obj.value, (float, int)):
       value = ureg.Quantity(obj.value)
     else:
@@ -1016,24 +866,24 @@ class QuantityType(Type):
   def check(value: Quantity, unit: Unit, *, target: LocatedValue):
     match value:
       case Quantity() if value.check(unit): # type: ignore
-        return Analysis(), LocatedValue.new(value.to(unit), area=target.area)
+        return LanguageServiceAnalysis(), LocatedValue.new(value.to(unit), area=target.area)
       case Quantity(dimensionless=True):
-        return Analysis(errors=[MissingUnitError(target, unit)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[MissingUnitError(target, unit)]), Ellipsis
       case Quantity():
-        return Analysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
       case _:
-        return Analysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
 
 class ArbitraryQuantityType:
   def analyze(self, obj, context):
     try:
       quantity = ureg.Quantity(obj.value)
     except pint.errors.UndefinedUnitError:
-      return Analysis(errors=[UnknownUnitError(obj)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
     except pint.PintError:
-      return Analysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
 
-    return Analysis(), LocatedValue.new(quantity, area=obj.area)
+    return LanguageServiceAnalysis(), LocatedValue.new(quantity, area=obj.area)
 
 
 class BoolType(PrimitiveType):
@@ -1053,11 +903,11 @@ class IntType(Type):
     result = cast(LocatedValue[int], raw_result)
 
     if (result.value < 0) and (self._mode != 'any'):
-      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidIntegerError(obj)]), Ellipsis
     elif (result.value == 0) and (self._mode == 'positive'):
-      return Analysis(errors=[InvalidIntegerError(obj)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidIntegerError(obj)]), Ellipsis
     else:
-      return Analysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
+      return LanguageServiceAnalysis(), ValueAsPythonExpr.new(result, depth=context.eval_depth)
 
 class StrType(PrimitiveType):
   def __init__(self):
@@ -1092,7 +942,7 @@ class EnumType(Type):
     self._variants = variants
 
   def analyze(self, obj, /, context):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
 
     if not obj.value in self._variants:
       if self._any_int:
@@ -1114,7 +964,7 @@ class UnionType(Type):
     self._variants = [variant, *variants]
 
   def analyze(self, obj, context):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
 
     for variant in self._variants:
       analysis, result = variant.analyze(obj, context)
@@ -1135,11 +985,11 @@ class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
       path = (context.cwd_path / self._path.value).resolve()
 
       if self._ensure_inside_cwd and (not path.is_relative_to(context.cwd_path)):
-        return Analysis(errors=[PathOutsideDirError(LocatedValueContainer(path, self._path.area), context.cwd_path)]), Ellipsis
+        return LanguageServiceAnalysis(errors=[PathOutsideDirError(LocatedValueContainer(path, self._path.area), context.cwd_path)]), Ellipsis
 
-      return Analysis(), LocatedValueContainer(path, self._path.area)
+      return LanguageServiceAnalysis(), LocatedValueContainer(path, self._path.area)
 
-    return Analysis(), self._path
+    return LanguageServiceAnalysis(), self._path
 
   @classmethod
   def new(cls, value: LocatedValue[Path], /, *, depth: int):
@@ -1285,16 +1135,16 @@ class ReadableDataRefType(Type):
 
 class BindingType(Type):
   def analyze(self, obj, /, context):
-    from .binding import Binding
+    from .fiber.binding import Binding
 
     if not isinstance(obj, str):
-      return Analysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
 
     assert isinstance(obj, LocatedString)
     expr_result = PythonExpr.parse(obj)
 
     if not expr_result:
-      return Analysis(errors=[InvalidExpr(obj)]), Ellipsis
+      return LanguageServiceAnalysis(errors=[InvalidExpr(obj)]), Ellipsis
 
     analysis, expr = expr_result
 
@@ -1328,8 +1178,8 @@ class KVDictType(Type):
     assert isinstance(obj, LocatedDict)
 
     if isinstance(obj, ReliableLocatedDict):
-      analysis.folds.append(FoldingRange(obj.fold_range))
-      analysis.selections.append(AnalysisSelection(obj.full_area.enclosing_range()))
+      analysis.folds.append(LanguageServiceFoldingRange(obj.fold_range))
+      analysis.selections.append(LanguageServiceSelection(obj.full_area.enclosing_range()))
 
     result = dict()
 
@@ -1355,7 +1205,7 @@ class KVDictValueAsPythonExpr(Evaluable[LocatedDict[K, V]], Generic[K, V]):
     self._value = value
 
   def evaluate(self, stack):
-    analysis = Analysis()
+    analysis = LanguageServiceAnalysis()
     failure = False
     result = dict[Evaluable[K] | K, Evaluable[V] | V]()
 
@@ -1395,7 +1245,7 @@ class DeferredAnalysisType(Type):
     self._type = obj_type
 
   def analyze(self, obj, /, context):
-    return (Analysis(), ValueAsPythonExpr.new(DeferredAnalysisValueAsPythonExpr(obj, self._type, depth=(context.eval_depth - self._depth)), depth=self._depth)) if self._depth > 0 else self._type.analyze(obj, context)
+    return (LanguageServiceAnalysis(), ValueAsPythonExpr.new(DeferredAnalysisValueAsPythonExpr(obj, self._type, depth=(context.eval_depth - self._depth)), depth=self._depth)) if self._depth > 0 else self._type.analyze(obj, context)
 
 class DeferredAnalysisValueAsPythonExpr(Evaluable):
   def __init__(self, obj: LocatedValue, obj_type: Type, /, *, depth: int):
@@ -1404,7 +1254,7 @@ class DeferredAnalysisValueAsPythonExpr(Evaluable):
     self._obj = obj
 
   def evaluate(self, context):
-    from .parser import AnalysisContext
+    from .fiber.parser import AnalysisContext
     return self._type.analyze(self._obj, AnalysisContext(eval_context=context, eval_depth=self._depth, symbolic=True))
 
 class HasAttrType(Type):
@@ -1426,7 +1276,7 @@ class HasAttrType(Type):
 class DataTypeType(Type):
   def analyze(self, obj, /, context):
     if isinstance(obj.value, np.dtype):
-      return Analysis(), obj
+      return LanguageServiceAnalysis(), obj
 
     analysis, str_result = StrType().analyze(obj, context.update(eval_depth=0))
 
@@ -1442,19 +1292,6 @@ class DataTypeType(Type):
       return analysis, ValueAsPythonExpr.new(LocatedValue.new(value, obj.area), depth=context.eval_depth)
 
 
-def print_analysis(analysis: Analysis, /, logger: Logger):
-  for error in analysis.errors:
-    logger.error(error.message)
-
-    for ref in error.references:
-      if isinstance(ref, ErrorDocumentReference) and ref.area:
-        for line in ref.area.format().splitlines():
-          logger.debug(line)
-
-  for warning in analysis.warnings:
-    logger.warning(warning.message)
-
-    for ref in warning.references:
-      if isinstance(ref, ErrorDocumentReference) and ref.area:
-        for line in ref.area.format().splitlines():
-          logger.debug(line)
+__all__ = [
+  'Type'
+]

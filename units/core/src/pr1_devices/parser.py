@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, Literal, final
 
+import pr1 as am
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
@@ -10,7 +11,7 @@ from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, export_value
-from pr1.fiber.langservice import (Analysis, AnyType, Attribute, BoolType, EnumType,
+from pr1.input import (AnyType, Attribute, BoolType, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType)
 from pr1.fiber.master2 import ProgramHandle
@@ -180,7 +181,7 @@ class PublisherTransformer(BasePassiveTransformer):
     }
 
   def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
 
     stable = data['stable'].value if ('stable' in data) else False # type: ignore
@@ -202,12 +203,12 @@ class PublisherTransformer(BasePassiveTransformer):
 
   def execute(self, data: tuple[dict[NodePath, Evaluable[LocatedValue[Any]]], bool], /, block):
     values, stable = data
-    return Analysis(), PublisherBlock(values, block, stable=stable)
+    return am.LanguageServiceAnalysis(), PublisherBlock(values, block, stable=stable)
 
 
 class ApplierTransformer(BasePartialPassiveTransformer):
   def execute(self, block):
-    return Analysis(), ApplierBlock(block)
+    return am.LanguageServiceAnalysis(), ApplierBlock(block)
 
 
 class Parser(BaseParser):
@@ -289,7 +290,7 @@ class Parser(BaseParser):
       )
     }, name="Devices", readonly=True)
 
-    return Analysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
+    return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
 
 
 @debug

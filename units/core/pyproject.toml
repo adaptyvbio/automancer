@@ -17,7 +17,6 @@ repeat = "pr1_repeat"
 segment = "pr1_segment"
 sequence = "pr1_sequence"
 shorthands = "pr1_shorthands"
-state = "pr1_state"
 timer = "pr1_timer"
 
 [tool.setuptools.packages.find]

@@ -5,7 +5,7 @@ from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
   from .fiber.parser import FiberProtocol
-  from .fiber.langservice import Analysis
+  from .input import LanguageServiceAnalysis
   from .document import Document
   from .host import Host
 
@@ -56,7 +56,7 @@ class Draft:
 
 @dataclass(kw_only=True)
 class DraftCompilation:
-  analysis: 'Analysis'
+  analysis: 'LanguageServiceAnalysis'
   document_paths: set[PurePosixPath]
   draft_id: str
   protocol: 'Optional[FiberProtocol]'

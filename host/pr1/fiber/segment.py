@@ -9,10 +9,10 @@ from typing import Any, AsyncIterator, Generator, Optional, Protocol, Sequence, 
 
 from .eval import EvalStack
 from ..host import logger
-from ..error import Error
+from ..error import Diagnostic
 from ..master.analysis import MasterAnalysis, MasterError
 from .process import BaseProcess, ProcessEvent, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent, ProgramExecEvent
-from .langservice import Analysis
+from ..input import Analysis
 from .parser import BaseBlock, BaseDefaultTransform, BaseLeadTransform, BaseProgram, BlockState, HeadProgram, Transforms
 from ..devices.claim import ClaimSymbol
 from ..reader import LocationArea
@@ -71,7 +71,7 @@ class SegmentProgramMode(IntEnum):
 
 @dataclass(kw_only=True)
 class SegmentProgramLocation:
-  error: Optional[Error]
+  error: Optional[Diagnostic]
   mode: SegmentProgramMode
   pausable: bool
   process: Optional[Exportable]

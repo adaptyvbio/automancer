@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Literal, TypedDict, cast
 
+import pr1 as am
 from pint import Quantity
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, EnumType,
+from pr1.input import (Attribute, EnumType,
                                    PotentialExprType, QuantityType, UnionType)
 from pr1.fiber.parser import (BaseLeadTransformer, BaseParser,
                               LeadTransformerPreparationResult)
@@ -49,9 +50,9 @@ class Transformer(BaseLeadTransformer):
 
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     if (attr := data.get('wait')):
-      return Analysis(), [LeadTransformerPreparationResult(attr, origin_area=cast(LocatedString, next(iter(data.keys()))).area)]
+      return am.LanguageServiceAnalysis(), [LeadTransformerPreparationResult(attr, origin_area=cast(LocatedString, next(iter(data.keys()))).area)]
     else:
-      return Analysis(), list()
+      return am.LanguageServiceAnalysis(), list()
 
   def adopt(self, data: Evaluable[LocatedValue[Quantity | Literal['forever']]], /, adoption_stack, trace):
     from .process import Process

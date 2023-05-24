@@ -8,7 +8,7 @@ from pint import Quantity
 from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
-from ..error import Diagnostic, ErrorDocumentReference
+from ..error import Diagnostic, DiagnosticDocumentReference
 from ..host import logger
 from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
@@ -18,7 +18,7 @@ from ..util.decorators import debug
 from ..util.misc import Exportable, log_exception
 
 if TYPE_CHECKING:
-  from .langservice import Analysis, Type
+  from ..input import Analysis, Type
 
 
 expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
@@ -94,7 +94,7 @@ class PythonSyntaxError(Diagnostic, Exception):
     Diagnostic.__init__(
       self,
       message,
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
@@ -103,18 +103,6 @@ class PythonExprKind(Enum):
   Static = 1
   Dynamic = 2
   Binding = 3
-
-
-# @deprecated
-class PotentialPythonExpr(Exportable, Protocol):
-  def __init__(self):
-    self.type: Optional[Type]
-
-  def augment(self) -> 'PythonExprAugmented':
-    ...
-
-  def evaluate(self, options: EvalOptions) -> 'tuple[Analysis, LocatedValue]':
-    ...
 
 
 class PythonExpr:
@@ -145,7 +133,7 @@ class PythonExpr:
 
   @classmethod
   def _parse_match(cls, match: re.Match):
-    from .langservice import Analysis
+    from ..input import Analysis
 
     match match.group(1):
       case None:
@@ -187,7 +175,7 @@ class PythonExpr:
 
   @classmethod
   def parse_mixed(cls, raw_str: LocatedString, /):
-    from .langservice import Analysis
+    from ..input import Analysis
 
     analysis = Analysis()
     output = list()
@@ -257,7 +245,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     self.metadata = dict[str, StaticAnalysisMetadata]()
 
   def analyze(self):
-    from .langservice import Analysis
+    from ..input import Analysis
 
     variables = EvalVariables()
 
@@ -281,7 +269,7 @@ class PythonExprObject(Evaluable[LocatedValue[Any]]):
     )
 
   def evaluate(self, context):
-    from .langservice import Analysis
+    from ..input import Analysis
     from .parser import AnalysisContext
 
     variables = dict[str, Any]()
@@ -315,7 +303,7 @@ class ValueAsPythonExpr(Evaluable[S], Generic[S]):
     self._value = value
 
   def evaluate(self, context):
-    from .langservice import Analysis
+    from ..input import Analysis
     return Analysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
 
   def export(self):
@@ -330,38 +318,6 @@ class ValueAsPythonExpr(Evaluable[S], Generic[S]):
   @classmethod
   def new(cls, value: S | EllipsisType, /, *, depth: int = 0):
     return cls(value, depth=(depth - 1)) if (depth > 0) and (not isinstance(value, EllipsisType)) else value
-
-
-# @deprecated
-class PythonExprAugmented:
-  def __init__(self, expr: PotentialPythonExpr, /, envs: EvalEnvs):
-    self._expr = expr
-    self._envs = envs
-
-  def evaluate(self, stack: EvalStack):
-    from .langservice import Analysis
-    from .parser import AnalysisContext
-
-    variables = dict[str, Any]()
-
-    for env in self._envs:
-      if (env_vars := stack[env]) is not None:
-        variables.update(env_vars)
-
-    context = EvalOptions(variables)
-
-    try:
-      result = self._expr.evaluate(context)
-    except EvalError as e:
-      return Analysis(errors=[e]), Ellipsis
-    else:
-      if self._expr.type:
-        return self._expr.type.analyze(result, AnalysisContext(symbolic=True))
-      else:
-        return Analysis(), result
-
-  def export(self):
-    return self._expr.export()
 
 
 if __name__ == "__main__":

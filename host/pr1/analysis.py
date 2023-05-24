@@ -1,8 +1,9 @@
 from abc import ABC
 from dataclasses import dataclass, field
+from logging import Logger
 from typing import Self, Sequence, TypeVar
 
-from .error import Diagnostic
+from .error import Diagnostic, DiagnosticDocumentReference
 
 
 T = TypeVar('T')
@@ -44,8 +45,32 @@ class DiagnosticAnalysis(BaseAnalysis):
   errors: list[Diagnostic] = field(default_factory=list)
   warnings: list[Diagnostic] = field(default_factory=list)
 
-  def __iadd__(self, other: Self, /):
+  def log_diagnostics(self, logger: Logger):
+    for error in self.errors:
+      logger.error(error.message)
+
+      for ref in error.references:
+        if isinstance(ref, DiagnosticDocumentReference) and ref.area:
+          for line in ref.area.format().splitlines():
+            logger.debug(line)
+
+    for warning in self.warnings:
+      logger.warning(warning.message)
+
+      for ref in warning.references:
+        if isinstance(ref, DiagnosticDocumentReference) and ref.area:
+          for line in ref.area.format().splitlines():
+            logger.debug(line)
+
+
+  def __iadd__(self, other: 'DiagnosticAnalysis', /):
     self.errors += other.errors
     self.warnings += other.warnings
 
     return super().__iadd__(other)
+
+
+__all__ = [
+  'BaseAnalysis',
+  'DiagnosticAnalysis'
+]

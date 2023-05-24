@@ -94,7 +94,7 @@ class RandomNode(NumericNode, PollableReadableNode):
     self.label = "Random"
 
   async def _read(self):
-    self.value = (time.time(), random.random() * ureg.dimensionless)
+    self.value = (time.time(), (random.random() - 0.5) * ureg.dimensionless * 1000)
 
 
 class Executor(BaseExecutor):

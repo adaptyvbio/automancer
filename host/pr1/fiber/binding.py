@@ -4,16 +4,17 @@ from types import EllipsisType
 from typing import Any, Callable, Optional, Protocol, TypeVar
 import ast
 
-from ..error import Error, ErrorDocumentReference
+from ..analysis import DiagnosticAnalysis
+from ..error import Diagnostic, DiagnosticDocumentReference
 from .eval import EvalEnv, EvalEnvs, EvalStack
 from .expr import Evaluable, PythonExpr, PythonExprKind, PythonExprObject
-from .langservice import Analysis, AnyType, HasAttrType
+from ..input import AnyType, HasAttrType
 from ..reader import LocatedString, LocatedValue, Source
 
 
-class InvalidBindingPythonExpr(Error, Exception):
+class InvalidBindingPythonExpr(Diagnostic, Exception):
   def __init__(self, target: LocatedValue, /):
-    super().__init__("Invalid binding expression", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid binding expression", references=[DiagnosticDocumentReference.from_value(target)])
 
 
 T = TypeVar('T', contravariant=True)
@@ -24,20 +25,20 @@ class BindingWriter(Protocol[T]):
 
 class Binding(Evaluable):
   @abstractmethod
-  def evaluate(self, stack: EvalStack) -> 'tuple[Analysis, BindingWriter | EllipsisType]':
+  def evaluate(self, stack: EvalStack) -> 'tuple[DiagnosticAnalysis, BindingWriter | EllipsisType]':
     ...
 
   def export(self):
     raise NotImplementedError
 
   @staticmethod
-  def parse(source: LocatedString, /, tree: Optional[ast.Expression] = None, *, envs: EvalEnvs, write_env: EvalEnv) -> 'tuple[Analysis, Binding | EllipsisType]':
+  def parse(source: LocatedString, /, tree: Optional[ast.Expression] = None, *, envs: EvalEnvs, write_env: EvalEnv) -> 'tuple[DiagnosticAnalysis, Binding | EllipsisType]':
     tree = tree or ast.parse(source, mode='eval')
 
     try:
-      return Analysis(), parse_binding_expr(tree.body, envs=envs, source=source, write_env=write_env)
+      return DiagnosticAnalysis(), parse_binding_expr(tree.body, envs=envs, source=source, write_env=write_env)
     except InvalidBindingPythonExpr as e:
-      return Analysis(errors=[e]), Ellipsis
+      return DiagnosticAnalysis(errors=[e]), Ellipsis
 
 
 @dataclass(kw_only=True)
@@ -64,7 +65,7 @@ class DestructuringBinding(Binding):
   starred: Optional[Binding]
 
   def evaluate(self, stack):
-    analysis = Analysis()
+    analysis = DiagnosticAnalysis()
 
     before_starred = [analysis.add(binding.evaluate(stack)) for binding in self.before_starred]
     starred = analysis.add(self.starred.evaluate(stack)) if self.starred else None
@@ -120,7 +121,7 @@ class NamedBinding(Binding):
 
       vars[self.name] = value
 
-    return Analysis(), write
+    return DiagnosticAnalysis(), write
 
 @dataclass(kw_only=True)
 class NullBinding(Binding):
@@ -128,7 +129,7 @@ class NullBinding(Binding):
     def write(value, /):
       pass
 
-    return Analysis(), write
+    return DiagnosticAnalysis(), write
 
 @dataclass(kw_only=True)
 class SubscriptBinding(Binding):
@@ -136,7 +137,7 @@ class SubscriptBinding(Binding):
   target: PythonExprObject
 
   def evaluate(self, stack):
-    analysis = Analysis()
+    analysis = DiagnosticAnalysis()
 
     slice_result = analysis.add(self.slice.evaluate(stack))
     target_result = analysis.add(self.target.evaluate(stack))
@@ -147,7 +148,7 @@ class SubscriptBinding(Binding):
     def write(self, value, /):
       target_result.value[slice_result.value] = value
 
-    return Analysis(), write
+    return DiagnosticAnalysis(), write
 
 
 def parse_binding_expr(expr: ast.expr, *, envs: EvalEnvs, source: LocatedString, write_env: EvalEnv):

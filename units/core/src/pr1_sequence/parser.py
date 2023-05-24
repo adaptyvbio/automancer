@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, TypedDict, cast
 
-from pr1.fiber.langservice import Analysis, AnyType, Attribute, ListType
+import pr1 as am
+from pr1.input import AnyType, Attribute, ListType
 from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
                               FiberParser, Layer,
                               LeadTransformerPreparationResult)
@@ -30,7 +31,7 @@ class Transformer(BaseLeadTransformer):
     self._fiber = fiber
 
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
 
     if (attr := data.get('actions')):
       action_layers = list[Layer]()
@@ -46,7 +47,7 @@ class Transformer(BaseLeadTransformer):
     return analysis, list()
 
   def adopt(self, data: list[Layer], /, adoption_stack, trace):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     children = list[BaseBlock]()
 
     for action_layer in data:

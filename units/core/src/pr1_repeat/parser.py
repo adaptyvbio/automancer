@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Literal, TypedDict
 
+import pr1 as am
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, Attribute, IntType,
+from pr1.input import (Attribute, IntType,
                                    PotentialExprType)
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
                               PassiveTransformerPreparationResult,
@@ -33,9 +34,9 @@ class Transformer(BasePassiveTransformer):
 
   def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
     if (attr := data.get('repeat')):
-      return Analysis(), PassiveTransformerPreparationResult(attr, runtime_envs=[self.env])
+      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr, runtime_envs=[self.env])
     else:
-      return Analysis(), None
+      return am.LanguageServiceAnalysis(), None
 
   def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack, trace):
     analysis, count = data.eval(EvalContext(adoption_stack), final=False)
@@ -46,7 +47,7 @@ class Transformer(BasePassiveTransformer):
     return analysis, TransformerAdoptionResult(count)
 
   def execute(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, block):
-    return Analysis(), Block(block, count=data, env=self.env)
+    return am.LanguageServiceAnalysis(), Block(block, count=data, env=self.env)
 
 class Parser(BaseParser):
   namespace = namespace

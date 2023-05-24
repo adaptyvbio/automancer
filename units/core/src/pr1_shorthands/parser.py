@@ -3,10 +3,11 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, Callable, Optional, TypedDict, cast
 
-from pr1.error import Error, ErrorDocumentReference
+import pr1 as am
+from pr1.error import Diagnostic, DiagnosticDocumentReference
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalStack
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.langservice import (Analysis, AnalysisMarker, AnalysisRelation, AnalysisRename,
+from pr1.input import (
                                    AnyType, Attribute, KVDictType,
                                    PotentialExprType, PrimitiveType, StrType)
 from pr1.fiber.master2 import ProgramOwner
@@ -26,23 +27,23 @@ from pr1.util.decorators import debug
 from . import namespace
 
 
-class CircularReferenceError(Error):
+class CircularReferenceError(Diagnostic):
   def __init__(self, target: LocatedValue):
-    super().__init__("Invalid circular reference", references=[ErrorDocumentReference.from_value(target)])
+    super().__init__("Invalid circular reference", references=[DiagnosticDocumentReference.from_value(target)])
 
 
 @dataclass(kw_only=True)
 class ShorthandStaticItem:
-  create_layer: Callable[[], tuple[Analysis, Layer | EllipsisType]]
-  definition_body_ref: ErrorDocumentReference
-  definition_name_ref: ErrorDocumentReference
+  create_layer: Callable[[], tuple[am.LanguageServiceAnalysis, Layer | EllipsisType]]
+  definition_body_ref: DiagnosticDocumentReference
+  definition_name_ref: DiagnosticDocumentReference
   deprecated: bool
   description: Optional[str]
   env: EvalEnv
   layer: Optional[Layer | EllipsisType] = None
   preparing: bool = False
   priority: int = 0
-  references: list[ErrorDocumentReference]
+  references: list[DiagnosticDocumentReference]
 
 @dataclass(kw_only=True)
 class ShorthandDynamicItem:
@@ -56,10 +57,11 @@ class Attributes(TypedDict, total=False):
 
 class LeadTransformer(BaseLeadTransformer):
   def __init__(self, parser: 'Parser'):
+    super().__init__()
     self.parser = parser
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     calls = list[LeadTransformerPreparationResult[tuple[ShorthandStaticItem, LocationArea, Any]]]()
 
     context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
@@ -78,7 +80,7 @@ class LeadTransformer(BaseLeadTransformer):
     return analysis, calls
 
   def adopt(self, data: tuple[ShorthandStaticItem, LocationArea, Any], /, adoption_stack, trace):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     shorthand, call_area, arg = data
 
     assert shorthand.layer
@@ -93,7 +95,7 @@ class LeadTransformer(BaseLeadTransformer):
       shorthand.env: {
         'arg': arg_result.value().value
       }
-    }, [*trace, ErrorDocumentReference.from_area(call_area)]))
+    }, [*trace, DiagnosticDocumentReference.from_area(call_area)]))
 
     if isinstance(block, EllipsisType):
       return analysis, Ellipsis
@@ -101,13 +103,12 @@ class LeadTransformer(BaseLeadTransformer):
     return analysis, block
 
 class PassiveTransformer(BasePassiveTransformer):
-  priority = 300
-
   def __init__(self, parser: 'Parser'):
+    super().__init__(priority=300)
     self.parser = parser
 
   def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     calls = list[tuple[ShorthandStaticItem, LocationArea, Evaluable]]()
 
     context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
@@ -127,7 +128,7 @@ class PassiveTransformer(BasePassiveTransformer):
     return analysis, (PassiveTransformerPreparationResult(calls) if calls else None)
 
   def adopt(self, data: list[tuple[ShorthandStaticItem, LocationArea, Evaluable[LocatedValue[Any]]]], /, adoption_stack, trace):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     calls = list[tuple[ShorthandStaticItem, Any]]()
 
     for shorthand, call_area, arg in data:
@@ -142,14 +143,14 @@ class PassiveTransformer(BasePassiveTransformer):
         shorthand.env: {
           'arg': arg_result.value().value
         }
-      }, [*trace, ErrorDocumentReference.from_area(call_area)]))
+      }, [*trace, DiagnosticDocumentReference.from_area(call_area)]))
 
       calls.append((shorthand, adopted_transforms))
 
     return analysis, TransformerAdoptionResult(calls)
 
   def execute(self, data: list[tuple[ShorthandStaticItem, Any]], /, block):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
     current_block = block
 
     for shorthand, adopted_transforms in data[::-1]:
@@ -190,13 +191,13 @@ class Parser(BaseParser):
     }
 
   def preload(self, raw_attrs: Attrs, /):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
 
     for shorthand_name in raw_attrs.keys():
       shorthand = self.shorthands[shorthand_name]
       located_name = cast(LocatedString, shorthand_name)
 
-      shorthand.references.append(ErrorDocumentReference.from_value(located_name))
+      shorthand.references.append(DiagnosticDocumentReference.from_value(located_name))
 
       if not shorthand.layer:
         if shorthand.preparing:
@@ -216,7 +217,7 @@ class Parser(BaseParser):
     return analysis, None
 
   def enter_protocol(self, data: Attributes, /, adoption_envs, runtime_envs):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
 
     if (attr := data.get('shorthands')):
       for name, data_shorthand in attr.items():
@@ -252,8 +253,8 @@ class Parser(BaseParser):
 
         self.shorthands[name] = ShorthandStaticItem(
           create_layer=create_layer,
-          definition_body_ref=ErrorDocumentReference.from_area(LocationArea([data_shorthand.area.enclosing_range()])),
-          definition_name_ref=ErrorDocumentReference.from_area(LocationArea([name.area.single_range()])),
+          definition_body_ref=DiagnosticDocumentReference.from_area(LocationArea([data_shorthand.area.enclosing_range()])),
+          definition_name_ref=DiagnosticDocumentReference.from_area(LocationArea([name.area.single_range()])),
           deprecated=deprecated,
           description=description,
           env=env,
@@ -263,11 +264,11 @@ class Parser(BaseParser):
     return analysis, ProtocolUnitData()
 
   def leave_protocol(self):
-    analysis = Analysis()
+    analysis = am.LanguageServiceAnalysis()
 
     for shorthand in self.shorthands.values():
       if not shorthand.layer:
-        analysis.markers.append(AnalysisMarker(
+        analysis.markers.append(am.LanguageServiceMarker(
           "Unused shorthand",
           shorthand.definition_name_ref,
           kind='unnecessary'
@@ -276,18 +277,18 @@ class Parser(BaseParser):
         _ = analysis.add(shorthand.create_layer())
 
       if shorthand.deprecated:
-        analysis.markers.append(AnalysisMarker(
+        analysis.markers.append(am.LanguageServiceMarker(
           "Deprecated shorthand",
           shorthand.definition_name_ref,
           kind='deprecated'
         ))
 
-      analysis.renames.append(AnalysisRename([
+      analysis.renames.append(am.LanguageServiceRename([
         shorthand.definition_name_ref,
         *shorthand.references
       ]))
 
-      analysis.relations.append(AnalysisRelation(
+      analysis.relations.append(am.LanguageServiceRelation(
         shorthand.definition_body_ref,
         shorthand.definition_name_ref,
         shorthand.references

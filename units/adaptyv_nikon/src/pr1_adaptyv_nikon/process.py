@@ -3,7 +3,7 @@ from types import EllipsisType
 from typing import final
 
 from pr1.fiber.eval import EvalContext
-from pr1.fiber.langservice import Analysis
+from pr1.input import Analysis
 from pr1.fiber.process import (BaseProcess, BaseProcessPoint, ProcessExecEvent,
                                ProcessFailureEvent, ProcessTerminationEvent)
 from pr1.master.analysis import MasterAnalysis

@@ -9,7 +9,7 @@ from typing import Any, Generator, Generic, Literal, Mapping, Optional, Protocol
 
 from ..analysis import DiagnosticAnalysis
 from ..document import Document
-from ..error import Diagnostic, Error, ErrorDocumentReference, ErrorReference
+from ..error import Diagnostic, Diagnostic, DiagnosticDocumentReference, DiagnosticReference
 from ..reader import LocatedString, Source
 
 
@@ -233,7 +233,7 @@ class StaticAnalysisDiagnostic(Diagnostic):
     super().__init__(
       message,
       name=('staticanalysis.' + name),
-      references=[ErrorDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
+      references=[DiagnosticDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
     )
 
   def analysis(self, *, warning: bool = False):

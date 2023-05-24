@@ -3,8 +3,7 @@ from types import EllipsisType
 from typing import TypedDict
 
 from pr1.fiber.expr import Evaluable
-from pr1.fiber.segment import SegmentTransform
-from pr1.fiber import langservice as lang
+from pr1 import input as lang
 from pr1.fiber.parser import BaseParser, BlockUnitData
 from pr1.reader import LocatedDict, LocatedString, LocationArea
 
@@ -35,8 +34,7 @@ class Parser(BaseParser):
         lang.EvaluableContainerType(lang.SimpleDictType({
           'command': lang.Attribute(
             lang.PotentialExprType(lang.StrType()),
-            description="The command to run.",
-            required=True
+            description="The command to run."
           ),
           'cwd': lang.Attribute(
             lang.PotentialExprType(lang.PathType()),

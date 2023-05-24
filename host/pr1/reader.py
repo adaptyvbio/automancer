@@ -8,7 +8,7 @@ import re
 import sys
 from typing import Any, Generic, Optional, TypeVar, cast
 
-from .error import Diagnostic, ErrorDocumentReference
+from .error import Diagnostic, DiagnosticDocumentReference
 from .util.decorators import deprecated
 
 
@@ -588,28 +588,28 @@ class UnreadableIndentationError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Unreadable indentation",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class MissingKeyError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Missing key",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidLineError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid line",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidCharacterError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid character",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
@@ -775,8 +775,8 @@ class DuplicateKeyError(ReaderError):
     super().__init__(
       "Invalid value, expected expression",
       references=[
-        ErrorDocumentReference.from_value(original, id='origin'),
-        ErrorDocumentReference.from_value(duplicate, id='duplicate')
+        DiagnosticDocumentReference.from_value(original, id='origin'),
+        DiagnosticDocumentReference.from_value(duplicate, id='duplicate')
       ]
     )
 
@@ -784,14 +784,14 @@ class InvalidIndentationError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid indentation",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidTokenError(ReaderError):
   def __init__(self, target: LocatedValue, /):
     super().__init__(
       "Invalid token",
-      references=[ErrorDocumentReference.from_value(target)]
+      references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
@@ -1100,12 +1100,12 @@ def loads(raw_source: Source | str, /) -> tuple[Any, list[ReaderError], list[Rea
   return result, tokenization_errors + analysis_errors, tokenization_warnings + analysis_warnings
 
 def loads2(raw_source: Source | str, /):
-  from .fiber.langservice import Analysis
+  from .analysis import DiagnosticAnalysis
 
   tokens, tokenization_errors, tokenization_warnings = tokenize(raw_source)
   result, analysis_errors, analysis_warnings = analyze(tokens)
 
-  return Analysis(
+  return DiagnosticAnalysis(
     errors=cast(list[Diagnostic], tokenization_errors + analysis_errors),
     warnings=cast(list[Diagnostic], (tokenization_warnings + analysis_warnings))
   ), result

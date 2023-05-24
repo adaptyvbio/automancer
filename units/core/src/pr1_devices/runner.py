@@ -11,7 +11,7 @@ from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import Null, ValueNode
-from pr1.error import Error
+from pr1.error import Diagnostic
 from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
 from pr1.fiber.master2 import Master

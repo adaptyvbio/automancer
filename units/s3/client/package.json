@@ -8,6 +8,7 @@
     "@types/react": "^18.0.16",
     "esbuild": "~0.15.16",
     "pr1": "file:../../../client",
+    "pr1-shared": "file:../../../app/shared",
     "typescript": "~4.9.0"
   }
 }

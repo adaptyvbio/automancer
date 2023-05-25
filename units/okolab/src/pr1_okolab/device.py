@@ -1,24 +1,18 @@
 import asyncio
-import time
 from asyncio import Task
 from typing import Callable, Optional
 
 from okolab import OkolabDevice, OkolabDeviceConnectionError
 from pint import Quantity
-from pr1.devices.nodes.collection import DeviceNode
-from pr1.devices.nodes.common import (ConfigurableNode, NodeId,
-                                      NodeUnavailableError)
-from pr1.devices.nodes.numeric import NumericNode
-from pr1.devices.nodes.readable import PollableReadableNode
-from pr1.devices.nodes.value import NullType
-from pr1.ureg import ureg
+
+import pr1 as am
 from pr1.util.asyncio import shield, try_all, wait_all
 from pr1.util.pool import Pool
 
 from . import logger, namespace
 
 
-class BoardTemperatureNode(NumericNode, PollableReadableNode):
+class BoardTemperatureNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, master: 'MasterDevice'):
     super().__init__(
       readable=True,
@@ -27,7 +21,7 @@ class BoardTemperatureNode(NumericNode, PollableReadableNode):
     )
 
     self.icon = "thermostat"
-    self.id = NodeId("boardTemperature")
+    self.id = am.NodeId("boardTemperature")
     self.label = "Board temperature"
 
     self._master = master
@@ -36,15 +30,15 @@ class BoardTemperatureNode(NumericNode, PollableReadableNode):
     assert (device := self._master._device)
 
     async def read():
-      return (await device.get_board_temperature()) * ureg.degC
+      return (await device.get_board_temperature()) * am.ureg.degC
 
     try:
       await self._set_value_at_half_time(read())
     except OkolabDeviceConnectionError as e:
-      raise NodeUnavailableError from e
+      raise am.NodeUnavailableError from e
 
 
-class TemperatureReadoutNode(NumericNode, PollableReadableNode):
+class TemperatureReadoutNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
       poll_interval=0.2,
@@ -53,21 +47,21 @@ class TemperatureReadoutNode(NumericNode, PollableReadableNode):
     )
 
     self.icon = "thermostat"
-    self.id = NodeId("readout")
+    self.id = am.NodeId("readout")
     self.label = "Temperature readout"
 
     self._worker = worker
 
   async def _read(self):
     async def read():
-      return (await self._worker._get_temperature_readout()) * ureg.degC
+      return (await self._worker._get_temperature_readout()) * am.ureg.degC
 
     try:
       await self._set_value_at_half_time(read())
     except OkolabDeviceConnectionError as e:
-      raise NodeUnavailableError from e
+      raise am.NodeUnavailableError from e
 
-class TemperatureSetpointNode(NumericNode, PollableReadableNode):
+class TemperatureSetpointNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
       max=60.0,
@@ -80,28 +74,28 @@ class TemperatureSetpointNode(NumericNode, PollableReadableNode):
     )
 
     self.icon = "thermostat"
-    self.id = NodeId("setpoint")
+    self.id = am.NodeId("setpoint")
     self.label = "Temperature setpoint"
 
     self._worker = worker
 
   async def _read(self):
     async def read():
-      return (await self._worker._get_temperature_setpoint()) * ureg.degC
+      return (await self._worker._get_temperature_setpoint()) * am.ureg.degC
 
     try:
       await self._set_value_at_half_time(read())
     except OkolabDeviceConnectionError as e:
-      raise NodeUnavailableError from e
+      raise am.NodeUnavailableError from e
 
-  async def _write(self, value: Quantity | NullType, /):
+  async def _write(self, value: Quantity | am.NullType, /):
     try:
-      await self._worker._set_temperature_setpoint(value.m_as("degC") if not isinstance(value, NullType) else None)
+      await self._worker._set_temperature_setpoint(value.m_as("degC") if not isinstance(value, am.NullType) else None)
     except OkolabDeviceConnectionError as e:
-      raise NodeUnavailableError from e
+      raise am.NodeUnavailableError from e
 
 
-class MasterDevice(DeviceNode):
+class MasterDevice(am.DeviceNode):
   owner = namespace
 
   def __init__(
@@ -116,7 +110,7 @@ class MasterDevice(DeviceNode):
 
     self.connected = False
     self.description = "H401-T-CONTROLLER"
-    self.id = NodeId(id)
+    self.id = am.NodeId(id)
     self.label = label
 
     self._address = address
@@ -178,7 +172,7 @@ class MasterDevice(DeviceNode):
 
             await shield(self._device.close())
             self._device = None
-        except* (NodeUnavailableError, OkolabDeviceConnectionError):
+        except* (am.NodeUnavailableError, OkolabDeviceConnectionError):
           pass
 
       if not ready:
@@ -237,7 +231,7 @@ class MasterDevice(DeviceNode):
       yield
 
 
-class WorkerDevice(DeviceNode, ConfigurableNode):
+class WorkerDevice(am.DeviceNode):
   owner = namespace
 
   def __init__(
@@ -254,7 +248,7 @@ class WorkerDevice(DeviceNode, ConfigurableNode):
     super().__init__()
 
     self.description = description or f"Okolab device (type {type})"
-    self.id = NodeId(id)
+    self.id = am.NodeId(id)
     self.label = label
 
     self._enabled: Optional[bool] = None

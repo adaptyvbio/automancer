@@ -1,9 +1,8 @@
 from abc import ABC
-import contextlib
-from typing import Callable, Literal, NewType, Optional, Protocol, Sequence, TypeVar
+from typing import Literal, NewType, Optional, Protocol, Sequence, TypeVar
 
-from ...util.misc import HierarchyNode
 from ...util.asyncio import Cancelable, DualEvent
+from ...util.misc import HierarchyNode
 
 
 NodeId = NewType('NodeId', str)
@@ -113,66 +112,12 @@ class BaseNode(HierarchyNode, ABC):
     return self._attach_listener(listener, mode='connection')
 
 
-class ConfigurableNode(BaseNode, ABC):
-  def __init__(self):
-    super().__init__()
-    self.connected = False
-
-  async def _configure(self) -> None:
-    pass
-
-  async def _unconfigure(self) -> None:
-    pass
-
-  async def configure(self):
-    assert not self.connected
-
-    await self._configure()
-    self.connected = True
-
-  async def unconfigure(self):
-    assert self.connected
-    self.connected = False
-
-    await self._unconfigure()
-
-  @contextlib.asynccontextmanager
-  async def try_configure(self):
-    await self.configure()
-
-    try:
-      yield
-    except:
-      await self.unconfigure()
-      raise
-
-  async def __aenter__(self):
-    async with configure(self):
-      self.connected = True
-
-  async def __aexit__(self, exc_name, exc, exc_type):
-    if self.connected:
-      self.connected = False
-      await self._unconfigure()
-
-
-@contextlib.asynccontextmanager
-async def configure(node: BaseNode, /):
-  if hasattr(node, '_configure'):
-    await node._configure() # type: ignore
-
-    try:
-      yield
-    except:
-      await node._unconfigure() # type: ignore
-      raise
-  else:
-    yield
-
-@contextlib.asynccontextmanager
-async def unconfigure(node: BaseNode, /):
-  try:
-    yield
-  finally:
-    if hasattr(node, '_unconfigure'):
-      await node._unconfigure() # type: ignore
+__all__ = [
+  'BaseNode',
+  'NodeUnavailableError',
+  'NodeId',
+  'NodePath',
+  'NodePathLike',
+  'NodeListener',
+  'NodeListenerMode'
+]

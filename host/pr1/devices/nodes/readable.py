@@ -137,6 +137,7 @@ class PollableReadableNode(SubscribableReadableNode):
       before_time = time.time()
 
       if not await self.read():
+        await self.wait_disconnected()
         raise NodeUnavailableError
 
       yield

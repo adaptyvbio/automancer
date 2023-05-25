@@ -116,3 +116,10 @@ class Watcher:
 
   async def __aexit__(self, exc_name, exc, exc_type):
     await self.stop()
+
+
+__all__ = [
+  'Watcher',
+  'WatchEvent',
+  'WatchModes'
+]

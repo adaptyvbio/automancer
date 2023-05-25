@@ -1,5 +1,5 @@
-import { Chip, ChipId, ProtocolBlockPath, UnitNamespace } from 'pr1-shared';
-import * as React from 'react';
+import { ExperimentId, ProtocolBlockPath } from 'pr1-shared';
+import { Component, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
@@ -48,13 +48,13 @@ export interface ViewDraftState {
   inspectorOpen: boolean;
 }
 
-export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
-  private chipIdAwaitingRedirection: ChipId | null = null;
+export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
+  private experimentIdAwaitingRedirection: ExperimentId | null = null;
   private compilationController: AbortController | null = null;
   private compilationPromise: Promise<DraftCompilation> | null = null;
   private controller = new AbortController();
   private pool = new Pool();
-  private refTitleBar = React.createRef<TitleBar>();
+  private refTitleBar = createRef<TitleBar>();
 
   constructor(props: ViewDraftProps) {
     super(props);
@@ -110,11 +110,11 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
     //   });
     // }
 
-    if (this.chipIdAwaitingRedirection) {
-      let chip = this.props.host.state.chips[this.chipIdAwaitingRedirection] as Chip;
+    if (this.experimentIdAwaitingRedirection) {
+      let experiment = this.props.host.state.experiments[this.experimentIdAwaitingRedirection];
 
-      if (chip.master) {
-        ViewExecution.navigate(chip.id);
+      if (experiment.master) {
+        ViewExecution.navigate(experiment.id);
       }
     }
   }
@@ -284,28 +284,17 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
               onSubmit={(data) => {
                 this.pool.add(async () => {
                   let client = this.props.host.client;
-                  let chipId = data.chipId ?? (await client.request({ type: 'createChip' })).chipId;
+                  let experimentId = data.experimentId ?? (await client.request({
+                    type: 'createExperiment',
+                    title: data.newExperimentTitle!
+                  })).experimentId;
 
-                  if (data.newChipTitle) {
-                    await client.request({
-                      type: 'command',
-                      chipId,
-                      namespace: ('metadata' as UnitNamespace),
-                      command: {
-                        type: 'set',
-                        archived: false,
-                        description: '',
-                        title: data.newChipTitle
-                      }
-                    });
-                  }
-
-                  this.chipIdAwaitingRedirection = chipId;
+                  this.experimentIdAwaitingRedirection = experimentId;
 
                   try {
                     await client.request({
                       type: 'startDraft',
-                      chipId,
+                      experimentId,
                       draft: {
                         id: this.props.draft.id,
                         documents: [
@@ -321,11 +310,11 @@ export class ViewDraft extends React.Component<ViewDraftProps, ViewDraftState> {
                       }
                     });
                   } catch (err) {
-                    this.chipIdAwaitingRedirection = null;
+                    this.experimentIdAwaitingRedirection = null;
                     throw err;
                   }
 
-                  console.clear();
+                  // console.clear();
                 });
               }} />
           )}
@@ -489,7 +478,7 @@ export interface ViewDraftWrapperRoute {
 
 export type ViewDraftWrapperProps = ViewProps<ViewDraftWrapperRoute>;
 
-export class ViewDraftWrapper extends React.Component<ViewDraftWrapperProps, {}> {
+export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
   get draft() {
     return this.props.app.state.drafts[this.props.route.params.draftId];
   }

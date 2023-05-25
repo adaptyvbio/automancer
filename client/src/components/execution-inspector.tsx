@@ -1,6 +1,5 @@
-import { Chip, Protocol, ProtocolBlockPath } from 'pr1-shared';
-import * as React from 'react';
-import { Fragment } from 'react';
+import { Experiment, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Component, Fragment } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
 import formStyles from '../../styles/components/form.module.scss';
@@ -19,7 +18,7 @@ import { FeatureEntry, FeatureList } from './features';
 export interface ExecutionInspectorProps {
   activeBlockPaths: ProtocolBlockPath[];
   blockPath: ProtocolBlockPath | null;
-  chip: Chip;
+  experiment: Experiment;
   host: Host;
   location: unknown;
   protocol: Protocol;
@@ -30,7 +29,7 @@ export interface ExecutionInspectorState {
 
 }
 
-export class ExecutionInspector extends React.Component<ExecutionInspectorProps, ExecutionInspectorState> {
+export class ExecutionInspector extends Component<ExecutionInspectorProps, ExecutionInspectorState> {
   pool = new Pool();
 
   constructor(props: ExecutionInspectorProps) {
@@ -62,7 +61,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
 
     let leafPair = blockAnalysis.pairs.at(-1)!;
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
-    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.chip.id, context);
+    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment.id, context);
 
     return (
       <div className={spotlightStyles.root}>
@@ -116,7 +115,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                 let blockPath = (pairIndex > 0)
                   ? group.path.slice(0, -pairIndex)
                   : group.path;
-                let blockContext = createBlockContext(blockPath, this.props.chip.id, context);
+                let blockContext = createBlockContext(blockPath, this.props.experiment.id, context);
 
                 if (!blockImpl.createFeatures) {
                   return null;
@@ -147,7 +146,7 @@ export class ExecutionInspector extends React.Component<ExecutionInspectorProps,
                         this.pool.add(async () => {
                           await this.props.host.client.request({
                             type: 'sendMessageToActiveBlock',
-                            chipId: this.props.chip.id,
+                            experimentId: this.props.experiment.id,
                             path: blockPath,
                             message: { type: 'halt' }
                           });

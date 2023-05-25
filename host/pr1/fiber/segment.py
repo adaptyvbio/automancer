@@ -229,7 +229,7 @@ class SegmentProgram(HeadProgram):
 
   async def run(self, stack: EvalStack):
     initial_point = None
-    runner = self._handle.master.chip.runners[self._block._process.namespace]
+    runner = self._handle.master.experiment.runners[self._block._process.namespace]
 
     self._point = initial_point or SegmentProgramPoint(process=None)
     self._process_location: Optional[Exportable] = None

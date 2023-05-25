@@ -90,11 +90,11 @@ steps:
 
   from .fiber.master2 import Master
 
-  chip = next(iter(host.chips.values()))
+  experiment = next(iter(host.experiments.values()))
   # chip.upgrade(host=host)
 
   if parser.protocol:
-    master = Master(parser.protocol, chip=chip, host=host)
+    master = Master(parser.protocol, experiment=experiment, host=host)
 
     # Remove the root state block
     # parser.protocol.root = parser.protocol.root.child # type: ignore

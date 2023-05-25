@@ -112,10 +112,10 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
       ? [
         { id: 'main',
           entries: [
-            { id: 'chip',
+            { id: 'experiments',
               label: 'Experiments',
               icon: 'science',
-              route: '/chip' },
+              route: '/experiments' },
             { id: 'draft',
               label: 'Protocols',
               icon: 'receipt_long',

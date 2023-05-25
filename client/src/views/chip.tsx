@@ -12,7 +12,7 @@ import * as util from '../util';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { MetadataTools } from '../unit';
 import { BaseUrl } from '../constants';
-import { ViewChips } from './chips';
+import { ViewExperiments } from './experiments';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -52,7 +52,7 @@ export class ViewChip extends React.Component<ViewChipProps, ViewChipState> {
 
   componentDidMount() {
     if (!this.chip) {
-      ViewChips.navigate();
+      ViewExperiments.navigate();
     }
   }
 

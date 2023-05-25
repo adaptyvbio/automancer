@@ -8,22 +8,21 @@ from graphlib import TopologicalSorter
 from types import EllipsisType
 from typing import Any, Optional, Protocol, cast
 
-from .util.misc import BaseDataInstance, create_datainstance
-
-from .langservice import LanguageServiceAnalysis
-from .analysis import DiagnosticAnalysis
 from . import logger, reader
-from .chip import Chip, ChipCondition
+from .analysis import DiagnosticAnalysis
 from .devices.nodes.collection import CollectionNode, DeviceNode
 from .devices.nodes.common import BaseNode, NodeId, NodePath
 from .document import Document
 from .draft import Draft, DraftCompilation
-from .input import (Attribute, BoolType, KVDictType,
-                                PrimitiveType, RecordType, StrType)
+from .experiment import Experiment, ExperimentId
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext
+from .input import (Attribute, BoolType, KVDictType, PrimitiveType, RecordType,
+                    StrType)
+from .langservice import LanguageServiceAnalysis
 from .unit import UnitManager
 from .ureg import ureg
+from .util.misc import create_datainstance
 from .util.pool import Pool
 
 
@@ -62,9 +61,9 @@ class Host:
     self.data_dir = backend.data_dir
     self.update_callback = update_callback
 
-    self.chips = dict[str, Chip]()
-    self.chips_dir = self.data_dir / "chips"
-    self.chips_dir.mkdir(exist_ok=True)
+    self.experiments = dict[str, Experiment]()
+    self.experiments_path = self.data_dir / "experiments"
+    self.experiments_path.mkdir(exist_ok=True)
 
     self.devices = dict[str, DeviceNode]()
     self.pool: Pool
@@ -197,28 +196,15 @@ class Host:
       for line in self.root_node.format_hierarchy().splitlines():
         logger.debug(line)
 
-      for path in self.chips_dir.iterdir():
+      for path in self.experiments_path.iterdir():
         if not path.name.startswith("."):
-          chip = Chip.try_unserialize(path, host=self)
+          if (experiment := Experiment.try_unserialize(path)):
+            self.experiments[experiment.id] = experiment
 
-          if isinstance(chip, Chip):
-            self.chips[chip.id] = chip
-
-      logger.debug(f"Loaded {len(self.chips)} chips")
+      logger.debug(f"Loaded {len(self.experiments)} experiments")
 
   def busy(self):
-    return any(chip.master for chip in self.chips.values())
-
-  def create_chip(self):
-    chip = Chip.create(
-      chips_dir=self.chips_dir,
-      host=self
-    )
-
-    self.chips[chip.id] = chip
-    logger.info(f"Created chip '{chip.id}'")
-
-    return chip
+    return any(chip.master for chip in self.experiments.values())
 
   async def reload_units(self):
     logger.info("Reloading development units")
@@ -241,27 +227,6 @@ class Host:
         if executor and not isinstance(executor, EllipsisType):
           self.executors[namespace] = executor
           await executor.initialize()
-
-        for chip in set(self.chips.values()):
-          self.chips[chip.id] = Chip.try_unserialize(chip.dir, host=self)
-
-        # for chip in self.chips.values():
-        #   old_runner = chip.runners.get(namespace)
-
-        #   if old_runner:
-        #     del chip.runners[namespace]
-
-        #   if hasattr(unit_info.unit, 'Runner'):
-        #     runner = unit_info.unit.Runner(chip=chip, host=self)
-
-        #     if old_runner:
-        #       runner.unserialize(old_runner.serialize())
-        #     else:
-        #       runner.create()
-
-        #     chip.runners[namespace] = runner
-
-        #   # <- Save chip
 
     analysis.log_diagnostics(logger)
 
@@ -294,8 +259,8 @@ class Host:
           } for unit_info in self.manager.units_info.values()
         }
       },
-      "chips": {
-        chip.id: chip.export() for chip in self.chips.values()
+      "experiments": {
+        experiment.id: experiment.export() for experiment in self.experiments.values()
       },
       "executors": {
         namespace: executor.export() for namespace, executor in self.executors.items()
@@ -310,7 +275,7 @@ class Host:
       state_update.update({ "info": state["info"] })
 
     state_update.update({
-      "chips": state["chips"],
+      "experiments": state["experiments"],
       "executors": state["executors"]
     })
 
@@ -318,18 +283,6 @@ class Host:
     return state_update
 
   async def process_request(self, request, *, agent) -> Any:
-    if request["type"] == "command":
-      chip = self.chips[request["chipId"]]
-      await chip.runners[request["namespace"]].command(request["command"])
-
-    if request["type"] == "createChip":
-      chip = self.create_chip()
-      self.update_callback()
-
-      return {
-        "chipId": chip.id
-      }
-
     if request["type"] == "createDraftSample":
       return "# Example protocol\nname: My protocol\n\nstages:\n  - steps:\n      - name: Step no. 1\n        duration: 5 min"
 
@@ -359,87 +312,90 @@ class Host:
 
         return compilation.export()
 
-      case "deleteChip":
-        chip = self.chips[request["chipId"]]
+      case "createExperiment":
+        experiment_id = ExperimentId(str(uuid.uuid4()))
+        experiment = Experiment(
+          id=experiment_id,
+          path=(self.experiments_path / experiment_id),
+          title=request["title"]
+        )
+
+        experiment.save()
+        self.experiments[experiment_id] = experiment
+
+        return {
+          "experimentId": experiment.id
+        }
+
+      case "deleteExperiment":
+        experiment = self.experiments[request["experimentId"]]
 
         # TODO: checks
 
         if request["trash"]:
-          self.backend.trash(chip.dir)
+          self.backend.trash(experiment.path)
         else:
-          shutil.rmtree(chip.dir)
+          shutil.rmtree(experiment.path)
 
-        del self.chips[request["chipId"]]
+        del self.experiments[request["experimentId"]]
 
-      case "duplicateChip":
-        chip = self.chips[request["chipId"]]
-        duplicated = chip.duplicate(chips_dir=self.chips_dir, host=self, template=request["template"])
-
-        self.chips[duplicated.id] = duplicated
-        logger.info(f"Duplicated chip '{chip.id}' into '{duplicated.id}'")
-
-        self.update_callback()
-        return { "chipId": duplicated.id }
-
-      case "requestExecutor":
+      case "requestToExecutor":
         return await self.executors[request["namespace"]].request(request["data"], agent=agent)
 
-      case "revealChipDirectory":
-        if agent.client.remote:
-          return
+      case "requestToRunner":
+        experiment = self.experiments[request["experimentId"]]
+        assert experiment.master
 
-        chip = self.chips[request["chipId"]]
-        self.backend.reveal(chip.dir)
+        return await experiment.master.runners[request["namespace"]].request(request["data"], agent=agent)
+
+      case "revealExperimentDirectory":
+        if not agent.client.remote:
+          experiment = self.experiments[request["experimentId"]]
+          self.backend.reveal(experiment.path)
 
       case "sendMessageToActiveBlock":
-        chip = self.chips[request["chipId"]]
-        assert chip.master
+        experiment = self.experiments[request["experimentId"]]
+        assert experiment.master
 
-        chip.master.receive(request["path"], request["message"])
+        experiment.master.receive(request["path"], request["message"])
 
         return None
 
       case "startDraft":
-        chip = self.chips[request["chipId"]]
+        experiment = self.experiments[request["experimentId"]]
 
-        if chip.master:
+        if experiment.master:
           raise Exception("Already running")
 
         draft = Draft.load(request["draft"])
         compilation = draft.compile(host=self)
 
         def cleanup_callback():
-          chip.master = None
+          experiment.master = None
 
         def update_callback():
           self.update_callback()
 
-        logger.info(f"Running protocol on chip '{chip.id}'")
+        logger.info(f"Running protocol on experiment '{experiment.id}'")
 
         async def func():
           assert compilation.protocol
 
-          chip.master = Master(compilation.protocol, chip, cleanup_callback=cleanup_callback, host=self)
-          run_task = asyncio.create_task(chip.master.run(update_callback))
+          experiment.master = Master(compilation.protocol, experiment, cleanup_callback=cleanup_callback, host=self)
+          run_task = asyncio.create_task(experiment.master.run(update_callback))
 
           try:
             await asyncio.shield(run_task)
           except asyncio.CancelledError:
-            logger.info(f"Halting protocol on chip '{chip.id}'")
-            chip.master.halt()
+            logger.info(f"Halting protocol on experiment '{experiment.id}'")
+            experiment.master.halt()
 
             await run_task
 
-          logger.info(f"Ran protocol on chip '{chip.id}'")
+          logger.info(f"Ran protocol on experiment '{experiment.id}'")
           self.update_callback()
 
         self.pool.start_soon(func(), priority=10)
-
-      case "upgradeChip":
-        chip = self.chips[request["chipId"]]
-        chip.upgrade(host=self)
-
-        logger.info(f"Upgraded chip '{chip.id}'")
 
     self.update_callback()
 

@@ -1,4 +1,4 @@
-import { ChipId, Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { ExperimentId, Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 
 import { Host } from './host';
 import { BlockContext, GlobalContext } from './interfaces/plugin';
@@ -16,13 +16,13 @@ export interface BlockPair {
 }
 
 
-export function createBlockContext(blockPath: ProtocolBlockPath, chipId: ChipId, context: GlobalContext): BlockContext {
+export function createBlockContext(blockPath: ProtocolBlockPath, experimentId: ExperimentId, context: GlobalContext): BlockContext {
   return {
     ...context,
     sendMessage: async (message) => {
       return await context.host.client.request({
         type: 'sendMessageToActiveBlock',
-        chipId,
+        experimentId,
         path: blockPath,
         message
       });

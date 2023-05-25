@@ -1,5 +1,5 @@
 import { List } from 'immutable';
-import { Chip, ChipId, PluginName, ProtocolBlockPath } from 'pr1-shared';
+import { ExperimentId, PluginName, ProtocolBlockPath } from 'pr1-shared';
 import { Component, createRef } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
@@ -10,12 +10,11 @@ import { GraphEditor } from '../components/graph-editor';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
-import { MetadataTools } from '../unit';
 import { Pool } from '../util';
 import * as util from '../util';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
-import { ViewChips } from './chips';
+import { ViewExperiments } from './experiments';
 import { ViewChip } from './chip';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
@@ -27,7 +26,7 @@ import { Button } from '../components/button';
 export interface ViewExecutionRoute {
   id: '_';
   params: {
-    chipId: ChipId;
+    experimentId: ExperimentId;
   };
 }
 
@@ -56,22 +55,22 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     };
   }
 
-  get chip() {
-    return this.props.host.state.chips[this.props.route.params.chipId] as Chip;
+  get experiment() {
+    return this.props.host.state.experiments[this.props.route.params.experimentId];
   }
 
   get master() {
-    return this.chip.master!;
+    return this.experiment.master!;
   }
 
   componentDidRender() {
-    if (!this.chip) {
-      ViewChips.navigate();
-    } else if (!this.chip.master) {
+    if (!this.experiment) {
+      ViewExperiments.navigate();
+    } else if (!this.experiment.master) {
       if (navigation.canGoBack) {
         navigation.back();
       } else {
-        ViewChip.navigate(this.chip.id);
+        ViewChip.navigate(this.experiment.id);
       }
     }
   }
@@ -90,6 +89,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
 
   private get globalContext(): GlobalContext {
     return {
+      app: this.props.app,
       host: this.props.host,
       pool: this.pool
     };
@@ -113,12 +113,9 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
   }
 
   override render() {
-    if (!this.chip?.master) {
+    if (!this.experiment?.master) {
       return null;
     }
-
-    let metadataTools = this.props.host.plugins['metadata' as PluginName] as unknown as MetadataTools;
-    let metadata = metadataTools.getChipMetadata(this.chip);
 
     let activeBlockPaths = this.activeBlockPaths;
     let selectedBlockPath = (this.state.selection?.blockPath ?? null);
@@ -127,7 +124,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     return (
       <main className={viewStyles.root}>
         <TitleBar
-          title={metadata.title}
+          title={this.experiment.title}
           subtitle={`Running ‘${this.master.protocol.name!}’`}
           subtitleVisible={true}
           tools={[{
@@ -173,7 +170,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                               <ExecutionInspector
                                 activeBlockPaths={activeBlockPaths}
                                 blockPath={selectedBlockPath}
-                                chip={this.chip}
+                                experiment={this.experiment}
                                 host={this.props.host}
                                 location={this.master.location}
                                 protocol={this.master.protocol}
@@ -213,7 +210,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                                       }
                                     }
 
-                                    let commonBlockContext = createBlockContext(commonBlockPath, this.chip.id, this.globalContext);
+                                    let commonBlockContext = createBlockContext(commonBlockPath, this.experiment.id, this.globalContext);
 
                                     this.pool.add(async () => {
                                       await commonBlockContext.sendMessage({
@@ -248,18 +245,19 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
   }
 
   static getDerivedStateFromProps(props: ViewExecutionProps, state: ViewExecutionState): Partial<ViewExecutionState> | null {
-    let chip = props.host.state.chips[props.route.params.chipId] as Chip;
+    let experiment = props.host.state.experiments[props.route.params.experimentId];
 
-    if (!chip?.master) {
+    if (!experiment?.master) {
       return null;
     }
 
     let globalContext: GlobalContext = {
+      app: props.app,
       host: props.host,
       pool: new Pool()
     };
 
-    let activeBlockPaths = List(getRefPaths(chip.master.protocol.root, chip.master.location, globalContext).map((blockPath) => List(blockPath)));
+    let activeBlockPaths = List(getRefPaths(experiment.master.protocol.root, experiment.master.location, globalContext).map((blockPath) => List(blockPath)));
     let selectedBlockPath = state.selection && List(state.selection.blockPath);
 
     if (!selectedBlockPath) {
@@ -288,14 +286,14 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
 
 
   static hash(options: ViewHashOptions<ViewExecutionRoute>) {
-    return options.route.params.chipId;
+    return options.route.params.experimentId;
   }
 
-  static navigate(chipId: ChipId) {
-    return navigation.navigate(`${BaseUrl}/chip/${chipId}/execution`);
+  static navigate(experimentId: ExperimentId) {
+    return navigation.navigate(`${BaseUrl}/experiment/${experimentId}`);
   }
 
   static routes = [
-    { id: '_', pattern: `/chip/:chipId/execution` }
+    { id: '_', pattern: `/experiment/:experimentId` }
   ];
 }

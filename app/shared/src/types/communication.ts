@@ -1,5 +1,5 @@
 import type { ChannelId, ClientId } from '../client';
-import type { ChipId, HostIdentifier, HostState } from './host';
+import type { ExperimentId, HostIdentifier, HostState } from './host';
 import type { PluginName } from './plugin';
 import type { ProtocolBlockPath } from './protocol';
 import type { UnionToIntersection } from './util';
@@ -14,32 +14,22 @@ export type RequestFunc = UnionToIntersection<
   // Host requests
   | (
     (options: {
-      type: 'command';
-      chipId: ChipId;
-      command: unknown;
-      namespace: PluginName;
-    }) => Promise<void>
-  ) | (
-    (options: {
       type: 'compileDraft';
       draft: any;
       options: any;
     }) => Promise<any>
   ) | (
-    (options: { type: 'createChip'; }) => Promise<{ chipId: ChipId; }>
+    (options: {
+      type: 'createExperiment';
+      title: string;
+    }) => Promise<{ experimentId: ExperimentId; }>
   ) | (
     (options: { type: 'createDraftSample'; }) => Promise<string>
   ) | (
     (options: {
-      type: 'deleteChip';
-      chipId: ChipId;
+      type: 'deleteExperiment';
+      experimentId: ExperimentId;
       trash: boolean;
-    }) => Promise<void>
-  ) | (
-    (options: {
-      type: 'duplicateChip';
-      chipId: ChipId;
-      template: boolean;
     }) => Promise<void>
   ) | (
     (options: {
@@ -47,33 +37,35 @@ export type RequestFunc = UnionToIntersection<
     }) => Promise<void>
   ) | (
     (options: {
-      type: 'requestExecutor';
+      type: 'requestToExecutor';
       data: unknown;
       namespace: PluginName;
     }) => Promise<unknown>
   ) | (
     (options: {
-      type: 'revealChipDirectory';
-      chipId: ChipId;
+      type: 'requestToRunner';
+      data: unknown;
+      experimentId: ExperimentId;
+      namespace: PluginName;
+    }) => Promise<void>
+  ) | (
+    (options: {
+      type: 'revealExperimentDirectory';
+      experimentId: ExperimentId;
     }) => Promise<void>
   ) | (
     (options: {
       type: 'sendMessageToActiveBlock';
-      chipId: ChipId;
+      experimentId: ExperimentId;
       path: ProtocolBlockPath;
       message: unknown;
     }) => Promise<void>
   ) | (
     (options: {
       type: 'startDraft';
-      chipId: ChipId;
       draftId: any;
+      experimentId: ExperimentId;
       source: string;
-    }) => Promise<void>
-  ) | (
-    (options: {
-      type: 'upgradeChip';
-      chipId: ChipId;
     }) => Promise<void>
   )
 >;

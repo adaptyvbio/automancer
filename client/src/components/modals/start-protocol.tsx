@@ -1,45 +1,39 @@
-import * as React from 'react';
+import { ExperimentId } from 'pr1-shared';
+import { useEffect, useRef, useState } from 'react';
 
 import descriptionStyles from '../../../styles/components/description.module.scss';
 
 import { Modal } from '../modal';
 import * as Form from '../standard-form';
 import { Host } from '../../host';
-import { MetadataTools } from '../../unit';
-import { Chip, ChipCondition, ChipId, UnitNamespace } from 'pr1-shared';
 
 
-const NewChipOptionId = ('_new' as ChipId);
+const NewExperimentOptionId = '_new' as const;
 
 export function StartProtocolModal(props: {
   host: Host;
   onCancel(): void;
   onSubmit(data: {
-    chipId: ChipId;
-    newChipTitle: null;
+    experimentId: ExperimentId;
+    newExperimentTitle: null;
   } | {
-    chipId: null;
-    newChipTitle: string | null;
+    experimentId: null;
+    newExperimentTitle: string | null;
   }): void;
 }) {
-  let metadataTools = props.host.units['metadata' as UnitNamespace] as unknown as MetadataTools;
-  let chips = (Object.values(props.host.state.chips)
-    .filter((chip) => chip.condition === ChipCondition.Ok) as Chip[])
-    .map((chip) => ({ chip, metadata: metadataTools.getChipMetadata(chip) }));
-
-  let [chipId, setChipId] = React.useState<ChipId | typeof NewChipOptionId>(
-    chips.find(({ chip, metadata }) => !metadata.archived && !chip.master)?.chip.id ?? NewChipOptionId
+  let experiments = Object.values(props.host.state.experiments);
+  let [experimentId, setExperimentId] = useState<ExperimentId | typeof NewExperimentOptionId>(
+    experiments.find((experiment) => !experiment.master)?.id ?? NewExperimentOptionId
   );
 
-  let [newChipTitle, setNewChipTitle] = React.useState<string>('');
+  let [newExperimentTitle, setNewExperimentTitle] = useState<string>('');
+  let refNewExperimentTitleInput = useRef<HTMLInputElement>(null);
 
-  let refNewChipTitleInput = React.createRef<HTMLInputElement>();
-
-  React.useEffect(() => {
-    if (chipId === NewChipOptionId) {
-      refNewChipTitleInput.current!.focus();
+  useEffect(() => {
+    if (experimentId === NewExperimentOptionId) {
+      refNewExperimentTitleInput.current!.focus();
     }
-  }, [chipId]);
+  }, [experimentId]);
 
   return (
     <Modal onCancel={props.onCancel}>
@@ -47,9 +41,9 @@ export function StartProtocolModal(props: {
         event.preventDefault();
 
         props.onSubmit(
-          (chipId === NewChipOptionId)
-            ? { chipId: null, newChipTitle: (newChipTitle.trim() || null) }
-            : { chipId, newChipTitle: null }
+          (experimentId === NewExperimentOptionId)
+            ? { experimentId: null, newExperimentTitle: (newExperimentTitle.trim() || null) }
+            : { experimentId, newExperimentTitle: null }
         )
       }}>
         <h2>Start protocol</h2>
@@ -57,31 +51,31 @@ export function StartProtocolModal(props: {
         <Form.Select
           label="Experiment"
           onInput={(value) => {
-            setChipId(value);
+            setExperimentId(value);
 
-            if (value === NewChipOptionId) {
-              setNewChipTitle('');
+            if (value === NewExperimentOptionId) {
+              setNewExperimentTitle('');
             }
           }}
           options={[
-            { id: ('_header1' as ChipId), label: 'Existing experiments', disabled: true },
-            ...chips.map(({ chip, metadata }) => ({
-              id: chip.id,
-              label: metadata.title,
-              disabled: metadata.archived || chip.master
+            { id: ('_header1' as ExperimentId), label: 'Existing experiments', disabled: true },
+            ...experiments.map((experiment) => ({
+              id: experiment.id,
+              label: experiment.title,
+              disabled: experiment.master
             })),
-            { id: ('_header2' as ChipId), label: 'New experiment', disabled: true },
-            { id: NewChipOptionId, label: 'New experiment' }
+            { id: ('_header2' as ExperimentId), label: 'New experiment', disabled: true },
+            { id: NewExperimentOptionId, label: 'New experiment' }
           ]}
-          value={chipId} />
+          value={experimentId} />
 
-        {(chipId === NewChipOptionId) && (
+        {(experimentId === NewExperimentOptionId) && (
           <Form.TextField
             label="Experiment title"
-            onInput={(value) => void setNewChipTitle(value)}
+            onInput={(value) => void setNewExperimentTitle(value)}
             placeholder="Untitled experiment"
-            value={newChipTitle}
-            targetRef={refNewChipTitleInput} />
+            value={newExperimentTitle}
+            targetRef={refNewExperimentTitleInput} />
         )}
 
         <Form.Actions mode="modal">

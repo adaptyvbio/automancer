@@ -17,8 +17,7 @@ import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view
 import { ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreDefaults, ApplicationSessionStoreEntries, ApplicationStoreConsumer } from './store/application';
 import { StoreManager } from './store/store-manager';
 import { Pool } from './util';
-import { ViewChip } from './views/chip';
-import { ViewChips } from './views/chips';
+import { ViewExperiments } from './views/experiments';
 import { ViewConf } from './views/conf';
 import { ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
@@ -27,7 +26,7 @@ import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
 
 
-const Views: ViewType[] = [ViewChip, ViewChips, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewPluginView];
+const Views: ViewType[] = [ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewPluginView];
 
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({
@@ -253,8 +252,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
         currentRouteData: routeData
       });
     } else {
-      console.warn(`Missing view for pathname ${new URL(url).pathname}, redirecting to ${BaseUrlPathname}/chip`);
-      navigation.navigate(`${BaseUrl}/chip`);
+      console.warn(`Missing view for pathname ${new URL(url).pathname}, redirecting`);
+      ViewExperiments.navigate();
     }
   }
 

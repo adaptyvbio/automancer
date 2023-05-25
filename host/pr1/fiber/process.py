@@ -304,7 +304,7 @@ class ProcessProgram(HeadProgram):
     global ProcessProgramMode
     Mode = ProcessProgramMode
 
-    analysis, data = self._block._data.eval(EvalContext(stack, cwd_path=self._handle.master.chip.dir), final=True)
+    analysis, data = self._block._data.eval(EvalContext(stack, cwd_path=self._handle.master.experiment.path), final=True)
 
     if isinstance(data, EllipsisType):
       self._mode = Mode.Broken()

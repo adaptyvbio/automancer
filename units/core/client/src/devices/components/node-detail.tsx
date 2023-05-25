@@ -197,14 +197,10 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
               {nodeState.writable && (
                 <Button onClick={() => {
                   this.props.context.pool.add(async () => {
-                    await this.props.context.host.client.request({
-                      type: 'requestExecutor',
-                      namespace,
-                      data: {
-                        type: (owned ? 'release' : 'claim'),
-                        nodePath: nodePath.toJS()
-                      }
-                    })
+                    await this.props.context.requestToExecutor({
+                      type: (owned ? 'release' : 'claim'),
+                      nodePath: nodePath.toJS()
+                    });
                   });
                 }}>{owned ? 'Release' : 'Claim'}</Button>
               )}

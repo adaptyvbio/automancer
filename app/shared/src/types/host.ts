@@ -5,68 +5,17 @@ import type { Brand } from './util';
 
 
 export type HostIdentifier = Brand<string, 'HostIdentifier'>;
-
-
-export type BackendAuthAgentSpec = {
-  type: 'password';
-  description: string;
-};
-
-
-export type ChipId = Brand<string, 'ChipId'>;
-export type DeviceId = Brand<string, 'DeviceId'>;
+export type ExperimentId = Brand<string, 'PastExperimentId'>;
 export type HostId = Brand<string, 'HostId'>;
 
-export interface Device {
-  id: DeviceId;
-  name: string;
-}
 
-
-export interface Chip {
-  id: ChipId;
-  condition: ChipCondition.Ok | ChipCondition.Partial | ChipCondition.Unrunnable;
-  issues: ChipIssue[];
+export interface Experiment {
+  id: ExperimentId;
+  creationDate: number;
   master: Master | null;
-  readable: true;
   runners: Record<PluginName, unknown>;
-  unitList: PluginName[];
+  title: string;
 }
-
-export interface UnreadableChip {
-  id: ChipId;
-  condition: ChipCondition.Unsupported | ChipCondition.Corrupted;
-  issues: ChipIssue[];
-  readable: false;
-}
-
-export type GeneralChip = Chip | UnreadableChip;
-
-
-export enum ChipCondition {
-  Ok = 0,
-  Partial = 1,
-  Unrunnable = 2,
-  Unsupported = 3,
-  Corrupted = 4
-}
-
-export interface ChipIssue {
-  message: string;
-}
-
-
-export type ExecutorStates = Record<PluginName, unknown>;
-
-
-/**
- * @deprecated
- */
-export interface ProtocolLocation {
-  segmentIndex: number;
-  state: any;
-}
-
 
 export interface HostState {
   info: {
@@ -77,9 +26,6 @@ export interface HostState {
     units: Record<string, PluginInfo>;
   };
 
-  chips: Record<ChipId, GeneralChip>;
-  devices: Record<DeviceId, Device>;
-  executors: ExecutorStates;
+  executors: Record<PluginName, unknown>;
+  experiments: Record<ExperimentId, Experiment>;
 }
-
-export type Namespace = 'control' | 'input' | 'timer';

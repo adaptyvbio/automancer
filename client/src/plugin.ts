@@ -1,4 +1,4 @@
-import { PluginName } from 'pr1-shared';
+import { ExperimentId, PluginName } from 'pr1-shared';
 import { Application } from './application';
 import { Host } from './host';
 import { PluginContext } from './interfaces/plugin';
@@ -10,6 +10,21 @@ export function createPluginContext<PersistentStoreEntries extends StoreEntries,
     app,
     host: host,
     pool: app.pool,
+    async requestToExecutor(request) {
+      return await host.client.request({
+        type: 'requestToExecutor',
+        data: request,
+        namespace
+      });
+    },
+    async requestToRunner(request, experimentId: ExperimentId) {
+      return await host.client.request({
+        type: 'requestToRunner',
+        experimentId,
+        data: request,
+        namespace
+      });
+    },
     store: {
       usePersistent: app.pluginStores[namespace]?.persistent.useEntry,
       useSession: app.pluginStores[namespace]?.session.useEntry

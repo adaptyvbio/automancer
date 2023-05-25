@@ -1,6 +1,6 @@
 import viewStyles from '../../styles/components/view.module.scss';
 
-import { ViewChips } from './chips';
+import { ViewExperiments } from './experiments';
 import { ViewProps } from '../interfaces/view';
 import { PluginName } from 'pr1-shared';
 import { useEffect } from 'react';
@@ -14,7 +14,7 @@ export function ViewPluginView(props: ViewProps) {
 
   useEffect(() => {
     if (!viewEntry) {
-      ViewChips.navigate();
+      ViewExperiments.navigate();
     }
   }, []);
 

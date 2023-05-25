@@ -19,7 +19,7 @@ from ..master.analysis import MasterAnalysis
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
-from ..chip import Chip
+from ..experiment import Experiment
 from ..ureg import ureg
 
 if TYPE_CHECKING:
@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 @provide_logger(logger)
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, chip: Chip, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
-    self.chip = chip
+  def __init__(self, protocol: FiberProtocol, /, experiment: Experiment, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
+    self.experiment = experiment
     self.host = host
     self.protocol = protocol
 
@@ -80,7 +80,7 @@ class Master:
     from random import random
 
     def ExpPath(path: PathLike[str] | str):
-      return self.chip.dir / path
+      return self.experiment.path / path
 
     def runtime_open(path: PathLike[str] | str, /, **kwargs):
       return open(ExpPath(path), **kwargs)

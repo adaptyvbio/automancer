@@ -1,4 +1,4 @@
-import type { OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import type { Experiment, ExperimentId, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import type { ComponentType, ReactNode } from 'react';
 
 import type { Application } from '../application';
@@ -22,6 +22,11 @@ export interface PluginViewEntry<Context extends AnyPluginContext> {
   Component: ComponentType<PluginViewComponentProps<Context>>;
 }
 
+export interface PluginRunnerComponentProps<Context extends AnyPluginContext> {
+  context: Context;
+  experiment: Experiment;
+}
+
 export interface PluginViewComponentProps<Context extends AnyPluginContext> {
   context: Context;
 }
@@ -34,6 +39,7 @@ export interface Plugin<PersistentStoreEntries extends StoreEntries = [], Sessio
   persistentStoreDefaults?: PersistentStoreEntries;
   sessionStoreDefaults?: SessionStoreEntries;
 
+  RunnerComponent?: ComponentType<PluginRunnerComponentProps<PluginContext<PersistentStoreEntries, SessionStoreEntries>>>;
   SettingsComponent?: ComponentType<PluginSettingsComponentProps<PluginContext<PersistentStoreEntries, SessionStoreEntries>>>;
 
   views?: PluginViewEntry<PluginContext<PersistentStoreEntries, SessionStoreEntries>>[];
@@ -50,6 +56,8 @@ export interface GlobalContext {
 }
 
 export interface PluginContext<PersistentStoreEntries extends StoreEntries = [], SessionStoreEntries extends StoreEntries = []> extends GlobalContext {
+  requestToExecutor(request: unknown): Promise<unknown>;
+  requestToRunner(request: unknown, experimentId: ExperimentId): Promise<unknown>;
   store: StoreConsumer<PersistentStoreEntries, SessionStoreEntries>;
 }
 

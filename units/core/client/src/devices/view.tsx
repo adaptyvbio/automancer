@@ -23,13 +23,9 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
     let controller = new AbortController();
 
     props.context.pool.add(async () => {
-      let { channelId } = (await props.context.host.client.request({
-        type: 'requestExecutor',
-        namespace,
-        data: {
-          type: 'listen'
-        }
-      }) as { channelId: ChannelId; });
+      let { channelId } = (await props.context.requestToExecutor({
+        type: 'listen'
+      })) as { channelId: ChannelId; };
 
       let channel = props.context.host.client.listen<[NodeId[], NodeStateChange][], {}>(channelId);
 

@@ -161,7 +161,7 @@ class BaseExecutor:
     pass
 
   async def request(self, request: Any, /, agent):
-    ...
+    pass
 
   """
   Hashes this executor options of this setup.
@@ -180,7 +180,10 @@ class BaseMasterRunner(ABC):
     ...
 
   async def cleanup(self):
-    ...
+    pass
 
-  def command(self, data: Any, /):
-    ...
+  def export(self):
+    return None
+
+  async def request(self, request: Any, /, agent) -> Any:
+    pass

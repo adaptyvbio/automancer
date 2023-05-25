@@ -1,20 +1,23 @@
 from typing import Optional
+
 import numpy as np
+
 from pr1.units.base import BaseMasterRunner
 
 from . import namespace
+from .executor import Executor
 
 
 class Runner(BaseMasterRunner):
   def __init__(self, master):
-    self._executor = master.host.executors[namespace]
+    self._executor: Executor = master.host.executors[namespace]
     self._master = master
 
     self._chip_count = 1
     self._points: Optional[np.ndarray] = None
-    self._points_path = master.chip.dir / namespace / "points.json"
+    self._points_path = master.experiment.path / namespace / "points.json"
 
-  async def command(self, data, /):
+  async def request(self, data, /, agent):
     match data["type"]:
       case "queryPoints":
         self._points = await self._executor.query(chip_count=self._chip_count)

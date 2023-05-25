@@ -25,24 +25,28 @@ int main() {
     sprintf(&capturePath, "%(output_path)s", "chipIndex");
 
     ND_DefineExperiment(FALSE, TRUE, FALSE, FALSE, FALSE, &capturePath, "prefix", 0, FALSE, FALSE, FALSE);
-    ND_ResetMultipointExp();
 
-    chipPointOffset = chipIndex * 4;
+    if (%(set_points)i) {
+      ND_ResetMultipointExp();
+      ND_SetMultipointExp(TRUE, TRUE, "", "", 0, 0.0, 0.0);
 
-    ux = (dx[chipPointOffset + 1] - dx[chipPointOffset]) / (cols - 1);
-    uy = (dy[chipPointOffset + 1] - dy[chipPointOffset]) / (cols - 1); // ~0
+      chipPointOffset = chipIndex * 4;
 
-    vx = (dx[chipPointOffset + 3] - dx[chipPointOffset]) / (rows - 1); // ~0
-    vy = (dy[chipPointOffset + 3] - dy[chipPointOffset]) / (rows - 1);
+      ux = (dx[chipPointOffset + 1] - dx[chipPointOffset]) / (cols - 1);
+      uy = (dy[chipPointOffset + 1] - dy[chipPointOffset]) / (cols - 1); // ~0
 
-    for (j = 0; j < rows; j = j + 1) {
-      for (i = 0; i < cols; i = i + 1) {
-        ax = dx[chipPointOffset] + i * ux + j * vx;
-        ay = dy[chipPointOffset] + i * uy + j * vy;
-        az = bilinear(&dx, &dy, &dz, ax, ay);
+      vx = (dx[chipPointOffset + 3] - dx[chipPointOffset]) / (rows - 1); // ~0
+      vy = (dy[chipPointOffset + 3] - dy[chipPointOffset]) / (rows - 1);
 
-        if (!(%(check_bounds)i && ((ax < bx[0]) || (ax > bx[1]) || (ay < by[0]) || (ay > by[1]) || (az < bz[0]) || (az > bz[1])))) {
-          ND_AppendMultipointPoint(ax, ay, az, "");
+      for (j = 0; j < rows; j = j + 1) {
+        for (i = 0; i < cols; i = i + 1) {
+          ax = dx[chipPointOffset] + i * ux + j * vx;
+          ay = dy[chipPointOffset] + i * uy + j * vy;
+          az = bilinear(&dx, &dy, &dz, ax, ay, chipPointOffset);
+
+          if (!(%(check_bounds)i && ((ax < bx[0]) || (ax > bx[1]) || (ay < by[0]) || (ay > by[1]) || (az < bz[0]) || (az > bz[1])))) {
+            ND_AppendMultipointPoint(ax, ay, az, "");
+          }
         }
       }
     }
@@ -52,12 +56,12 @@ int main() {
 }
 
 
-double bilinear(double* x[4], double* y[4], double* s[4], double px, double py) {
+double bilinear(double* x[%(chip_point_count)i], double* y[%(chip_point_count)i], double* s[%(chip_point_count)i], double px, double py, int offset) {
   double a, u, v;
 
-  a = x[0] * (y[1] - y[3]) + x[1] * (y[3] - y[0]) + x[3] * (y[0] - y[1]);
-  u = ((x[1] - x[0]) * py - (y[1] - y[0]) * px + x[0] * y[1] - y[0] * x[1]) / a;
-  v  = ((x[0] - x[3]) * py - (y[0] - y[3]) * px - x[0] * y[3] + y[0] * x[3]) / a;
+  a = x[offset + 0] * (y[offset + 1] - y[offset + 3]) + x[offset + 1] * (y[offset + 3] - y[offset + 0]) + x[offset + 3] * (y[offset + 0] - y[offset + 1]);
+  u = ((((x[offset + 1] - x[offset + 0]) * py - (y[offset + 1] - y[offset + 0]) * px) + x[offset + 0] * y[offset + 1]) - y[offset + 0] * x[offset + 1]) / a;
+  v = ((((x[offset + 0] - x[offset + 3]) * py - (y[offset + 0] - y[offset + 3]) * px) - x[offset + 0] * y[offset + 3]) + y[offset + 0] * x[offset + 3]) / a;
 
-  return (1 - v) * ((1 - u) * s[0] + u * s[3]) + v * ((1 - u) * s[1] + u * s[2]);
+  return (1 - v) * ((1 - u) * s[offset + 0] + u * s[offset + 3]) + v * ((1 - u) * s[offset + 1] + u * s[offset + 2]);
 }

@@ -119,10 +119,16 @@ export function createProcessBlockImpl<Data, Location>(options: {
   getLabel?(data: Data): string | null;
 }): PluginBlockImpl<ProcessBlock<Data>, ProcessLocation<Location>> {
   return {
-    ...(options.Component && {
-      Component(props) {
-        let Component = options.Component!;
+    Component(props) {
+      if (props.location.mode === ProcessLocationMode.Broken) {
+        return (
+          <p style={{ margin: '1rem 0' }}>An error occured.</p>
+        );
+      }
 
+      let Component = options.Component;
+
+      if (Component) {
         return (
           <Component
             data={props.block.data}
@@ -131,7 +137,9 @@ export function createProcessBlockImpl<Data, Location>(options: {
             location={props.location.process} />
         );
       }
-    }),
+
+      return null;
+    },
     computeGraph,
     createCommands(block, location, context) {
       if ((location.mode === ProcessLocationMode.Normal) && location.pausable) {

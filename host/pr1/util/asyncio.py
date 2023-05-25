@@ -56,8 +56,7 @@ class AsyncIteratorThread(Generic[T, S]):
     return self
 
   async def __anext__(self) -> S:
-    loop = asyncio.get_event_loop()
-    done, value = await loop.run_in_executor(None, lambda: self._queue.get(block=True))
+    done, value = await asyncio.to_thread(lambda: self._queue.get(block=True))
 
     if done:
       self._thread.join()

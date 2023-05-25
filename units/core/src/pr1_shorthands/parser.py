@@ -186,6 +186,7 @@ class Parser(BaseParser):
       shorthand_name: Attribute(
         deprecated=shorthand.deprecated,
         description=shorthand.description,
+        optional=True,
         type=AnyType()
       ) for shorthand_name, shorthand in self.shorthands.items()
     }

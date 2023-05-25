@@ -325,10 +325,13 @@ class ProcessTransformer(BaseLeadTransformer):
   def adopt(self, data, /, adoption_stack, trace):
     from .process import ProcessBlock
 
-    analysis, evaluated_data = data.eval(EvalContext(adoption_stack), final=False)
+    analysis, result = data.eval(EvalContext(adoption_stack), final=False)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
 
     block = analysis.add(self._parser.wrap(ProcessBlock(
-      evaluated_data,
+      result,
       self._Process
     )))
 
@@ -702,6 +705,8 @@ class FiberParser:
         _ = analysis.add(parser.preload(result))
         result_by_parser[parser] = result
 
+    failure = False
+
     for transformer in self.transformers:
       parser = next(parser for parser in self._parsers if transformer in parser.transformers)
 
@@ -718,6 +723,7 @@ class FiberParser:
         unit_attrs = analysis.add(self.block_type.analyze_namespace(block_result, context, key=transformer))
 
       if isinstance(unit_attrs, EllipsisType):
+        failure = failure or isinstance(transformer, BaseLeadTransformer)
         continue
 
       if isinstance(transformer, BaseLeadTransformer):
@@ -742,10 +748,15 @@ class FiberParser:
       analysis.errors.append(LeadTransformInPassiveLayerError(attrs))
     if (mode != 'passive') and (len(lead_transforms) > 1):
       analysis.errors.append(DuplicateLeadTransformInLayerError([transform.origin_area for _, transform in lead_transforms]))
+
+    if failure:
+      return analysis, Ellipsis
+
     if (mode == 'lead') and (len(lead_transforms) < 1):
       analysis.errors.append(MissingLeadTransformInLayerError(attrs))
       return analysis, Ellipsis
 
+    # TODO: Add token even for failed transformers
     for _, transform in lead_transforms:
       analysis.tokens.append(LanguageServiceToken("lead", DiagnosticDocumentReference.from_area(transform.origin_area)))
 

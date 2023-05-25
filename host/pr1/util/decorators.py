@@ -46,3 +46,10 @@ def provide_logger(parent_logger: Logger, *, name: str = '_logger'):
     return cls
 
   return func
+
+
+__all__ = [
+  'debug',
+  'deprecated',
+  'provide_logger'
+]

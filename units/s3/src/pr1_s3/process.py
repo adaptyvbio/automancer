@@ -1,26 +1,22 @@
-from botocore.config import Config
-from dataclasses import dataclass
-from pathlib import Path
-from types import EllipsisType
-from typing import Literal, Optional, Protocol
 import asyncio
-import botocore.exceptions
-import io
+from logging import Logger
 import math
-import os
+from asyncio import Event
+from dataclasses import dataclass
+from typing import Literal, Optional, Protocol
 
 import boto3
-import pr1 as am
-from pr1.error import Diagnostic
-from pr1.fiber.eval import EvalStack
-from pr1.fiber.expr import export_value
-from pr1.fiber.process import BaseProcess, BaseProcessPoint, ProcessExecEvent, ProcessFailureEvent, ProcessTerminationEvent
-from pr1.master.analysis import MasterAnalysis, MasterError
-from pr1.units.base import BaseProcessRunner
-from pr1.util.asyncio import AsyncIteratorThread
-from pr1.util.misc import FileObject, UnreachableError
+import botocore.exceptions
+from botocore.config import Config
 
-from . import namespace
+import pr1 as am
+from pr1.fiber.expr import export_value
+from pr1.fiber.process import (BaseProcess, BaseProcessPoint, ProcessExecEvent,
+                               ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent)
+from pr1.master.analysis import MasterAnalysis, MasterError
+from pr1.util.asyncio import AsyncIteratorThread
+
+from . import logger, namespace
 
 
 MIN_PART_SIZE = 5_242_880 # 5 MiB
@@ -66,12 +62,33 @@ class ProcessLocation:
 class ProcessPoint(BaseProcessPoint):
   pass
 
+@am.provide_logger(logger)
 class Process(BaseProcess[ProcessData, ProcessPoint]):
   name = "_"
   namespace = namespace
 
   def __init__(self, data: ProcessData, /, master):
     self._data = data
+    self._halted = False
+    self._resume_event: Optional[Event] = None
+
+    self._logger: Logger
+
+  def halt(self):
+    if self._resume_event:
+      self._resume_event.set()
+      self._resume_event = None
+
+    self._halted = True
+
+  def pause(self):
+    self._resume_event = Event()
+
+  def resume(self):
+    assert self._resume_event
+
+    self._resume_event.set()
+    self._resume_event = None
 
   async def run(self, point, stack):
     try:
@@ -105,149 +122,163 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
         client = boto3.client(**client_args)
 
 
-        # Single upload
-        if part_count <= 1:
-          yield ProcessExecEvent(
-            location=ProcessLocation(
-              phase='upload',
-              progress=0.0
-            )
-          )
-
-          def run_upload(callback):
-            return client.upload_fileobj(
-              source_file,
-              Bucket=self._data.bucket,
-              Key=self._data.target,
-              Callback=callback
-            )
-
-          thread = AsyncIteratorThread[None, int](run_upload)
-          uploaded_byte_count = 0
-
-          async for chunk_byte_count in thread:
-            uploaded_byte_count += chunk_byte_count
-
+        try:
+          # Singlepart upload
+          if part_count <= 1:
             yield ProcessExecEvent(
               location=ProcessLocation(
                 phase='upload',
-                progress=(uploaded_byte_count / source_size)
+                progress=0.0
               )
             )
 
-          try:
+            def run_upload(callback):
+              return client.upload_fileobj(
+                source_file,
+                Bucket=self._data.bucket,
+                Key=self._data.target,
+                Callback=callback
+              )
+
+            thread = AsyncIteratorThread[None, int](run_upload)
+            uploaded_byte_count = 0
+
+            async for chunk_byte_count in thread:
+              uploaded_byte_count += chunk_byte_count
+
+              self._logger.debug(f"Uploaded {uploaded_byte_count}/{source_size} bytes of singlepart upload")
+
+              yield ProcessExecEvent(
+                location=ProcessLocation(
+                  phase='upload',
+                  progress=(uploaded_byte_count / source_size)
+                )
+              )
+
             thread.result()
-          except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
-            yield ProcessFailureEvent(
-              analysis=MasterAnalysis(errors=[BotoError(e)])
+
+          # Multipart upload
+          else:
+            yield ProcessExecEvent(
+              pausable=True,
+              location=ProcessLocation(
+                phase='create',
+                progress=0.0
+              )
             )
 
-            return
+            res_create = await asyncio.to_thread(lambda: client.create_multipart_upload(
+              Bucket=self._data.bucket,
+              Key=self._data.target
+            ))
+
+            self._logger.debug(f"Created multipart upload with id {res_create['UploadId']}")
+
+            upload_args = dict(
+              Bucket=res_create['Bucket'],
+              Key=res_create['Key'],
+              UploadId=res_create['UploadId']
+            )
+
+            try:
+              if self._halted:
+                raise asyncio.CancelledError
+
+              if self._resume_event:
+                yield ProcessPauseEvent(
+                  location=ProcessLocation(
+                    paused=True,
+                    phase='part_upload',
+                    progress=0.0
+                  )
+                )
+
+                await self._resume_event.wait()
+
+              if self._halted:
+                raise asyncio.CancelledError
+
+              yield ProcessExecEvent(
+                pausable=True,
+                location=ProcessLocation(
+                  phase='part_upload',
+                  progress=0.0
+                )
+              )
+
+              parts = list()
+
+              for part_index in range(part_count):
+                part_last = part_index == (part_count - 1)
+
+                res_upload = await asyncio.to_thread(lambda: client.upload_part(
+                  Body=source_file.read(-1 if part_last else part_size),
+                  PartNumber=(part_index + 1),
+                  **upload_args
+                ))
+
+                self._logger.debug(f"Uploaded part {part_index + 1}/{part_count}")
+
+                parts.append(dict(
+                  ETag=res_upload['ETag'],
+                  PartNumber=(part_index + 1)
+                ))
+
+                location = ProcessLocation(
+                  phase=('complete' if part_last else 'part_upload'),
+                  progress=((part_index + 1) / part_count)
+                )
+
+                if self._halted:
+                  raise asyncio.CancelledError
+
+                if self._resume_event:
+                  yield ProcessPauseEvent(
+                    location=ProcessLocation(
+                      paused=True,
+                      phase=location.phase,
+                      progress=location.progress
+                    )
+                  )
+
+                  await self._resume_event.wait()
+
+                if self._halted:
+                  raise asyncio.CancelledError
+
+                yield ProcessExecEvent(
+                  location=location
+                )
+
+              await asyncio.to_thread(lambda: client.complete_multipart_upload(
+                MultipartUpload=dict(Parts=parts),
+                **upload_args
+              ))
+
+              self._logger.debug("Completed upload")
+            except:
+              await asyncio.to_thread(lambda: client.abort_multipart_upload(
+                **upload_args
+              ))
+
+              self._logger.debug("Cancelled upload")
+              raise
+        except asyncio.CancelledError:
+          pass
+        except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
+          yield ProcessFailureEvent(
+            analysis=MasterAnalysis(errors=[BotoError(e)])
+          )
+
+          return
+        finally:
+          client.close()
     except OSError as e:
       yield ProcessFailureEvent(
         analysis=MasterAnalysis(errors=[SourceError(e)])
       )
 
       return
-
-    # # Multipart upload
-    # else:
-    #   yield ProcessExecEvent(
-    #     pausable=True,
-    #     location=ProcessLocation(
-    #       phase='create',
-    #       progress=0.0
-    #     )
-    #   )
-
-    #   loop = asyncio.get_event_loop()
-    #   res_create = await loop.run_in_executor(None, lambda: client.create_multipart_upload(
-    #     Bucket=self._data.bucket,
-    #     Key=self._data.target
-    #   ))
-
-    #   upload_args = dict(
-    #     Bucket=res_create['Bucket'],
-    #     Key=res_create['Key'],
-    #     UploadId=res_create['UploadId']
-    #   )
-
-    #   try:
-    #     if self._halted:
-    #       raise asyncio.CancelledError
-
-    #     if self._resume_future:
-    #       yield ProcessExecEvent(
-    #         location=ProcessLocation(
-    #           paused=True,
-    #           phase='part_upload',
-    #           progress=0.0
-    #         ),
-    #         stopped=True
-    #       )
-
-    #       await self._resume_future
-
-    #     yield ProcessExecEvent(
-    #       pausable=True,
-    #       location=ProcessLocation(
-    #         phase='part_upload',
-    #         progress=0.0
-    #       )
-    #     )
-
-    #     parts = list()
-
-    #     for part_index in range(part_count):
-    #       part_last = part_index == (part_count - 1)
-
-    #       res_upload = await loop.run_in_executor(None, lambda: client.upload_part(
-    #         Body=source_file.read(-1 if part_last else part_size),
-    #         PartNumber=(part_index + 1),
-    #         **upload_args
-    #       ))
-
-    #       parts.append(dict(
-    #         ETag=res_upload['ETag'],
-    #         PartNumber=(part_index + 1)
-    #       ))
-
-    #       if self._halted:
-    #         raise asyncio.CancelledError()
-
-    #       location = ProcessLocation(
-    #         phase=('complete' if part_last else 'part_upload'),
-    #         progress=((part_index + 1) / part_count)
-    #       )
-
-    #       if self._resume_future:
-    #         yield ProcessExecEvent(
-    #           location=ProcessLocation(
-    #             paused=True,
-    #             phase=location.phase,
-    #             progress=location.progress
-    #           ),
-    #           stopped=True
-    #         )
-
-    #         await self._resume_future
-
-    #       yield ProcessExecEvent(
-    #         location=location
-    #       )
-
-    #     await loop.run_in_executor(None, lambda: client.complete_multipart_upload(
-    #       MultipartUpload=dict(Parts=parts),
-    #       **upload_args
-    #     ))
-    #   except asyncio.CancelledError:
-    #     pass
-    #   finally:
-    #     await loop.run_in_executor(None, lambda: client.abort_multipart_upload(
-    #       **upload_args
-    #     ))
-
-    # client.close()
 
     yield ProcessTerminationEvent(
       location=ProcessLocation(

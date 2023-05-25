@@ -1,4 +1,4 @@
-import { DynamicValue, Host, Plugin, createProcessBlockImpl, formatDynamicValue } from 'pr1';
+import { DynamicValue, ExpandableText, Plugin, ProgressBar, createProcessBlockImpl, formatDynamicValue } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
@@ -17,7 +17,36 @@ export interface ProcessLocation {
 export default {
   namespace: ('s3' as PluginName),
   blocks: {
-    ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, never>({
+    ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
+      Component(props) {
+        let progress = (() => {
+          switch (props.location.phase) {
+            case 'complete':
+              return 0.9;
+            case 'create':
+              return 0;
+            case 'done':
+              return 1;
+            case 'part_upload':
+              return 0.1 + props.location.progress * 0.8;
+            case 'upload':
+              return props.location.progress;
+          }
+        })();
+
+        return (
+          <div>
+            <ProgressBar
+              description={() => (
+                <ExpandableText expandedValue="100%">
+                  {(progress * 100).toFixed() + '%'}
+                </ExpandableText>
+              )}
+              paused={props.location.paused}
+              value={progress} />
+          </div>
+        );
+      },
       createFeatures(data, location) {
         return [
           { icon: 'cloud_upload',
@@ -27,40 +56,4 @@ export default {
       }
     })
   }
-
-  // ProcessComponent(props: {
-  //   host: Host;
-  //   processData: ProcessData;
-  //   processLocation: ProcessLocation;
-  //   time: number;
-  // }) {
-  //   let location = props.processLocation;
-
-  //   let progress = (() => {
-  //     switch (location.phase) {
-  //       case 'complete': return 0.9;
-  //       case 'create': return 0;
-  //       case 'done': return 1;
-  //       case 'part_upload': return 0.1 + location.progress * 0.8;
-  //       case 'upload': return location.progress;
-  //     }
-  //   })();
-
-  //   return (
-  //     <div>
-  //       <ProgressBar
-  //         paused={props.processLocation.paused}
-  //         value={progress} />
-  //     </div>
-  //   );
-  // },
-
-  // createProcessFeatures(processData: ProcessData, _options) {
-  //   switch (processData.type) {
-  //     case 'upload': return [
-  //       { icon: 'cloud_upload',
-  //         label: 'Upload to S3' }
-  //     ];
-  //   }
-  // }
 } satisfies Plugin

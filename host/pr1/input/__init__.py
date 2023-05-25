@@ -123,7 +123,6 @@ class Attribute:
     """
 
     self._optional = optional or not isinstance(default, EllipsisType)
-
     self._decisive = (not self._optional) or decisive
     self._default = default
     self._deprecated = deprecated
@@ -467,7 +466,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
       return analysis, Ellipsis
 
     for attr_name, attr in self._attributes_by_key[key].items():
-      if not (attr_name in attr_values[key]) and not isinstance(attr._default, EllipsisType):
+      if not (attr_name in result) and not isinstance(attr._default, EllipsisType):
         result[UnlocatedValue(attr_name)] = ValueAsPythonExpr.new(UnlocatedValue(attr._default), depth=context.eval_depth)
 
     return analysis, result
@@ -931,9 +930,7 @@ class IdentifierType(Type):
     if isinstance(obj_new, EllipsisType):
       return analysis, Ellipsis
 
-    try:
-      is_identifier(obj_new, allow_leading_digit=self._allow_leading_digit)
-    except LocatedError:
+    if not is_identifier(obj_new, allow_leading_digit=self._allow_leading_digit):
       analysis.errors.append(InvalidIdentifierError(obj))
       return analysis, Ellipsis
 

@@ -18,7 +18,6 @@ class Parser(BaseParser):
     self.transformers = [ProcessTransformer(Process, {
       's3-upload': am.Attribute(
         description="Uploads a file to an S3 bucket.",
-        optional=True,
         type=am.EvaluableContainerType(
           am.RecordType({
           'bucket': am.Attribute(

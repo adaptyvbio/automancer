@@ -359,7 +359,7 @@ class ProcessProgram(HeadProgram):
               # if pausable is not None:
               #   self._process_pausable = pausable
 
-            case (Mode.Normal(), ProcessExecEvent()):
+            case (Mode.Halting() | Mode.Normal(), ProcessExecEvent()):
               pass
 
             case (Mode.Resuming(resuming_event), ProcessExecEvent()):

@@ -1,23 +1,24 @@
 import asyncio
-from asyncio import Future, Task
-from dataclasses import dataclass
 import time
-from types import EllipsisType
-from typing import Any, Optional
+from asyncio import Event, Future, Task
+from dataclasses import dataclass, field
+from typing import Any, Literal, Optional
 
-from pr1.fiber.eval import EvalContext
+from pint import Quantity
+
+import pr1 as am
 from pr1.fiber.expr import export_value
-from pr1.fiber.process import BaseProcess, BaseProcessPoint, ProcessExecEvent, ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent
-from pr1.master.analysis import MasterAnalysis
 from pr1.ureg import ureg
 
 from . import namespace
-from .parser import ProcessData
+
+
+ProcessData = Quantity | Literal['forever']
 
 
 @dataclass(kw_only=True)
 class ProcessLocation:
-  duration: Optional[float] # in seconds, none = wait forever
+  duration: Optional[float] # in seconds, None = wait forever
   progress: float
   paused: bool = False
 
@@ -31,94 +32,105 @@ class ProcessLocation:
       "progress": self.progress
     }
 
+
 @dataclass
-class ProcessPoint(BaseProcessPoint):
+class ProcessPoint(am.BaseProcessPoint):
   progress: float
 
-  @classmethod
-  def import_value(cls, value: Any, /):
-    return cls(progress=value["progress"])
 
-class Process(BaseProcess[ProcessData, ProcessPoint]):
+class ProcessMode:
+  @dataclass
+  class Halted:
+    pass
+
+  @dataclass
+  class Normal:
+    task: Task[None]
+
+  @dataclass
+  class Paused:
+    event: Event = field(default_factory=Event, repr=False)
+
+  @dataclass
+  class WaitingForever:
+    event: Event = field(default_factory=Event, repr=False)
+
+  Any = Halted | Normal | Paused | WaitingForever
+
+
+class Process(am.BaseProcess[ProcessData, ProcessPoint]):
   name = "_"
   namespace = namespace
+
+  Point = ProcessPoint
 
   def __init__(self, data: ProcessData, /, master):
     self._data = data
 
-    self._progress: Optional[float] = None
-    self._resume_future: Optional[Future] = None
-    self._task: Optional[Task] = None
+    self._jump_progress: Optional[float] = None
+    self._mode: ProcessMode.Any
 
   def halt(self):
-    if self._task:
-      self._task.cancel()
-    if self._resume_future:
-      self._resume_future.cancel()
-      self._resume_future = None
+    match self._mode:
+      case ProcessMode.Normal(task):
+        task.cancel()
+      case ProcessMode.Paused(event):
+        event.set()
+      case ProcessMode.WaitingForever(event):
+        event.set()
 
-  def jump(self, point, /):
-    self._progress = point.progress
+    self._mode = ProcessMode.Halted()
 
-    if self._task:
-      self._task.cancel()
+  def jump(self, point: ProcessPoint, /):
+    self._jump_progress = point.progress
 
-    return True
+    match self._mode:
+      case ProcessMode.Normal(task):
+        task.cancel()
+        return True
+      case ProcessMode.Paused():
+        pass
+        return True
+      case _:
+        return False
 
   def pause(self):
-    assert self._task
-
-    self._resume_future = Future()
-    self._task.cancel()
+    match self._mode:
+      case ProcessMode.Normal(task):
+        task.cancel()
+        self._mode = ProcessMode.Paused()
 
   def resume(self):
-    assert self._resume_future
+    match self._mode:
+      case ProcessMode.Paused(event):
+        event.set()
 
-    self._resume_future.set_result(None)
-    self._resume_future = None
+  async def run(self, point: Optional[ProcessPoint], stack):
+    total_duration = self._data.m_as('sec') if not isinstance(self._data, str) else None
 
-  async def run(self, point, stack):
-    eval_analysis, eval_result = self._data.duration.eval(EvalContext(stack), final=True)
+    if total_duration is not None:
+      self._jump_progress = (point.progress if point else 0.0)
 
-    if isinstance(eval_result, EllipsisType):
-      yield ProcessFailureEvent(analysis=MasterAnalysis.cast(eval_analysis))
-      return
+      while True:
+        progress = self._jump_progress
+        self._jump_progress = None
 
-    total_duration = eval_result.value.m_as('sec') if (eval_result.value != 'forever') else None
-    self._progress = (point.progress if point else 0.0)
+        remaining_duration = (total_duration * (1.0 - progress))
+        task_time = time.time()
 
-    initial = True
+        yield am.ProcessExecEvent(
+          duration=remaining_duration,
+          location=ProcessLocation(duration=total_duration, progress=progress),
+          pausable=True,
+          time=task_time
+        )
 
-    while True:
-      progress = self._progress
-      self._progress = None
+        task = asyncio.create_task(asyncio.sleep(remaining_duration))
+        self._mode = ProcessMode.Normal(task)
 
-      remaining_duration = (total_duration * (1.0 - progress)) if (total_duration is not None) else None
-      task_time = time.time()
-
-      yield ProcessExecEvent(
-        analysis=(MasterAnalysis.cast(eval_analysis) if initial else MasterAnalysis()),
-        duration=remaining_duration,
-        location=ProcessLocation(duration=total_duration, progress=progress),
-        pausable=True,
-        time=task_time
-      )
-
-      initial = False
-
-      async def wait_forever():
-        await Future()
-
-      self._task = asyncio.create_task(
-        asyncio.sleep(remaining_duration)
-          if (remaining_duration is not None)
-          else wait_forever()
-      )
-
-      try:
-        await self._task
-      except asyncio.CancelledError:
-        if self._progress is None:
+        try:
+          await task
+        except asyncio.CancelledError:
           self._task = None
 
           current_time = time.time()
@@ -128,10 +140,8 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
             progress += elapsed_time / total_duration
             remaining_duration = total_duration * (1.0 - progress)
 
-          self._progress = progress
-
-          # yield ProcessExecEvent(location=ProcessLocation(self._progress, paused=True))
-          # await asyncio.sleep(2)
+          if self._jump_progress is None:
+            self._jump_progress = progress
 
           location = ProcessLocation(
             duration=total_duration,
@@ -139,39 +149,58 @@ class Process(BaseProcess[ProcessData, ProcessPoint]):
             progress=progress
           )
 
-          if self._resume_future:
-            # The process is paused.
-            yield ProcessPauseEvent(
-              duration=remaining_duration,
-              location=location,
-              time=current_time
-            )
-
-            try:
-              await self._resume_future
-            except asyncio.CancelledError:
-              # The process is halting while being paused.
-
-              yield ProcessTerminationEvent(
+          match self._mode:
+            case ProcessMode.Halted():
+              yield am.ProcessTerminationEvent(
                 location=location,
                 time=current_time
               )
 
               return
+            case ProcessMode.Normal(task):
+              # Just a jump
+              pass
+            case ProcessMode.Paused(event):
+              yield am.ProcessPauseEvent(
+                location=location,
+                time=current_time
+              )
 
-          else:
-            # The process is halted.
-            yield ProcessTerminationEvent(
-              location=location,
-              time=current_time
-            )
+              await event.wait()
 
-            return
-      else:
-        break
-      finally:
-        self._task = None
+              match self._mode:
+                case ProcessMode.Halted():
+                  yield am.ProcessTerminationEvent(
+                    location=location,
+                    time=current_time
+                  )
 
-    yield ProcessTerminationEvent(
+                  return
+                case ProcessMode.Paused():
+                  # Resume
+                  pass
+        else:
+          # The timer completed successfully.
+          break
+    else:
+      yield am.ProcessExecEvent(
+        location=ProcessLocation(duration=None, progress=0.0)
+      )
+
+      self._mode = ProcessMode.WaitingForever()
+      await self._mode.event.wait()
+
+
+    yield am.ProcessTerminationEvent(
       location=ProcessLocation(duration=total_duration, progress=1.0)
     )
+
+  @staticmethod
+  def import_point(data, /):
+    return ProcessPoint(progress=data["progress"])
+
+  @staticmethod
+  def export_data(data, /):
+    return {
+      "duration": export_value(data)
+    }

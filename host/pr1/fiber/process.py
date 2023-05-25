@@ -81,6 +81,8 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   name: ClassVar[str]
   namespace: ClassVar[str]
 
+  Point: ClassVar[Optional[type[BaseProcessPoint]]] = None
+
   def __init__(self, data: T_ProcessData, /, master: 'Master'):
     ...
 
@@ -91,14 +93,18 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
     return False
 
   def pause(self):
-    ...
+    pass
 
   def resume(self):
-    ...
+    pass
 
   @abstractmethod
   def run(self, point: Optional[S_ProcessPoint], stack: EvalStack) -> AsyncIterator[ProcessEvent]:
     ...
+
+  @staticmethod
+  def import_point(data: Any, /):
+    raise NotImplementedError
 
   @abstractstaticmethod
   def export_data(data: Any, /) -> Any:
@@ -114,7 +120,7 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
     return ProcessProgram(self, handle)
 
   def import_point(self, data, /):
-    return self._data.import_point(data)
+    return self._ProcessType.import_point(data)
 
   def export(self):
     return {
@@ -433,9 +439,31 @@ class ProcessProgram(HeadProgram):
             )
           ))
 
+          break
+
       del self._mode
       del self._process
       del self._process_location
       del self._process_pausable
 
     del self._point
+
+
+__all__ = [
+  'BaseProcess',
+  'BaseProcessEvent',
+  'BaseProcessPoint',
+  'DateLike',
+  'DurationLike',
+  'ProcessError',
+  'ProcessExecEvent',
+  'ProcessFailureEvent',
+  'ProcessInternalError',
+  'ProcessPauseEvent',
+  'ProcessProgram',
+  'ProcessProgramLocation',
+  'ProcessProgramMode',
+  'ProcessProtocolError',
+  'ProcessTerminationEvent',
+  'ProgramExecDuration'
+]

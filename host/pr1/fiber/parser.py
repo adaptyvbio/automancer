@@ -200,7 +200,7 @@ Attrs = dict[str, Any]
 AttrsOptional = dict[str, Any | EllipsisType]
 
 class BaseParser(ABC):
-  namespace: str
+  namespace: ClassVar[str]
   layer_attributes: Optional[dict[str, lang.Attribute]] = None
   root_attributes = dict[str, lang.Attribute]()
 

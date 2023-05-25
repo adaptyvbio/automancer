@@ -1173,6 +1173,7 @@ __all__ = [
   'DeferredAnalysisType',
   'DictType',
   'EllipsisType',
+  'EnumType',
   'EvaluableContainerType',
   'HasAttrType',
   'IntType',
@@ -1180,7 +1181,9 @@ __all__ = [
   'ListType',
   'PotentialExprType',
   'PrimitiveType',
+  'QuantityType',
   'RecordType',
   'StrType',
   'Type',
+  'UnionType'
 ]

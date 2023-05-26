@@ -10,7 +10,6 @@ from ..reader import LocatedString
 @dataclass(kw_only=True)
 class StaticAnalysisContext:
   input_value: LocatedString
-  prelude: Symbols
 
 class StaticAnalysisDiagnostic(Diagnostic):
   def __init__(self, message: str, node: ast.expr | ast.stmt, context: StaticAnalysisContext, *, name: str = 'unknown'):

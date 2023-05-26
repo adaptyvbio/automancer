@@ -10,15 +10,6 @@ from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
                     TypeVarDef, TypeVariables, UnionDef, UnknownDef)
 
 
-def create_union(types: list[TypeDef], /) -> TypeDef:
-  current_type: TypeDef = types[0]
-
-  for type in types[1:]:
-    current_type = UnionDef(current_type, type)
-
-  return current_type
-
-
 def instantiate_type_instance(input_type: ClassDef | ClassConstructorDef[ClassDefWithTypeArgs | ClassDef] | ClassDefWithTypeArgs | UnknownDef, /) -> ClassDefWithTypeArgs | UnknownDef:
   match input_type:
     case ClassDef():
@@ -117,7 +108,7 @@ def call(callee: TypeDef, args: list[TypeDef], kwargs: dict[str, TypeDef], node:
     if not overload:
       return StaticAnalysisDiagnostic("Invalid arguments", node, context).analysis(), UnknownDef()
 
-    result.append(overload.return_type)
+    result.append(resolve_type_variables(overload.return_type, item.type_values))
 
   return StaticAnalysisAnalysis(), UnionDef.from_iter(result)
 
@@ -166,6 +157,9 @@ def evaluate_eval_expr(
 
       left_type = analysis.add(evaluate_eval_expr(left, foreign_symbols, prelude_symbols, context))
       right_type = analysis.add(evaluate_eval_expr(right, foreign_symbols, prelude_symbols, context))
+
+      if isinstance(left_type, UnknownDef) or isinstance(right_type, UnknownDef):
+        return analysis, UnknownDef()
 
       operator_name = BinOpMethodMap[op.__class__]
 
@@ -233,17 +227,28 @@ def evaluate_eval_expr(
     case ast.Constant(int()):
       return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['int'])
 
+    case ast.Constant(str()):
+      return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['str'])
+
     case ast.List(elts):
       analysis, elts_types = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])
-      return analysis, ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[create_union(elts_types)])
+      return analysis, ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter(elts_types)])
 
     case ast.Name(id=name, ctx=ast.Load()):
-      variable_value = foreign_variables.get(name)
+      variable_value = (prelude_variables | foreign_variables).get(name)
 
       if not variable_value:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
 
       return StaticAnalysisAnalysis(), variable_value
+
+    case ast.Slice(lower, upper, step):
+      analysis = StaticAnalysisAnalysis()
+      lower_type = lower and analysis.add(evaluate_eval_expr(lower, foreign_symbols, prelude_symbols, context))
+      upper_type = upper and analysis.add(evaluate_eval_expr(upper, foreign_symbols, prelude_symbols, context))
+      step_type = step and analysis.add(evaluate_eval_expr(step, foreign_symbols, prelude_symbols, context))
+
+      return analysis, instantiate_type_instance(prelude_type_defs['slice'])
 
     case ast.Subscript(value=target, slice=subscript):
       analysis, target_type = evaluate_eval_expr(target, foreign_symbols, prelude_symbols, context)
@@ -267,7 +272,16 @@ def evaluate_eval_expr(
 
         return analysis, ClassConstructorDef(ClassDefWithTypeArgs(target_type, [instantiate_type_instance(type_arg) for type_arg in type_args]))
 
-      raise Exception("Invalid subscript")
+      subscript_type = analysis.add(evaluate_eval_expr(subscript, foreign_symbols, prelude_symbols, context))
+
+      method = get_attribute(target_type, "__getitem__")
+
+      if not method:
+        return analysis + StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownDef()
+
+      result = analysis.add(call(method, [subscript_type], dict(), node, context))
+
+      return analysis, result
 
     case _:
       print("Missing evaluate_eval_expr()", ast.dump(node, indent=2))

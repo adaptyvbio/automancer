@@ -1,6 +1,6 @@
 import ast
 
-from .types import Symbols, TypeDefs, TypeInstances
+from .types import PreludeTypeDefs, PreludeTypeInstances, Symbols, TypeDefs, TypeInstances
 from .special import CoreTypeDefs
 from ..error import ErrorDocumentReference
 from .module import evaluate_library_module
@@ -15,8 +15,7 @@ def process_source(contents: str, /, prelude: Symbols):
 
   document = Document.text(contents)
   context = StaticAnalysisContext(
-    input_value=document.source,
-    prelude=prelude
+    input_value=document.source
   )
 
   analysis, result = evaluate_library_module(module, CoreTypeDefs | prelude[0], prelude[1], context)
@@ -31,7 +30,7 @@ def process_source(contents: str, /, prelude: Symbols):
   return result
 
 
-def create_prelude():
+def create_prelude() -> tuple[PreludeTypeDefs, PreludeTypeInstances]:
   type_defs, type_instances = process_source("""
 class float:
   def __add__(self, other: float, /) -> float:
@@ -43,8 +42,24 @@ class int:
   def __add__(self, other: float, /) -> int:
     ...
 
-class str:
+class slice:
   pass
+
+class str:
+  def __add__(self, other: str, /) -> str:
+    ...
+
+  def __mul__(self, other: int, /) -> str:
+    ...
+
+  def __len__(self) -> int:
+    ...
+
+  def strip(self, chars: str = ...) -> str:
+    ...
+
+  def rstrip(self, chars: str = ...) -> str:
+    ...
 
 T = TypeVar('T')
 
@@ -52,7 +67,16 @@ class list(Generic[T]):
   def append(self, item: T, /) -> None:
     ...
 
+  def __add__(self, other: list[T], /) -> list[T]:
+    ...
+
   def __getitem__(self, index: int, /) -> T:
+    ...
+
+  def __getitem__(self, index: slice, /) -> list[T]:
+    ...
+
+  def __len__(self) -> int:
     ...
 
 
@@ -60,4 +84,4 @@ def random() -> float:
   ...
 """, (TypeDefs(), TypeInstances()))
 
-  return (CoreTypeDefs | type_defs), type_instances
+  return (CoreTypeDefs | type_defs), type_instances # type: ignore

@@ -13,13 +13,13 @@ from .support import create_prelude, process_source
 prelude = create_prelude()
 
 type_defs, type_instances = process_source("""
-X = list[int]
+# X = list[int]
 
-T = TypeVar('T')
+# T = TypeVar('T')
 
-class A(Generic[T]):
-  def x(self) -> T:
-    ...
+# class A(Generic[T]):
+#   def x(self) -> T:
+#     ...
 
 # scalar: float | int
 # scalar: int
@@ -48,10 +48,9 @@ print('---')
 print()
 
 
-document = Document.text("~~~ A[int]().x() ~~~")
+document = Document.text("~~~ [3, 4, 5, 'a', 6] ~~~")
 context = StaticAnalysisContext(
-  input_value=document.source[4:-4],
-  prelude=prelude
+  input_value=document.source[4:-4]
 )
 
 root = ast.parse(context.input_value, mode='eval')

@@ -101,7 +101,13 @@ class UnionDef(Generic[T]):
 
   @classmethod
   def from_iter(cls, items_iter: Sequence[T], /):
-    items = list(items_iter)
+    from .overloads import check_type
+
+    items = list[T]()
+
+    for item in items_iter:
+      if not any(check_type(item, other) for other in items):
+        items.append(item)
 
     if len(items) == 1:
       return items[0]
@@ -156,6 +162,8 @@ class PreludeTypeDefs(TypedDict):
   float: ClassDef
   int: ClassDef
   list: ClassDef
+  slice: ClassDef
+  str: ClassDef
 
 class PreludeTypeInstances(TypedDict):
   float: ClassDefWithTypeArgs

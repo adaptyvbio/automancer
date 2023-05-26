@@ -28,8 +28,6 @@ def check_type(lhs: TypeDef, rhs: TypeDef, /):
     case ClassDefWithTypeArgs(lhs_cls, lhs_type_args), ClassDefWithTypeArgs(rhs_cls, rhs_type_args):
       return (lhs_cls is rhs_cls) and (len(lhs_type_args) == len(rhs_type_args)) and all(check_type(lhs_type_arg, rhs_type_arg) for lhs_type_arg, rhs_type_arg in zip(lhs_type_args, rhs_type_args))
 
-  print("!!", lhs, rhs)
-
   return False
 
 def find_overload(func: FuncDef, /, args: list[TypeDef], kwargs: dict[str, TypeDef], type_values: TypeValues):

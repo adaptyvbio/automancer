@@ -1,4 +1,7 @@
 import ast
+from pprint import pprint
+
+from .expr import Expr, generate_name, transfer_node_location
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
@@ -137,7 +140,7 @@ def evaluate_eval_expr(
     foreign_symbols: Symbols,
     prelude_symbols: tuple[PreludeTypeDefs, PreludeTypeInstances],
     context: StaticAnalysisContext
-) -> tuple[StaticAnalysisAnalysis, TypeInstance]:
+) -> tuple[StaticAnalysisAnalysis, Expr]:
   foreign_type_defs, foreign_variables = foreign_symbols
   prelude_type_defs, prelude_variables = prelude_symbols
 
@@ -231,8 +234,37 @@ def evaluate_eval_expr(
       return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['str'])
 
     case ast.List(elts):
-      analysis, elts_types = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])
-      return analysis, ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter(elts_types)])
+      analysis, elts_exprs = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])
+      # pprint(elts_exprs)
+      # return analysis, ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter(elts_exprs)])
+
+      max_phase = max([expr.phase for expr in elts_exprs])
+
+      # [a * index for index in range(phase0var)]
+      # [a * index for index in range(phase1var)]
+
+      components = dict[str, Expr]()
+      items = list[ast.expr]()
+
+      for expr in elts_exprs:
+        if expr.phase < max_phase:
+          name = generate_name()
+          components[name] = expr
+          items.append(transfer_node_location(expr.node, ast.Name(name, ctx=ast.Load())))
+        else:
+          components |= expr.components
+          items.append(expr.node)
+
+      # print(items, preevaluated)
+
+      return analysis, Expr(
+        components=components,
+        dependencies=set.union(*[expr.dependencies for expr in elts_exprs]),
+        frequency=min([expr.frequency for expr in elts_exprs]),
+        node=transfer_node_location(node, ast.List(items, ctx=ast.Load())),
+        phase=max_phase,
+        type=ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter([expr.type for expr in elts_exprs])]),
+      )
 
     case ast.Name(id=name, ctx=ast.Load()):
       variable_value = (prelude_variables | foreign_variables).get(name)
@@ -240,7 +272,12 @@ def evaluate_eval_expr(
       if not variable_value:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
 
-      return StaticAnalysisAnalysis(), variable_value
+      return StaticAnalysisAnalysis(), Expr(
+        dependencies=variable_value.dependencies,
+        node=node,
+        phase=variable_value.phase,
+        type=variable_value.type
+      )
 
     case ast.Slice(lower, upper, step):
       analysis = StaticAnalysisAnalysis()

@@ -1,13 +1,13 @@
 import ast
 from pprint import pprint
-import sys
 
 from ..document import Document
 from ..error import ErrorDocumentReference
 from .context import StaticAnalysisContext
+from .expr import Expr, InstanceExpr
 from .expression import evaluate_eval_expr
-from .special import CoreTypeDefs
 from .support import create_prelude, process_source
+from .types import ClassDef, ClassDefWithTypeArgs
 
 
 prelude = create_prelude()
@@ -35,20 +35,35 @@ type_defs, type_instances = process_source("""
 # x: list[T]
 """, prelude)
 
-pprint(type_defs)
-pprint(type_instances)
+# pprint(type_defs)
+# pprint(type_instances)
+
+
+foreign_instances = {
+  'A': InstanceExpr(
+    dependencies={'A'},
+    phase=0,
+    type=ClassDefWithTypeArgs(ClassDef("A"))
+  ),
+  'B': InstanceExpr(
+    dependencies={'B'},
+    phase=1,
+    type=ClassDefWithTypeArgs(ClassDef("B"))
+  ),
+  'C': InstanceExpr(
+    dependencies={'C'},
+    phase=0,
+    type=ClassDefWithTypeArgs(ClassDef("C"))
+  )
+}
 
 
 # import sys
 # sys.exit()
 
 
-print()
-print('---')
-print()
 
-
-document = Document.text("~~~ [3, 4, 5, 'a', 6] ~~~")
+document = Document.text("~~~ [A, B, [A, C], [A, B]] ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4]
 )
@@ -56,7 +71,11 @@ context = StaticAnalysisContext(
 root = ast.parse(context.input_value, mode='eval')
 
 # print(ast.dump(root, indent=2))
-analysis, result = evaluate_eval_expr(root.body, (type_defs, type_instances), prelude, context)
+analysis, result = evaluate_eval_expr(root.body, (type_defs, foreign_instances), prelude, context)
+
+print()
+print('---')
+print()
 
 for error in analysis.errors:
   print("Error :", error)
@@ -66,6 +85,26 @@ for error in analysis.errors:
       print(reference.area.format())
 
 pprint(result)
+print(ast.dump(result.node, indent=2))
+
+# print()
+# pprint(analysis)
+
+
+# def evaluate_expr(expr: Expr, /):
+#   pass
+
+result.evaluate(phase=0, variables={
+  'A': 'a',
+  'C': 'c'
+})
 
 print()
-pprint(analysis)
+print()
+pprint(result)
+
+x = result.evaluate(phase=1, variables={
+  'B': 'b'
+})
+
+print(x)

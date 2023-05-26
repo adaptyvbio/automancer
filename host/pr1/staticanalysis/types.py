@@ -130,7 +130,7 @@ class ClassConstructorDef(Generic[T]):
 @dataclass
 class ClassDefWithTypeArgs:
   cls: ClassDef
-  type_args: 'list[TypeDef]'
+  type_args: 'list[TypeDef]' = field(default_factory=list)
 
   @property
   def type_values(self) -> TypeValues:

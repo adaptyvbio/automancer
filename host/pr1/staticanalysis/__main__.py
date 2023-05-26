@@ -63,7 +63,7 @@ foreign_instances = {
 
 
 
-document = Document.text("~~~ [A, B, [A, C], [A, B]] ~~~")
+document = Document.text("~~~ [A, B, [A, C], [A, B], (6).__add__] ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4]
 )
@@ -94,17 +94,17 @@ print(ast.dump(result.node, indent=2))
 # def evaluate_expr(expr: Expr, /):
 #   pass
 
-result.evaluate(phase=0, variables={
+x = result.to_evaluated().evaluate(phase=0, variables={
   'A': 'a',
   'C': 'c'
 })
 
 print()
 print()
-pprint(result)
+# pprint(result)
 
-x = result.evaluate(phase=1, variables={
+y = x.evaluate(phase=1, variables={
   'B': 'b'
 })
 
-print(x)
+print(y)

@@ -61,10 +61,10 @@ def resolve_type_variables(input_type: TypeDef, type_values: TypeValues) -> Type
       raise Exception("Unknown type")
 
 
-def get_attribute(origin_type: TypeInstance, name: str):
+def get_attribute(origin_expr: Expr, name: str):
   result = list[TypeInstance]()
 
-  for child_type in UnionDef.iter(origin_type):
+  for child_type in UnionDef.iter(origin_expr.type):
     match child_type:
       case ClassConstructorDef(cls):
         instantiated = instantiate_type_instance(cls)
@@ -94,7 +94,10 @@ def get_attribute(origin_type: TypeInstance, name: str):
       case UnknownDef():
         return UnknownDef()
 
-  return UnionDef.from_iter(result)
+  return Expr(
+
+    type=UnionDef.from_iter(result)
+  )
 
 def call(callee: TypeDef, args: list[TypeDef], kwargs: dict[str, TypeDef], node: ast.expr | ast.stmt, context: StaticAnalysisContext) -> tuple[StaticAnalysisAnalysis, TypeInstance]:
   result: list[TypeDef] = []
@@ -146,14 +149,14 @@ def evaluate_eval_expr(
 
   match node:
     case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
-      analysis, obj_type = evaluate_eval_expr(obj, foreign_symbols, prelude_symbols, context)
+      analysis, obj_expr = evaluate_eval_expr(obj, foreign_symbols, prelude_symbols, context)
 
-      attr_type = get_attribute(obj_type, attr_name)
+      attr_expr = get_attribute(obj_expr, attr_name)
 
-      if not attr_type:
+      if not attr_expr:
         return analysis + StaticAnalysisDiagnostic("Invalid attribute name", obj, context).analysis(), UnknownDef()
 
-      return analysis, attr_type
+      return analysis, attr_expr
 
     case ast.BinOp(left=left, right=right, op=op):
       analysis = StaticAnalysisAnalysis()
@@ -222,49 +225,22 @@ def evaluate_eval_expr(
         # return analysis, resolve_type_variables(overload.return_type, func_type.type_values)
 
     case ast.Constant(None):
-      return StaticAnalysisAnalysis(), instantiate_type_instance(NoneType)
+      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(NoneType))
 
     case ast.Constant(float()):
-      return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['float'])
+      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['float']))
 
     case ast.Constant(int()):
-      return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['int'])
+      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['int']))
 
     case ast.Constant(str()):
-      return StaticAnalysisAnalysis(), instantiate_type_instance(prelude_type_defs['str'])
+      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['str']))
 
     case ast.List(elts):
       analysis, elts_exprs = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])
-      # pprint(elts_exprs)
-      # return analysis, ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter(elts_exprs)])
+      list_type = ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter([expr.type for expr in elts_exprs])])
 
-      max_phase = max([expr.phase for expr in elts_exprs])
-
-      # [a * index for index in range(phase0var)]
-      # [a * index for index in range(phase1var)]
-
-      components = dict[str, Expr]()
-      items = list[ast.expr]()
-
-      for expr in elts_exprs:
-        if expr.phase < max_phase:
-          name = generate_name()
-          components[name] = expr
-          items.append(transfer_node_location(expr.node, ast.Name(name, ctx=ast.Load())))
-        else:
-          components |= expr.components
-          items.append(expr.node)
-
-      # print(items, preevaluated)
-
-      return analysis, Expr(
-        components=components,
-        dependencies=set.union(*[expr.dependencies for expr in elts_exprs]),
-        frequency=min([expr.frequency for expr in elts_exprs]),
-        node=transfer_node_location(node, ast.List(items, ctx=ast.Load())),
-        phase=max_phase,
-        type=ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter([expr.type for expr in elts_exprs])]),
-      )
+      return analysis, Expr.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
 
     case ast.Name(id=name, ctx=ast.Load()):
       variable_value = (prelude_variables | foreign_variables).get(name)

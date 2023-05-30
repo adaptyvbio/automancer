@@ -61,10 +61,10 @@ def resolve_type_variables(input_type: TypeDef, type_values: TypeValues) -> Type
       raise Exception("Unknown type")
 
 
-def get_attribute(origin_expr: Expr, name: str):
+def get_attribute(origin_type: TypeInstance, name: str):
   result = list[TypeInstance]()
 
-  for child_type in UnionDef.iter(origin_expr.type):
+  for child_type in UnionDef.iter(origin_type):
     match child_type:
       case ClassConstructorDef(cls):
         instantiated = instantiate_type_instance(cls)
@@ -94,10 +94,7 @@ def get_attribute(origin_expr: Expr, name: str):
       case UnknownDef():
         return UnknownDef()
 
-  return Expr(
-
-    type=UnionDef.from_iter(result)
-  )
+  return UnionDef.from_iter(result)
 
 def call(callee: TypeDef, args: list[TypeDef], kwargs: dict[str, TypeDef], node: ast.expr | ast.stmt, context: StaticAnalysisContext) -> tuple[StaticAnalysisAnalysis, TypeInstance]:
   result: list[TypeDef] = []
@@ -150,46 +147,54 @@ def evaluate_eval_expr(
   match node:
     case ast.Attribute(obj, attr=attr_name, ctx=ast.Load()):
       analysis, obj_expr = evaluate_eval_expr(obj, foreign_symbols, prelude_symbols, context)
+      attr_type = get_attribute(obj_expr.type, attr_name)
 
-      attr_expr = get_attribute(obj_expr, attr_name)
+      if not attr_type:
+        analysis.errors.append(StaticAnalysisDiagnostic("Invalid attribute name", obj, context))
+        attr_type = UnknownDef()
 
-      if not attr_expr:
-        return analysis + StaticAnalysisDiagnostic("Invalid attribute name", obj, context).analysis(), UnknownDef()
-
-      return analysis, attr_expr
+      return analysis, Expr.assemble(
+        attr_type,
+        [obj_expr],
+        lambda nodes: transfer_node_location(node, ast.Attribute(nodes[0], attr_name, ctx=ast.Load()))
+      )
 
     case ast.BinOp(left=left, right=right, op=op):
       analysis = StaticAnalysisAnalysis()
 
-      left_type = analysis.add(evaluate_eval_expr(left, foreign_symbols, prelude_symbols, context))
-      right_type = analysis.add(evaluate_eval_expr(right, foreign_symbols, prelude_symbols, context))
+      left_expr = analysis.add(evaluate_eval_expr(left, foreign_symbols, prelude_symbols, context))
+      right_expr = analysis.add(evaluate_eval_expr(right, foreign_symbols, prelude_symbols, context))
 
-      if isinstance(left_type, UnknownDef) or isinstance(right_type, UnknownDef):
-        return analysis, UnknownDef()
+      if isinstance(left_expr.type, UnknownDef) or isinstance(right_expr.type, UnknownDef):
+        result_type = UnknownDef()
+      else:
+        operator_name = BinOpMethodMap[op.__class__]
 
-      operator_name = BinOpMethodMap[op.__class__]
+        if (method := get_attribute(left_expr.type, f"__{operator_name}__")):
+          result_type = analysis.add(call(method, [right_expr.type], dict(), node, context))
+        elif (method := get_attribute(right_expr.type, f"__r{operator_name}__")):
+          result_type = analysis.add(call(method, [left_expr.type], dict(), node, context))
+        else:
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", node, context))
+          result_type = UnknownDef()
 
-      if (method := get_attribute(left_type, f"__{operator_name}__")):
-        result = analysis.add(call(method, [right_type], dict(), node, context))
-        return analysis, result
-
-      if (method := get_attribute(right_type, f"__r{operator_name}__")):
-        result = analysis.add(call(method, [left_type], dict(), node, context))
-        return analysis, result
-
-      return (analysis + StaticAnalysisDiagnostic("Invalid operation", node, context).analysis(warning=True)), UnknownDef()
+      return analysis, Expr.assemble(
+        result_type,
+        [left_expr, right_expr],
+        lambda nodes: transfer_node_location(node, ast.BinOp(nodes[0], op, nodes[1]))
+      )
 
     case ast.Call(func, args, keywords):
-      analysis, func_type = evaluate_eval_expr(func, foreign_symbols, prelude_symbols, context)
+      analysis, func_expr = evaluate_eval_expr(func, foreign_symbols, prelude_symbols, context)
 
-      args = analysis.add_sequence([evaluate_eval_expr(arg, foreign_symbols, prelude_symbols, context) for arg in args])
-      kwargs = analysis.add_mapping({ keyword.arg: evaluate_eval_expr(keyword.value, foreign_symbols, prelude_symbols, context) for keyword in keywords if keyword.arg })
+      arg_exprs = analysis.add_sequence([evaluate_eval_expr(arg, foreign_symbols, prelude_symbols, context) for arg in args])
+      kwarg_exprs = analysis.add_mapping({ keyword.arg: evaluate_eval_expr(keyword.value, foreign_symbols, prelude_symbols, context) for keyword in keywords if keyword.arg })
 
-      if isinstance(func_type, UnknownDef):
-        return analysis, UnknownDef()
+      if isinstance(func_expr, UnknownDef):
+        result_type = UnknownDef()
 
-      if isinstance(func_type, ClassConstructorDef):
-        cls_with_type_args = instantiate_type_instance(func_type.target)
+      elif isinstance(func_expr, ClassConstructorDef):
+        cls_with_type_args = instantiate_type_instance(func_expr.target)
 
         if isinstance(cls_with_type_args, UnknownDef):
           return analysis, UnknownDef()
@@ -205,24 +210,39 @@ def evaluate_eval_expr(
           return analysis + StaticAnalysisDiagnostic("Invalid call", node, context).analysis(), UnknownDef()
 
         return analysis, cls_with_type_args
+
       else:
-        assert isinstance(func_type, ClassDefWithTypeArgs) # To be removed
+        assert isinstance(func_expr.type, ClassDefWithTypeArgs) # To be removed
 
-        func_ref = func_type.cls.instance_attrs.get('__call__')
+        func_type = func_expr.type.cls.instance_attrs.get('__call__')
 
-        if not func_ref:
-          return analysis + StaticAnalysisDiagnostic("Invalid object for call", node, context).analysis(), UnknownDef()
+        if func_type:
+          assert isinstance(func_type, FuncDef)
+          overload = find_overload(func_type, args=[arg.type for arg in arg_exprs], kwargs={ name: kwarg.type for name, kwarg in kwarg_exprs.items() }, type_values=func_expr.type.type_values)
 
-        assert isinstance(func_ref, FuncDef) # To be removed
-        overload = find_overload(func_ref, args=args, kwargs=kwargs, type_values=func_type.type_values)
+          if overload:
+            result_type = instantiate_type_instance(resolve_type_variables(overload.return_type, func_expr.type.type_values))
+          else:
+            analysis.errors.append(StaticAnalysisDiagnostic("Invalid arguments", node, context))
+            result_type = UnknownDef()
 
-        if not overload:
-          analysis.errors.append(StaticAnalysisDiagnostic("Invalid arguments", node, context))
-          return analysis, UnknownDef()
+          # return analysis, resolve_type_variables(instantiate_type_instance(overload.return_type), func_type.type_values)
+          # return analysis, resolve_type_variables(overload.return_type, func_type.type_values)
+        else:
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid object for call", node, context))
+          result_type = UnknownDef()
 
-        # return analysis, resolve_type_variables(instantiate_type_instance(overload.return_type), func_type.type_values)
-        return analysis, instantiate_type_instance(resolve_type_variables(overload.return_type, func_type.type_values))
-        # return analysis, resolve_type_variables(overload.return_type, func_type.type_values)
+      arg_count = len(args)
+
+      return analysis, Expr.assemble(
+        result_type,
+        [func_expr, *arg_exprs, *kwarg_exprs.values()],
+        lambda nodes: transfer_node_location(node, ast.Call(
+          nodes[0],
+          nodes[1:(arg_count + 1)],
+          [(keyword, node) for keyword, node in zip(kwarg_exprs.keys(), nodes[(arg_count + 1):])]
+        ))
+      )
 
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(NoneType))
@@ -235,6 +255,19 @@ def evaluate_eval_expr(
 
     case ast.Constant(str()):
       return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['str']))
+
+    case ast.IfExp(test, body, orelse):
+      analysis = StaticAnalysisAnalysis()
+
+      test_expr = analysis.add(evaluate_eval_expr(test, foreign_symbols, prelude_symbols, context))
+      body_expr = analysis.add(evaluate_eval_expr(body, foreign_symbols, prelude_symbols, context))
+      orelse_expr = analysis.add(evaluate_eval_expr(orelse, foreign_symbols, prelude_symbols, context))
+
+      return analysis, Expr.assemble(
+        UnionDef.from_iter([body_expr.type, orelse_expr.type]),
+        [test_expr, body_expr, orelse_expr],
+        lambda nodes: transfer_node_location(node, ast.IfExp(nodes[0], nodes[1], nodes[2]))
+      )
 
     case ast.List(elts):
       analysis, elts_exprs = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])

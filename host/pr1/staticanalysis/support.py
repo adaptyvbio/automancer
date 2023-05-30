@@ -39,7 +39,7 @@ class float:
 class int:
   self.x: float
 
-  def __add__(self, other: float, /) -> int:
+  def __add__(self, other: int, /) -> int:
     ...
 
 class slice:

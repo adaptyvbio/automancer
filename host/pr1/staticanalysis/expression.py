@@ -1,7 +1,7 @@
 import ast
 from pprint import pprint
 
-from .expr import Expr, UnknownExpr, generate_name, transfer_node_location
+from .expr import BaseExprDef, ComplexVariable, CompositeExprDef, ComplexExprDef, generate_name, transfer_node_location
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
@@ -137,10 +137,10 @@ BinOpMethodMap: dict[type[ast.operator], str] = {
 
 def evaluate_eval_expr(
     node: ast.expr, /,
-    foreign_symbols: tuple[ExportedTypeDefs, dict[str, Expr]],
+    foreign_symbols: tuple[ExportedTypeDefs, dict[str, ComplexVariable]],
     prelude_symbols: tuple[PreludeTypeDefs, PreludeTypeInstances],
     context: StaticAnalysisContext
-) -> tuple[StaticAnalysisAnalysis, Expr]:
+) -> tuple[StaticAnalysisAnalysis, BaseExprDef]:
   foreign_type_defs, foreign_variables = foreign_symbols
   prelude_type_defs, prelude_variables = prelude_symbols
 
@@ -153,7 +153,7 @@ def evaluate_eval_expr(
         analysis.errors.append(StaticAnalysisDiagnostic("Invalid attribute name", obj, context))
         attr_type = UnknownDef()
 
-      return analysis, Expr.assemble(
+      return analysis, CompositeExprDef.assemble(
         attr_type,
         [obj_expr],
         lambda nodes: transfer_node_location(node, ast.Attribute(nodes[0], attr_name, ctx=ast.Load()))
@@ -178,7 +178,7 @@ def evaluate_eval_expr(
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", node, context))
           result_type = UnknownDef()
 
-      return analysis, Expr.assemble(
+      return analysis, CompositeExprDef.assemble(
         result_type,
         [left_expr, right_expr],
         lambda nodes: transfer_node_location(node, ast.BinOp(nodes[0], op, nodes[1]))
@@ -234,7 +234,7 @@ def evaluate_eval_expr(
 
       arg_count = len(args)
 
-      return analysis, Expr.assemble(
+      return analysis, CompositeExprDef.assemble(
         result_type,
         [func_expr, *arg_exprs, *kwarg_exprs.values()],
         lambda nodes: transfer_node_location(node, ast.Call(
@@ -245,16 +245,16 @@ def evaluate_eval_expr(
       )
 
     case ast.Constant(None):
-      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(NoneType))
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(NoneType))
 
     case ast.Constant(float()):
-      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['float']))
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['float']))
 
     case ast.Constant(int()):
-      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['int']))
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['int']))
 
     case ast.Constant(str()):
-      return StaticAnalysisAnalysis(), Expr(node, instantiate_type_instance(prelude_type_defs['str']))
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['str']))
 
     case ast.IfExp(test, body, orelse):
       analysis = StaticAnalysisAnalysis()
@@ -263,7 +263,7 @@ def evaluate_eval_expr(
       body_expr = analysis.add(evaluate_eval_expr(body, foreign_symbols, prelude_symbols, context))
       orelse_expr = analysis.add(evaluate_eval_expr(orelse, foreign_symbols, prelude_symbols, context))
 
-      return analysis, Expr.assemble(
+      return analysis, CompositeExprDef.assemble(
         UnionDef.from_iter([body_expr.type, orelse_expr.type]),
         [test_expr, body_expr, orelse_expr],
         lambda nodes: transfer_node_location(node, ast.IfExp(nodes[0], nodes[1], nodes[2]))
@@ -273,16 +273,16 @@ def evaluate_eval_expr(
       analysis, elts_exprs = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(elt, foreign_symbols, prelude_symbols, context) for elt in elts])
       list_type = ClassDefWithTypeArgs(prelude_type_defs['list'], type_args=[UnionDef.from_iter([expr.type for expr in elts_exprs])])
 
-      return analysis, Expr.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
+      return analysis, CompositeExprDef.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
 
     case ast.Name(id=name, ctx=ast.Load()):
       if var := foreign_variables.get(name):
-        name = generate_name()
+        # name = generate_name()
 
-        return StaticAnalysisAnalysis(), UnknownExpr(
-          expr_def=var,
-          node=transfer_node_location(node, ast.Name(id=name, ctx=ast.Load())),
-          phase=100,
+        return StaticAnalysisAnalysis(), ComplexExprDef(
+          ExprEvalType=var.ExprEvalType,
+          node=node, # transfer_node_location(node, ast.Name(id=name, ctx=ast.Load())),
+          phase=1000,
           type=var.type
         )
 
@@ -291,7 +291,7 @@ def evaluate_eval_expr(
       if not variable_value:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
 
-      return StaticAnalysisAnalysis(), Expr(
+      return StaticAnalysisAnalysis(), CompositeExprDef(
         node=node,
         phase=0,
         type=variable_value.type

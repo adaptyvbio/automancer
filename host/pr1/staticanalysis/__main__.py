@@ -11,7 +11,7 @@ from ..util.asyncio import Cancelable
 from ..document import Document
 from ..error import ErrorDocumentReference
 from .context import StaticAnalysisContext
-from .expr import BaseEvaluationExpr, BaseWatchedExpr, UnknownExpr, UnknownExprDef
+from .expr import BaseExprEval, BaseExprWatch, ComplexExprDef, ComplexVariable, DeferredExprEval
 from .expression import evaluate_eval_expr
 from .support import create_prelude, process_source
 from .types import ClassDef, ClassDefWithTypeArgs
@@ -46,11 +46,15 @@ type_defs, type_instances = process_source("""
 # pprint(type_instances)
 
 @dataclass
-class RandomEvaluationExpr(BaseEvaluationExpr):
-  pass
+class RandomExprEval(BaseExprEval):
+  def evaluate(self, variables):
+    return self
+
+  def to_watched(self):
+    return RandomExprWatch()
 
 @dataclass
-class RandomWatchedExpr(BaseWatchedExpr):
+class RandomExprWatch(BaseExprWatch):
   initialized: bool = False
   value: Optional[float] = None
 
@@ -72,24 +76,19 @@ class RandomWatchedExpr(BaseWatchedExpr):
 
 
 foreign_exprs = {
-  'A': UnknownExprDef(
-    RandomEvaluationExpr,
+  'A': ComplexVariable(
+    ExprEvalType=(lambda: DeferredExprEval(name='A', phase=0)),
     type=ClassDefWithTypeArgs(ClassDef("A"))
   ),
-  # 'B': InstanceExpr(
-  #   type=ClassDefWithTypeArgs(ClassDef("B"))
-  # )
+  'B': ComplexVariable(
+    ExprEvalType=(lambda: DeferredExprEval(name='B', phase=1)),
+    type=ClassDefWithTypeArgs(ClassDef("B"))
+  ),
+  'C': ComplexVariable(
+    ExprEvalType=(lambda: RandomExprEval()),
+    type=ClassDefWithTypeArgs(ClassDef("C"))
+  )
 
-  # 'B': InstanceExpr(
-  #   dependencies={'B'},
-  #   phase=100,
-  #   type=ClassDefWithTypeArgs(ClassDef("B"))
-  # ),
-  # 'C': InstanceExpr(
-  #   dependencies={'C'},
-  #   phase=2,
-  #   type=ClassDefWithTypeArgs(ClassDef("C"))
-  # ),
   # 'dev': InstanceExpr(
   #   phase=1,
   #   type=ClassDefWithTypeArgs(ClassDef("Devices", instance_attrs={
@@ -100,8 +99,7 @@ foreign_exprs = {
 
 
 
-# document = Document.text("~~~ [A, B, [A, C], [A, B], (6).__add__, (3).__add__(A + A)] ~~~")
-document = Document.text("~~~ A ~~~")
+document = Document.text("~~~ [C - B, C - B] ~~~")
 context = StaticAnalysisContext(
   input_value=document.source[4:-4]
 )
@@ -133,35 +131,43 @@ for error in analysis.errors:
 
 phA = result.to_evaluated()
 
-pprint(phA)
-sys.exit()
+# print(ast.dump(phA.expr.node, indent=2))
+# pprint(phA)
+# sys.exit()
 
-ph0 = phA.evaluate(variables={})
+# print("\n---\n")
 
-pprint(ph0)
-sys.exit()
+ph0 = phA.evaluate(variables={ 'A': 42 })
+
+# pprint(ph0)
+# sys.exit()
 
 ph1 = ph0.evaluate(variables={
-  'A': 'a',
-  'B': 'b',
-  'C': 'c'
+  'B': time.time()
 })
 
-print()
-print()
+# print()
+# print()
 # pprint(ph1)
+# sys.exit()
+
 # print(ast.dump(ph1.expr.node, indent=2))
 
 
 w = ph1.to_watched()
 
-# def listener(x):
-#   print(">", x)
-
-# w.watch(listener)
+# pprint(w)
 
 
-pprint(w)
+async def main():
+  def listener(x):
+    print(">", x.value)
+
+  w.watch(listener)
+  await asyncio.sleep(10)
+
+
+asyncio.run(main())
 
 
 # y = x.evaluate(phase=1, variables={

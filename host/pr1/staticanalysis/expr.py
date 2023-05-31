@@ -10,161 +10,146 @@ from typing import Any, Callable, ClassVar, Generic, Optional, Protocol, Self, S
 from .types import ClassDefWithTypeArgs, TypeInstance
 
 
-def generate_name():
-  return "_" + binascii.b2a_hex(os.urandom(4)).decode()
-
-
-T = TypeVar('T')
-
 @dataclass
-class Container(Generic[T]):
-  value: T
+class ComplexVariable:
+  ExprEvalType: 'type[BaseExprEval]'
+  type: TypeInstance
 
 
 # Phase 1
 
-@dataclass
-class BaseRegularExpr(ABC):
+@dataclass(frozen=True)
+class BaseExprDef(ABC):
   node: ast.expr
-  phase: int
-  _: KW_ONLY
   type: TypeInstance
+  _: KW_ONLY
+  phase: int = 0
 
   @abstractmethod
-  def to_evaluated(self) -> 'BaseEvaluationExpr':
+  def to_evaluated(self) -> 'BaseExprEval':
     ...
 
-@dataclass
-class Expr(BaseRegularExpr):
-  components: dict[str, BaseRegularExpr] = field(default_factory=dict)
+@dataclass(frozen=True)
+class CompositeExprDef(BaseExprDef):
+  components: dict[str, BaseExprDef] = field(default_factory=dict)
 
   @functools.cached_property
   def code(self):
     return compile(ast.Expression(self.node), "<string>", mode='eval')
 
   def to_evaluated(self):
-    return UnevaluatedExpr(
+    return CompositeExprEval(
       components={ name: component.to_evaluated() for name, component in self.components.items() },
       expr=self
     )
 
   @classmethod
-  def assemble(cls, type: TypeInstance, exprs: Sequence[Self], get_node: Callable[[list[ast.expr]], ast.expr]):
+  def assemble(cls, type: TypeInstance, exprs: Sequence[BaseExprDef], get_node: Callable[[list[ast.expr]], ast.expr]):
     max_phase = max([expr.phase for expr in exprs])
 
-    components = dict[str, BaseRegularExpr]()
+    components = dict[str, BaseExprDef]()
     items = list[ast.expr]()
 
     for expr in exprs:
-      if expr.phase < max_phase:
+      # TODO: Check and improve
+      if expr.phase > 0:
         name = generate_name()
         components[name] = expr
         items.append(transfer_node_location(expr.node, ast.Name(name, ctx=ast.Load())))
       else:
-        if isinstance(expr, Expr):
+        if isinstance(expr, CompositeExprDef):
           components |= expr.components
 
         items.append(expr.node)
 
-    # print(items, preevaluated)
-
     return cls(
       components=components,
       node=get_node(items),
-      phase=max_phase,
+      phase=0,
       type=type
     )
 
-@dataclass
-class UnknownExprDef:
-  EvaluationExpr: 'type[BaseEvaluationExpr]'
-  type: TypeInstance
+@dataclass(frozen=True)
+class ComplexExprDef(BaseExprDef):
+  ExprEvalType: 'type[BaseExprEval]'
 
   def to_evaluated(self):
-    return self.EvaluationExpr()
-
-@dataclass
-class UnknownExpr(BaseRegularExpr):
-  expr_def: UnknownExprDef
-
-  def to_evaluated(self):
-    return VariableExpr(self.expr_def)
+    return self.ExprEvalType()
 
 
 # Phase 2
 
-class BaseEvaluationExpr(ABC):
-  pass
-
-@dataclass
-class EvaluatedExpr(BaseEvaluationExpr):
-  value: Any
+class BaseExprEval(ABC):
+  @abstractmethod
+  def evaluate(self, variables: dict[str, Any]) -> Self:
+    ...
 
 @dataclass(frozen=True)
-class UnevaluatedExpr(BaseEvaluationExpr):
-  components: dict[str, BaseEvaluationExpr]
-  expr: Expr
+class ConstantExprEval(BaseExprEval):
+  value: Any
 
-  def evaluate(self, variables: dict[str, Any]):
+  def evaluate(self, variables):
+    return self
+
+@dataclass(frozen=True)
+class CompositeExprEval(BaseExprEval):
+  components: dict[str, BaseExprEval]
+  expr: CompositeExprDef
+
+  def evaluate(self, variables):
     evaluated_components = {
-      name: component.evaluate(variables) if isinstance(component, UnevaluatedExpr) else component
+      name: component.evaluate(variables)
       for name, component in self.components.items()
     }
 
-    if all(isinstance(component, EvaluatedExpr) for component in evaluated_components.values()):
-      all_variables = variables | { name: component.value for name, component in evaluated_components.items() }
-      return EvaluatedExpr(eval(self.expr.code, globals(), all_variables))
+    if all(isinstance(component, ConstantExprEval) for component in evaluated_components.values()):
+      all_variables = variables | { name: component.value for name, component in evaluated_components.items() } # type: ignore
+      return ConstantExprEval(eval(self.expr.code, globals(), all_variables))
     else:
-      return UnevaluatedExpr(
+      return CompositeExprEval(
         components=evaluated_components,
         expr=self.expr
       )
 
   def to_watched(self):
-    return WatchedExpr(
-      components={ name: component.to_watched() if isinstance(component, UnevaluatedExpr) else component for name, component in self.components.items() },
+    return CompositeExprWatch(
+      components={ name: component.to_watched() if not isinstance(component, ConstantExprEval) else component for name, component in self.components.items() },
       expr=self.expr
     )
 
 @dataclass(frozen=True)
-class DeferredExpr(BaseEvaluationExpr):
+class DeferredExprEval(BaseExprEval):
   name: str
   phase: int
 
-  def evaluate(self, variables: dict[str, Any]):
-    return EvaluatedExpr(variables[self.name]) if (self.phase < 1) else self.__class__(self.name, self.phase - 1)
-
-@dataclass
-class VariableExpr(BaseEvaluationExpr):
-  expr_def: UnknownExprDef
-
-  def evaluate(self, variables: dict[str, Any]):
-    return self
+  def evaluate(self, variables):
+    return ConstantExprEval(variables[self.name]) if (self.phase < 1) else self.__class__(self.name, self.phase - 1)
 
 
 # Phase 3
 
-class BaseWatchedExpr(ABC):
-  initialized: ClassVar[bool]
-  value: ClassVar[Any]
+@dataclass
+class BaseExprWatch(ABC):
+  initialized: bool
+  value: Any = None
 
   @abstractmethod
   def watch(self, listener: Callable[[Self], None], /):
     ...
 
-@dataclass
-class WatchedExpr(BaseWatchedExpr):
-  components: dict[str, BaseWatchedExpr | EvaluatedExpr]
-  expr: Expr
+@dataclass(kw_only=True)
+class CompositeExprWatch(BaseExprWatch):
+  components: dict[str, BaseExprWatch | ConstantExprEval]
   initialized: bool = False
+  expr: CompositeExprDef
   value: Optional[Any] = None
   _listeners: set[Callable[[Self], None]] = field(default_factory=set, init=False)
 
   def watch(self, listener, /):
     self._listeners.add(listener)
 
-    def change(watchable: BaseWatchedExpr):
-      if all(isinstance(component, EvaluatedExpr) or component.initialized for component in self.components.values()):
+    def change(watchable: BaseExprWatch):
+      if all(isinstance(component, ConstantExprEval) or component.initialized for component in self.components.values()):
         self.initialized = True
         self.value = eval(self.expr.code, globals(), { name: component.value for name, component in self.components.items() })
 
@@ -172,9 +157,11 @@ class WatchedExpr(BaseWatchedExpr):
           listener(self)
 
     for component in self.components.values():
-      if not isinstance(component, EvaluatedExpr):
+      if not isinstance(component, ConstantExprEval):
         component.watch(change)
 
+
+# Utilities
 
 T_AST = TypeVar('T_AST', bound=ast.AST)
 
@@ -186,6 +173,16 @@ def transfer_node_location(source: T_AST, target: T_AST) -> T_AST:
 
   return target
 
+
+def generate_name():
+  return "_" + binascii.b2a_hex(os.urandom(4)).decode()
+
+
+T = TypeVar('T')
+
+@dataclass
+class Container(Generic[T]):
+  value: T
 
 # frequency[time(), 3 * ureg.Hz]
 # static[dev.Oko.temperature]

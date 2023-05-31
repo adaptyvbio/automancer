@@ -1,14 +1,14 @@
 import ast
 from pprint import pprint
 
-from .expr import Expr, generate_name, transfer_node_location
+from .expr import Expr, UnknownExpr, generate_name, transfer_node_location
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
 from .overloads import find_overload
 from .special import NoneType
 from .type import evaluate_type_expr
-from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs,
+from .types import (ClassConstructorDef, ClassDef, ClassDefWithTypeArgs, ExportedTypeDefs,
                     FuncDef, PreludeTypeDefs, PreludeTypeInstances, Symbols, TypeDef, TypeDefs, TypeInstance, TypeInstances, TypeValues,
                     TypeVarDef, TypeVariables, UnionDef, UnknownDef)
 
@@ -137,7 +137,7 @@ BinOpMethodMap: dict[type[ast.operator], str] = {
 
 def evaluate_eval_expr(
     node: ast.expr, /,
-    foreign_symbols: Symbols,
+    foreign_symbols: tuple[ExportedTypeDefs, dict[str, Expr]],
     prelude_symbols: tuple[PreludeTypeDefs, PreludeTypeInstances],
     context: StaticAnalysisContext
 ) -> tuple[StaticAnalysisAnalysis, Expr]:
@@ -276,15 +276,24 @@ def evaluate_eval_expr(
       return analysis, Expr.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
 
     case ast.Name(id=name, ctx=ast.Load()):
-      variable_value = (prelude_variables | foreign_variables).get(name)
+      if var := foreign_variables.get(name):
+        name = generate_name()
+
+        return StaticAnalysisAnalysis(), UnknownExpr(
+          expr_def=var,
+          node=transfer_node_location(node, ast.Name(id=name, ctx=ast.Load())),
+          phase=100,
+          type=var.type
+        )
+
+      variable_value = prelude_variables.get(name)
 
       if not variable_value:
         return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
 
       return StaticAnalysisAnalysis(), Expr(
-        dependencies=variable_value.dependencies,
         node=node,
-        phase=variable_value.phase,
+        phase=0,
         type=variable_value.type
       )
 

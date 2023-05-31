@@ -6,12 +6,10 @@ import sys
 import time
 from typing import Any, Optional
 
-from ..util.asyncio import Cancelable
-
 from ..document import Document
 from ..error import ErrorDocumentReference
 from .context import StaticAnalysisContext
-from .expr import BaseExprEval, BaseExprWatch, ComplexExprDef, ComplexVariable, DeferredExprEval
+from .expr import BaseExprEval, BaseExprWatch, ComplexVariable, DeferredExprEval, Dependency
 from .expression import evaluate_eval_expr
 from .support import create_prelude, process_source
 from .types import ClassDef, ClassDefWithTypeArgs
@@ -46,6 +44,20 @@ type_defs, type_instances = process_source("""
 # pprint(type_instances)
 
 @dataclass
+class RandomDependency(Dependency):
+  value: Optional[float] = None
+
+  def __hash__(self):
+    return id(self)
+
+  async def watch(self):
+    while True:
+      self.value = time.time()
+      yield
+
+      await asyncio.sleep(0.05)
+
+@dataclass
 class RandomExprEval(BaseExprEval):
   def evaluate(self, variables):
     return self
@@ -55,24 +67,12 @@ class RandomExprEval(BaseExprEval):
 
 @dataclass
 class RandomExprWatch(BaseExprWatch):
+  dependencies = {RandomDependency()}
   initialized: bool = False
   value: Optional[float] = None
 
-  def watch(self, listener):
-    async def fn():
-      while True:
-        self.initialized = True
-        self.value = time.time()
-
-        listener(self)
-        await asyncio.sleep(1)
-
-    task = asyncio.create_task(fn())
-
-    def cancel():
-      task.cancel()
-
-    return Cancelable(cancel)
+  def evaluate(self, changed_dependencies):
+    return next(iter(self.dependencies)).value
 
 
 foreign_exprs = {
@@ -160,11 +160,13 @@ w = ph1.to_watched()
 
 
 async def main():
-  def listener(x):
-    print(">", x.value)
+  dep = next(iter(w.dependencies))
+  it = dep.watch()
 
-  w.watch(listener)
-  await asyncio.sleep(10)
+  async for _ in it:
+    print(w.evaluate({dep}))
+
+  # await asyncio.sleep(10)
 
 
 asyncio.run(main())
@@ -224,33 +226,3 @@ asyncio.run(main())
 #     handle = None
 
 #   expr.listen(change)
-
-
-# expr: Any = (...)
-
-# def run(dep):
-#   expr({dep})
-
-# for dep in expr.dependencies:
-#   dep.watch(run)
-
-
-# class Clock:
-#   def __init__(self):
-#     self.delay = 1
-#     self._listeners = set()
-
-#   def interpolate(self):
-#     ...
-
-#   def listen(self, listener):
-#     self._listeners.add(listener)
-
-#   async def start(self):
-#     while True:
-#       await asyncio.sleep(1)
-
-#       current_time = time.time()
-
-#       for listener in self._listeners:
-#         listener(self, current_time, current_time)

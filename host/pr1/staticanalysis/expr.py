@@ -84,12 +84,18 @@ class BaseExprEval(ABC):
   def evaluate(self, variables: dict[str, Any]) -> Self:
     ...
 
+  def to_watched(self) -> 'BaseExprWatch':
+    raise NotImplementedError
+
 @dataclass(frozen=True)
 class ConstantExprEval(BaseExprEval):
   value: Any
 
   def evaluate(self, variables):
     return self
+
+  def to_watched(self):
+    return ConstantExprWatch(self.value)
 
 @dataclass(frozen=True)
 class CompositeExprEval(BaseExprEval):
@@ -113,7 +119,7 @@ class CompositeExprEval(BaseExprEval):
 
   def to_watched(self):
     return CompositeExprWatch(
-      components={ name: component.to_watched() if not isinstance(component, ConstantExprEval) else component for name, component in self.components.items() },
+      components={ name: component.to_watched() for name, component in self.components.items() },
       expr=self.expr
     )
 
@@ -128,37 +134,47 @@ class DeferredExprEval(BaseExprEval):
 
 # Phase 3
 
+class Dependency:
+  pass
+
 @dataclass
 class BaseExprWatch(ABC):
-  initialized: bool
-  value: Any = None
+  dependencies: ClassVar[set[Dependency]]
 
   @abstractmethod
-  def watch(self, listener: Callable[[Self], None], /):
+  def evaluate(self, changed_dependencies: set[Dependency]) -> Any:
     ...
 
 @dataclass(kw_only=True)
 class CompositeExprWatch(BaseExprWatch):
-  components: dict[str, BaseExprWatch | ConstantExprEval]
+  components: dict[str, BaseExprWatch]
   initialized: bool = False
   expr: CompositeExprDef
   value: Optional[Any] = None
-  _listeners: set[Callable[[Self], None]] = field(default_factory=set, init=False)
 
-  def watch(self, listener, /):
-    self._listeners.add(listener)
-
-    def change(watchable: BaseExprWatch):
-      if all(isinstance(component, ConstantExprEval) or component.initialized for component in self.components.values()):
-        self.initialized = True
-        self.value = eval(self.expr.code, globals(), { name: component.value for name, component in self.components.items() })
-
-        for listener in self._listeners:
-          listener(self)
+  @property
+  def dependencies(self):
+    dependencies = set[Dependency]()
 
     for component in self.components.values():
-      if not isinstance(component, ConstantExprEval):
-        component.watch(change)
+      dependencies |= component.dependencies
+
+    return dependencies
+
+  def evaluate(self, changed_dependencies: set[Dependency]):
+    if (changed_dependencies & self.dependencies) or (not self.initialized):
+      self.initialized = True
+      self.value = eval(self.expr.code, globals(), { name: component.evaluate(changed_dependencies) for name, component in self.components.items() })
+
+    return self.value
+
+@dataclass
+class ConstantExprWatch:
+  dependencies: set[Dependency] = field(default_factory=set, init=False)
+  value: Any
+
+  def evaluate(self, changed_dependencies):
+    return self.value
 
 
 # Utilities

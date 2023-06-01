@@ -277,11 +277,9 @@ def evaluate_eval_expr(
 
     case ast.Name(id=name, ctx=ast.Load()):
       if var := foreign_variables.get(name):
-        # name = generate_name()
-
         return StaticAnalysisAnalysis(), ComplexExprDef(
           ExprEvalType=var.ExprEvalType,
-          node=node, # transfer_node_location(node, ast.Name(id=name, ctx=ast.Load())),
+          node=node,
           phase=1000,
           type=var.type
         )
@@ -289,13 +287,9 @@ def evaluate_eval_expr(
       variable_value = prelude_variables.get(name)
 
       if not variable_value:
-        return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), UnknownDef()
+        return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), CompositeExprDef(node, UnknownDef())
 
-      return StaticAnalysisAnalysis(), CompositeExprDef(
-        node=node,
-        phase=0,
-        type=variable_value.type
-      )
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, variable_value.type)
 
     case ast.Slice(lower, upper, step):
       analysis = StaticAnalysisAnalysis()

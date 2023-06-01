@@ -128,7 +128,9 @@ class LanguageServiceAnalysis(DiagnosticAnalysis):
   selections: list[LanguageServiceSelection] = field(default_factory=list)
   tokens: list[LanguageServiceToken] = field(default_factory=list)
 
-  def __iadd__(self, other, /):
+  def _add(self, other, /):
+    super()._add(other)
+
     if isinstance(other, LanguageServiceAnalysis):
       self.completions += other.completions
       self.folds += other.folds
@@ -138,8 +140,6 @@ class LanguageServiceAnalysis(DiagnosticAnalysis):
       self.renames += other.renames
       self.selections += other.selections
       self.tokens += other.tokens
-
-    return super().__iadd__(other)
 
   def __repr__(self):
     return f"{self.__class__.__name__}(errors={self.errors!r})"

@@ -8,10 +8,10 @@ from types import EllipsisType
 from typing import Optional
 
 from ..error import Diagnostic, DiagnosticDocumentReference
-from ..fiber.expr import Evaluable, ValueAsPythonExpr
+from ..fiber.expr import Evaluable, EvaluableConstantValue
 from ..langservice import LanguageServiceAnalysis
 from ..reader import LocatedValue, LocatedValueContainer
-from . import DeferredAnalysisType, PrimitiveType, Type, UnionType
+from . import PrimitiveType, Type, UnionType
 
 
 # Refs
@@ -162,7 +162,7 @@ class FileRefType(Type):
     else:
       ref = IOBaseFileRef(result.value)
 
-    return analysis, ValueAsPythonExpr.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
+    return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
 
 class ReadableDataRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
@@ -182,7 +182,7 @@ class ReadableDataRefType(Type):
     else:
       ref = result.value
 
-    return analysis, ValueAsPythonExpr.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
+    return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
 
 class PathType(Type):
   def __init__(self, *, resolve_cwd: bool = True):
@@ -228,6 +228,21 @@ class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
   def new(cls, value: LocatedValue[Path], /, *, depth: int):
     return cls(value, depth=depth) if depth > 0 else value
 
+class WritableDataRefType(Type):
+  def __init__(self, *, text: Optional[bool] = None):
+    self._type = UnionType(
+      FileRefType(text=text),
+      PrimitiveType(bytes)
+    )
+
+  def analyze(self, obj, context):
+    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    return analysis, EvaluableConstantValue.new(LocatedValueContainer(result, obj.area), depth=context.eval_depth)
+
 
 __all__ = [
   'BytesIOFileRef',
@@ -239,5 +254,6 @@ __all__ = [
   'PathFileRef',
   'PathOutsideDirError',
   'PathType',
-  'ReadableDataRefType'
+  'ReadableDataRefType',
+  'WritableDataRefType'
 ]

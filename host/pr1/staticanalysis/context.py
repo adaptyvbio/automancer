@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from .types import Symbols
 from ..analysis import DiagnosticAnalysis
-from ..error import Diagnostic, ErrorDocumentReference
+from ..error import Diagnostic, DiagnosticDocumentReference
 from ..reader import LocatedString
 
 
@@ -16,7 +16,7 @@ class StaticAnalysisDiagnostic(Diagnostic):
     super().__init__(
       message,
       name=('staticanalysis.' + name),
-      references=[ErrorDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
+      references=[DiagnosticDocumentReference.from_area(context.input_value.compute_ast_node_area(node))]
     )
 
   def analysis(self, *, warning: bool = False):

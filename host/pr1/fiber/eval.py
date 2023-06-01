@@ -50,6 +50,7 @@ class EvalContext:
 class EvalOptions:
   variables: EvalVariables = field(default_factory=EvalVariables)
 
+# @deprecated
 class EvalError(Diagnostic, Exception):
   def __init__(self, area: LocationArea, /, message: str):
     Exception.__init__(self)

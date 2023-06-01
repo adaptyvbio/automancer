@@ -256,9 +256,10 @@ class LocatedError(Exception):
 
 
 T = TypeVar('T')
+T_co = TypeVar('T_co', covariant=True)
 
-class LocatedValue(Generic[T]):
-  def __init__(self, value: T, area: LocationArea, *, full_area: Optional[LocationArea] = None):
+class LocatedValue(Generic[T_co]):
+  def __init__(self, value: T_co, area: LocationArea, *, full_area: Optional[LocationArea] = None):
     self.area = area
     self.full_area = full_area or area
     self.value = value
@@ -272,7 +273,10 @@ class LocatedValue(Generic[T]):
     return self.area.source
 
   @classmethod
-  def new(cls, obj: Any, area: LocationArea, *, deep: bool = False) -> 'LocatedValue':
+  def new(cls, obj: T, area: Optional[LocationArea], *, deep: bool = False) -> 'PossiblyLocatedValue[T]':
+    if not area:
+      return UnlocatedValue(obj)
+
     match obj:
       case LocatedValue():
         return obj
@@ -310,7 +314,8 @@ class LocatedValue(Generic[T]):
 
 
 class UnlocatedValue(Generic[T]):
-  def __init__(self, value: T):
+  def __init__(self, value: T, /):
+    self.area = None
     self.value = value
 
   def dislocate(self):
@@ -457,6 +462,9 @@ class LocatedDict(dict[K, V], LocatedValue[dict[K, V]], Generic[K, V]):
     LocatedValue.__init__(self, value, area)
     self.update(value)
 
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.value!r})"
+
   def get_key(self, target: V):
     return next(key for key in self.keys() if key == target)
 
@@ -468,6 +476,9 @@ class LocatedList(list[T], LocatedValue[list[T]], Generic[T]):
   def __init__(self, value: list, area: LocationArea):
     LocatedValue.__init__(self, value, area)
     self += value
+
+  def __repr__(self):
+    return f"{self.__class__.__name__}({self.value!r})"
 
 
 class Source(LocatedString):

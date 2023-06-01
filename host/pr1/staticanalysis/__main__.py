@@ -7,7 +7,7 @@ import time
 from typing import Any, Optional
 
 from ..document import Document
-from ..error import ErrorDocumentReference
+from ..error import DiagnosticDocumentReference
 from .context import StaticAnalysisContext
 from .expr import BaseExprEval, BaseExprWatch, ComplexVariable, DeferredExprEval, Dependency
 from .expression import evaluate_eval_expr
@@ -117,7 +117,7 @@ for error in analysis.errors:
   print("Error :", error)
 
   for reference in error.references:
-    if isinstance(reference, ErrorDocumentReference) and reference.area:
+    if isinstance(reference, DiagnosticDocumentReference) and reference.area:
       print(reference.area.format())
 
 # pprint(result)

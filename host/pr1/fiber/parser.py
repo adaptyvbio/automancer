@@ -443,6 +443,7 @@ class Layer:
 
 @dataclass(kw_only=True)
 class AnalysisContext:
+  auto_expr: bool = False
   envs_list: list[EvalEnvs] = field(default_factory=list)
   eval_context: Optional[EvalContext] = None
   eval_depth: int = 0

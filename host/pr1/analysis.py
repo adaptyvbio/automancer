@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from logging import Logger
 from typing import Self, Sequence, TypeVar
@@ -10,10 +10,15 @@ T = TypeVar('T')
 S = TypeVar('S')
 
 @dataclass(kw_only=True)
-class BaseAnalysis(ABC):
-  def add(self, other: tuple[Self, T], /) -> T:
+class BaseAnalysis():
+  def add(self, other: 'tuple[BaseAnalysis, T]', /) -> T:
     other_analysis, other_value = other
+    old_self = self
+
     self += other_analysis
+
+    if self is not old_self:
+      raise RuntimeError("Invalid operation")
 
     return other_value
 
@@ -23,11 +28,20 @@ class BaseAnalysis(ABC):
   def add_sequence(self, other: list[tuple[Self, T]], /) -> list[T]:
     return self.add(self.__class__.sequence(other))
 
-  def __add__(self, other: Self, /) -> Self:
+  def __add__(self, other: 'BaseAnalysis', /) -> Self:
     return self.__class__().__iadd__(self).__iadd__(other)
 
-  def __iadd__(self, other: Self, /):
+  def __iadd__(self, other: 'BaseAnalysis', /):
+    if (other.__class__ is not self.__class__) and issubclass(other.__class__, self.__class__):
+      # TODO: Check if useful
+      return other + self
+
+    self._add(other)
     return self
+
+  @abstractmethod
+  def _add(self, other: 'BaseAnalysis', /):
+    pass
 
   @classmethod
   def sequence(cls, obj: Sequence[tuple[Self, T]], /) -> tuple[Self, list[T]]:
@@ -63,11 +77,10 @@ class DiagnosticAnalysis(BaseAnalysis):
             logger.debug(line)
 
 
-  def __iadd__(self, other: 'DiagnosticAnalysis', /):
+  def _add(self, other: 'DiagnosticAnalysis', /):
+    super()._add(other)
     self.errors += other.errors
     self.warnings += other.warnings
-
-    return super().__iadd__(other)
 
 
 __all__ = [

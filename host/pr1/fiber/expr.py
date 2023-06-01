@@ -1,18 +1,23 @@
 from abc import ABC, abstractmethod
 import ast
 import builtins
+from dataclasses import KW_ONLY, dataclass
 import functools
 import re
 from enum import Enum
+import traceback
 from pint import Quantity
 from types import EllipsisType, NoneType
 from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
 
+from ..staticanalysis.expr import BaseExprEval, ConstantExprEval
+from ..staticanalysis.context import StaticAnalysisContext
+from ..staticanalysis.expression import evaluate_eval_expr
+from ..staticanalysis.support import create_prelude
+from ..analysis import DiagnosticAnalysis
 from ..langservice import LanguageServiceAnalysis
-
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..host import logger
-from .staticanalysis import PreludeVariables, StaticAnalysisContext, StaticAnalysisMetadata, evaluate_expr_type
 from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 from ..reader import LocatedString, LocatedValue, LocationArea, PossiblyLocatedValue
@@ -23,8 +28,7 @@ if TYPE_CHECKING:
   from ..input import Type
 
 
-expr_regexp = re.compile(r"([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}")
-expr_regexp_exact = re.compile(fr"^{expr_regexp.pattern}$")
+expr_regexp = re.compile(r"^([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}$")
 escape_regexp = re.compile(r"\\(.)")
 
 def unescape(value: LocatedString) -> LocatedString:
@@ -90,16 +94,19 @@ def export_value(value: Any, /):
       }
 
 
-class PythonSyntaxError(Diagnostic, Exception):
+class EvalError(Diagnostic):
+  def __init__(self, area: LocationArea, /, message: str):
+    super().__init__(f"Evaluation error: {message}", references=[DiagnosticDocumentReference.from_area(area)])
+
+class PythonSyntaxError(Diagnostic):
   def __init__(self, message: str, target: LocatedValue, /):
-    Exception.__init__(self, message)
-    Diagnostic.__init__(
-      self,
+    super().__init__(
       message,
       references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 
+# @deprecated
 class PythonExprKind(Enum):
   Field = 0
   Static = 1
@@ -107,6 +114,7 @@ class PythonExprKind(Enum):
   Binding = 3
 
 
+# @deprecated
 class PythonExpr:
   def __init__(self, contents: LocatedString, kind: PythonExprKind, tree: ast.Expression):
     self.contents = contents
@@ -147,7 +155,7 @@ class PythonExpr:
       case "@":
         kind = PythonExprKind.Binding
       case _:
-        raise ValueError()
+        raise ValueError
 
     analysis = LanguageServiceAnalysis()
     contents = unescape(LocatedString.from_match_group(match, 2).strip())
@@ -175,35 +183,12 @@ class PythonExpr:
 
     return cls._parse_match(match)
 
-  @classmethod
-  def parse_mixed(cls, raw_str: LocatedString, /):
-    from ..langservice import LanguageServiceAnalysis
-
-    analysis = LanguageServiceAnalysis()
-    output = list()
-
-    index = 0
-
-    for match in expr_regexp.finditer(raw_str):
-      match_start, match_end = match.span()
-
-      output.append(raw_str[index:match_start])
-      index = match_end
-
-      match_analysis, match_expr = cls._parse_match(match)
-      analysis += match_analysis
-      output.append(match_expr)
-
-    output.append(raw_str[index:])
-
-    return analysis, output
-
 
 T = TypeVar('T', bound=PossiblyLocatedValue, covariant=True)
 
 class Evaluable(Exportable, ABC, Generic[T]):
-  @abstractmethod
-  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
+  # @abstractmethod
+  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     ...
 
   @overload
@@ -225,105 +210,114 @@ class Evaluable(Exportable, ABC, Generic[T]):
     raise NotImplementedError
 
 
+@dataclass
 class PythonExprObject(Evaluable[LocatedValue[Any]]):
   """
   A wrapper around `PythonExpr` which provides pre- and post-evaluation analysis.
+
+  Parameters
+    depth: The post-evaluation depth of the expression. A depth of 0 means that `evaluate()` will return the evaluation's result directly, otherwise it will a return a `ValueAsPythonExpr` instance.
+    envs: The evaluation environments of the expression, used for static analysis and evaluation.
+    expr: The `PythonExpr` instance to wrap.
+    type: The type of the expression, used after evaluation.
   """
 
-  def __init__(self, expr: PythonExpr, /, type: 'Type', *, depth: int, envs: EvalEnvs):
-    """
-    Parameters
-      depth: The post-evaluation depth of the expression. A depth of 0 means that `evaluate()` will return the evaluation's result directly, otherwise it will a return a `ValueAsPythonExpr` instance.
-      envs: The evaluation environments of the expression, used for static analysis and evaluation.
-      expr: The `PythonExpr` instance to wrap.
-      type: The type of the expression, used after evaluation.
-    """
-
-    self._depth = depth
-    self._envs = envs
-    self._expr = expr
-    self._type = type
-
-    self.metadata = dict[str, StaticAnalysisMetadata]()
+  contents: LocatedString
+  tree: ast.Expression
+  _: KW_ONLY
+  depth: int
+  envs_list: list[EvalEnvs]
 
   def analyze(self):
     from ..langservice import LanguageServiceAnalysis
 
-    variables = EvalVariables()
+    variables = dict[str, Any]()
 
-    for env in self._envs:
-      variables |= { name: value.type for name, value in env.values.items() }
+    for envs in self.envs_list:
+      for env in envs:
+        variables |= {
+          name: value.type for name, value in env.values.items()
+        }
+
+    prelude = create_prelude()
 
     try:
-      static_analysis, result_type = evaluate_expr_type(self._expr.tree.body, variables, StaticAnalysisContext(
-        input_value=self._expr.contents,
-        prelude=PreludeVariables
+      analysis, result = evaluate_eval_expr(self.tree.body, ({}, variables), prelude, StaticAnalysisContext(
+        input_value=self.contents
       ))
     except Exception:
       log_exception(logger)
-      return LanguageServiceAnalysis()
+      traceback.print_exc()
+      return LanguageServiceAnalysis(errors=[Diagnostic("Static analysis failure")]), Ellipsis
 
-    self.metadata = static_analysis.metadata
+    return analysis, EvaluablePythonExpr(self.contents, result.to_evaluated())
 
-    return LanguageServiceAnalysis(
-      errors=static_analysis.errors,
-      warnings=static_analysis.warnings
-    )
+  @classmethod
+  def parse(cls, raw_str: LocatedString, /):
+    match = expr_regexp.match(raw_str)
 
-  def evaluate(self, context):
-    from ..input import LanguageServiceAnalysis
-    from .parser import AnalysisContext
+    if not match:
+      return None
 
-    variables = dict[str, Any]()
+    kind_symbol = match.group(1)
+    contents = unescape(LocatedString.from_match_group(match, 2).strip())
 
-    for env in self._envs:
-      if (env_vars := context.stack[env]) is not None:
-        variables.update(env_vars)
-
-    options = EvalOptions(variables)
+    analysis = DiagnosticAnalysis()
 
     try:
-      result = self._expr.evaluate(options)
-    except EvalError as e:
-      return LanguageServiceAnalysis(errors=[e]), Ellipsis
-    else:
-      analysis, result = self._type.analyze(result, AnalysisContext(eval_context=context, symbolic=True))
-      return analysis, ValueAsPythonExpr.new(result, depth=self._depth)
+      tree = ast.parse(contents, mode='eval')
+    except SyntaxError as e:
+      target = contents.index_syntax_error(e)
+      analysis.errors.append(PythonSyntaxError(e.msg, target))
 
-  def export(self):
-    return self._expr.export()
+      return analysis, Ellipsis
 
-  def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._expr)}, depth={self._depth})"
+    return analysis, tree
 
-
-S = TypeVar('S', bound=(Evaluable | PossiblyLocatedValue))
-
-class ValueAsPythonExpr(Evaluable[S], Generic[S]):
-  def __init__(self, value: S | EllipsisType, /, *, depth: int):
-    self._depth = depth
-    self._value = value
+@dataclass
+class EvaluablePythonExpr(Evaluable):
+  contents: LocatedString
+  expr: BaseExprEval
 
   def evaluate(self, context):
-    from ..langservice import LanguageServiceAnalysis
-    return LanguageServiceAnalysis(), self._value if self._depth < 1 else ValueAsPythonExpr(self._value, depth=(self._depth - 1))
+    # from ..input import LanguageServiceAnalysis
+    # from .parser import AnalysisContext
+
+    # variables = dict[str, Any]()
+
+    # for env in self._envs:
+    #   if (env_vars := context.stack[env]) is not None:
+    #     variables.update(env_vars)
+
+    try:
+      # Idea: check that expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
+      result = self.expr.evaluate({})
+    except Exception as e:
+      return DiagnosticAnalysis(errors=[EvalError(self.contents.area, str(e))]), Ellipsis
+    else:
+      if isinstance(result, ConstantExprEval):
+        return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
+
+      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result)
+
+  # def export(self):
+  #   return self._expr.export()
+
+
+S = TypeVar('S', bound=PossiblyLocatedValue)
+
+@dataclass(frozen=True)
+class EvaluableConstantValue(Evaluable[S], Generic[S]):
+  inner_value: S
+
+  def evaluate(self, context):
+    return DiagnosticAnalysis(), self
 
   def export(self):
     return export_value(self._value)
 
-  def value(self):
-    return cast(LocatedValue, self._value)
+  def unwrap(self):
+    return self.value
 
   def __repr__(self):
-    return f"{self.__class__.__name__}({repr(self._value)}, depth={(self._depth + 1)})"
-
-  @classmethod
-  def new(cls, value: S | EllipsisType, /, *, depth: int = 0):
-    return cls(value, depth=(depth - 1)) if (depth > 0) and (not isinstance(value, EllipsisType)) else value
-
-
-if __name__ == "__main__":
-  from ..reader import Source
-  print(PythonExpr.parse(Source("${{ 1 + 2 }}")))
-  print(PythonExpr.parse_mixed(Source(r"x{{ '\}}\\'xx' + 2 }}y")))
-  print(PythonExpr.parse_mixed(Source("a {{ x }} b {{ y }} c")))
+    return f"{self.__class__.__name__}({self.inner_value!r})"

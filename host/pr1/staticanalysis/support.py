@@ -2,7 +2,7 @@ import ast
 
 from .types import PreludeTypeDefs, PreludeTypeInstances, Symbols, TypeDefs, TypeInstances
 from .special import CoreTypeDefs
-from ..error import ErrorDocumentReference
+from ..error import DiagnosticDocumentReference
 from .module import evaluate_library_module
 from ..document import Document
 from .context import StaticAnalysisContext
@@ -24,7 +24,7 @@ def process_source(contents: str, /, prelude: Symbols):
     print("Error :", error)
 
     for reference in error.references:
-      if isinstance(reference, ErrorDocumentReference) and reference.area:
+      if isinstance(reference, DiagnosticDocumentReference) and reference.area:
         print(reference.area.format())
 
   return result

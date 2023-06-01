@@ -134,6 +134,13 @@ BinOpMethodMap: dict[type[ast.operator], str] = {
   ast.BitXor: 'xor'
 }
 
+UnaryOpMethodMap: dict[type[ast.unaryop], str] = {
+  ast.Invert: 'invert',
+  ast.Not: 'not',
+  ast.UAdd: 'pos',
+  ast.USub: 'neg'
+}
+
 
 def evaluate_eval_expr(
     node: ast.expr, /,
@@ -331,6 +338,26 @@ def evaluate_eval_expr(
       result = analysis.add(call(method, [subscript_type], dict(), node, context))
 
       return analysis, result
+
+    case ast.UnaryOp(op, operand):
+      analysis, operand_expr = evaluate_eval_expr(operand, foreign_symbols, prelude_symbols, context)
+
+      if isinstance(operand_expr.type, UnknownDef):
+        result_type = UnknownDef()
+      else:
+        operator_name = UnaryOpMethodMap[op.__class__]
+
+        if (method := get_attribute(operand_expr.type, f"__{operator_name}__")):
+          result_type = analysis.add(call(method, list(), dict(), node, context))
+        else:
+          analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", node, context))
+          result_type = UnknownDef()
+
+      return analysis, CompositeExprDef.assemble(
+        result_type,
+        [operand_expr],
+        lambda nodes: transfer_node_location(node, ast.UnaryOp(op, nodes[0]))
+      )
 
     case _:
       print("Missing evaluate_eval_expr()", ast.dump(node, indent=2))

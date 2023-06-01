@@ -27,12 +27,15 @@ class Transformer(BasePassiveTransformer):
 
   def __init__(self):
     self.env = EvalEnv({
-      'index': EvalEnvValue()
+      'index': EvalEnvValue(
+        description="The current iteration index.",
+        ExprEvalType=(lambda: am.DeferredExprEval(name='index', phase=1)),
+      )
     }, name="Repeat", readonly=True)
 
-  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+  def prepare(self, data: Attributes, /, envs):
     if (attr := data.get('repeat')):
-      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr, runtime_envs=[self.env])
+      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr, envs=[self.env])
     else:
       return am.LanguageServiceAnalysis(), None
 

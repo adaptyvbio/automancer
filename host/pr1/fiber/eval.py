@@ -1,17 +1,18 @@
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Optional
 
-from .staticanalysis import ClassRef, CommonVariables
-from ..error import Diagnostic, Diagnostic, DiagnosticDocumentReference
+from ..error import Diagnostic, DiagnosticDocumentReference
 from ..reader import LocatedString, LocatedValue, LocationArea
+from ..staticanalysis.expr import ComplexVariable
+from ..staticanalysis.types import TypeInstance, UnknownDef
 
 
 @dataclass(kw_only=True)
-class EvalEnvValue:
+class EvalEnvValue(ComplexVariable):
   deprecated: bool = False
   description: Optional[str] = None
-  type: ClassRef = field(default_factory=(lambda: ClassRef(CommonVariables['unknown'])))
+  type: TypeInstance = field(default_factory=(lambda: UnknownDef()))
 
 @dataclass
 class EvalEnv:

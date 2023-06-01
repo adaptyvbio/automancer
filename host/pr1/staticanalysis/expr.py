@@ -7,12 +7,12 @@ import os
 from dataclasses import KW_ONLY, dataclass, field
 from typing import Any, Callable, ClassVar, Generic, Optional, Protocol, Self, Sequence, TypeVar
 
-from .types import ClassDefWithTypeArgs, TypeInstance
+from .types import TypeInstance
 
 
 @dataclass
 class ComplexVariable:
-  ExprEvalType: 'type[BaseExprEval]'
+  ExprEvalType: 'Callable[[], BaseExprEval]'
   type: TypeInstance
 
 
@@ -71,13 +71,17 @@ class CompositeExprDef(BaseExprDef):
 
 @dataclass(frozen=True)
 class ComplexExprDef(BaseExprDef):
-  ExprEvalType: 'type[BaseExprEval]'
+  ExprEvalType: 'Callable[[], BaseExprEval]'
 
   def to_evaluated(self):
     return self.ExprEvalType()
 
 
 # Phase 2
+
+@dataclass
+class EvaluationError(Exception):
+  cause: Exception
 
 class BaseExprEval(ABC):
   @abstractmethod
@@ -110,7 +114,13 @@ class CompositeExprEval(BaseExprEval):
 
     if all(isinstance(component, ConstantExprEval) for component in evaluated_components.values()):
       all_variables = variables | { name: component.value for name, component in evaluated_components.items() } # type: ignore
-      return ConstantExprEval(eval(self.expr.code, globals(), all_variables))
+
+      try:
+        result = eval(self.expr.code, globals(), all_variables)
+      except Exception as e:
+        raise EvaluationError(e) from e
+      else:
+        return ConstantExprEval(result)
     else:
       return CompositeExprEval(
         components=evaluated_components,
@@ -202,3 +212,20 @@ class Container(Generic[T]):
 
 # frequency[time(), 3 * ureg.Hz]
 # static[dev.Oko.temperature]
+
+
+__all__ = [
+  'BaseExprDef',
+  'BaseExprEval',
+  'BaseExprWatch',
+  'ComplexExprDef',
+  'ComplexVariable',
+  'CompositeExprDef',
+  'CompositeExprEval',
+  'CompositeExprWatch',
+  'ConstantExprEval',
+  'ConstantExprWatch',
+  'Container',
+  'DeferredExprEval',
+  'Dependency',
+]

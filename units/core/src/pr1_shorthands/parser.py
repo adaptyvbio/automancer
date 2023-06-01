@@ -60,11 +60,11 @@ class LeadTransformer(BaseLeadTransformer):
     super().__init__()
     self.parser = parser
 
-  def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
+  def prepare(self, data: Attrs, /, envs):
     analysis = am.LanguageServiceAnalysis()
     calls = list[LeadTransformerPreparationResult[tuple[ShorthandStaticItem, LocationArea, Any]]]()
 
-    context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
+    context = AnalysisContext(envs=envs)
 
     for shorthand_name, arg in data.items():
       shorthand = self.parser.shorthands[shorthand_name]
@@ -107,11 +107,11 @@ class PassiveTransformer(BasePassiveTransformer):
     super().__init__(priority=300)
     self.parser = parser
 
-  def prepare(self, data: Attrs, /, adoption_envs, runtime_envs):
+  def prepare(self, data: Attrs, /, envs):
     analysis = am.LanguageServiceAnalysis()
     calls = list[tuple[ShorthandStaticItem, LocationArea, Evaluable]]()
 
-    context = AnalysisContext(envs_list=[adoption_envs, runtime_envs])
+    context = AnalysisContext(envs=envs)
 
     for shorthand_name, arg in data.items():
       shorthand = self.parser.shorthands[shorthand_name]
@@ -217,16 +217,16 @@ class Parser(BaseParser):
 
     return analysis, None
 
-  def enter_protocol(self, data: Attributes, /, adoption_envs, runtime_envs):
+  def enter_protocol(self, data: Attributes, /, envs):
     analysis = am.LanguageServiceAnalysis()
 
     if (attr := data.get('shorthands')):
       for name, data_shorthand in attr.items():
         env = EvalEnv({
-          'arg': EvalEnvValue()
+          # 'arg': EvalEnvValue()
         }, readonly=True)
 
-        create_layer = lambda data_shorthand = data_shorthand, env = env: self.fiber.parse_layer(data_shorthand, adoption_envs=[*adoption_envs, env], runtime_envs=[*runtime_envs, env], extra_attributes={
+        create_layer = lambda data_shorthand = data_shorthand, env = env: self.fiber.parse_layer(data_shorthand, envs=[*envs, env], extra_attributes={
           '_priority': Attribute(
             PrimitiveType(int),
             description="Sets the priority of the shorthand. Shorthands with a higher priority are executed before those with a lower priority when running a protocol."

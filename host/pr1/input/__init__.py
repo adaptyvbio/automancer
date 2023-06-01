@@ -753,22 +753,24 @@ class PotentialExprType(Type):
     self._type = obj_type
 
   def analyze(self, obj, /, context):
-    if isinstance(obj, str) and (not context.symbolic):
+    if isinstance(obj, str) and (not context.symbolic) and (context.envs is not None):
       assert isinstance(obj, LocatedString)
-      parse_result = PythonExprObject.parse(obj)
+      parse_return = PythonExprObject.parse(obj)
 
-      if parse_result:
+      if parse_return:
         analysis = LanguageServiceAnalysis()
-        ast_expr = analysis.add(parse_result)
+        parse_result = analysis.add(parse_return)
 
-        if isinstance(ast_expr, EllipsisType):
+        if isinstance(parse_result, EllipsisType):
           return analysis, Ellipsis
+
+        expr_contents, expr_ast = parse_result
 
         # if expr.kind != PythonExprKind.Field:
         #   analysis.errors.append(InvalidExprKind(obj))
         #   return analysis, Ellipsis
 
-        expr_object = PythonExprObject(obj, ast_expr, depth=context.eval_depth, envs_list=context.envs_list)
+        expr_object = PythonExprObject(expr_contents, expr_ast, depth=context.eval_depth, envs=context.envs)
         expr_result = analysis.add(expr_object.analyze())
 
         if isinstance(expr_result, EllipsisType):
@@ -1114,6 +1116,9 @@ class EvaluablePostAnalysis(Evaluable[T_PossiblyLocatedValue], Generic[T_Possibl
       return analysis, Ellipsis
 
     return DeferredAnalysisType(self._type).analyze(result, AnalysisContext(symbolic=True))
+
+  def export(self):
+    return self._obj.export()
 
 class HasAttrType(Type):
   def __init__(self, attribute: str, /):

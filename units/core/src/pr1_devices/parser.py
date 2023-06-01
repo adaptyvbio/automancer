@@ -242,7 +242,7 @@ class Parser(BaseParser):
 
     return nodes
 
-  def enter_protocol(self, attrs, /, adoption_envs, runtime_envs):
+  def enter_protocol(self, attrs, /, envs):
     def create_type(node: BaseNode, parent_path: NodePath = ()):
       node_path = (*parent_path, node.id)
       connected_ref = TrackedReadableNodeClassRef(
@@ -280,17 +280,17 @@ class Parser(BaseParser):
           return None
 
     env = EvalEnv({
-      'devices': EvalEnvValue(
-        type=ClassRef(ClassDef(
-          name='Devices',
-          instance_attrs={
-            device_node.id: device_node_type for device_node in self._fiber.host.root_node.nodes.values() if (device_node_type := create_type(device_node))
-          }
-        ))
-      )
+      # 'devices': EvalEnvValue(
+      #   type=ClassRef(ClassDef(
+      #     name='Devices',
+      #     instance_attrs={
+      #       device_node.id: device_node_type for device_node in self._fiber.host.root_node.nodes.values() if (device_node_type := create_type(device_node))
+      #     }
+      #   ))
+      # )
     }, name="Devices", readonly=True)
 
-    return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), runtime_envs=[env])
+    return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), envs=[env])
 
 
 @debug

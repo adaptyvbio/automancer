@@ -36,10 +36,16 @@ class float:
   def __add__(self, other: float, /) -> float:
     ...
 
+  def __neg__(self) -> float:
+    ...
+
 class int:
   self.x: float
 
   def __add__(self, other: int, /) -> int:
+    ...
+
+  def __mul__(self, other: int, /) -> int:
     ...
 
 class slice:
@@ -85,3 +91,11 @@ def random() -> float:
 """, (TypeDefs(), TypeInstances()))
 
   return (CoreTypeDefs | type_defs), type_instances # type: ignore
+
+
+prelude = create_prelude()
+
+
+__all__ = [
+  'prelude'
+]

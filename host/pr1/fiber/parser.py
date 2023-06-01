@@ -5,6 +5,9 @@ from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
                     Sequence, TypeVar, final)
 
+from ..staticanalysis.expr import DeferredExprEval
+from ..staticanalysis.support import prelude
+from ..staticanalysis.expression import instantiate_type_instance
 from .. import input as lang
 from .. import reader
 from ..draft import Draft
@@ -110,8 +113,7 @@ class ProtocolUnitDetails:
 class ProtocolUnitData:
   details: Optional[ProtocolUnitDetails] = None
   _: KW_ONLY
-  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
-  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  envs: EvalEnvs = field(default_factory=EvalEnvs)
 
 @debug
 class BlockData:
@@ -209,7 +211,7 @@ class BaseParser(ABC):
   def __init__(self, fiber: 'FiberParser'):
     self.leaf_transformers = list[BasePartialPassiveTransformer]()
 
-  def enter_protocol(self, attrs: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, ProtocolUnitData]:
+  def enter_protocol(self, attrs: Attrs, /, envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, ProtocolUnitData]:
     return LanguageServiceAnalysis(), ProtocolUnitData()
 
   def leave_protocol(self):
@@ -219,9 +221,7 @@ class BaseDefaultTransform(ABC):
   priority: ClassVar[int]
 
   def __init__(self):
-    self.adoption_envs = EvalEnvs()
-    self.runtime_envs = EvalEnvs()
-
+    self.envs = EvalEnvs()
     self.priority: int
 
   @abstractmethod
@@ -254,8 +254,7 @@ class TransformerAdoptionResult:
 class PassiveTransformerPreparationResult:
   data: Any
   _: KW_ONLY
-  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
-  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  envs: EvalEnvs = field(default_factory=EvalEnvs)
 
 
 T = TypeVar('T')
@@ -265,15 +264,14 @@ class LeadTransformerPreparationResult(Generic[T]):
   data: T
   origin_area: LocationArea
   _: KW_ONLY
-  adoption_envs: EvalEnvs = field(default_factory=EvalEnvs)
-  runtime_envs: EvalEnvs = field(default_factory=EvalEnvs)
+  envs: EvalEnvs = field(default_factory=EvalEnvs)
 
 class BasePassiveTransformer(ABC):
   def __init__(self, attributes: Optional[dict[str, lang.Attribute]] = None, *, priority: int):
     self.attributes = attributes or dict()
     self.priority = priority
 
-  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, Optional[PassiveTransformerPreparationResult] | EllipsisType]:
+  def prepare(self, data: Attrs, /, envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, Optional[PassiveTransformerPreparationResult] | EllipsisType]:
     return LanguageServiceAnalysis(), PassiveTransformerPreparationResult(data)
 
   @abstractmethod
@@ -295,7 +293,7 @@ class BaseLeadTransformer(ABC):
     self.priority = 0
 
   @abstractmethod
-  def prepare(self, data: Attrs, /, adoption_envs: EvalEnvs, runtime_envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, list[LeadTransformerPreparationResult] | EllipsisType]:
+  def prepare(self, data: Attrs, /, envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, list[LeadTransformerPreparationResult] | EllipsisType]:
     return LanguageServiceAnalysis(), list()
 
   @abstractmethod
@@ -319,7 +317,7 @@ class ProcessTransformer(BaseLeadTransformer):
     self._Process = Process
     self._parser = parser
 
-  def prepare(self, data: dict[LocatedString, LocatedValue], /, adoption_envs, runtime_envs):
+  def prepare(self, data: dict[LocatedString, LocatedValue], /, envs):
     if data:
       key, value = next(iter(data.items()))
       return LanguageServiceAnalysis(), [LeadTransformerPreparationResult(value, origin_area=key.area)]
@@ -349,8 +347,7 @@ class Layer:
   lead_transform: Optional[tuple[BaseLeadTransformer, LeadTransformerPreparationResult]]
   passive_transforms: list[tuple[BasePassiveTransformer, PassiveTransformerPreparationResult]]
   _: KW_ONLY
-  adoption_envs: EvalEnvs
-  runtime_envs: EvalEnvs
+  envs: EvalEnvs
   extra_info: Optional[Attrs | EllipsisType] = None
 
   def adopt(self, adoption_stack: EvalStack, trace: Trace):
@@ -449,7 +446,7 @@ class Layer:
 @dataclass(kw_only=True)
 class AnalysisContext:
   auto_expr: bool = False
-  envs_list: list[EvalEnvs] = field(default_factory=list)
+  envs: Optional[EvalEnvs] = None
   eval_context: Optional[EvalContext] = None
   eval_depth: int = 0
   symbolic: bool = False
@@ -494,14 +491,26 @@ class FiberParser:
 
     analysis = LanguageServiceAnalysis()
 
+    # ComplexVariable(
+    #   ExprEvalType=(lambda: DeferredExprEval(name='A', phase=0)),
+    #   type=ClassDefWithTypeArgs(ClassDef("A"))
+    # )
+
     global_env = EvalEnv({
-      'ExpPath': EvalEnvValue(),
-      'Path': EvalEnvValue(),
-      'unit': EvalEnvValue()
+      # 'ExpPath': EvalEnvValue(),
+      # 'Path': EvalEnvValue(),
+      'unit': EvalEnvValue(
+        ExprEvalType=(lambda: DeferredExprEval(name='unit', phase=0)),
+        description="The unit registry."
+      ),
+      'username': EvalEnvValue(
+        ExprEvalType=(lambda: DeferredExprEval(name='username', phase=0)),
+        description="The user's name.",
+        type=instantiate_type_instance(prelude[0].get('str'))
+      )
     }, name="Global", readonly=True)
 
-    adoption_envs = [global_env]
-    runtime_envs = [global_env, self.user_env]
+    envs = [global_env, self.user_env]
 
 
     # Syntax
@@ -566,10 +575,8 @@ class FiberParser:
       if isinstance(unit_attrs, EllipsisType):
         continue
 
-      protocol_unit_data = analysis.add(parser.enter_protocol(unit_attrs, adoption_envs=adoption_envs, runtime_envs=runtime_envs))
-
-      adoption_envs += protocol_unit_data.adoption_envs
-      runtime_envs += protocol_unit_data.runtime_envs
+      protocol_unit_data = analysis.add(parser.enter_protocol(unit_attrs, envs))
+      envs += protocol_unit_data.envs
 
       if protocol_unit_data.details:
         protocol_details[parser.namespace] = protocol_unit_data.details
@@ -604,37 +611,24 @@ class FiberParser:
 
     adoption_stack: EvalStack = {
       global_env: {
-        'ExpPath': PurePath,
-        'Path': Path,
+        # 'ExpPath': PurePath,
+        # 'Path': Path,
         # 'open': adoption_open,
-        'unit': ureg
+        'unit': ureg,
+        'username': '34'
       }
     }
 
     for protocol_unit_details in protocol_details.values():
       adoption_stack |= protocol_unit_details.create_adoption_stack()
 
-    layer = analysis.add(self.parse_layer(root_result_native['steps'], adoption_envs, runtime_envs))
+    layer = analysis.add(self.parse_layer(root_result_native['steps'], envs))
 
     if isinstance(layer, EllipsisType):
       return analysis, Ellipsis
 
     root_block = analysis.add(layer.adopt_lead(adoption_stack, trace=Trace()))
-
-    # root_block_prep = analysis.add(self.prepare_block(root_result_native['steps'], adoption_envs=adoption_envs, runtime_envs=runtime_envs))
-
-    # if isinstance(root_block_prep, EllipsisType):
-    #   return analysis, Ellipsis
-
-    # root_block_data = analysis.add(self.parse_block(root_block_prep, adoption_stack))
-
-    # if isinstance(root_block_data, EllipsisType):
-    #   return analysis, Ellipsis
-
-    # root_block = analysis.add(self.execute(root_block_data.state, root_block_data.transforms, origin_area=root_result_native['steps'].area))
-
     print("\x1b[1;31mAnalysis →\x1b[22;0m", analysis.errors)
-    # print(root_block)
 
     if isinstance(root_block, EllipsisType):
       return analysis, Ellipsis
@@ -662,15 +656,14 @@ class FiberParser:
     self,
     attrs: Any,
     /,
-    adoption_envs: EvalEnvs,
-    runtime_envs: EvalEnvs,
+    envs: EvalEnvs,
     *,
     extra_attributes: Optional[dict[str, lang.Attribute | lang.Type]] = None,
     mode: Literal['any', 'lead', 'passive'] = 'lead'
   ):
     analysis = LanguageServiceAnalysis()
     context = AnalysisContext(
-      envs_list=[adoption_envs, runtime_envs]
+      envs=envs
     )
 
     if extra_attributes is not None:
@@ -696,8 +689,7 @@ class FiberParser:
     lead_transforms = list[tuple[BaseLeadTransformer, LeadTransformerPreparationResult]]()
     passive_transforms = list[tuple[BasePassiveTransformer, PassiveTransformerPreparationResult]]()
 
-    extra_adoption_envs = EvalEnvs()
-    extra_runtime_envs = EvalEnvs()
+    extra_envs = EvalEnvs()
 
     result_by_parser = dict[BaseParser, Any]()
 
@@ -716,12 +708,8 @@ class FiberParser:
     for transformer in self.transformers:
       parser = next(parser for parser in self._parsers if transformer in parser.transformers)
 
-      current_adoption_envs = adoption_envs + extra_adoption_envs
-      current_runtime_envs = runtime_envs + extra_runtime_envs
-
-      context = AnalysisContext(
-        envs_list=[current_adoption_envs, current_runtime_envs]
-      )
+      current_envs = envs + extra_envs
+      context = AnalysisContext(envs=envs)
 
       if parser.layer_attributes is not None:
         unit_attrs = result_by_parser[parser]
@@ -733,20 +721,18 @@ class FiberParser:
         continue
 
       if isinstance(transformer, BaseLeadTransformer):
-        new_lead_transforms = analysis.add(transformer.prepare(unit_attrs, current_adoption_envs, current_runtime_envs))
+        new_lead_transforms = analysis.add(transformer.prepare(unit_attrs, current_envs))
 
         if not isinstance(new_lead_transforms, EllipsisType):
           if (not lead_transforms) and new_lead_transforms:
-            extra_adoption_envs += new_lead_transforms[0].adoption_envs
-            extra_runtime_envs += new_lead_transforms[0].runtime_envs
+            extra_envs += new_lead_transforms[0].envs
 
           lead_transforms += [(transformer, transform) for transform in new_lead_transforms]
       else:
-        new_passive_transform = analysis.add(transformer.prepare(unit_attrs, current_adoption_envs, current_runtime_envs))
+        new_passive_transform = analysis.add(transformer.prepare(unit_attrs, current_envs))
 
         if new_passive_transform and not isinstance(new_passive_transform, EllipsisType):
-          extra_adoption_envs += new_passive_transform.adoption_envs
-          extra_runtime_envs += new_passive_transform.runtime_envs
+          extra_envs += new_passive_transform.envs
 
           passive_transforms.append((transformer, new_passive_transform))
 
@@ -769,9 +755,8 @@ class FiberParser:
     layer = Layer(
       (lead_transforms[0] if lead_transforms else None),
       passive_transforms,
-      adoption_envs=extra_adoption_envs,
+      envs=extra_envs,
       extra_info=extra_info,
-      runtime_envs=extra_runtime_envs
     )
 
     return analysis, layer

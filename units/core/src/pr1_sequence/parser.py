@@ -30,14 +30,14 @@ class Transformer(BaseLeadTransformer):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+  def prepare(self, data: Attributes, /, envs):
     analysis = am.LanguageServiceAnalysis()
 
     if (attr := data.get('actions')):
       action_layers = list[Layer]()
 
       for action_source in attr:
-        layer = analysis.add(self._fiber.parse_layer(action_source, adoption_envs, runtime_envs))
+        layer = analysis.add(self._fiber.parse_layer(action_source, envs))
 
         if not isinstance(layer, EllipsisType):
           action_layers.append(layer)

@@ -21,17 +21,16 @@ class Transformer(BasePassiveTransformer):
   def __init__(self, fiber: FiberParser):
     self._fiber = fiber
 
-  def prepare(self, data, /, adoption_envs, runtime_envs):
+  def prepare(self, data, /, envs):
     if 'outer' in data:
-      analysis, layer = self._fiber.parse_layer(data['outer'], adoption_envs, runtime_envs, mode='passive')
+      analysis, layer = self._fiber.parse_layer(data['outer'], envs, mode='passive')
 
       if isinstance(layer, EllipsisType):
         return analysis, Ellipsis
 
       return analysis, PassiveTransformerPreparationResult(
         layer,
-        adoption_envs=layer.adoption_envs,
-        runtime_envs=layer.runtime_envs
+        envs=layer.envs
       )
     else:
       return am.DiagnosticAnalysis(), None

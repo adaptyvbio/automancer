@@ -28,7 +28,7 @@ class Transformer(BasePassiveTransformer):
       )
     }, priority=800)
 
-  def prepare(self, data: Attributes, /, adoption_envs, runtime_envs):
+  def prepare(self, data: Attributes, /, envs):
     if (attr := data.get('name')):
       return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr)
     else:

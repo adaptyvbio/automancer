@@ -16,7 +16,7 @@ class Parser(am.BaseParser):
         documentation=["Accepts either a quantity or the `forever` keyword.", "Examples:\n```prl\nwait: forever\nwait: 10 min\n```\n"],
         type=am.UnionType(
           am.EnumType('forever'),
-          am.QuantityType('second')
+          am.QuantityType('second', min=(1 * am.ureg.msec))
         )
       )
     }, parser=fiber)]

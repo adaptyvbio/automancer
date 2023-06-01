@@ -54,7 +54,7 @@ class Parser(BaseParser):
   def __init__(self, fiber):
     self._fiber = fiber
 
-  def prepare_block(self, attrs, /, adoption_envs, runtime_envs):
+  def prepare_block(self, attrs, /, envs):
     return lang.Analysis(), BlockUnitPreparationData(attrs)
 
   def parse_block(self, attrs: Attributes, /, adoption_stack, trace):

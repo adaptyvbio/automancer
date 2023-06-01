@@ -1,31 +1,31 @@
-from abc import ABC, abstractmethod
 import ast
 import builtins
-from dataclasses import KW_ONLY, dataclass
 import functools
 import re
-from enum import Enum
 import traceback
-from pint import Quantity
+from abc import ABC, abstractmethod
+from dataclasses import KW_ONLY, dataclass
+from enum import Enum
 from types import EllipsisType, NoneType
-from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, Protocol, TypeVar, cast, overload
+from typing import Any, Generic, Literal, TypeVar, cast, overload
 
-from ..staticanalysis.expr import BaseExprEval, ConstantExprEval
-from ..staticanalysis.context import StaticAnalysisContext
-from ..staticanalysis.expression import evaluate_eval_expr
-from ..staticanalysis.support import create_prelude
+from pint import Quantity
+
 from ..analysis import DiagnosticAnalysis
-from ..langservice import LanguageServiceAnalysis
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..host import logger
-from .eval import EvalContext, EvalOptions, EvalEnv, EvalEnvs, EvalError, EvalStack, EvalVariables, evaluate as dynamic_evaluate
-from .staticeval import evaluate as static_evaluate
-from ..reader import LocatedString, LocatedValue, LocationArea, PossiblyLocatedValue
-from ..util.decorators import debug
+from ..langservice import LanguageServiceAnalysis
+from ..reader import (LocatedString, LocatedValue, LocationArea,
+                      PossiblyLocatedValue)
+from ..staticanalysis.context import StaticAnalysisContext
+from ..staticanalysis.expr import (BaseExprEval, ConstantExprEval,
+                                   EvaluationError)
+from ..staticanalysis.expression import evaluate_eval_expr
+from ..staticanalysis.support import prelude
 from ..util.misc import Exportable, log_exception
-
-if TYPE_CHECKING:
-  from ..input import Type
+from .eval import EvalContext, EvalEnvs, EvalOptions
+from .eval import evaluate as dynamic_evaluate
+from .staticeval import evaluate as static_evaluate
 
 
 expr_regexp = re.compile(r"^([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}$")
@@ -240,20 +240,15 @@ class PythonExprObject:
   tree: ast.Expression
   _: KW_ONLY
   depth: int
-  envs_list: list[EvalEnvs]
+  envs: EvalEnvs
 
   def analyze(self):
     from ..langservice import LanguageServiceAnalysis
 
     variables = dict[str, Any]()
 
-    for envs in self.envs_list:
-      for env in envs:
-        variables |= {
-          name: value.type for name, value in env.values.items()
-        }
-
-    prelude = create_prelude()
+    for env in self.envs:
+      variables |= env.values
 
     try:
       analysis, result = evaluate_eval_expr(self.tree.body, ({}, variables), prelude, StaticAnalysisContext(
@@ -264,7 +259,7 @@ class PythonExprObject:
       traceback.print_exc()
       return LanguageServiceAnalysis(errors=[Diagnostic("Static analysis failure")]), Ellipsis
 
-    return analysis, EvaluablePythonExpr(self.contents, result.to_evaluated())
+    return analysis, EvaluablePythonExpr(self.contents, self.envs, result.to_evaluated())
 
   @classmethod
   def parse(cls, raw_str: LocatedString, /):
@@ -286,36 +281,37 @@ class PythonExprObject:
 
       return analysis, Ellipsis
 
-    return analysis, tree
+    return analysis, (contents, tree)
 
 @dataclass
 class EvaluablePythonExpr(Evaluable):
   contents: LocatedString
+  envs: EvalEnvs
   expr: BaseExprEval
 
   def evaluate(self, context):
-    # from ..input import LanguageServiceAnalysis
-    # from .parser import AnalysisContext
+    variables = dict[str, Any]()
 
-    # variables = dict[str, Any]()
-
-    # for env in self._envs:
-    #   if (env_vars := context.stack[env]) is not None:
-    #     variables.update(env_vars)
+    for env in self.envs:
+      if (env_vars := context.stack.get(env)) is not None:
+        variables |= env_vars
 
     try:
-      # Idea: check that expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
-      result = self.expr.evaluate({})
-    except Exception as e:
-      return DiagnosticAnalysis(errors=[EvalError(self.contents.area, str(e))]), Ellipsis
+      # Idea: check that the expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
+      result = self.expr.evaluate(variables)
+    except EvaluationError as e:
+      return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
     else:
       if isinstance(result, ConstantExprEval):
         return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
 
-      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result)
+      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, self.envs, result)
 
-  # def export(self):
-  #   return self._expr.export()
+  def export(self):
+    return {
+      "type": "expression",
+      "contents": self.contents.value
+    }
 
 
 S = TypeVar('S', bound=PossiblyLocatedValue)

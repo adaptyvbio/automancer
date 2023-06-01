@@ -14,9 +14,9 @@ class Parser(am.BaseParser):
       'wait': am.Attribute(
         description="Wait for a fixed delay",
         documentation=["Accepts either a quantity or the `forever` keyword.", "Examples:\n```prl\nwait: forever\nwait: 10 min\n```\n"],
-        type=am.PotentialExprType(am.UnionType(
+        type=am.UnionType(
           am.EnumType('forever'),
           am.QuantityType('second')
-        ))
+        )
       )
     }, parser=fiber)]

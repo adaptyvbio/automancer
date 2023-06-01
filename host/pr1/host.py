@@ -109,8 +109,9 @@ class Host:
     if conf_path.exists():
       document = Document.text((self.data_dir / "setup.yml").open().read())
 
-      analysis, conf_data = reader.loads2(document.source)
-      raw_conf: Any = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
+      analysis = LanguageServiceAnalysis()
+      conf_data = analysis.add(reader.loads2(document.source))
+      raw_conf = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
 
       analysis.log_diagnostics(logger)
 

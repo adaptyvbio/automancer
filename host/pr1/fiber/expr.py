@@ -187,14 +187,28 @@ class PythonExpr:
 T = TypeVar('T', bound=PossiblyLocatedValue, covariant=True)
 
 class Evaluable(Exportable, ABC, Generic[T]):
-  # @abstractmethod
-  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
+  @abstractmethod
+  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
     ...
 
+  def evaluate_final(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
+    analysis, result = self.evaluate(context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    assert isinstance(result, EvaluableConstantValue)
+    return analysis, result.inner_value
+
+  def evaluate_provisional(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
+    return self.evaluate(context) # type: ignore
+
+  # @deprecated
   @overload
   def eval(self, context: EvalContext, *, final: Literal[False]) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     ...
 
+  # @deprecated
   @overload
   def eval(self, context: EvalContext, *, final: Literal[True]) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
     ...
@@ -211,7 +225,7 @@ class Evaluable(Exportable, ABC, Generic[T]):
 
 
 @dataclass
-class PythonExprObject(Evaluable[LocatedValue[Any]]):
+class PythonExprObject:
   """
   A wrapper around `PythonExpr` which provides pre- and post-evaluation analysis.
 
@@ -314,7 +328,7 @@ class EvaluableConstantValue(Evaluable[S], Generic[S]):
     return DiagnosticAnalysis(), self
 
   def export(self):
-    return export_value(self._value)
+    return export_value(self.inner_value)
 
   def unwrap(self):
     return self.value

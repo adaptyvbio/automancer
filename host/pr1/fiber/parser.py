@@ -2,20 +2,20 @@ from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path, PurePath
 from types import EllipsisType
-from typing import (TYPE_CHECKING, Any, Callable, ClassVar, Generic, Literal, Optional,
-                    Protocol, Sequence, TypeVar, cast, final)
+from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
+                    Sequence, TypeVar, final)
 
-from ..langservice import LanguageServiceAnalysis, LanguageServiceToken
-
+from .. import input as lang
 from .. import reader
 from ..draft import Draft
 from ..error import Diagnostic, DiagnosticDocumentReference, Trace
+from ..langservice import LanguageServiceAnalysis, LanguageServiceToken
 from ..reader import LocatedString, LocatedValue, LocationArea
 from ..ureg import ureg
 from ..util.decorators import debug
 from ..util.misc import Exportable, HierarchyNode
-from .. import input as lang
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack
+from .expr import Evaluable
 
 if TYPE_CHECKING:
   from ..host import Host
@@ -310,6 +310,10 @@ BaseTransformers = list[BaseTransformer]
 class ProcessTransformer(BaseLeadTransformer):
   def __init__(self, Process: 'type[BaseProcess]', attributes: dict[str, lang.Attribute], *, parser: 'FiberParser'):
     assert attributes and (len(attributes) == 1)
+
+    for attr in attributes.values():
+      attr._type = lang.PotentialExprType(lang.AutoExprContextType(attr._type))
+
     super().__init__(attributes)
 
     self._Process = Process
@@ -322,10 +326,11 @@ class ProcessTransformer(BaseLeadTransformer):
     else:
       return LanguageServiceAnalysis(), list()
 
-  def adopt(self, data, /, adoption_stack, trace):
+  def adopt(self, data: Evaluable, /, adoption_stack, trace):
     from .process import ProcessBlock
 
-    analysis, result = data.eval(EvalContext(adoption_stack), final=False)
+    analysis = LanguageServiceAnalysis()
+    result = analysis.add(data.evaluate_provisional(EvalContext(adoption_stack)))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis

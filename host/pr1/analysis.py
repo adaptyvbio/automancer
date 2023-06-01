@@ -31,7 +31,7 @@ class BaseAnalysis():
   def __add__(self, other: 'BaseAnalysis', /) -> Self:
     return self.__class__().__iadd__(self).__iadd__(other)
 
-  def __iadd__(self, other: 'BaseAnalysis', /):
+  def __iadd__(self, other: 'BaseAnalysis', /) -> Self:
     if (other.__class__ is not self.__class__) and issubclass(other.__class__, self.__class__):
       # TODO: Check if useful
       return other + self

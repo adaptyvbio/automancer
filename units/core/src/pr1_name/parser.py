@@ -24,7 +24,7 @@ class Transformer(BasePassiveTransformer):
     super().__init__({
       'name': Attribute(
         description="Sets the block's name.",
-        type=PotentialExprType(StrType(), static=True)
+        type=StrType()
       )
     }, priority=800)
 

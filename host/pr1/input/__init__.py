@@ -86,7 +86,7 @@ class InvalidIntegerError(Diagnostic):
 
 
 class Type(Protocol):
-  def analyze(self, obj: PossiblyLocatedValue, /, context: 'AnalysisContext') -> tuple[LanguageServiceAnalysis, Any | EllipsisType]:
+  def analyze(self, obj: LocatedValue, /, context: 'AnalysisContext') -> tuple[LanguageServiceAnalysis, Any | EllipsisType]:
     ...
 
 CompletionKind = Literal['class', 'constant', 'enum', 'field', 'property']
@@ -468,7 +468,8 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     for attr_name, attr in self._attributes_by_key[key].items():
       if not (attr_name in result) and not isinstance(attr._default, EllipsisType):
-        result[UnlocatedValue(attr_name)] = EvaluableConstantValue.new(UnlocatedValue(attr._default), depth=context.eval_depth)
+        located_default = UnlocatedValue(attr._default)
+        result[UnlocatedValue(attr_name)] = EvaluableConstantValue(located_default) if context.auto_expr else located_default
 
     return analysis, result
 
@@ -502,9 +503,10 @@ class RecordType(DivisibleCompositeDictType):
       return analysis, Ellipsis
 
     # located_result = obj.transform(result) if isinstance(obj, ReliableLocatedDict) else LocatedDict(result, obj.area)
-    located_result = LocatedValue(result, obj.area)
 
-    return analysis, EvaluableRecord.new(located_result) if context.auto_expr else located_result
+    return analysis, EvaluableRecord.new(LocatedValue(result, obj.area)) if context.auto_expr else LocatedValue(create_datainstance({
+      item_key.value: item_value for item_key, item_value in result.items()
+    }), obj.area)
 
 @dataclass
 class EvaluableRecord(Evaluable):
@@ -594,7 +596,7 @@ class AnyType(Type):
     pass
 
   def analyze(self, obj, /, context):
-    return LanguageServiceAnalysis(), EvaluableConstantValue.new(obj, depth=context.eval_depth)
+    return LanguageServiceAnalysis(), EvaluableConstantValue(obj) if context.auto_expr else obj
 
 class PrimitiveType(Type):
   def __init__(self, primitive: Any, /):
@@ -751,7 +753,7 @@ class PotentialExprType(Type):
     self._type = obj_type
 
   def analyze(self, obj, /, context):
-    if isinstance(obj, str) and (not context.symbolic) and (context.eval_depth > 0):
+    if isinstance(obj, str) and (not context.symbolic):
       assert isinstance(obj, LocatedString)
       parse_result = PythonExprObject.parse(obj)
 
@@ -806,7 +808,7 @@ class QuantityType(Type):
       (context.symbolic and (obj.value == None))
     ):
       result = LocatedValue.new(None, area=obj.area)
-      return LanguageServiceAnalysis(), EvaluableConstantValue.new(result, depth=context.eval_depth)
+      return DiagnosticAnalysis(), EvaluableConstantValue(result) if not context.auto_expr else result
 
     if isinstance(obj.value, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
@@ -814,11 +816,11 @@ class QuantityType(Type):
       try:
         value = ureg.Quantity(obj.value)
       except pint.errors.UndefinedUnitError:
-        return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
+        return DiagnosticAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
       except (pint.PintError, TokenError):
-        return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
+        return DiagnosticAnalysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
       except Exception:
-        return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
+        return DiagnosticAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
     elif isinstance(obj.value, (float, int)):
       value = ureg.Quantity(obj.value)
     else:
@@ -834,19 +836,19 @@ class QuantityType(Type):
       analysis.errors.append(OutOfBoundsQuantityError(result, self._min, self._max))
       return analysis, Ellipsis
 
-    return analysis, EvaluableConstantValue.new(result, depth=context.eval_depth)
+    return analysis, EvaluableConstantValue(result) if not context.auto_expr else result
 
   @staticmethod
   def check(value: Quantity, unit: Unit, *, target: LocatedValue):
     match value:
       case Quantity() if value.check(unit): # type: ignore
-        return LanguageServiceAnalysis(), LocatedValue.new(value.to(unit), area=target.area)
+        return DiagnosticAnalysis(), LocatedValue.new(value.to(unit), area=target.area)
       case Quantity(dimensionless=True):
-        return LanguageServiceAnalysis(errors=[MissingUnitError(target, unit)]), Ellipsis
+        return DiagnosticAnalysis(errors=[MissingUnitError(target, unit)]), Ellipsis
       case Quantity():
-        return LanguageServiceAnalysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
+        return DiagnosticAnalysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
       case _:
-        return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
+        return DiagnosticAnalysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
 
 class ArbitraryQuantityType:
   def analyze(self, obj, context):
@@ -919,17 +921,17 @@ class EnumType(Type):
 
     if not obj.value in self._variants:
       if self._any_int:
-        int_analysis, int_result = PrimitiveType(int).analyze(obj, context.update(eval_depth=0))
+        int_analysis, int_result = PrimitiveType(int).analyze(obj, context.update(auto_expr=False))
 
         if not isinstance(int_result, EllipsisType) and (int_result.value in self._variants):
-          return (analysis + int_analysis), EvaluableConstantValue.new(int_result, depth=context.eval_depth)
+          return (analysis + int_analysis), EvaluableConstantValue(int_result) if context.auto_expr else int_result
         elif self._all_int:
           analysis += int_analysis
 
       analysis.errors.append(InvalidEnumValueError(obj))
       return analysis, Ellipsis
     else:
-      return analysis, EvaluableConstantValue.new(obj, depth=context.eval_depth)
+      return analysis, EvaluableConstantValue(obj) if context.auto_expr else obj
 
 
 class UnionType(Type):
@@ -1013,7 +1015,8 @@ class KVDictType(Type):
     self._value_type = value_type or key_type
 
   def analyze(self, obj, /, context):
-    analysis, result = PrimitiveType(dict).analyze(obj, context)
+    analysis = LanguageServiceAnalysis()
+    result = analysis.add(PrimitiveType(dict).analyze(obj, context))
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
@@ -1146,10 +1149,17 @@ class DataTypeType(Type):
     else:
       return analysis, EvaluableConstantValue.new(LocatedValue.new(value, obj.area), depth=context.eval_depth)
 
+@dataclass
+class AutoExprContextType(Type):
+  type: Type
+
+  def analyze(self, obj, /, context):
+    return self.type.analyze(obj, context.update(auto_expr=True))
 
 __all__ = [
   'AnyType',
   'Attribute',
+  'AutoExprContextType',
   'BoolType',
   'DataTypeType',
   'DeferredAnalysisType',

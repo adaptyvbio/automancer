@@ -5,8 +5,6 @@ from typing import Literal, TypedDict
 import pr1 as am
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable
-from pr1.input import (Attribute, IntType,
-                                   PotentialExprType)
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
                               PassiveTransformerPreparationResult,
                               TransformerAdoptionResult)
@@ -21,9 +19,9 @@ class Attributes(TypedDict, total=False):
 class Transformer(BasePassiveTransformer):
   priority = 400
   attributes = {
-    'repeat': Attribute(
+    'repeat': am.Attribute(
       description="Repeats a block a fixed number of times.",
-      type=PotentialExprType(IntType(mode='positive_or_null'))
+      type=am.AutoExprContextType(am.IntType(mode='positive_or_null'))
     )
   }
 
@@ -39,7 +37,7 @@ class Transformer(BasePassiveTransformer):
       return am.LanguageServiceAnalysis(), None
 
   def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack, trace):
-    analysis, count = data.eval(EvalContext(adoption_stack), final=False)
+    analysis, count = data.evaluate_provisional(EvalContext(adoption_stack))
 
     if isinstance(count, EllipsisType):
       return analysis, Ellipsis

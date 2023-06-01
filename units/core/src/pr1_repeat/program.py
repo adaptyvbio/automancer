@@ -84,7 +84,7 @@ class Program(BaseProgram):
 
   async def run(self, point: Optional[ProgramPoint], stack):
     while True:
-      analysis, result = self._block.count.eval(EvalContext(stack), final=True)
+      analysis, result = self._block.count.evaluate_final(EvalContext(stack))
 
       if not isinstance(result, EllipsisType):
         break

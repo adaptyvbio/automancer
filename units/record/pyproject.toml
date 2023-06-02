@@ -1,3 +1,25 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=66", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "pr1-record"
+dynamic = ["version"]
+requires-python = ">3.11"
+
+dependencies=[
+  "numpy>=1.23.0",
+  "pandas>=1.5.0"
+]
+
+[project.entry-points."pr1.units"]
+record = "pr1_record"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"pr1_record.client" = ["*"]
+
+[tool.setuptools_scm]
+root = "../.."

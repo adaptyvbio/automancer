@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from io import IOBase
 from pathlib import Path
 from types import EllipsisType
-from typing import Optional
+from typing import Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from pr1.devices.nodes.readable import WatchableNode
 from pr1.devices.nodes.value import NullType
 from pr1.error import Diagnostic, DiagnosticDocumentReference
 from pr1.fiber.eval import EvalContext, EvalStack
-from pr1.input import PathFileRef
+from pr1.fiber.parser import BaseProgram
 from pr1.master.analysis import MasterAnalysis, MasterError, SystemMasterError
 from pr1.reader import LocatedString, LocatedValue
 from pr1.state import StateEvent, UnitStateInstance
@@ -24,7 +24,7 @@ from pr1.util.misc import Exportable
 from pr1.util.pool import Pool
 
 from . import logger, namespace
-from .parser import OutputFormat, RecordState
+from .parser import Block, OutputFormat, ProgramData
 
 
 class MissingNodeError(MasterError):
@@ -48,7 +48,7 @@ class UnknownExtensionError(MasterError):
     super().__init__("Unknown extension", references=[DiagnosticDocumentReference.from_value(target)])
 
 
-EXTENSIONS: dict[str, OutputFormat] = {
+FORMATS_BY_EXTENSION: dict[str, OutputFormat] = {
   '.csv': 'csv',
   # '.h5': 'hdf5',
   # '.hdf5': 'hdf5',
@@ -103,7 +103,7 @@ class RecordStateInstance(UnitStateInstance):
     assert self._data is not None
     self._data.append(tuple(row))
 
-  def prepare(self, state: RecordState):
+  def prepare(self, state):
     analysis = MasterAnalysis()
 
     result = analysis.add(state.data.eval(EvalContext(
@@ -221,9 +221,36 @@ class RecordStateInstance(UnitStateInstance):
     self._notify(StateEvent(RecordStateLocation(rows=len(self._data)), settled=True))
 
 
-class Runner(BaseProcessRunner):
-  StateConsumer = RecordStateInstance
+class Program(BaseProgram):
+  def __init__(self, block: Block, handle):
+    super().__init__(block, handle)
 
-  def __init__(self, chip, *, host):
-    self._chip = chip
-    self._host = host
+    self._block = block
+    self._experiment = handle.master.experiment
+
+  def halt(self):
+    pass
+
+  async def run(self, point, stack):
+    analysis, raw_result = self._block.data.evaluate_final(EvalContext(stack, cwd_path=self._experiment.path))
+
+    if isinstance(raw_result, EllipsisType):
+      raise Exception("Failed to evaluate block")
+
+    data: ProgramData = raw_result.dislocate()
+
+    if data.format:
+      format = data.format
+    else:
+      output_name = data.output.get_name()
+
+      if output_name:
+        format = FORMATS_BY_EXTENSION.get(output_name.suffix.lower())
+      else:
+        format = None
+
+      if not format:
+        raise Exception("Unknown output format")
+
+    # with data.output.open(text=False) as file:
+    #   pass

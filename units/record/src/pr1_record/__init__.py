@@ -10,11 +10,11 @@ metadata = Metadata(
   description="Record",
   icon=MetadataIcon(kind='icon', value="monitoring"),
   title="Record",
-  version="1.0"
+  version="2.0"
 )
 
 client_path = files(__name__ + '.client')
 logger = parent_logger.getChild(namespace)
 
 from .parser import Parser
-from .runner import Runner
+# from .runner import Runner

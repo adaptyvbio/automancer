@@ -22,6 +22,12 @@ class BaseAnalysis():
 
     return other_value
 
+  def add_const(self, other: 'tuple[BaseAnalysis, T]', /) -> tuple['BaseAnalysis', T]:
+    other_analysis, other_value = other
+    self += other_analysis
+
+    return self, other_value
+
   def add_mapping(self, other: dict[T, tuple[Self, S]], /) -> dict[T, S]:
     return { key: self.add(value) for key, value in other.items() }
 
@@ -79,8 +85,10 @@ class DiagnosticAnalysis(BaseAnalysis):
 
   def _add(self, other: 'DiagnosticAnalysis', /):
     super()._add(other)
-    self.errors += other.errors
-    self.warnings += other.warnings
+
+    if isinstance(other, DiagnosticAnalysis):
+      self.errors += other.errors
+      self.warnings += other.warnings
 
 
 __all__ = [

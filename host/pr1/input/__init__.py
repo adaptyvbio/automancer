@@ -89,6 +89,10 @@ class Type(Protocol):
   def analyze(self, obj: LocatedValue, /, context: 'AnalysisContext') -> tuple[LanguageServiceAnalysis, Any | EllipsisType]:
     ...
 
+class DirectedType(Type, Protocol[T]):
+  def analyze(self, obj: PossiblyLocatedValue[T], /, context: 'AnalysisContext') -> tuple[BaseAnalysis, Any | EllipsisType]:
+    ...
+
 CompletionKind = Literal['class', 'constant', 'enum', 'field', 'property']
 
 class Attribute:
@@ -598,8 +602,8 @@ class AnyType(Type):
   def analyze(self, obj, /, context):
     return LanguageServiceAnalysis(), EvaluableConstantValue(obj) if context.auto_expr else obj
 
-class PrimitiveType(Type):
-  def __init__(self, primitive: Any, /):
+class PrimitiveType(Type, Generic[T]):
+  def __init__(self, primitive: type[T], /):
     self._primitive = primitive
 
   def _analyze(self, obj, /, context):
@@ -640,13 +644,13 @@ class PrimitiveType(Type):
       case _:
         return DiagnosticAnalysis(), obj
 
-  def analyze(self, obj, /, context):
+  def analyze(self, obj, /, context) -> tuple[DiagnosticAnalysis, Evaluable[LocatedValue[T]] | LocatedValue[T] | EllipsisType]:
     analysis, result = self._analyze(obj, context)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, (EvaluableConstantValue(result) if context.auto_expr else result)
+    return analysis, (EvaluableConstantValue(result) if context.auto_expr else result) # type: ignore
 
 class TransformType(Type):
   def __init__(self, parent_type: Type, transformer: Callable, /):
@@ -748,10 +752,7 @@ class EvaluableList(Evaluable[PossiblyLocatedValue[list[T_PossiblyLocatedValue]]
     ], list_value.area)) if all(isinstance(item, EvaluableConstantValue) for item in list_value.value) else cls(list_value)
 
 
-class PotentialExprType(Type):
-  def __init__(self, obj_type: Type, /):
-    self._type = obj_type
-
+class PossibleExprType(Type):
   def analyze(self, obj, /, context):
     if isinstance(obj, str) and (not context.symbolic) and (context.envs is not None):
       assert isinstance(obj, LocatedString)
@@ -773,20 +774,22 @@ class PotentialExprType(Type):
         expr_object = PythonExprObject(expr_contents, expr_ast, depth=context.eval_depth, envs=context.envs)
         expr_result = analysis.add(expr_object.analyze())
 
-        if isinstance(expr_result, EllipsisType):
-          return analysis, Ellipsis
+        return analysis, expr_result
 
-        result = analysis.add(DeferredAnalysisType(self._type).analyze(expr_result, context))
-        return analysis, result
+        # if isinstance(expr_result, EllipsisType):
+        #   return analysis, Ellipsis
 
-    return self._type.analyze(obj, context)
+        # result = analysis.add(PostAnalysisType(self._type).analyze(expr_result, context))
+        # return analysis, result
 
-    # analysis, result = self._type.analyze(obj, context)
+    return BaseAnalysis(), EvaluableConstantValue(obj)
+    # return self._type.analyze(obj, context)
 
-    # if isinstance(result, EllipsisType):
-    #   return analysis, Ellipsis
-
-    # return analysis, EvaluableConstantValue(result) if not context.auto_expr else result
+def PotentialExprType(obj_type: Type):
+  return ChainType(
+    PossibleExprType(),
+    obj_type
+  )
 
 class QuantityType(Type):
   def __init__(
@@ -810,7 +813,7 @@ class QuantityType(Type):
       (context.symbolic and (obj.value == None))
     ):
       result = LocatedValue.new(None, area=obj.area)
-      return DiagnosticAnalysis(), EvaluableConstantValue(result) if not context.auto_expr else result
+      return DiagnosticAnalysis(), EvaluableConstantValue(result) if context.auto_expr else result
 
     if isinstance(obj.value, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
@@ -838,7 +841,7 @@ class QuantityType(Type):
       analysis.errors.append(OutOfBoundsQuantityError(result, self._min, self._max))
       return analysis, Ellipsis
 
-    return analysis, EvaluableConstantValue(result) if not context.auto_expr else result
+    return analysis, EvaluableConstantValue(result) if context.auto_expr else result
 
   @staticmethod
   def check(value: Quantity, unit: Unit, *, target: LocatedValue):
@@ -1087,18 +1090,13 @@ class EvaluableContainerType(Type):
   def analyze(self, obj, /, context):
     return self._type.analyze(obj, context.update(eval_depth=self._depth))
 
-class DeferredAnalysisType(Type):
+class PostAnalysisType(Type):
   def __init__(self, obj_type: Type, /):
     self._type = obj_type
 
   def analyze(self, obj: Evaluable, /, context):
     if isinstance(obj, EvaluableConstantValue):
-      analysis, result = self._type.analyze(obj.inner_value, context)
-
-      if isinstance(result, EllipsisType):
-        return analysis, Ellipsis
-
-      return analysis, EvaluableConstantValue(result)
+      return self._type.analyze(obj.inner_value, context.update(auto_expr=True))
 
     return DiagnosticAnalysis(), EvaluablePostAnalysis(obj, self._type)
 
@@ -1110,12 +1108,30 @@ class EvaluablePostAnalysis(Evaluable[T_PossiblyLocatedValue], Generic[T_Possibl
   def evaluate(self, context):
     from ..fiber.parser import AnalysisContext
 
-    analysis, result = self._obj.evaluate(context)
+    analysis, eval_result = self._obj.evaluate(context)
 
-    if isinstance(result, EllipsisType):
+    if isinstance(eval_result, EllipsisType):
       return analysis, Ellipsis
 
-    return DeferredAnalysisType(self._type).analyze(result, AnalysisContext(symbolic=True))
+    if isinstance(eval_result, EvaluableConstantValue):
+      analysis, analysis_result = self._type.analyze(eval_result.inner_value, AnalysisContext(auto_expr=True, symbolic=True))
+
+      if isinstance(analysis_result, EllipsisType):
+        return analysis, Ellipsis
+
+      final_result = analysis.add(analysis_result.evaluate(context))
+      return analysis, final_result
+    else:
+      return analysis, EvaluablePostAnalysis(eval_result, self._type)
+
+    # return PostAnalysisType(self._type).analyze(result, AnalysisContext(symbolic=True))
+
+    # if isinstance(validation_result, EllipsisType):
+    #   return analysis, Ellipsis
+
+    # return analysis, EvaluableConstantValue(validation_result)
+
+  # PostAnalysis(PossiblyDeferred(...))
 
   def export(self):
     return self._obj.export()
@@ -1161,13 +1177,65 @@ class AutoExprContextType(Type):
   def analyze(self, obj, /, context):
     return self.type.analyze(obj, context.update(auto_expr=True))
 
+
+class ChainType(Type):
+  def __init__(self, first: Type, *others: Type):
+    self._types = [first, *others]
+
+  def analyze(self, obj, /, context):
+    analysis = LanguageServiceAnalysis()
+    current_obj = obj
+
+    for type_index, current_type in enumerate(self._types):
+      result = analysis.add(current_type.analyze(current_obj, context))
+
+      if isinstance(result, EllipsisType):
+        return analysis, Ellipsis
+
+      if isinstance(result, EvaluableConstantValue):
+        current_obj = result.inner_value
+      else:
+        other_types = self._types[type_index + 1:]
+        return analysis, EvaluableChain(result, other_types) if other_types else result
+
+    return analysis, EvaluableConstantValue(current_obj)
+
+@dataclass
+class EvaluableChain(Evaluable):
+  _obj: Evaluable
+  _types: list[Type]
+
+  def evaluate(self, context):
+    from ..fiber.parser import AnalysisContext
+
+    analysis, result = self._obj.evaluate(context)
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    if isinstance(result, EvaluableConstantValue):
+      analysis, final_result = analysis.add_const(ChainType(*self._types).analyze(result.inner_value, AnalysisContext(auto_expr=True)))
+
+      if isinstance(final_result, EllipsisType):
+        return analysis, Ellipsis
+
+      x = analysis.add(final_result.evaluate(context))
+      return analysis, x
+
+    return analysis, EvaluableChain(result, self._types)
+
+  def export(self):
+    return self._obj.export()
+
+
+
 __all__ = [
   'AnyType',
   'Attribute',
   'AutoExprContextType',
   'BoolType',
   'DataTypeType',
-  'DeferredAnalysisType',
+  'PostAnalysisType',
   'DictType',
   'EllipsisType',
   'EnumType',

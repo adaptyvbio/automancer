@@ -14,6 +14,7 @@ from .host import Host
 from .input import *
 from .input.file import *
 from .langservice import *
+from .staticanalysis.expr import *
 from .ureg import *
 from .util.decorators import *
 

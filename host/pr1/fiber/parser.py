@@ -272,11 +272,16 @@ class BasePassiveTransformer(ABC):
     self.priority = priority
 
   def prepare(self, data: Attrs, /, envs: EvalEnvs) -> tuple[LanguageServiceAnalysis, Optional[PassiveTransformerPreparationResult] | EllipsisType]:
-    return LanguageServiceAnalysis(), PassiveTransformerPreparationResult(data)
+    return LanguageServiceAnalysis(), PassiveTransformerPreparationResult(data) if data else None
 
-  @abstractmethod
   def adopt(self, data: Any, /, adoption_stack: EvalStack, trace: Trace) -> tuple[LanguageServiceAnalysis, Optional[TransformerAdoptionResult] | EllipsisType]:
-    ...
+    analysis = LanguageServiceAnalysis()
+    result = analysis.add_mapping({ attr_name: attr_value.evaluate_provisional(EvalContext(adoption_stack)) for attr_name, attr_value in data.items() })
+
+    if any(isinstance(attr_result, EllipsisType) for attr_result in result.values()):
+      return analysis, Ellipsis
+
+    return analysis, TransformerAdoptionResult(result)
 
   @abstractmethod
   def execute(self, data: Any, /, block: BaseBlock) -> tuple[LanguageServiceAnalysis, BaseBlock | EllipsisType]:
@@ -310,7 +315,7 @@ class ProcessTransformer(BaseLeadTransformer):
     assert attributes and (len(attributes) == 1)
 
     for attr in attributes.values():
-      attr._type = lang.PotentialExprType(lang.AutoExprContextType(attr._type))
+      attr._type = lang.AutoExprContextType(lang.PotentialExprType(attr._type))
 
     super().__init__(attributes)
 

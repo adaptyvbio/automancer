@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
@@ -7,11 +8,12 @@ from pathlib import Path
 from types import EllipsisType
 from typing import Optional
 
+from ..analysis import BaseAnalysis, DiagnosticAnalysis
+
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..fiber.expr import Evaluable, EvaluableConstantValue
-from ..langservice import LanguageServiceAnalysis
-from ..reader import LocatedValue, LocatedValueContainer
-from . import PrimitiveType, Type, UnionType
+from ..reader import LocatedValue, LocatedValueContainer, PossiblyLocatedValue
+from . import ChainType, DirectedType, PrimitiveType, Type, UnionType
 
 
 # Refs
@@ -137,7 +139,7 @@ class PathOutsideDirError(Diagnostic):
     super().__init__(f"Path '{str(delta)}' is outside target directory", references=[DiagnosticDocumentReference.from_value(target)])
 
 
-# Types
+# Atomic types
 
 class FileRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
@@ -164,6 +166,51 @@ class FileRefType(Type):
 
     return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
 
+class PathType(Type):
+  def __init__(self, *, resolve_cwd: bool = True):
+    self._resolve_cwd = resolve_cwd
+    self._type = UnionType(
+      PrimitiveType(PathLike),
+      PrimitiveType(str)
+    )
+
+  def analyze(self, obj, /, context):
+    analysis, result = self._type.analyze(obj, context.update(auto_expr=False))
+
+    if isinstance(result, EllipsisType):
+      return analysis, Ellipsis
+
+    result = LocatedValueContainer(Path(result.value), result.area)
+    return analysis, EvaluableRelativePath(result)
+
+@dataclass
+class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
+  path: LocatedValue[Path]
+  ensure_inside_cwd: bool = True
+
+  def evaluate(self, context):
+    # tmp
+    # return LanguageServiceAnalysis(), EvaluableConstantValue(LocatedValue(Path('/root') / self.path.value, self.path.area))
+
+    if context.cwd_path:
+      path = (context.cwd_path / self.path.value).resolve()
+      located_path = LocatedValueContainer(path, self.path.area)
+
+      if self.ensure_inside_cwd and (not path.is_relative_to(context.cwd_path)):
+        return DiagnosticAnalysis(errors=[PathOutsideDirError(located_path, context.cwd_path)]), Ellipsis
+
+      return BaseAnalysis(), EvaluableConstantValue(located_path)
+
+    return BaseAnalysis(), self
+
+
+class PathFileRefWrapperType(DirectedType[Path]):
+  def analyze(self, obj: PossiblyLocatedValue[Path], /, context):
+    return BaseAnalysis(), EvaluableConstantValue(LocatedValue.new(PathFileRef(Path(obj.value)), obj.area))
+
+
+# Composite types
+
 class ReadableDataRefType(Type):
   def __init__(self, *, text: Optional[bool] = None):
     self._type = UnionType(
@@ -171,7 +218,7 @@ class ReadableDataRefType(Type):
       PrimitiveType(bytes)
     )
 
-  def analyze(self, obj, context):
+  def analyze(self, obj, /, context):
     analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
 
     if isinstance(result, EllipsisType):
@@ -184,64 +231,31 @@ class ReadableDataRefType(Type):
 
     return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
 
-class PathType(Type):
-  def __init__(self, *, resolve_cwd: bool = True):
-    self._resolve_cwd = resolve_cwd
-    self._type = UnionType(
-      PrimitiveType(PathLike),
-      PrimitiveType(str)
-    )
+def WritableDataRefType(text: Optional[bool] = None):
+  return ChainType(PathType(), PathFileRefWrapperType())
 
-  def analyze(self, obj, /, context):
-    analysis, result = self._type.analyze(obj, context)
+# PostAnalysisType(WritableDataRefType)
 
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
+# class WritableDataRefType(Type):
+#   def __init__(self, *, text: Optional[bool] = None):
+#     self._type = PathType()
 
-    result = LocatedValueContainer(Path(result.value), result.area)
+#     # self._type = UnionType(
+#     #   FileRefType(text=text),
+#     #   Binding(...)
+#     # )
 
-    if context.eval_context:
-      eval_analysis, eval_result = EvaluableRelativePath(result, depth=(context.eval_depth + 1)).evaluate(context.eval_context)
-      return (analysis + eval_analysis), eval_result
-    else:
-      return analysis, EvaluableRelativePath.new(result, depth=context.eval_depth)
+#   def analyze(self, obj, /, context):
+#     analysis, result = self._type.analyze(obj, context)
+#     print(">", result)
 
-class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
-  def __init__(self, value: LocatedValue[Path], /, *, depth: int):
-    self._depth = depth
-    self._ensure_inside_cwd = True
-    self._path = value
+#     if isinstance(result, EllipsisType):
+#       return analysis, Ellipsis
 
-  def evaluate(self, context):
-    if context.cwd_path:
-      path = (context.cwd_path / self._path.value).resolve()
+#     assert isinstance(result, LocatedValue)
 
-      if self._ensure_inside_cwd and (not path.is_relative_to(context.cwd_path)):
-        return LanguageServiceAnalysis(errors=[PathOutsideDirError(LocatedValueContainer(path, self._path.area), context.cwd_path)]), Ellipsis
-
-      return LanguageServiceAnalysis(), LocatedValueContainer(path, self._path.area)
-
-    print("Drop")
-    return LanguageServiceAnalysis(), self._path
-
-  @classmethod
-  def new(cls, value: LocatedValue[Path], /, *, depth: int):
-    return cls(value, depth=depth) if depth > 0 else value
-
-class WritableDataRefType(Type):
-  def __init__(self, *, text: Optional[bool] = None):
-    self._type = UnionType(
-      FileRefType(text=text),
-      PrimitiveType(bytes)
-    )
-
-  def analyze(self, obj, context):
-    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
-
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
-
-    return analysis, EvaluableConstantValue.new(LocatedValueContainer(result, obj.area), depth=context.eval_depth)
+#     located_result = LocatedValueContainer(PathFileRef(Path(result.value)), obj.area)
+#     return analysis, EvaluableConstantValue(located_result) if context.auto_expr else located_result
 
 
 __all__ = [

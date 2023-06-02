@@ -32,7 +32,7 @@ class ProcessData(Protocol):
   credentials: Optional[AWSCredentials]
   multipart: bool
   region: str
-  source: am.FileRef
+  source: am.DataRef
   target: str
 
 

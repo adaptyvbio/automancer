@@ -1,29 +1,28 @@
 import builtins
 import copy
-from dataclasses import dataclass
 import functools
 import re
+from dataclasses import dataclass
 from tokenize import TokenError
 from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
-                    Protocol, TypeVar, cast, reveal_type)
+                    Protocol, TypeVar, cast)
 
 import numpy as np
 import pint
 from pint import Quantity, Unit
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
-
+from ..error import Diagnostic, DiagnosticDocumentReference
+from ..fiber.expr import (Evaluable, EvaluableConstantValue, PythonExpr,
+                          PythonExprKind, PythonExprObject)
 from ..langservice import *
-from ..error import Diagnostic, Diagnostic, DiagnosticDocumentReference, Trace
-from ..reader import (LocatedDict, LocatedError, LocatedList, LocatedString,
-                      LocatedValue, LocatedValueContainer, LocationArea,
-                      LocationRange, PossiblyLocatedValue, ReliableLocatedDict, ReliableLocatedList, UnlocatedValue)
+from ..reader import (LocatedDict, LocatedString, LocatedValue,
+                      PossiblyLocatedValue, ReliableLocatedDict,
+                      UnlocatedValue)
 from ..ureg import ureg
-from ..util.misc import Exportable, create_datainstance
+from ..util.misc import create_datainstance
 from ..util.parser import is_identifier
-from ..fiber.expr import (Evaluable, PythonExpr, PythonExprKind, PythonExprObject,
-                   EvaluableConstantValue)
 
 if TYPE_CHECKING:
   from ..fiber.parser import AnalysisContext

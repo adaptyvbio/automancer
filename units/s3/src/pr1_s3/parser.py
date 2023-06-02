@@ -41,7 +41,7 @@ class Parser(BaseParser):
           ),
           'source': am.Attribute(
             am.PotentialExprType(
-              am.ReadableDataRefType(text=False)
+              am.ReadableDataRefType()
             ),
             description="The source of the data to upload. This can be a path as a literal string, a `Path` instance, a file object or a `bytes` object."
           ),

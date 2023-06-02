@@ -1,24 +1,26 @@
-from dataclasses import dataclass
 import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from io import BytesIO, FileIO, IOBase, TextIOBase
+from dataclasses import dataclass
+from io import BytesIO, IOBase, TextIOBase
 from os import PathLike
-from pathlib import Path
+from pathlib import Path, PurePath
 from types import EllipsisType
-from typing import Optional
+from typing import IO, Literal, Optional
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
-
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..fiber.expr import Evaluable, EvaluableConstantValue
 from ..reader import LocatedValue, LocatedValueContainer, PossiblyLocatedValue
 from . import ChainType, DirectedType, PrimitiveType, Type, UnionType
 
 
+FileOpenMode = Literal['read', 'write']
+
+
 # Refs
 
-class FileRef(ABC):
+class DataRef(ABC):
   """
   An abstract reference to a file-like object.
   """
@@ -28,27 +30,27 @@ class FileRef(ABC):
     ...
 
   @abstractmethod
-  def open_file(self, mode: str) -> IOBase:
+  def open_file(self, text: bool) -> IOBase:
     ...
 
   @contextmanager
-  def open(self, mode: str):
-    file = self.open_file(mode)
+  def open(self, text: bool):
+    file = self.open_file(text)
 
     try:
       yield file
     finally:
       self.close_file()
 
-  def get_name(self) -> str:
-    raise NotImplementedError
+  def get_name(self) -> Optional[PurePath]:
+    return None
 
   @abstractmethod
   def get_size(self) -> int:
     ...
 
 
-class BytesIOFileRef(FileRef):
+class BytesDataRef(DataRef):
   """
   A reference to a `bytes` object.
   """
@@ -66,7 +68,7 @@ class BytesIOFileRef(FileRef):
     return len(self._data)
 
 
-class IOBaseFileRef(FileRef):
+class FileDataRef(DataRef):
   """
   A reference to an `io.IOBase` object.
   """
@@ -77,9 +79,12 @@ class IOBaseFileRef(FileRef):
   def close_file(self):
     pass
 
-  def open_file(self, mode: str):
-    if isinstance(self._file, FileIO):
-      assert self._file.mode == mode
+  def open_file(self, text):
+    if text and not isinstance(self._file, TextIOBase):
+      raise IOError("File is not open in text mode")
+
+    if (not text) and isinstance(self._file, TextIOBase):
+      raise IOError("File is not open in binary mode")
 
     return self._file
 
@@ -87,13 +92,14 @@ class IOBaseFileRef(FileRef):
     return os.fstat(self._file.fileno()).st_size
 
 
-class PathFileRef(FileRef):
+class PathDataRef(DataRef):
   """
   A reference to a file on the filesystem.
   """
 
-  def __init__(self, path: Path, /):
-    self._file: Optional[IOBase] = None
+  def __init__(self, path: Path, /, mode: FileOpenMode):
+    self._file: Optional[IO] = None
+    self._mode = mode
     self._path = path
 
   def path(self):
@@ -103,16 +109,19 @@ class PathFileRef(FileRef):
     assert self._file
     self._file.close()
 
-  def open_file(self, mode: str):
-    file = self._path.open(mode)
+  def open_file(self, text):
+    if self._mode == 'write':
+      self._path.parent.mkdir(exist_ok=True, parents=True)
 
-    assert isinstance(file, IOBase)
+    file = self._path.open({ 'read': 'r', 'write': 'w' }[self._mode] + (str() if text else 'b'))
+
+    # assert isinstance(file, IOBase)
     self._file = file
 
     return file
 
   def get_name(self):
-    return self._path.name
+    return PurePath(self._path.name)
 
   def get_size(self):
     if not self._file:
@@ -141,30 +150,28 @@ class PathOutsideDirError(Diagnostic):
 
 # Atomic types
 
-class FileRefType(Type):
-  def __init__(self, *, text: Optional[bool] = None):
-    self._text = text
-    self._type = UnionType(
-      PathType(),
-      PrimitiveType(IOBase)
-    )
+@dataclass
+class FileDataRefType(Type):
+  mode: FileOpenMode
 
   def analyze(self, obj, /, context):
-    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
+    analysis, result = PrimitiveType(IOBase).analyze(obj, context.update(auto_expr=False))
+    assert isinstance(result, LocatedValue)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
-    if (self._text is not None) and isinstance(result.value, IOBase) and (isinstance(result.value, TextIOBase) != self._text):
-      analysis.errors.append(InvalidFileObject(result))
-      return analysis, Ellipsis
+    match self.mode:
+      case 'read':
+        if not result.value.readable():
+          analysis.errors.append(InvalidFileObject(result))
+          return analysis, Ellipsis
+      case 'write':
+        if not result.value.writable():
+          analysis.errors.append(InvalidFileObject(result))
+          return analysis, Ellipsis
 
-    if isinstance(result.value, Path):
-      ref = PathFileRef(result.value)
-    else:
-      ref = IOBaseFileRef(result.value)
-
-    return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
+    return analysis, EvaluableConstantValue(result) if context.auto_expr else result
 
 class PathType(Type):
   def __init__(self, *, resolve_cwd: bool = True):
@@ -204,68 +211,38 @@ class EvaluableRelativePath(Evaluable[LocatedValue[Path]]):
     return BaseAnalysis(), self
 
 
-class PathFileRefWrapperType(DirectedType[Path]):
+@dataclass
+class PathDataRefWrapperType(DirectedType[Path]):
+  mode: FileOpenMode
+
   def analyze(self, obj: PossiblyLocatedValue[Path], /, context):
-    return BaseAnalysis(), EvaluableConstantValue(LocatedValue.new(PathFileRef(Path(obj.value)), obj.area))
+    return BaseAnalysis(), EvaluableConstantValue(LocatedValue.new(PathDataRef(Path(obj.value), mode=self.mode), obj.area))
 
 
 # Composite types
 
-class ReadableDataRefType(Type):
-  def __init__(self, *, text: Optional[bool] = None):
-    self._type = UnionType(
-      FileRefType(text=text),
-      PrimitiveType(bytes)
-    )
+def ReadableDataRefType():
+  return UnionType(
+    ChainType(PathType(), PathDataRefWrapperType(mode='read')),
+    FileDataRefType(mode='read')
+  )
 
-  def analyze(self, obj, /, context):
-    analysis, result = self._type.analyze(obj, context.update(eval_depth=0))
-
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
-
-    if isinstance(result.value, bytes):
-      ref = BytesIOFileRef(result.value)
-    else:
-      ref = result.value
-
-    return analysis, EvaluableConstantValue.new(LocatedValueContainer(ref, obj.area), depth=context.eval_depth)
-
-def WritableDataRefType(text: Optional[bool] = None):
-  return ChainType(PathType(), PathFileRefWrapperType())
-
-# PostAnalysisType(WritableDataRefType)
-
-# class WritableDataRefType(Type):
-#   def __init__(self, *, text: Optional[bool] = None):
-#     self._type = PathType()
-
-#     # self._type = UnionType(
-#     #   FileRefType(text=text),
-#     #   Binding(...)
-#     # )
-
-#   def analyze(self, obj, /, context):
-#     analysis, result = self._type.analyze(obj, context)
-#     print(">", result)
-
-#     if isinstance(result, EllipsisType):
-#       return analysis, Ellipsis
-
-#     assert isinstance(result, LocatedValue)
-
-#     located_result = LocatedValueContainer(PathFileRef(Path(result.value)), obj.area)
-#     return analysis, EvaluableConstantValue(located_result) if context.auto_expr else located_result
+def WritableDataRefType():
+  return UnionType(
+    ChainType(PathType(), PathDataRefWrapperType(mode='write')),
+    FileDataRefType(mode='write')
+  )
 
 
 __all__ = [
-  'BytesIOFileRef',
+  'BytesDataRef',
+  'DataRef',
   'EvaluableRelativePath',
-  'FileRef',
-  'FileRefType',
+  'FileDataRef',
+  'FileDataRefType',
   'InvalidFileObject',
-  'IOBaseFileRef',
-  'PathFileRef',
+  'PathDataRef',
+  'PathDataRefWrapperType',
   'PathOutsideDirError',
   'PathType',
   'ReadableDataRefType',

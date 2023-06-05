@@ -1,7 +1,7 @@
-from pint import UnitRegistry
+from quantops import UnitRegistry
 
 
-ureg = UnitRegistry(autoconvert_offset_to_baseunit=True)
+ureg = UnitRegistry.load_default()
 
 
 __all__ = [

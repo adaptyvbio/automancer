@@ -149,8 +149,6 @@ class Host:
 
     logger.info(f"Loaded {len(self.manager.units)} units")
 
-    self.ureg = ureg
-
     analysis = DiagnosticAnalysis()
 
     for namespace in self.manager.units.keys():

@@ -9,7 +9,7 @@ from enum import Enum
 from types import EllipsisType, NoneType
 from typing import Any, Generic, Literal, TypeVar, cast, overload
 
-from pint import Quantity
+from quantops import Quantity
 
 from ..analysis import DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticDocumentReference
@@ -84,9 +84,7 @@ def export_value(value: Any, /):
     case Quantity():
       return {
         "type": "quantity",
-        "dimensionality": dict(value.units.dimensionality), # type: ignore
-        "formatted": f"{value:~#H}",
-        "magnitude": (value.to_base_units().magnitude * 1000) # type: ignore
+        "magnitude": value.magnitude
       }
     case _:
       return {
@@ -200,7 +198,7 @@ class Evaluable(Exportable, ABC, Generic[T]):
     assert isinstance(result, EvaluableConstantValue)
     return analysis, result.inner_value
 
-  def evaluate_provisional(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
+  def evaluate_provisional(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     return self.evaluate(context) # type: ignore
 
   # @deprecated

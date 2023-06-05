@@ -11,7 +11,7 @@ from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, export_value
-from pr1.input import (AnyType, Attribute, BoolType, EnumType,
+from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, EnumType,
                                    PotentialExprType, PrimitiveType,
                                    QuantityType)
 from pr1.fiber.master2 import ProgramHandle
@@ -168,10 +168,10 @@ class PublisherTransformer(BasePassiveTransformer):
     return {
       key: Attribute(
         description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
-        documentation=([f"Unit: {node.unit:~P}"] if isinstance(node, NumericNode) and node.unit else None),
+        documentation=([f"Unit: {node.context!r}"] if isinstance(node, NumericNode) and node.unit else None),
         label=node.label,
         optional=True,
-        type=PotentialExprType(get_type(node))
+        type=AutoExprContextType(get_type(node))
       ) for key, (node, path) in self._parser.node_map.items()
     } | {
       'stable': Attribute(
@@ -191,7 +191,7 @@ class PublisherTransformer(BasePassiveTransformer):
         continue
 
       node, path = self._parser.node_map[key]
-      value = analysis.add(value.eval(EvalContext(adoption_stack), final=False))
+      value = analysis.add(value.evaluate_provisional(EvalContext(adoption_stack)))
 
       if not isinstance(value, EllipsisType):
         values[path] = value

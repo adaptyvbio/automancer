@@ -1,16 +1,14 @@
-import { DynamicValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue } from 'pr1';
+import { DynamicValue, EvaluableValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue, formatEvaluable, ureg } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
+import { createElement } from 'react';
 
 
 export interface ProcessData {
-  duration: DynamicValue;
+  duration: EvaluableValue<number | null>;
 }
 
 export interface ProcessLocation {
-  duration: {
-    quantity: DynamicValue;
-    value: number;
-  } | null;
+  duration: number | null;
   paused: boolean;
   progress: number;
   startDate: number;
@@ -51,13 +49,21 @@ export default {
         );
       },
       createFeatures(data, location) {
+        let formatInnerValue = (value: number | null) =>
+          (value !== null)
+            ? ureg.formatQuantityAsReact(value, 1, 'time', { createElement: createElement })
+            : 'Forever';
+
         return [{
           icon: 'hourglass_empty',
-          label: (
-            location
-              ? (location.duration && formatDynamicValue(location.duration.quantity))
-              : (!((data.duration.type === 'string') && (data.duration.value === 'forever')) ? formatDynamicValue(data.duration) : null)
-          ) ?? 'Forever'
+          label: location
+            ? formatInnerValue(location.duration)
+            : formatEvaluable(data.duration, formatInnerValue)
+          // label: (
+          //   location
+          //     ? (location.duration && formatDynamicValue(location.duration.quantity))
+          //     : (!((data.duration.type === 'string') && (data.duration.value === 'forever')) ? formatDynamicValue(data.duration) : null)
+          // ) ?? 'Forever'
         }];
       },
       getLabel(data) {

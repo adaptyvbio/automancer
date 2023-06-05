@@ -2,12 +2,11 @@ import asyncio
 from asyncio import Task
 from typing import Callable, Optional
 
-from okolab import OkolabDevice, OkolabDeviceConnectionError
-from pint import Quantity
-
 import pr1 as am
+from okolab import OkolabDevice, OkolabDeviceConnectionError
 from pr1.util.asyncio import shield, try_all, wait_all
 from pr1.util.pool import Pool
+from quantops import Quantity
 
 from . import logger, namespace
 

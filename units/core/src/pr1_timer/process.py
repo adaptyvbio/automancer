@@ -2,16 +2,15 @@ import asyncio
 import time
 from asyncio import Event, Future, Task
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
-
-from pint import Quantity
+from typing import Any, Callable, Literal, Optional, TypeVar
 
 import pr1 as am
-from pr1.fiber.expr import export_value
-from pr1.ureg import ureg
+from pr1.fiber.expr import (Evaluable, EvaluableConstantValue,
+                            EvaluablePythonExpr, export_value)
+from pr1.reader import PossiblyLocatedValue
+from quantops import Quantity
 
 from . import namespace
-
 
 ProcessData = Quantity | Literal['forever']
 
@@ -25,7 +24,7 @@ class ProcessLocation:
   def export(self):
     return {
       "duration": {
-        "quantity": export_value(self.duration * ureg.second),
+        "quantity": export_value(self.duration * am.ureg.second),
         "value": (self.duration * 1000),
       } if self.duration is not None else None,
       "paused": self.paused,
@@ -106,7 +105,7 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
         event.set()
 
   async def run(self, point: Optional[ProcessPoint], stack):
-    total_duration = self._data.m_as('sec') if not isinstance(self._data, str) else None
+    total_duration = (self._data / am.ureg.sec).magnitude if not isinstance(self._data, str) else None
 
     if total_duration is not None:
       self._jump_progress = (point.progress if point else 0.0)
@@ -200,7 +199,25 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
     return ProcessPoint(progress=data["progress"])
 
   @staticmethod
-  def export_data(data, /):
+  def export_data(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
     return {
-      "duration": export_value(data)
+      "duration": export_evaluable(data, lambda value: (value / am.ureg.second).magnitude if not isinstance(value, str) else None)
     }
+
+
+T = TypeVar('T')
+
+def export_evaluable(target: Evaluable[PossiblyLocatedValue[T]], /, export_inner_value: Callable[[T], Any]):
+  match target:
+    case EvaluableConstantValue(inner_value):
+      return {
+        "type": "constant",
+        "innerValue": export_inner_value(inner_value.value)
+      }
+    case EvaluablePythonExpr():
+      return {
+        "type": "expression",
+        "expression": target.contents
+      }
+    case _:
+      raise ValueError

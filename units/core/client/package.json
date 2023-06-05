@@ -21,6 +21,7 @@
     "postcss-modules": "^6.0.0",
     "pr1": "file:../../../client",
     "pr1-shared": "file:../../../app/shared",
+    "quantops": "file:../../../../../Developer/unit-management/javascript",
     "typescript": "~4.9.0"
   }
 }

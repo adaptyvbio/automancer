@@ -3,11 +3,10 @@ from pathlib import Path
 from types import EllipsisType
 from typing import Protocol, final
 
-from pint import Quantity
-
 import pr1 as am
 from pr1.master.analysis import MasterAnalysis, MasterError
 from pr1.util.misc import Exportable
+from quantops import Quantity
 
 from . import namespace
 from .executor import Executor
@@ -57,12 +56,12 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
 
     await self._executor.capture(
       chip_count=self._runner._chip_count,
-      exposure=self._data.exposure.m_as('millisecond'),
+      exposure=(self._data.exposure / am.ureg.millisecond).magnitude,
       objective=self._data.objective,
       optconf=self._data.optconf,
       output_path=self._data.save,
       points=self._runner._points,
-      z_offset=self._data.z_offset.m_as('micrometer')
+      z_offset=(self._data.z_offset / am.ureg.micrometer).magnitude
     )
 
     yield am.ProcessTerminationEvent()

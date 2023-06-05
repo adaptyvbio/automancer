@@ -8,9 +8,9 @@ from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
                     Protocol, TypeVar, cast)
 
+from quantops import Dimensionality, Quantity, Unit
 import numpy as np
-import pint
-from pint import Quantity, Unit
+import quantops
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticDocumentReference
@@ -552,24 +552,24 @@ class InvalidPrimitiveError(Diagnostic):
     )
 
 class MissingUnitError(Diagnostic):
-  def __init__(self, target: LocatedValue, /, unit: Unit):
+  def __init__(self, target: LocatedValue, /):
     super().__init__(
-      f"Missing unit, expected {unit:~P}",
+      f"Missing unit",
       references=[DiagnosticDocumentReference.from_value(target)]
     )
 
 class InvalidUnitError(Diagnostic):
-  def __init__(self, target: LocatedValue, /, unit: Unit):
+  def __init__(self, target: LocatedValue, /):
     super().__init__(
-      f"Invalid unit, expected {unit:P}",
+      f"Invalid unit",
       references=[DiagnosticDocumentReference.from_value(target)]
     )
 
-class UnknownUnitError(Diagnostic):
-  def __init__(self, target: LocatedValue, /):
+class QuantopsParserError(Diagnostic):
+  def __init__(self, exception: quantops.ParserError, /):
     super().__init__(
-      "Unknown unit",
-      references=[DiagnosticDocumentReference.from_value(target)]
+      exception.message,
+      references=[DiagnosticDocumentReference.from_area(exception.area)]
     )
 
 class InvalidExpr(Diagnostic):
@@ -802,35 +802,31 @@ class QuantityType(Type):
   ):
     self._allow_inverse = allow_inverse # TODO: Add implementation
     self._allow_nil = allow_nil
+    self._dimensionality = ureg.parse_unit(unit or "dimensionless").dimensionality
     self._max = max
     self._min = min
-    self._unit: Unit = ureg.Unit(unit)
 
   def analyze(self, obj, /, context):
     if self._allow_nil and (
       ((not context.symbolic) and (obj == "nil")) or
       (context.symbolic and (obj.value == None))
     ):
-      result = LocatedValue.new(None, area=obj.area)
+      result = LocatedValue.new(None, obj.area)
       return DiagnosticAnalysis(), EvaluableConstantValue(result) if context.auto_expr else result
 
     if isinstance(obj.value, str): # and (not context.symbolic):
       assert isinstance(obj, LocatedString)
 
       try:
-        value = ureg.Quantity(obj.value)
-      except pint.errors.UndefinedUnitError:
-        return DiagnosticAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
-      except (pint.PintError, TokenError):
-        return DiagnosticAnalysis(errors=[InvalidPrimitiveError(obj, Quantity)]), Ellipsis
-      except Exception:
-        return DiagnosticAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
+        value = ureg.parse_quantity(obj)
+      except quantops.ParserError as e:
+        return DiagnosticAnalysis(errors=[QuantopsParserError(e)]), Ellipsis
     elif isinstance(obj.value, (float, int)):
-      value = ureg.Quantity(obj.value)
+      value = obj.value * ureg.dimensionless
     else:
       value = obj.value
 
-    analysis, result = self.check(value, self._unit, target=obj)
+    analysis, result = self.check(value, self._dimensionality, target=obj)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
@@ -843,27 +839,36 @@ class QuantityType(Type):
     return analysis, EvaluableConstantValue(result) if context.auto_expr else result
 
   @staticmethod
-  def check(value: Quantity, unit: Unit, *, target: LocatedValue):
+  def check(value: Quantity, dimensionality: Dimensionality, *, target: LocatedValue):
     match value:
-      case Quantity() if value.check(unit): # type: ignore
-        return DiagnosticAnalysis(), LocatedValue.new(value.to(unit), area=target.area)
-      case Quantity(dimensionless=True):
-        return DiagnosticAnalysis(errors=[MissingUnitError(target, unit)]), Ellipsis
+      case Quantity() if (value.dimensionality == dimensionality):
+        return DiagnosticAnalysis(), LocatedValue.new(value, target.area)
+      case Quantity() if value.dimensionless:
+        return DiagnosticAnalysis(errors=[MissingUnitError(target)]), Ellipsis
       case Quantity():
-        return DiagnosticAnalysis(errors=[InvalidUnitError(target, unit)]), Ellipsis
+        return DiagnosticAnalysis(errors=[InvalidUnitError(target)]), Ellipsis
       case _:
         return DiagnosticAnalysis(errors=[InvalidPrimitiveError(target, Quantity)]), Ellipsis
 
-class ArbitraryQuantityType:
-  def analyze(self, obj, context):
-    try:
-      quantity = ureg.Quantity(obj.value)
-    except pint.errors.UndefinedUnitError:
-      return LanguageServiceAnalysis(errors=[UnknownUnitError(obj)]), Ellipsis
-    except pint.PintError:
-      return LanguageServiceAnalysis(errors=[InvalidPrimitiveError(obj, pint.Quantity)]), Ellipsis
+class ArbitraryQuantityType(Type):
+  def __init__(self, *, allow_unit: bool = False):
+    self._allow_unit = allow_unit
 
-    return LanguageServiceAnalysis(), LocatedValue.new(quantity, area=obj.area)
+  def analyze(self, obj, /, context):
+    try:
+      quantity = ureg.parse_quantity(obj.value)
+    except quantops.ParserError as e:
+      if self._allow_unit:
+        try:
+          unit_value = ureg.parse_unit(obj.value)
+        except quantops.ParserError as e:
+          return DiagnosticAnalysis(errors=[QuantopsParserError(e)]), Ellipsis
+        else:
+          return DiagnosticAnalysis(), LocatedValue.new(1.0 * unit_value, obj.area)
+
+      return DiagnosticAnalysis(errors=[QuantopsParserError(e)]), Ellipsis
+    else:
+      return DiagnosticAnalysis(), LocatedValue.new(quantity, obj.area)
 
 
 class BoolType(PrimitiveType):

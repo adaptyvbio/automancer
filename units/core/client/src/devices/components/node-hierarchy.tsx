@@ -1,12 +1,11 @@
 import { Map as ImMap, Set as ImSet, List } from 'immutable';
-import { ShadowScrollable, util, Icon } from 'pr1';
-import { Fragment, ReactNode, useState } from 'react';
+import { ShadowScrollable, util, Icon, ureg } from 'pr1';
+import { ReactNode, createElement, useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
 import { BaseNode, CollectionNode, Context, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
 import { isCollectionNode, isValueNode, iterNodes } from '../util';
-import { formatQuantity } from '../format';
 
 
 export interface NodeHierarchyProps {
@@ -174,9 +173,10 @@ export function NodeHierarchyNode(props: {
 
     if (lastValue && (lastValue.type === 'default')) {
       if (props.node.spec?.type === 'numeric') {
-        let [magnitude, unit] = formatQuantity((lastValue.innerValue as NumericValue).magnitude, props.node.spec.dimensionality, { style: 'short' });
-
-        entryValue = [magnitude, (unit ? <Fragment key="0">&nbsp;{unit}</Fragment> : [])];
+        entryValue = ureg.formatQuantityAsReact((lastValue.innerValue as NumericValue).magnitude, 0, ureg.deserializeContext(props.node.spec.context), {
+          createElement,
+          style: 'symbol'
+        });
       } else if (props.node.spec?.type === 'enum') {
         let caseId = lastValue.innerValue as (number | string);
         let specCase = props.node.spec.cases.find((specCase) => (specCase.id === caseId))!;

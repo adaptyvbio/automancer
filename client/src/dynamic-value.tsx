@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { ReactNode } from 'react';
 
 import { Expression } from './components/expression';
 import { formatDuration } from './format';
@@ -54,5 +54,23 @@ export function formatDynamicValue(value: DynamicValue) {
       return '<unknown>';
     default:
       return '<invalid>';
+  }
+}
+
+
+export type EvaluableValue<T> = {
+  type: 'constant';
+  innerValue: T;
+} | {
+  type: 'expression';
+  contents: string;
+}
+
+export function formatEvaluable<T>(value: EvaluableValue<T>, formatInnerValue: ((innerValue: T) => ReactNode)): ReactNode {
+  switch (value.type) {
+    case 'constant':
+      return formatInnerValue(value.innerValue);
+    case 'expression':
+      return <Expression contents={value.contents} />;
   }
 }

@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { Button, Icon, StaticSelect, util } from 'pr1';
-import { Component, ReactNode, createRef, useEffect, useRef, useState } from 'react';
+import { Button, Icon, StaticSelect, ureg, util } from 'pr1';
+import { Component, ReactNode, createElement, createRef, useEffect, useRef, useState } from 'react';
 
 import styles from '../styles.module.scss';
 
@@ -285,7 +285,13 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                     } else {
                       switch (node.spec.type) {
                         case 'numeric':
-                          [magnitude, unit] = formatQuantity((lastValueEvent.value.innerValue as NumericValue).magnitude, node.spec.dimensionality, { sign: true, style: 'short' });
+                          let joint;
+                          [magnitude, joint, unit] = ureg.formatQuantityAsReact((lastValueEvent.value.innerValue as NumericValue).magnitude, 0, ureg.deserializeContext(node.spec.context), {
+                            createElement,
+                            sign: true,
+                            style: 'symbol'
+                          });
+
                           break;
                         default:
                           magnitude = '[unknown]';

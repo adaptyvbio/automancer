@@ -64,7 +64,7 @@ export const Prefixes = [
 ];
 
 
-export function formatQuantity(value: number, rawDimensionality: RawDimensionality, options: { sign?:  boolean; style: 'long' | 'short' }) {
+export function formatQuantity(value: number, rawDimensionality: RawDimensionality, options: { sign?: boolean; style: 'long' | 'short' }) {
   let valueLog = Math.floor(Math.log10(Math.abs(value)) / 3);
   let prefix = Prefixes[BasePrefixIndex - valueLog];
   let valueScaled = value * (10 ** (-valueLog * 3));

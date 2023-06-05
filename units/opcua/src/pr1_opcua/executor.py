@@ -3,20 +3,19 @@ from types import EllipsisType
 from typing import Any
 
 import pr1 as am
-from pint import Quantity
-from pr1.ureg import ureg
-from pr1.reader import LocatedValue
 from pr1.error import Diagnostic, DiagnosticDocumentReference
-from pr1.input import (ArbitraryQuantityType, Attribute,
-                                   BoolType, DictType, EnumType,
-                                   IdentifierType, ListType, QuantityType,
-                                   StrType)
-from pr1.units.base import BaseExecutor
 from pr1.host import Host
+from pr1.input import (ArbitraryQuantityType, Attribute, BoolType, DictType,
+                       EnumType, IdentifierType, ListType, QuantityType,
+                       StrType)
+from pr1.reader import LocatedValue
+from pr1.units.base import BaseExecutor
+from pr1.ureg import ureg
 from pr1.util.asyncio import wait_all
 from pr1.util.pool import Pool
 
-from .device import OPCUADevice, OPCUADeviceNumericNode, nodes_map, variants_map
+from .device import (OPCUADevice, OPCUADeviceNumericNode, nodes_map,
+                     variants_map)
 
 
 logging.getLogger("asyncua").setLevel(logging.WARNING)
@@ -45,7 +44,7 @@ class Executor(BaseExecutor):
         'min': Attribute(ArbitraryQuantityType(), optional=True),
         'stable': Attribute(BoolType(), optional=True),
         'type': EnumType(*variants_map.keys()),
-        'unit': Attribute(ArbitraryQuantityType(), optional=True),
+        'unit': Attribute(ArbitraryQuantityType(allow_unit=True), optional=True),
         'writable': Attribute(BoolType(), optional=True)
       }))
     }))
@@ -70,13 +69,13 @@ class Executor(BaseExecutor):
 
         for node_conf in device_conf['nodes']:
           if nodes_map[node_conf['type']] is OPCUADeviceNumericNode:
-            quantity: Quantity = node_conf['unit'].value if 'unit' in node_conf else ureg.Quantity('1')
+            quantity = node_conf['unit'].value if 'unit' in node_conf else (1.0 * ureg.dimensionless)
 
             if 'min' in node_conf:
-              result = analysis.add(QuantityType.check(node_conf['min'].value, quantity.units, target=node_conf['min']))
+              result = analysis.add(QuantityType.check(node_conf['min'].value, quantity.dimensionality, target=node_conf['min']))
               failure = failure or isinstance(result, EllipsisType)
             if 'max' in node_conf:
-              result = analysis.add(QuantityType.check(node_conf['max'].value, quantity.units, target=node_conf['max']))
+              result = analysis.add(QuantityType.check(node_conf['max'].value, quantity.dimensionality, target=node_conf['max']))
               failure = failure or isinstance(result, EllipsisType)
           else:
             for key in ['unit', 'min', 'max']:

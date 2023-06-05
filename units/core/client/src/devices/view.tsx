@@ -1,4 +1,4 @@
-import { PluginViewComponentProps } from 'pr1';
+import { ErrorBoundary, PluginViewComponentProps } from 'pr1';
 
 import { Map as ImMap, List } from 'immutable';
 import { TitleBar } from 'pr1';
@@ -78,13 +78,15 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
           let nodeState = nodeStates.get(selectedNodePath)!;
 
           return (
-            <NodeDetail
-              context={props.context}
-              executor={executor}
-              node={node}
-              nodePath={selectedNodePath}
-              nodeState={nodeState}
-              key={selectedNodePath.join('.')} />
+            <ErrorBoundary>
+              <NodeDetail
+                context={props.context}
+                executor={executor}
+                node={node}
+                nodePath={selectedNodePath}
+                nodeState={nodeState}
+                key={selectedNodePath.join('.')} />
+            </ErrorBoundary>
           );
         })()}
 

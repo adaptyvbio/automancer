@@ -1,6 +1,7 @@
 import { List, Map as ImMap, Set as ImSet } from 'immutable';
 import { DynamicValue, PluginContext } from 'pr1';
 import { Brand, ClientId, PluginName } from 'pr1-shared';
+import { SerializedContext } from 'quantops';
 
 
 export type Context = PluginContext<PersistentStoreEntries, SessionStoreEntries>;
@@ -42,8 +43,7 @@ export interface ValueNode extends BaseNode {
     }[];
   } | {
     type: 'numeric';
-    dimensionality: Record<`[${string}]`, number>;
-    unitFormatted: string | null;
+    context: SerializedContext;
   };
 }
 

@@ -40,6 +40,7 @@ export * from './components/button';
 export * from './components/context-menu';
 export * from './components/description';
 export * from './components/diagnostics-report';
+export * from './components/error-boundary';
 export * from './components/expandable-text';
 export * from './components/features';
 export * from './components/graph-editor';
@@ -58,6 +59,7 @@ export * from './store/idb';
 export * from './store/store-manager';
 export * from './store/application';
 export * from './unit';
+export * from './ureg';
 
 export * from './interfaces/host';
 export * from './interfaces/graph';

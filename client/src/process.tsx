@@ -145,20 +145,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
     },
     computeGraph,
     createCommands(block, location, context) {
-      if ((location.mode === ProcessLocationMode.Normal) && location.pausable) {
-        return [{
-          id: 'pause',
-          label: 'Pause',
-          shortcut: 'P',
-          onTrigger() {
-            context.pool.add(async () => {
-              await context.sendMessage({ type: 'pause' });
-            });
-          }
-        }];
-      }
-
-      if ((location.mode === ProcessLocationMode.Paused)) {
+      if (location.mode === ProcessLocationMode.Paused) {
         return [{
           id: 'resume',
           label: 'Resume',
@@ -166,6 +153,20 @@ export function createProcessBlockImpl<Data, Location>(options: {
           onTrigger() {
             context.pool.add(async () => {
               await context.sendMessage({ type: 'resume' });
+            });
+          }
+        }];
+      }
+
+      if (location.pausable) {
+        return [{
+          id: 'pause',
+          disabled: (location.mode !== ProcessLocationMode.Normal),
+          label: 'Pause',
+          shortcut: 'P',
+          onTrigger() {
+            context.pool.add(async () => {
+              await context.sendMessage({ type: 'pause' });
             });
           }
         }];

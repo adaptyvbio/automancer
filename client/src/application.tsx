@@ -14,13 +14,14 @@ import type { Host } from './host';
 import { HostInfo } from './interfaces/host';
 import { Plugins, UnknownPlugin } from './interfaces/plugin';
 import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
+import { ShortcutManager } from './shortcuts';
 import { ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreDefaults, ApplicationSessionStoreEntries, ApplicationStoreConsumer } from './store/application';
 import { StoreManager } from './store/store-manager';
 import { Pool } from './util';
-import { ViewExperiments } from './views/experiments';
 import { ViewConf } from './views/conf';
 import { ViewDraftWrapper } from './views/draft';
 import { ViewExecution } from './views/execution';
+import { ViewExperiments } from './views/experiments';
 import { ViewPluginView } from './views/plugin-view';
 import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
@@ -95,6 +96,7 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     persistent: StoreManager<object>;
     session: StoreManager<object>;
   }> = {};
+  shortcutManager = new ShortcutManager();
 
   constructor(props: ApplicationProps) {
     super(props);
@@ -314,6 +316,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
         });
       }
     }, { signal: this.controller.signal });
+
+    this.shortcutManager.listen(document.body, { signal: this.controller.signal });
 
     this.pool.add(async () => {
       // Initialize the app backend

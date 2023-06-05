@@ -361,6 +361,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                 component: (
                   <ErrorBoundary>
                     <GraphEditor
+                      app={this.props.app}
                       host={this.props.host}
                       protocol={this.state.compilation?.protocol ?? null}
                       selectBlock={this.selectBlock.bind(this)}

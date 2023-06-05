@@ -154,6 +154,71 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       nodePadding,
       vertical: true
     };
+
+
+    this.props.app.shortcutManager.attach('Escape', () => {
+      if (!this.props.selection || this.props.selection.observed) {
+        return false;
+      }
+
+      this.selectBlock(null);
+      return true;
+    }, { signal: this.controller.signal });
+
+    this.props.app.shortcutManager.attach(['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'], (event, properties) => {
+      if (this.lastRenderedNodePositions) {
+        let currentPath = this.props.selection && List(this.props.selection.blockPath);
+        let originPosition = currentPath && this.lastRenderedNodePositions.get(currentPath)!;
+
+        let minDistance = Infinity;
+        let minPath: List<number> | null = null;
+
+        for (let [path, position] of this.lastRenderedNodePositions) {
+          if (path.equals(currentPath)) {
+            continue;
+          }
+
+          let distance: number;
+
+          if (originPosition) {
+            if ((properties.key === 'ArrowDown') && !(position.y > originPosition.y)) {
+              continue;
+            }
+
+            if ((properties.key === 'ArrowUp') && !(position.y < originPosition.y)) {
+              continue;
+            }
+
+            if ((properties.key === 'ArrowRight') && !(position.x > originPosition.x)) {
+              continue;
+            }
+
+            if ((properties.key === 'ArrowLeft') && !(position.x < originPosition.x)) {
+              continue;
+            }
+
+            distance = squareDistance(position, originPosition);
+          } else {
+            if (properties.key === 'ArrowDown') {
+              distance = squareLength(position);
+            } else if (properties.key === 'ArrowUp') {
+              distance = -squareLength(position);
+            } else {
+              distance = Infinity;
+            }
+          }
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            minPath = path;
+          }
+        }
+
+        if (minPath) {
+          this.props.selectBlock(minPath.toArray());
+        }
+      }
+    }, { signal: this.controller.signal });
   }
 
   override componentWillUnmount() {
@@ -262,7 +327,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       // Compute boundaries
 
       let margin: SideValues = {
-        bottom: 2,
+        bottom: (this.props.summary ? 2 : 1),
         left: 1,
         right: 1,
         top: 1
@@ -289,67 +354,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     let offsetY = this.state.offset.y;
 
     return (
-      <div className={graphEditorStyles.root} ref={this.refContainer} tabIndex={-1} onKeyDown={(event) => {
-        if (!['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (this.lastRenderedNodePositions) {
-          let currentPath = this.props.selection && List(this.props.selection.blockPath);
-          let originPosition = currentPath && this.lastRenderedNodePositions.get(currentPath)!;
-
-          let minDistance = Infinity;
-          let minPath: List<number> | null = null;
-
-          for (let [path, position] of this.lastRenderedNodePositions) {
-            if (path.equals(currentPath)) {
-              continue;
-            }
-
-            let distance: number;
-
-            if (originPosition) {
-              if ((event.key === 'ArrowDown') && !(position.y > originPosition.y)) {
-                continue;
-              }
-
-              if ((event.key === 'ArrowUp') && !(position.y < originPosition.y)) {
-                continue;
-              }
-
-              if ((event.key === 'ArrowRight') && !(position.x > originPosition.x)) {
-                continue;
-              }
-
-              if ((event.key === 'ArrowLeft') && !(position.x < originPosition.x)) {
-                continue;
-              }
-
-              distance = squareDistance(position, originPosition);
-            } else {
-              if (event.key === 'ArrowDown') {
-                distance = squareLength(position);
-              } else if (event.key === 'ArrowUp') {
-                distance = -squareLength(position);
-              } else {
-                distance = Infinity;
-              }
-            }
-
-            if (distance < minDistance) {
-              minDistance = distance;
-              minPath = path;
-            }
-          }
-
-          if (minPath) {
-            this.props.selectBlock(minPath.toArray());
-          }
-        }
-      }}>
+      <div className={graphEditorStyles.root} ref={this.refContainer} tabIndex={-1}>
         <svg
           viewBox={`0 0 ${this.state.size.width} ${this.state.size.height}`}
           className={util.formatClass(graphEditorStyles.svg, { '_animatingView': this.state.animatingView })}

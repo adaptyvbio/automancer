@@ -4,10 +4,8 @@ import styles from '../../styles/components/shortcut-guide.module.scss';
 
 import { ApplicationStoreContext } from '../contexts';
 import { ShortcutDisplayMode } from '../store/application';
+import { IS_MAC } from '../shortcuts';
 
-
-// @ts-expect-error
-const IS_MAC = (navigator.userAgentData.platform === 'macOS');
 
 // const IS_MAC = navigator.platform.startsWith('Mac');
 
@@ -40,7 +38,7 @@ const KEY_CODE_MAP: Record<string, string> = {
 
 
 export function ShortcutGuide(props: PropsWithChildren<{
-  onTrigger?(): void;
+  onTrigger?(): void; // @deprecated
   shortcut: string | null;
 }>) {
   let store = useContext(ApplicationStoreContext);
@@ -54,7 +52,7 @@ export function ShortcutGuide(props: PropsWithChildren<{
       let controller = new AbortController();
       let segments = shortcutSegments!;
 
-      let rawTargetKey = segments.at(-1).toLowerCase();
+      let rawTargetKey = segments.at(-1)!.toLowerCase();
       let targetKey = KEY_CODE_MAP[rawTargetKey] ?? rawTargetKey;
 
       document.body.addEventListener('keydown', (event) => {

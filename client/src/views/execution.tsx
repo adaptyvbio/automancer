@@ -215,6 +215,10 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                                           type: 'jump',
                                           value: currentPoint
                                         });
+
+                                        this.setState({
+                                          selection: null
+                                        });
                                       });
                                     }}>Jump here</Button>
                                   </>

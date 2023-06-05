@@ -139,9 +139,9 @@
   &Actions {
     display: flex;
     column-gap: 0.4rem;
-  }
 
-  &Status {
-    color: #666;
+    > :not(button) {
+      margin: 0 0.4rem;
+    }
   }
 }

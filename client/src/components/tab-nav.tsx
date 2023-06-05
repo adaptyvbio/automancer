@@ -1,4 +1,3 @@
-import * as React from 'react';
 import { Component, ReactNode } from 'react';
 
 import styles from '../../styles/components/tab-nav.module.scss';
@@ -7,14 +6,15 @@ import { ExpandableText } from './expandable-text';
 import * as util from '../util';
 
 import { ShortcutGuide } from './shortcut-guide';
+import { OrdinaryId } from 'pr1-shared';
 
 
-export interface TabNavProps {
-  activeEntryId?: string | null;
-  setActiveEntryId?(id: string | null): void;
+export interface TabNavProps<T extends OrdinaryId> {
+  activeEntryId?: T | null;
+  setActiveEntryId?(id: T | null): void;
 
   entries: {
-    id: string;
+    id: T;
     contents?(): ReactNode;
     disabled?: unknown;
     label: string;
@@ -22,22 +22,22 @@ export interface TabNavProps {
   }[];
 }
 
-export interface TabNavState {
-  activeEntryId: string | null;
+export interface TabNavState<T extends OrdinaryId> {
+  activeEntryId: T | null;
 }
 
-export class TabNav extends Component<TabNavProps, TabNavState> {
-  constructor(props: TabNavProps) {
+export class TabNav<T extends OrdinaryId> extends Component<TabNavProps<T>, TabNavState<T>> {
+  constructor(props: TabNavProps<T>) {
     super(props);
 
     this.state = {
       activeEntryId: (this.props.activeEntryId === undefined)
-      ? this.props.entries.find((entry) => !entry.disabled)?.id ?? null
-      : null
+        ? this.props.entries.find((entry) => !entry.disabled)?.id ?? null
+        : null
     };
   }
 
-  private setActiveEntryId(entryId: string) {
+  private setActiveEntryId(entryId: T) {
     if (this.props.activeEntryId !== undefined) {
       this.props.setActiveEntryId?.(entryId);
     } else {

@@ -202,7 +202,7 @@
     box-shadow: 0 0 0 5px rgba($app-blue, 20%), 0 0 0 2px $app-blue;
   }
 
-  &:global(._active)::after {
+  &:is([data-activity="active"], [data-activity="paused"])::after {
     content: "";
     position: absolute;
 
@@ -219,21 +219,9 @@
     border-radius: calc(var(--height) * 0.5);
   }
 
-  // &::after {
-  //   content: "";
-  //   position: absolute;
-
-  //   --circle-size: 12px;
-
-  //   right: 1.6rem;
-  //   top: calc((var(--cell-size) - var(--circle-size)) * 0.5);
-
-  //   width: var(--circle-size);
-  //   aspect-ratio: 1;
-
-  //   background-color: $app-blue;
-  //   border-radius: 50%;
-  // }
+  &[data-activity="paused"]::after {
+    background-color: #ccc;
+  }
 }
 
 

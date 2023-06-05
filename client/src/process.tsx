@@ -8,7 +8,7 @@ import { FeatureDef } from './components/features';
 import { deepEqual } from './util';
 
 
-const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<unknown>> = (block, path, ancestors, location, options, context) => {
   let impl = context.host.plugins[block.namespace].blocks[block.name];
   let features = impl.createFeatures!(block, null, context);
 
@@ -39,7 +39,6 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
     },
 
     render(position, renderOptions) {
-      let active = (location !== null);
       let selection = options.settings.editor.props.selection;
 
       let status = (selection && deepEqual(selection.blockPath, path))
@@ -51,7 +50,11 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, unknown> = (block,
       return {
         element: (
           <GraphNode
-            active={active}
+            activity={location
+              ? [ProcessLocationMode.Broken, ProcessLocationMode.Paused].includes(location.mode)
+                ? 'paused'
+                : 'active'
+              : 'default'}
             autoMove={false}
             cellSize={{
               width,

@@ -14,9 +14,11 @@ import { FeatureGroupDef } from '../interfaces/unit';
 import { getBlockName } from '../protocol';
 import * as util from '../util';
 import { Icon } from './icon';
+import { Application } from '../application';
 
 
 export interface GraphEditorProps {
+  app: Application;
   host: Host;
   protocol: Protocol | null;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
@@ -164,6 +166,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     }
 
     let context: GlobalContext = {
+      app: this.props.app,
       host: this.props.host,
       pool: this.pool
     };
@@ -226,7 +229,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           }, context);
         }
 
-        return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], location, {
+        return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation, {
           settings,
           computeMetrics: (key) => {
             let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
@@ -424,7 +427,7 @@ interface GraphNodeDef {
 }
 
 export function GraphNode(props: {
-  active?: unknown;
+  activity?: 'active' | 'default' | 'paused';
   autoMove: unknown;
   cellSize: Size;
   node: GraphNodeDef;
@@ -448,9 +451,8 @@ export function GraphNode(props: {
         height={settings.cellPixelSize * props.cellSize.height}
         className={graphEditorStyles.nodeobject}>
         <div
-          className={util.formatClass(graphEditorStyles.node, {
-            '_active': props.active
-          })}
+          className={graphEditorStyles.node}
+          data-activity={props.activity}
           data-status={props.status}
           onClick={(event) => {
             event.stopPropagation();

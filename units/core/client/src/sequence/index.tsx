@@ -62,7 +62,7 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
   });
 
   let start = childrenMetrics[0].start;
-  let end = childrenMetrics.at(-1).end;
+  let end = childrenMetrics.at(-1)!.end;
 
   return {
     start: {
@@ -70,8 +70,8 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
       y: childrenPos[0].y + start.y
     },
     end: {
-      x: childrenPos.at(-1).x + end.x,
-      y: childrenPos.at(-1).y + end.y
+      x: childrenPos.at(-1)!.x + end.x,
+      y: childrenPos.at(-1)!.y + end.y
     },
     size: vertical
       ? {

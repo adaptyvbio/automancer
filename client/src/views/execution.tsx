@@ -37,7 +37,7 @@ export interface ViewExecutionState {
     blockPath: ProtocolBlockPath;
     observed: boolean;
   } | null;
-  toolsTabId: string | null;
+  toolsTabId: 'inspector' | 'report' | null;
   toolsOpen: boolean;
 }
 
@@ -50,7 +50,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
 
     this.state = {
       selection: null,
-      toolsTabId: 'execution',
+      toolsTabId: 'inspector',
       toolsOpen: true
     };
   }
@@ -100,13 +100,11 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
       selection: blockPath && {
         blockPath,
         observed: false
-      },
-      toolsTabId: 'execution'
+      }
     });
 
     if (options?.showInspector) {
       this.setState({
-        toolsTabId: 'execution',
         toolsOpen: true
       });
     }
@@ -143,6 +141,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                 component: (
                   <ErrorBoundary>
                     <GraphEditor
+                      app={this.props.app}
                       host={this.props.host}
                       location={this.master.location}
                       protocol={this.master.protocol}
@@ -162,7 +161,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                     entries={[
                       ...(isSelectedBlockActive
                         ? [{
-                          id: 'execution',
+                          id: ('inspector' as const),
                           label: 'Execution',
                           shortcut: 'E',
                           contents: () => (
@@ -178,55 +177,54 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                             </ErrorBoundary>
                           )
                         }]
-                        : []),
-                      {
-                        id: 'inspector',
-                        label: 'Inspector',
-                        shortcut: 'I',
-                        contents: () => (
-                          <BlockInspector
-                            blockPath={selectedBlockPath}
-                            footer={selectedBlockPath && !isSelectedBlockActive
-                              ? [(
-                                <>
-                                  <Button shortcut="J" onClick={() => {
-                                    let targetBlockPath = selectedBlockPath!;
-                                    let commonBlockPath = List(activeBlockPaths)
-                                      .map((blockPath): ProtocolBlockPath => blockPath.slice(0, getCommonBlockPathLength(blockPath, targetBlockPath)))
-                                      .maxBy((commonBlockPath) => commonBlockPath.length)!;
+                        : [{
+                          id: ('inspector' as const),
+                          label: 'Inspector',
+                          shortcut: 'E',
+                          contents: () => (
+                            <BlockInspector
+                              blockPath={selectedBlockPath}
+                              footer={selectedBlockPath && !isSelectedBlockActive
+                                ? [(
+                                  <>
+                                    <Button shortcut="J" onClick={() => {
+                                      let targetBlockPath = selectedBlockPath!;
+                                      let commonBlockPath = List(activeBlockPaths)
+                                        .map((blockPath): ProtocolBlockPath => blockPath.slice(0, getCommonBlockPathLength(blockPath, targetBlockPath)))
+                                        .maxBy((commonBlockPath) => commonBlockPath.length)!;
 
-                                    let blockAnalysis = analyzeBlockPath(this.master.protocol, this.master.location, targetBlockPath, this.globalContext);
-                                    let currentPoint: unknown | null = null;
+                                      let blockAnalysis = analyzeBlockPath(this.master.protocol, this.master.location, targetBlockPath, this.globalContext);
+                                      let currentPoint: unknown | null = null;
 
-                                    for (let blockIndex = (targetBlockPath.length - 1); blockIndex >= commonBlockPath.length; blockIndex -= 1) {
-                                      let currentPair = blockAnalysis.pairs[blockIndex];
-                                      let currentBlockImpl = getBlockImpl(currentPair.block, this.globalContext);
+                                      for (let blockIndex = (targetBlockPath.length - 1); blockIndex >= commonBlockPath.length; blockIndex -= 1) {
+                                        let currentPair = blockAnalysis.pairs[blockIndex];
+                                        let currentBlockImpl = getBlockImpl(currentPair.block, this.globalContext);
 
-                                      if (currentBlockImpl.createPoint) {
-                                        currentPoint = currentBlockImpl.createPoint(currentPair.block, currentPair.location, {
-                                          key: targetBlockPath[blockIndex],
-                                          point: currentPoint
-                                        }, this.globalContext);
+                                        if (currentBlockImpl.createPoint) {
+                                          currentPoint = currentBlockImpl.createPoint(currentPair.block, currentPair.location, {
+                                            key: targetBlockPath[blockIndex],
+                                            point: currentPoint
+                                          }, this.globalContext);
+                                        }
                                       }
-                                    }
 
-                                    let commonBlockContext = createBlockContext(commonBlockPath, this.experiment.id, this.globalContext);
+                                      let commonBlockContext = createBlockContext(commonBlockPath, this.experiment.id, this.globalContext);
 
-                                    this.pool.add(async () => {
-                                      await commonBlockContext.sendMessage({
-                                        type: 'jump',
-                                        value: currentPoint
+                                      this.pool.add(async () => {
+                                        await commonBlockContext.sendMessage({
+                                          type: 'jump',
+                                          value: currentPoint
+                                        });
                                       });
-                                    });
-                                  }}>Jump here</Button>
-                                </>
-                              ), null]
-                              : null}
-                            host={this.props.host}
-                            protocol={this.master.protocol}
-                            selectBlock={this.selectBlock.bind(this)} />
-                        )
-                      },
+                                    }}>Jump here</Button>
+                                  </>
+                                ), null]
+                                : null}
+                              host={this.props.host}
+                              protocol={this.master.protocol}
+                              selectBlock={this.selectBlock.bind(this)} />
+                          )
+                        }]),
                       {
                         id: 'report',
                         label: 'Report',
@@ -244,6 +242,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     );
   }
 
+
   static getDerivedStateFromProps(props: ViewExecutionProps, state: ViewExecutionState): Partial<ViewExecutionState> | null {
     let experiment = props.host.state.experiments[props.route.params.experimentId];
 
@@ -260,15 +259,18 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     let activeBlockPaths = List(getRefPaths(experiment.master.protocol.root, experiment.master.location, globalContext).map((blockPath) => List(blockPath)));
     let selectedBlockPath = state.selection && List(state.selection.blockPath);
 
+    // The previously-selected block has been unselected.
     if (!selectedBlockPath) {
       return {
         selection: {
           blockPath: activeBlockPaths.first()!.toArray(),
           observed: true
-        }
+        },
+        toolsTabId: 'inspector'
       };
     }
 
+    // The observed (= not explicit selected) selection is not active anymore.
     if (state.selection!.observed && !activeBlockPaths.includes(selectedBlockPath)) {
       return {
         selection: {

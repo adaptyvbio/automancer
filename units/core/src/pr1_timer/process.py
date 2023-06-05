@@ -23,10 +23,7 @@ class ProcessLocation:
 
   def export(self):
     return {
-      "duration": {
-        "quantity": export_value(self.duration * am.ureg.second),
-        "value": (self.duration * 1000),
-      } if self.duration is not None else None,
+      "duration": self.duration,
       "paused": self.paused,
       "progress": self.progress
     }

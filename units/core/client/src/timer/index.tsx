@@ -33,7 +33,7 @@ export default {
         return (
           <TimedProgressBar
             date={props.date}
-            duration={props.location.duration.value}
+            duration={props.location.duration * 1000}
             paused={props.location.paused}
             setValue={(progress) => {
               props.context.pool.add(async () => {
@@ -59,11 +59,6 @@ export default {
           label: location
             ? formatInnerValue(location.duration)
             : formatEvaluable(data.duration, formatInnerValue)
-          // label: (
-          //   location
-          //     ? (location.duration && formatDynamicValue(location.duration.quantity))
-          //     : (!((data.duration.type === 'string') && (data.duration.value === 'forever')) ? formatDynamicValue(data.duration) : null)
-          // ) ?? 'Forever'
         }];
       },
       getLabel(data) {

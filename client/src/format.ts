@@ -1,3 +1,6 @@
+import { ReactNode, createElement } from 'react';
+
+
 export interface TimeUnit {
   factor: number;
   narrow: string;
@@ -21,10 +24,12 @@ export const TIME_UNITS: TimeUnit[] = [
  * To be replaced with [`Intl.DurationFormat`](https://github.com/tc39/proposal-intl-duration-format) once stable.
  *
  * @param input The duration, in milliseconds.
+ * @param resolution The smallest fraction of the input to display. Defaults to `0.01` (1%).
  * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`), `narrow` (`1h 40m`) or `numeric` (`01:40`).
  */
 export function formatDuration(input: number, options?: {
   range?: number;
+  resolution?: number;
   style?: ('long' | 'narrow' | 'numeric' | 'short');
 }) {
   let range = (options?.range ?? input);
@@ -32,6 +37,7 @@ export function formatDuration(input: number, options?: {
 
   let inputRest = Math.round(input);
   let rangeRest = Math.round(range);
+  let resolution = inputRest * (options?.resolution ?? 0.01);
 
   let units = (style !== 'numeric')
     ? TIME_UNITS.slice()
@@ -40,17 +46,21 @@ export function formatDuration(input: number, options?: {
   let segments: string[] = [];
 
   for (let unit of units.reverse()) {
+    let withinResolution = inputRest > resolution;
+
     let unitInputValue = Math.floor(inputRest / unit.factor);
     let unitRangeValue = Math.floor(rangeRest / unit.factor);
 
     inputRest %= unit.factor;
     rangeRest %= unit.factor;
 
-    if ((unitRangeValue > 0) || ((style === 'numeric') && TIME_UNITS.slice(1, 3).includes(unit))) {
-      if (style !== 'numeric') {
-        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitInputValue > 1)) ? 's' : ''));
-      } else {
+    if (style === 'numeric') {
+      if ((unitRangeValue > 0) || TIME_UNITS.slice(1, 3).includes(unit)) {
         segments.push(unitInputValue.toFixed().padStart(2, '0'));
+      }
+    } else {
+      if ((unitRangeValue > 0) && withinResolution) {
+        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitInputValue > 1)) ? 's' : ''));
       }
     }
   }
@@ -108,7 +118,63 @@ export function formatRelativeTime(input: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
-export function formatAbsoluteTime(input: number): string {
-  let time = new Date(input);
-  return `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+
+/**
+ * Formats an absolute time.
+ *
+ * @param input The time, in milliseconds.
+ * @param options.ref A reference time used to indicate the time's day difference.
+ */
+export function formatAbsoluteTime(input: number, options?: { ref?: number | null; }): ReactNode {
+  let date = new Date(input);
+
+  let ref = (options?.ref ?? Date.now());
+  let midnight = new Date(ref);
+  midnight.setHours(0, 0, 0, 0);
+
+  let dayDifference = (ref !== null)
+    ? Math.floor((input - midnight.getTime()) / 24 / 3600e3)
+    : 0;
+
+  return [
+    `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+    (dayDifference !== 0)
+      ? createElement('sup', { key: 0 }, [
+        (dayDifference > 0) ? '+' : '\u2212', // &minus;
+        Math.abs(dayDifference).toFixed(0)
+      ])
+      : null
+  ];
+}
+
+
+/**
+ * Formats a pair of absolute times.
+ *
+ * @param a The first time, in milliseconds.
+ * @param b The second time, in milliseconds.
+ * @param options.mode The mode to use, either `directional` (`10:00 → 11:00`) or `range` (`10:00 – 11:00`).
+ */
+export function formatAbsoluteTimePair(a: number, b: number, options?: {
+  mode?: 'directional' | 'range';
+  ref?: number | null;
+}): ReactNode {
+  let diff = Math.abs(b - a);
+
+  let symbol = {
+    directional: '\u2192', // &rarr;
+    range: '\u2013' // &ndash;
+  }[options?.mode ?? 'range'];
+
+  if (diff < 60e3) {
+    return formatAbsoluteTime(a);
+  }
+
+  return [
+    formatAbsoluteTime(a, { ref: (options?.ref ?? null) }),
+    '\xa0',
+    symbol,
+    ' ',
+    formatAbsoluteTime(b, { ref: (options?.ref ?? null) })
+  ];
 }

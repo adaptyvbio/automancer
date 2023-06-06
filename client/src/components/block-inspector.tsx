@@ -11,7 +11,8 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
 import { Application } from '../application';
-import { formatDuration } from '../format';
+import { formatAbsoluteTimePair, formatDuration } from '../format';
+import { TimeSensitive } from './time-sensitive';
 
 
 export function BlockInspector(props: {
@@ -46,8 +47,6 @@ export function BlockInspector(props: {
   let leafPair = blockAnalysis.pairs.at(-1)!;
   let leafBlockImpl = getBlockImpl(leafPair.block, globalContext);
 
-  console.log(blockAnalysis);
-
   return (
     <div className={spotlightStyles.root}>
       <div className={spotlightStyles.contents}>
@@ -72,10 +71,18 @@ export function BlockInspector(props: {
         </div>
 
         <div className={spotlightStyles.timeinfo}>
-          <div>{formatDuration(leafPair.duration * 1000)}</div>
-          {/* <div>{leafPair.startTime} &rarr; {leafPair.endTime}</div> */}
-          {/* <div>20 ± 5 minutes</div> */}
-          <div>22:17 &rarr; 07:58<sup>+1</sup></div>
+          <TimeSensitive
+            contents={() => {
+              let now = Date.now();
+
+              return (
+                <>
+                  <div>{formatDuration(leafPair.duration * 1000)}</div>
+                  <div>{formatAbsoluteTimePair(now + leafPair.startTime * 1000, now + leafPair.endTime * 1000, { mode: 'directional' })}</div>
+                </>
+              );
+            }}
+            interval={30e3} />
         </div>
 
         {blockAnalysis.isLeafBlockTerminal && (

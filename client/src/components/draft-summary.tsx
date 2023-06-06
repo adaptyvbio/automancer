@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { ReactNode } from 'react';
 
 import styles from '../../styles/components/diagnostics-summary.module.scss';
 
@@ -8,10 +8,10 @@ import { ShortcutGuide } from './shortcut-guide';
 
 
 export function DraftSummary(props: {
-  description?: string | null;
+  description?: ReactNode | null;
   onStart?: (() => void) | null;
   status: 'default' | 'error' | 'success' | 'warning';
-  title: string;
+  title: ReactNode;
 }) {
   return (
     <div className={util.formatClass(styles.root, {

@@ -1,5 +1,5 @@
 import { ExperimentId, ProtocolBlockPath } from 'pr1-shared';
-import { Component, createRef } from 'react';
+import { Component, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
@@ -20,13 +20,15 @@ import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
 import { Draft, DraftCompilation, DraftId } from '../draft';
-import * as format from '../format';
 import { Host } from '../host';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import * as util from '../util';
 import { Pool } from '../util';
 import { ViewExecution } from './execution';
 import { ViewDrafts } from './protocols';
+import { analyzeBlockPath } from '../protocol';
+import { GlobalContext } from '../interfaces/plugin';
+import { formatAbsoluteTime, formatDuration, formatRelativeDate } from '../format';
 
 
 export interface ViewDraftProps {
@@ -220,6 +222,12 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     let subtitle: React.ReactNode | null = null;
     let subtitleVisible = false;
 
+    let globalContext: GlobalContext = {
+      app: this.props.app,
+      host: this.props.host,
+      pool: this.pool
+    };
+
     if (!this.props.draft.readable && !this.state.requesting) {
       component = (
         <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
@@ -254,6 +262,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         <FilledDraftSummary
           compiling={this.state.compiling}
           compilation={this.state.compilation}
+          context={globalContext}
           onStart={() => {
             this.setState({ startModalOpen: true });
           }} />
@@ -438,7 +447,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
               return (delta < 5e3)
                 ? 'Just saved'
-                : `Last saved ${format.formatRelativeDate(lastModified)}`;
+                : `Last saved ${formatRelativeDate(lastModified)}`;
               }
             }
             interval={1e3} />
@@ -447,8 +456,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         subtitle = null;
       }
     }
-
-    // console.log(this.state.compilation?.protocol)
 
     return (
       <main className={viewStyles.root}>
@@ -524,6 +531,7 @@ export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
 export function FilledDraftSummary(props: {
   compilation: DraftCompilation | null;
   compiling: boolean;
+  context: GlobalContext;
   onStart(): void;
 }) {
   if (props.compiling) {
@@ -538,9 +546,30 @@ export function FilledDraftSummary(props: {
     ? props.onStart
     : null;
 
-  let warningText = warningCount > 0
+  let warningText = (warningCount > 0)
     ? `${warningCount} warning${warningCount > 1 ? 's' : ''}`
     : null;
+
+
+  let etaText: ReactNode | null = null;
+
+  if (compilation.protocol) {
+    let analysis = analyzeBlockPath(compilation.protocol, null, [], props.context);
+    let pair = analysis.pairs[0];
+
+    etaText = [
+      formatDuration(pair.duration * 1000),
+      ' (ETA ',
+      <TimeSensitive
+        contents={() => formatAbsoluteTime(Date.now() + pair.endTime * 1000)}
+        interval={30e3}
+        key={0} />,
+      ')'
+    ];
+  } else {
+    etaText = null;
+  }
+
 
   if (errorCount > 0) {
     return (
@@ -553,6 +582,7 @@ export function FilledDraftSummary(props: {
   } else if (warningText) {
     return (
       <DraftSummary
+      description={etaText}
         onStart={onStart}
         status="warning"
         title={warningText} />
@@ -560,6 +590,7 @@ export function FilledDraftSummary(props: {
   } else {
     return (
       <DraftSummary
+        description={etaText}
         onStart={onStart}
         status="success"
         title="Ready" />

@@ -8,8 +8,10 @@ export interface Protocol {
 }
 
 export interface ProtocolBlock {
+  eta: number;
   name: ProtocolBlockName;
   namespace: PluginName;
+
   [key: string]: unknown;
 }
 

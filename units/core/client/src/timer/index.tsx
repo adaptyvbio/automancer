@@ -1,6 +1,5 @@
-import { DynamicValue, EvaluableValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDynamicValue, formatEvaluable, ureg } from 'pr1';
+import { EvaluableValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
-import { createElement } from 'react';
 
 
 export interface ProcessData {
@@ -51,7 +50,7 @@ export default {
       createFeatures(data, location) {
         let formatInnerValue = (value: number | null) =>
           (value !== null)
-            ? ureg.formatQuantityAsReact(value, 1, 'time', { createElement: createElement })
+            ? formatDuration(value * 1000)
             : 'Forever';
 
         return [{

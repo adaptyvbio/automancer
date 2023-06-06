@@ -76,7 +76,5 @@ export class ShortcutManager {
     options.signal.addEventListener('abort', () => {
       this.shortcutItems = this.shortcutItems.subtract(items);
     });
-
-    console.log(this.shortcutItems.toJS());
   }
 }

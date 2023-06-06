@@ -46,10 +46,10 @@ class SystemNode(DeviceNode):
 class ProcessMemoryUsageNode(NumericNode, PollableReadableNode):
   def __init__(self):
     super().__init__(
+      context="memory",
       dtype='u4',
       poll_interval=0.3,
-      readable=True,
-      unit=ureg.MB
+      readable=True
     )
 
     self.connected = True
@@ -66,10 +66,10 @@ class ProcessMemoryUsageNode(NumericNode, PollableReadableNode):
 class EpochNode(NumericNode, PollableReadableNode):
   def __init__(self):
     super().__init__(
+      context="time",
       dtype='u8',
       poll_interval=0.3,
-      readable=True,
-      unit=ureg.year
+      readable=True
     )
 
     self.connected = True

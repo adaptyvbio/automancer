@@ -5,7 +5,7 @@ import { Component, ReactNode, createElement, createRef, useEffect, useRef, useS
 
 import styles from '../styles.module.scss';
 
-import { BaseNode, Context, ExecutorState, NodePath, NodeState, namespace } from '../types';
+import { BaseNode, Context, ExecutorState, NodePath, NodeState, NumericNodeSpec, namespace } from '../types';
 import { isValueNode } from '../util';
 import { NumericValue } from '../types';
 import { formatQuantity } from '../format';
@@ -271,6 +271,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 <div className={styles.detailValueLabel}>{nodeState.connected ? 'Current value' : 'Last known value'}</div>
                 <div className={styles.detailValueQuantity}>
                   {(() => {
+                    let spec = node.spec;
                     let lastValueEvent = nodeState.lastValueEvent;
 
                     let magnitude: ReactNode;
@@ -283,12 +284,12 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                       // The device is disabled.
                       magnitude = '[disabled]';
                     } else {
-                      switch (node.spec.type) {
+                      switch (spec.type) {
                         case 'numeric':
                           let joint;
-                          [magnitude, joint, unit] = ureg.formatQuantityAsReact((lastValueEvent.value.innerValue as NumericValue).magnitude, 0, ureg.deserializeContext(node.spec.context), {
+                          [magnitude, joint, unit] = ureg.formatQuantityAsReact((lastValueEvent.value.innerValue as NumericValue).magnitude, spec.resolution ?? 0, ureg.deserializeContext(spec.context), {
                             createElement,
-                            sign: true,
+                            sign: (spec.range && spec.range[0] < 0),
                             style: 'symbol'
                           });
 
@@ -308,16 +309,29 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                   })()}
                 </div>
               </div>
-              <div className={styles.detailValueRoot}>
-                <div className={styles.detailValueLabel}>Target value</div>
-                {(() => {
-                  // console.log(node);
+              {node.writable && (
+                <div className={styles.detailValueRoot}>
+                  <div className={styles.detailValueLabel}>Target value</div>
+                  {(() => {
+                    switch (node.spec.type) {
+                      case 'numeric':
+                        // if (node.spec.range) {
+                        //   console.log(ureg.formatRangeAsReact(
+                        //     node.spec.range[0],
+                        //     node.spec.range[1],
+                        //     0,
+                        //     ureg.deserializeContext(node.spec.context),
+                        //     { createElement }
+                        //   ));
+                        // }
 
-                  return (
-                    <NumericValueEditor />
-                  );
-                })()}
-              </div>
+                        return (
+                          <NumericValueEditor spec={node.spec} />
+                        );
+                    }
+                  })()}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -327,13 +341,29 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 }
 
 
-function NumericValueEditor() {
+function NumericValueEditor(props: {
+  spec: NumericNodeSpec;
+}) {
   let [rawValue, setRawValue] = useState<{
     input: string;
     unitIndex: number;
   } | null>(null);
 
   let refInput = useRef<HTMLInputElement>(null);
+
+  // let range = props.spec.range!;
+  // let unitOptions = ureg.filterRangeCompositeUnitFormats(
+  //   range[0],
+  //   range[1],
+  //   ureg.deserializeContext(props.spec.context),
+  //   { system: 'SI' }
+  // ).map((option, index) => ({
+  //   id: index,
+  //   label: ureg.form
+  //   value: option.value
+  // }));
+
+  // console.log(x);
 
   let unitExpressions = [
     { id: 'Pa', label: 'Pa', value: 1 },

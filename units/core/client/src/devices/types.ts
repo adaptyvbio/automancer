@@ -33,6 +33,10 @@ export interface DeviceNode extends CollectionNode {
 }
 
 export interface ValueNode extends BaseNode {
+  nullable: boolean;
+  readable: boolean;
+  writable: boolean;
+
   spec: {
     type: 'boolean';
   } | {
@@ -41,10 +45,14 @@ export interface ValueNode extends BaseNode {
       id: number | string;
       label: string | null;
     }[];
-  } | {
-    type: 'numeric';
-    context: SerializedContext;
-  };
+  } | NumericNodeSpec;
+}
+
+export interface NumericNodeSpec {
+  type: 'numeric';
+  context: SerializedContext;
+  range: [number, number] | null;
+  resolution: number | null;
 }
 
 

@@ -170,16 +170,18 @@ export function NodeHierarchyNode(props: {
 
   if (isValueNode(props.node)) {
     let lastValue = nodeState?.lastValueEvent?.value;
+    let spec = props.node.spec;
 
     if (lastValue && (lastValue.type === 'default')) {
-      if (props.node.spec?.type === 'numeric') {
-        entryValue = ureg.formatQuantityAsReact((lastValue.innerValue as NumericValue).magnitude, 0, ureg.deserializeContext(props.node.spec.context), {
+      if (spec.type === 'numeric') {
+        entryValue = ureg.formatQuantityAsReact((lastValue.innerValue as NumericValue).magnitude, spec.resolution ?? 0, ureg.deserializeContext(spec.context), {
           createElement,
+          sign: (spec.range && spec.range[0] < 0),
           style: 'symbol'
         });
-      } else if (props.node.spec?.type === 'enum') {
+      } else if (spec.type === 'enum') {
         let caseId = lastValue.innerValue as (number | string);
-        let specCase = props.node.spec.cases.find((specCase) => (specCase.id === caseId))!;
+        let specCase = spec.cases.find((specCase) => (specCase.id === caseId))!;
 
         entryValue = (specCase.label ?? specCase.id);
       }

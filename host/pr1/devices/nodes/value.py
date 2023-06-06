@@ -180,11 +180,9 @@ class ValueNode(BaseNode, ABC, Generic[T]):
     return {
       **super().export(),
       "spec": self._export_spec(),
-      "value": {
-        "nullable": self.nullable,
-        "readable": self.readable,
-        "writable": self.writable
-      }
+      "nullable": self.nullable,
+      "readable": self.readable,
+      "writable": self.writable
     }
 
   def export_value(self, value: Optional[T | NullType], /):

@@ -1,25 +1,28 @@
 import asyncio
+import time
 from asyncio import Event
 from contextlib import AsyncExitStack
-import time
-from typing import Any, Callable, Optional, cast, final
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast, final
 
 from asyncua import Client, ua
 from asyncua.common import Node as UANode
-from asyncua.ua.uatypes import NodeId as UANodeId
-from asyncua.ua.uaerrors import BadNodeIdUnknown, UaStatusCodeError
 from asyncua.common.subscription import SubHandler
-from pint import Quantity
+from asyncua.ua.uaerrors import BadNodeIdUnknown, UaStatusCodeError
+from asyncua.ua.uatypes import NodeId as UANodeId
 from pr1.devices.nodes.collection import DeviceNode
-from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.common import NodeId, NodeUnavailableError
-from pr1.util.pool import Pool
-from pr1.util.asyncio import aexit_handler, race, shield, wait_all
+from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode
 from pr1.devices.nodes.readable import SubscribableReadableNode
+from pr1.util.asyncio import aexit_handler, race, shield, wait_all
 from pr1.util.batch import BatchWorker
+from pr1.util.pool import Pool
+from quantops import Quantity
 
 from . import logger, namespace
+
+if TYPE_CHECKING:
+  from .executor import NodeConf
 
 
 variants_map = {
@@ -179,22 +182,21 @@ class OPCUADeviceNumericNode(OPCUADeviceNode, NumericNode):
   def __init__(
     self,
     *,
-    quantity: Optional[Quantity],
+    quantity: Quantity,
     **kwargs
   ):
     super().__init__(
-      unit=(quantity.units if quantity is not None else None),
       **kwargs
     )
 
     self.icon = "speed"
-    self._factor = (quantity.magnitude if quantity is not None else 1.0)
+    self._quantity = quantity
 
-  def _transform_read(self, value: int | float, /):
-    return self._transform_numeric_read(value * self._factor)
+  def _transform_read(self, value: float, /):
+    return value * self._quantity
 
   def _transform_write(self, value: Quantity, /):
-    raw_value = value.magnitude / self._factor
+    raw_value = (value / self._quantity).magnitude
 
     match self._type:
       case 'i16' | 'i32' | 'i64' | 'u16' | 'u32' | 'u64':
@@ -259,34 +261,30 @@ class OPCUADevice(DeviceNode):
       (node := self._create_node(node_conf)).id: node for node_conf in nodes_conf
     }
 
-  def _create_node(self, node_conf):
-    Node = nodes_map[node_conf['type']]
-    writable = (writable_conf := node_conf.get('writable')) and writable_conf.value
+  def _create_node(self, node_conf: 'NodeConf'):
+    Node = nodes_map[node_conf.type]
 
     opts: dict[str, Any] = dict(
-      description=(node_conf['description'].value if 'description' in node_conf else None),
+      context=(node_conf.context or node_conf.unit.find_context()),
+      description=node_conf.description,
       device=self,
-      id=node_conf['id'].value,
-      label=(node_conf['label'].value if 'label' in node_conf else None),
-      location=UANodeId.from_string(node_conf['location'].value),
-      stable=(node_conf['stable'].value if 'stable' in node_conf else True),
-      type=node_conf['type'].value,
-      writable=writable
+      id=node_conf.id,
+      label=node_conf.label,
+      location=UANodeId.from_string(node_conf.location),
+      resolution=node_conf.resolution,
+      stable=node_conf.stable,
+      type=node_conf.type,
+      writable=node_conf.writable
     )
 
-    dtype = dtype_map.get(node_conf['type'].value)
+    dtype = dtype_map.get(node_conf.type)
 
     if dtype is not None:
       opts |= dict(
         dtype=dtype,
-        quantity=(node_conf['unit'].value if 'unit' in node_conf else None)
+        quantity=node_conf.unit,
+        range=((node_conf.min, node_conf.max) if node_conf.min and node_conf.max else None)
       )
-
-      if writable:
-        opts |= dict(
-          min=(node_conf['min'].value if 'min' in node_conf else None),
-          max=(node_conf['max'].value if 'max' in node_conf else None)
-        )
 
     return Node(**opts)
 

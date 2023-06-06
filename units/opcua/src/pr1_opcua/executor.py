@@ -1,24 +1,46 @@
 import logging
 from types import EllipsisType
-from typing import Any
+from typing import Any, NotRequired, Optional, Protocol
 
 import pr1 as am
 from pr1.error import Diagnostic, DiagnosticDocumentReference
 from pr1.host import Host
-from pr1.input import (ArbitraryQuantityType, Attribute, BoolType, DictType,
-                       EnumType, IdentifierType, ListType, QuantityType,
-                       StrType)
 from pr1.reader import LocatedValue
 from pr1.units.base import BaseExecutor
 from pr1.ureg import ureg
 from pr1.util.asyncio import wait_all
 from pr1.util.pool import Pool
+from quantops import Quantity, QuantityContext
 
 from .device import (OPCUADevice, OPCUADeviceNumericNode, nodes_map,
                      variants_map)
 
 
 logging.getLogger("asyncua").setLevel(logging.WARNING)
+
+
+class NodeConf(Protocol):
+  context: Optional[QuantityContext] # NotRequired
+  description: Optional[str]
+  id: str
+  label: Optional[str]
+  location: str
+  max: Optional[Quantity] # NotRequired
+  min: Optional[Quantity] # NotRequired
+  resolution: Optional[Quantity] # NotRequired
+  stable: bool
+  type: str
+  unit: Quantity # NotRequired
+  writable: bool
+
+class DeviceConf(Protocol):
+  address: str
+  id: str
+  label: str | None
+  nodes: list[NodeConf]
+
+class Conf(Protocol):
+  devices: list[DeviceConf]
 
 
 class OPCUAConfigurationError(Diagnostic):
@@ -30,22 +52,24 @@ class OPCUAConfigurationError(Diagnostic):
 
 
 class Executor(BaseExecutor):
-  options_type = DictType({
-    'devices': ListType(DictType({
-      'address': StrType(),
-      'id': IdentifierType(),
-      'label': Attribute(StrType(), optional=True),
-      'nodes': ListType(DictType({
-        'description': Attribute(StrType(), optional=True),
-        'id': StrType(),
-        'label': Attribute(StrType(), optional=True),
-        'location': StrType(),
-        'max': Attribute(ArbitraryQuantityType(), optional=True),
-        'min': Attribute(ArbitraryQuantityType(), optional=True),
-        'stable': Attribute(BoolType(), optional=True),
-        'type': EnumType(*variants_map.keys()),
-        'unit': Attribute(ArbitraryQuantityType(allow_unit=True), optional=True),
-        'writable': Attribute(BoolType(), optional=True)
+  options_type = am.RecordType({
+    'devices': am.ListType(am.RecordType({
+      'address': am.StrType(),
+      'id': am.IdentifierType(),
+      'label': am.Attribute(am.StrType(), default=None),
+      'nodes': am.ListType(am.RecordType({
+        'context': am.Attribute(am.QuantityContextType(), default=None),
+        'description': am.Attribute(am.StrType(), default=None),
+        'id': am.StrType(),
+        'label': am.Attribute(am.StrType(), default=None),
+        'location': am.StrType(),
+        'max': am.Attribute(am.ArbitraryQuantityType(), default=None),
+        'min': am.Attribute(am.ArbitraryQuantityType(), default=None),
+        'resolution': am.Attribute(am.ArbitraryQuantityType(), default=None),
+        'stable': am.Attribute(am.BoolType(), default=True),
+        'type': am.EnumType(*variants_map.keys()),
+        'unit': am.Attribute(am.ArbitraryQuantityType(allow_unit=True), default=(1.0 * ureg.dimensionless)),
+        'writable': am.Attribute(am.BoolType(), default=False)
       }))
     }))
   })
@@ -60,38 +84,51 @@ class Executor(BaseExecutor):
     self._devices = dict[str, OPCUADevice]()
 
     if self._conf:
-      for device_conf in self._conf['devices']:
+      for device_conf in self._conf.value.devices.value:
         failure = False
-        device_id = device_conf['id']
 
-        if device_id in self._host.devices:
-          raise device_id.error(f"Duplicate device id '{device_id}'")
+        if device_conf.value.id in self._host.devices:
+          analysis.errors.append(OPCUAConfigurationError("Duplicate device id", device_conf.id))
+          failure = True
 
-        for node_conf in device_conf['nodes']:
-          if nodes_map[node_conf['type']] is OPCUADeviceNumericNode:
-            quantity = node_conf['unit'].value if 'unit' in node_conf else (1.0 * ureg.dimensionless)
+        for node_conf in device_conf.value.nodes.value:
+          if nodes_map[node_conf.value.type.value] is OPCUADeviceNumericNode:
+            node_unit = node_conf.value.unit.value
 
-            if 'min' in node_conf:
-              result = analysis.add(QuantityType.check(node_conf['min'].value, quantity.dimensionality, target=node_conf['min']))
+            if node_conf.value.min.value is not None:
+              result = analysis.add(am.QuantityType.check(node_conf.value.min, node_unit.dimensionality))
               failure = failure or isinstance(result, EllipsisType)
-            if 'max' in node_conf:
-              result = analysis.add(QuantityType.check(node_conf['max'].value, quantity.dimensionality, target=node_conf['max']))
+            elif node_conf.value.writable.value:
+              analysis.errors.append(OPCUAConfigurationError(f"Missing property 'min'", node_conf))
+              failure = True
+
+            if node_conf.value.max.value is not None:
+              result = analysis.add(am.QuantityType.check(node_conf.value.max, node_unit.dimensionality))
               failure = failure or isinstance(result, EllipsisType)
+            elif node_conf.value.writable.value:
+              analysis.errors.append(OPCUAConfigurationError(f"Missing property 'max'", node_conf))
+              failure = True
+
+            if ((ctx := node_conf.value.context.value) is not None) and (ctx.dimensionality != node_unit.dimensionality):
+              analysis.errors.append(OPCUAConfigurationError(f"Invalid context dimensionality", node_conf.value.context))
+              failure = True
           else:
-            for key in ['unit', 'min', 'max']:
-              if key in node_conf:
-                analysis.errors.append(OPCUAConfigurationError("Invalid property for non-numeric node", node_conf[key]))
+            for key in ['context', 'min', 'max', 'resolution']:
+              if getattr(node_conf.value, key) is not None:
+                analysis.errors.append(OPCUAConfigurationError(f"Invalid property '{key}' for non-numeric node", getattr(node_conf.value, key)))
 
         if not failure:
+          device_conf_unlocated = device_conf.dislocate()
+
           device = OPCUADevice(
-            address=device_conf['address'].value,
-            id=device_id.value,
-            label=(device_conf['label'].value if 'label' in device_conf else None),
-            nodes_conf=device_conf['nodes']
+            address=device_conf_unlocated.address,
+            id=device_conf_unlocated.id,
+            label=device_conf_unlocated.label,
+            nodes_conf=device_conf_unlocated.nodes
           )
 
-          self._devices[device_id.value] = device
-          self._host.devices[device_id.value] = device
+          self._devices[device_conf_unlocated.id] = device
+          self._host.devices[device_conf_unlocated.id] = device
 
     return analysis
 

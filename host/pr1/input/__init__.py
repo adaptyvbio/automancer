@@ -8,7 +8,7 @@ from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
                     Protocol, TypeVar, cast)
 
-from quantops import Dimensionality, Quantity, Unit
+from quantops import Dimensionality, Quantity, QuantityContext, Unit
 import numpy as np
 import quantops
 
@@ -839,11 +839,11 @@ class QuantityType(Type):
     return analysis, EvaluableConstantValue(result) if context.auto_expr else result
 
   @staticmethod
-  def check(value: Quantity, dimensionality: Dimensionality, *, target: LocatedValue):
-    match value:
-      case Quantity() if (value.dimensionality == dimensionality):
-        return DiagnosticAnalysis(), LocatedValue.new(value, target.area)
-      case Quantity() if value.dimensionless:
+  def check(target: LocatedValue[Quantity], /, dimensionality: Dimensionality):
+    match target.value:
+      case Quantity() if (target.value.dimensionality == dimensionality):
+        return DiagnosticAnalysis(), LocatedValue.new(target, target.area)
+      case Quantity() if target.value.dimensionless:
         return DiagnosticAnalysis(errors=[MissingUnitError(target)]), Ellipsis
       case Quantity():
         return DiagnosticAnalysis(errors=[InvalidUnitError(target)]), Ellipsis
@@ -855,6 +855,9 @@ class ArbitraryQuantityType(Type):
     self._allow_unit = allow_unit
 
   def analyze(self, obj, /, context):
+    if not isinstance(obj.value, str):
+      return DiagnosticAnalysis(errors=[InvalidPrimitiveError(obj, str)]), Ellipsis
+
     try:
       quantity = ureg.parse_quantity(obj.value)
     except quantops.ParserError as e:
@@ -869,6 +872,26 @@ class ArbitraryQuantityType(Type):
       return DiagnosticAnalysis(errors=[QuantopsParserError(e)]), Ellipsis
     else:
       return DiagnosticAnalysis(), LocatedValue.new(quantity, obj.area)
+
+class QuantityContextType(Type):
+  def analyze(self, obj, /, context):
+    match obj.value:
+      case QuantityContext():
+        return obj
+      case str():
+        assert isinstance(obj, LocatedString)
+
+        try:
+          ctx = ureg.get_context(obj.value)
+        except quantops.ParserError:
+          try:
+            ctx = ureg.parse_assembly_as_context(obj)
+          except quantops.ParserError as e:
+            return DiagnosticAnalysis(errors=[QuantopsParserError(e)]), Ellipsis
+
+        return DiagnosticAnalysis(), LocatedValue.new(ctx, obj.area)
+      case _:
+        return DiagnosticAnalysis(errors=[InvalidPrimitiveError(obj, QuantityContext)]), Ellipsis
 
 
 class BoolType(PrimitiveType):
@@ -1235,19 +1258,22 @@ class EvaluableChain(Evaluable):
 
 __all__ = [
   'AnyType',
+  'ArbitraryQuantityType',
   'Attribute',
   'AutoExprContextType',
   'BoolType',
   'DataTypeType',
-  'PostAnalysisType',
   'DictType',
   'EllipsisType',
   'EnumType',
   'EvaluableContainerType',
   'HasAttrType',
+  'IdentifierType',
   'IntType',
   'KVDictType',
+  'QuantityContextType',
   'ListType',
+  'PostAnalysisType',
   'PotentialExprType',
   'PrimitiveType',
   'QuantityType',

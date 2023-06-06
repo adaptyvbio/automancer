@@ -14,9 +14,9 @@ from . import logger, namespace
 class BoardTemperatureNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, master: 'MasterDevice'):
     super().__init__(
+      context="temperature",
       readable=True,
-      poll_interval=1.0,
-      unit="degC"
+      poll_interval=1.0
     )
 
     self.icon = "thermostat"
@@ -40,9 +40,9 @@ class BoardTemperatureNode(am.NumericNode, am.PollableReadableNode):
 class TemperatureReadoutNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
+      context="temperature",
       poll_interval=0.2,
-      readable=True,
-      unit="degC"
+      readable=True
     )
 
     self.icon = "thermostat"
@@ -63,12 +63,14 @@ class TemperatureReadoutNode(am.NumericNode, am.PollableReadableNode):
 class TemperatureSetpointNode(am.NumericNode, am.PollableReadableNode):
   def __init__(self, *, worker: 'WorkerDevice'):
     super().__init__(
-      max=60.0,
-      min=25.0,
+      context="temperature",
       nullable=True,
       poll_interval=5.0,
+      range=(
+        25.0 * am.ureg.degC,
+        60.0 * am.ureg.degC
+      ),
       readable=True,
-      unit="degC",
       writable=True
     )
 
@@ -89,7 +91,7 @@ class TemperatureSetpointNode(am.NumericNode, am.PollableReadableNode):
 
   async def _write(self, value: Quantity | am.NullType, /):
     try:
-      await self._worker._set_temperature_setpoint(value.m_as("degC") if not isinstance(value, am.NullType) else None)
+      await self._worker._set_temperature_setpoint((value / am.ureg.degC).magnitude if not isinstance(value, am.NullType) else None)
     except OkolabDeviceConnectionError as e:
       raise am.NodeUnavailableError from e
 
@@ -290,6 +292,7 @@ class WorkerDevice(am.DeviceNode):
     match self._index:
       case 1: return await device.get_temperature1()
       case 2: return await device.get_temperature2()
+      case _: raise NotImplementedError
 
   async def _get_temperature_setpoint(self):
     assert (device := self._master._device)
@@ -297,6 +300,7 @@ class WorkerDevice(am.DeviceNode):
     match self._index:
       case 1: return await device.get_temperature_setpoint1()
       case 2: return await device.get_temperature_setpoint2()
+      case _: raise NotImplementedError
 
   async def _set_enabled(self, enabled: bool, /):
     if enabled != self._enabled:

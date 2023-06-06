@@ -27,11 +27,18 @@ export class ShortcutManager {
 
   listen(target: HTMLElement = document.body, options: { signal: AbortSignal; }) {
     target.addEventListener('keydown', (event) => {
+      if (event.composedPath().some((element) => (element instanceof HTMLDialogElement))) {
+        return;
+      }
+
+      let key = KEY_CODE_MAP[event.key] ?? event.key;
+      key = (key.length === 1) ? key.toUpperCase() : key;
+
       let properties: ShortcutProperties = {
         altKey: event.altKey,
         ctrlKey: event.ctrlKey,
-        key: (KEY_CODE_MAP[event.key] ?? event.key),
-        metaKey: IS_MAC ? event.metaKey : event.ctrlKey,
+        key,
+        metaKey: (IS_MAC ? event.metaKey : event.ctrlKey),
         shiftKey: event.shiftKey
       };
 

@@ -20,7 +20,10 @@ export enum ApplierLocationMode {
 
 export default {
   getChildren(block, context) {
-    return [block.child];
+    return [{
+      block: block.child,
+      delay: 0
+    }];
   },
   getChildrenExecution(block, location, context) {
     return (location.mode === ApplierLocationMode.Normal)

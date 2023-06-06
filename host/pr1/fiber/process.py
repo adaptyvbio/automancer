@@ -2,10 +2,12 @@ import datetime
 from abc import ABC, abstractmethod, abstractstaticmethod
 from asyncio import Event
 from dataclasses import dataclass, field
+import math
 import time
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
 
+from ..eta import DurationETA, export_eta
 from ..reader import PossiblyLocatedValue
 from .expr import Evaluable
 from ..host import logger
@@ -17,24 +19,6 @@ from .parser import BaseBlock, HeadProgram
 
 if TYPE_CHECKING:
   from .master2 import Master
-
-
-DateLike = datetime.datetime | float
-DurationLike = datetime.timedelta | float
-
-def transform_duration(value: DurationLike, /) -> float:
-  return value.total_seconds() if isinstance(value, datetime.timedelta) else value
-
-class ProgramExecDuration:
-  def __init__(self, value: DurationLike, /, resolution: DurationLike = 0.0):
-    self.resolution = resolution
-    self.value = value
-
-  def export(self):
-    return {
-      "resolution": transform_duration(self.resolution),
-      "value": transform_duration(self.value)
-    }
 
 
 @dataclass(kw_only=True)
@@ -52,12 +36,12 @@ class BaseProcessEvent:
 
 @dataclass(kw_only=True)
 class ProcessExecEvent(BaseProcessEvent):
-  duration: Optional[ProgramExecDuration | DurationLike] = None
+  duration: Optional[DurationETA] = None
   pausable: Optional[bool] = None
 
 @dataclass(kw_only=True)
 class ProcessPauseEvent(BaseProcessEvent):
-  duration: Optional[ProgramExecDuration | DurationLike] = None
+  duration: Optional[DurationETA] = None
 
 @dataclass(kw_only=True)
 class ProcessFailureEvent(BaseProcessEvent):
@@ -103,6 +87,10 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
     ...
 
   @staticmethod
+  def eta(data: Any) -> DurationETA:
+    return math.nan
+
+  @staticmethod
   def import_point(data: Any, /):
     raise NotImplementedError
 
@@ -116,6 +104,9 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
     self._data = data
     self._ProcessType = ProcessType
 
+  def _eta(self):
+    return self._ProcessType.eta(self._data)
+
   def create_program(self, handle):
     return ProcessProgram(self, handle)
 
@@ -126,7 +117,9 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
     return {
       "name": self._ProcessType.name,
       "namespace": self._ProcessType.namespace,
-      "data": self._ProcessType.export_data(self._data)
+
+      "data": self._ProcessType.export_data(self._data),
+      "eta": export_eta(self.eta())
     }
 
 
@@ -453,8 +446,6 @@ __all__ = [
   'BaseProcess',
   'BaseProcessEvent',
   'BaseProcessPoint',
-  'DateLike',
-  'DurationLike',
   'ProcessError',
   'ProcessExecEvent',
   'ProcessFailureEvent',
@@ -464,6 +455,5 @@ __all__ = [
   'ProcessProgramLocation',
   'ProcessProgramMode',
   'ProcessProtocolError',
-  'ProcessTerminationEvent',
-  'ProgramExecDuration'
+  'ProcessTerminationEvent'
 ]

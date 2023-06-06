@@ -1,7 +1,7 @@
 import { ExperimentId, Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 
-import { Host } from './host';
 import { BlockContext, GlobalContext } from './interfaces/plugin';
+import { importEta } from './dynamic-value';
 
 
 export interface BlockGroup {
@@ -13,6 +13,10 @@ export interface BlockGroup {
 export interface BlockPair {
   block: ProtocolBlock;
   location: unknown | null;
+
+  duration: number;
+  startTime: number;
+  endTime: number;
 }
 
 
@@ -69,7 +73,7 @@ export function getRefPaths(block: ProtocolBlock, location: unknown, context: Gl
   return Array.from(refs.entries())
     .filter(([key, ref]) => ref)
     .flatMap(([key, ref]) =>
-      getRefPaths(children![key], ref!.location, context).map((path) => [key, ...path])
+      getRefPaths(children![key].block, ref!.location, context).map((path) => [key, ...path])
     );
 }
 
@@ -91,7 +95,11 @@ export function analyzeBlockPath(
 ) {
   let pairs: BlockPair[] = [{
     block: protocol.root,
-    location: rootLocation
+    location: rootLocation,
+
+    duration: protocol.root.eta,
+    endTime: protocol.root.eta,
+    startTime: 0
   }];
 
   let groups: BlockGroup[] = [{
@@ -105,25 +113,36 @@ export function analyzeBlockPath(
 
   let currentBlock = protocol.root;
   let currentLocation = rootLocation;
+  let currentStartTime = 0;
 
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
 
     currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
-    currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
+
+    let childInfo = currentBlockImpl.getChildren!(currentBlock, context)[key];
+
+    currentBlock = childInfo.block;
+    currentStartTime += childInfo.delay;
+
+    let duration = importEta(currentBlock.eta);
 
     pairs.push({
       block: currentBlock,
-      location: currentLocation
+      location: currentLocation,
+
+      duration,
+      endTime: (currentStartTime + duration),
+      startTime: currentStartTime
     });
   }
 
-  for (let [blockIndex, { block, location }] of pairs.entries()) {
+  for (let [blockIndex, pair] of pairs.entries()) {
     let isBlockLeaf = (blockIndex === (pairs.length - 1));
 
-    let group = groups.at(-1);
-    let blockName = getBlockName(block);
-    let blockImpl = getBlockImpl(block, context);
+    let group = groups.at(-1)!;
+    let blockName = getBlockName(pair.block);
+    let blockImpl = getBlockImpl(pair.block, context);
 
     if (isBlockLeaf && !blockImpl.getChildren) {
       isLeafBlockTerminal = true;
@@ -144,15 +163,18 @@ export function analyzeBlockPath(
       group.name = blockName;
     }
 
-    group.pairs.push({
-      block,
-      location
-    });
+    group.pairs.push(pair);
 
     if (blockIndex > 0) {
       group.path.push(blockPath[blockIndex]);
     }
   }
+
+  // console.log({
+  //   groups,
+  //   isLeafBlockTerminal,
+  //   pairs
+  // });
 
   return {
     groups,

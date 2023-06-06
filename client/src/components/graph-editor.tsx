@@ -274,7 +274,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           groupBlocks.push(currentBlock);
 
           let key = 0;
-          currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
+          currentBlock = currentBlockImpl.getChildren!(currentBlock, context)[key].block;
           currentBlockPath.push(key);
           currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
         }
@@ -297,7 +297,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation, {
           settings,
           computeMetrics: (key) => {
-            let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key];
+            let childBlock = currentBlockImpl.getChildren!(currentBlock, context)[key].block;
             let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
 
             return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);

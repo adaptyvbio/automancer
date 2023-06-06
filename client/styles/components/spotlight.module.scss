@@ -119,6 +119,15 @@
   }
 }
 
+.timeinfo {
+  display: flex;
+  justify-content: space-between;
+
+  margin: 1rem 0;
+
+  color: #666;
+}
+
 
 .footer {
   &Root {

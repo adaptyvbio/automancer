@@ -5,6 +5,7 @@ import { Fragment } from 'react';
 
 export interface Block extends ProtocolBlock {
   children: ProtocolBlock[];
+  childrenDelays: number[];
 }
 
 export interface Location {
@@ -21,8 +22,6 @@ export interface Point {
 
 const horizontalCellGap = 2;
 const verticalCellGap = 1;
-
-const namespace = ('sequence' as PluginName);
 
 const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, ancestors, location, options, context) => {
   let vertical = options.settings.vertical;
@@ -158,7 +157,7 @@ const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, 
 };
 
 export default {
-  namespace,
+  namespace: ('sequence' as PluginName),
 
   blocks: {
     ['_' as ProtocolBlockName]: {
@@ -170,7 +169,10 @@ export default {
         };
       },
       getChildren(block, context) {
-        return block.children;
+        return block.children.map((childBlock, index) => ({
+          block: childBlock,
+          delay: block.childrenDelays[index]
+        }));
       },
       getChildrenExecution(block, location, context) {
         return [

@@ -1,15 +1,10 @@
-import { DynamicValue, Plugin, PluginBlockImpl, ProtocolBlockGraphRendererMetrics, formatDynamicValue } from 'pr1';
+import { DynamicValue, Plugin, PluginBlockImpl, formatDynamicValue } from 'pr1';
 import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
   child: ProtocolBlock;
   count: DynamicValue;
-}
-
-export interface BlockMetrics extends ProtocolBlockGraphRendererMetrics {
-  child: ProtocolBlockGraphRendererMetrics;
-  label: string;
 }
 
 export interface Location {
@@ -79,7 +74,10 @@ export default {
         }];
       },
       getChildren(block, context) {
-        return [block.child];
+        return [{
+          block: block.child,
+          delay: 0
+        }];
       },
       getChildrenExecution(block, location, context) {
         return [{ location: location.children[0] }];

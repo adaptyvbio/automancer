@@ -1,5 +1,6 @@
 from asyncio import Event
 from dataclasses import KW_ONLY, dataclass, field
+import math
 from types import EllipsisType
 from typing import Optional
 
@@ -81,6 +82,14 @@ class Program(BaseProgram):
   #     self.halt()
   #   elif point.child:
   #     self._child_program.jump(point.child)
+
+  def eta(self, location: ProgramLocation):
+    if location.count is None:
+      return math.inf
+    if location.iteration is None:
+      return self._block.eta()
+
+    return self._owner.duration_eta() + self._block.eta() * (location.count - location.iteration)
 
   async def run(self, point: Optional[ProgramPoint], stack):
     while True:

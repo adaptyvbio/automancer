@@ -75,7 +75,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     // Initialize the editor
 
     this.editor = monaco.editor.create(this.ref.current!, {
@@ -428,7 +428,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     }, { signal: this.controller.signal });
   }
 
-  componentDidUpdate(prevProps: TextEditorProps) {
+  override componentDidUpdate(prevProps: TextEditorProps) {
     // if (this.props.draft.revision !== prevProps.draft.revision) {
     //   let position = this.editor.getPosition();
 
@@ -458,7 +458,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     // }
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     this.controller.abort();
   }
 
@@ -478,7 +478,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.editor.trigger(undefined, 'undo', undefined);
   }
 
-  render() {
+  override render() {
     return (
       <div className={textEditorStyles.root} onKeyDown={(event) => {
         if (this.editor.hasTextFocus()) {

@@ -183,6 +183,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                           shortcut: 'E',
                           contents: () => (
                             <BlockInspector
+                              app={this.props.app}
                               blockPath={selectedBlockPath}
                               footer={selectedBlockPath && !isSelectedBlockActive
                                 ? [(

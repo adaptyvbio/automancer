@@ -32,7 +32,7 @@ export function DraftSummary(props: {
         <button type="button" className={styles.actionRoot} onClick={props.onStart}>
           <Icon name="play_circle" className={styles.actionIcon} />
           <div className={styles.actionLabel}>
-            <ShortcutGuide shortcut="Meta+Shift+S" onTrigger={props.onStart}>Start</ShortcutGuide>
+            <ShortcutGuide shortcut="Meta+Shift+S">Start</ShortcutGuide>
           </div>
         </button>
       )}

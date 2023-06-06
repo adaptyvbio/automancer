@@ -10,6 +10,7 @@ from .devices.nodes.primitive import *
 from .devices.nodes.readable import *
 from .devices.nodes.value import *
 from .devices.nodes.watcher import *
+from .eta import *
 from .host import Host
 from .input import *
 from .input.file import *

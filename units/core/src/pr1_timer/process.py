@@ -1,4 +1,5 @@
 import asyncio
+import math
 import time
 from asyncio import Event, Future, Task
 from dataclasses import dataclass, field
@@ -7,13 +8,13 @@ from typing import Any, Callable, Literal, Optional, TypeVar
 import pr1 as am
 from pr1.fiber.expr import (Evaluable, EvaluableConstantValue,
                             EvaluablePythonExpr, export_value)
-from pr1.reader import PossiblyLocatedValue
+from pr1.reader import LocatedValue, PossiblyLocatedValue
 from quantops import Quantity
 
 from . import namespace
 
-ProcessData = Quantity | Literal['forever']
 
+ProcessData = Quantity | Literal['forever']
 
 @dataclass(kw_only=True)
 class ProcessLocation:
@@ -194,6 +195,16 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
   @staticmethod
   def import_point(data, /):
     return ProcessPoint(progress=data["progress"])
+
+  @staticmethod
+  def eta(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
+    match data:
+      case EvaluableConstantValue(LocatedValue('forever')):
+        return math.inf
+      case EvaluableConstantValue(LocatedValue(Quantity() as duration)):
+        return (duration / am.ureg.second).magnitude
+      case _:
+        return math.nan
 
   @staticmethod
   def export_data(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):

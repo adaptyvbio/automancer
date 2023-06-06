@@ -259,6 +259,8 @@ T = TypeVar('T')
 T_co = TypeVar('T_co', covariant=True)
 
 class LocatedValue(Generic[T_co]):
+  __match_args__ = ('value', 'area')
+
   def __init__(self, value: T_co, area: LocationArea, *, full_area: Optional[LocationArea] = None):
     self.area = area
     self.full_area = full_area or area

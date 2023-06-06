@@ -9,6 +9,7 @@ from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
+from pr1.eta import export_eta
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, export_value
 from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, EnumType,
@@ -99,6 +100,9 @@ class ApplierBlock(BaseBlock):
   def __get_node_name__(self):
     return "State applier"
 
+  def _eta(self):
+    return self.child.eta()
+
   def create_program(self, handle):
     from .program import ApplierProgram
     return ApplierProgram(self, handle)
@@ -111,7 +115,8 @@ class ApplierBlock(BaseBlock):
       "namespace": namespace,
       "name": "applier",
 
-      "child": self.child.export()
+      "child": self.child.export(),
+      "eta": export_eta(self.eta())
     }
 
 
@@ -128,6 +133,9 @@ class PublisherBlock(BaseBlock):
   def __get_node_name__(self):
     return "State publisher"
 
+  def _eta(self):
+    return self.child.eta()
+
   def create_program(self, handle):
     from .program import PublisherProgram
     return PublisherProgram(self, handle)
@@ -141,6 +149,7 @@ class PublisherBlock(BaseBlock):
       "name": "publisher",
 
       "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
+      "eta": export_eta(self.eta()),
       "child": self.child.export(),
       "stable": self.stable
     }
@@ -161,14 +170,14 @@ class PublisherTransformer(BasePassiveTransformer):
         case EnumNode():
           return EnumType(*[case.id for case in node.cases])
         case NumericNode():
-          return QuantityType(node.unit, allow_nil=node.nullable, min=node.min, max=node.max)
+          return QuantityType(node.context.dimensionality, allow_nil=node.nullable, min=(node.range[0] if node.range else None), max=(node.range[1] if node.range else None))
         case _:
           return AnyType()
 
     return {
       key: Attribute(
         description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
-        documentation=([f"Unit: {node.context!r}"] if isinstance(node, NumericNode) and node.unit else None),
+        # documentation=([f"Unit: {node.context!r}"] if isinstance(node, NumericNode) else None),
         label=node.label,
         optional=True,
         type=AutoExprContextType(get_type(node))

@@ -110,7 +110,11 @@ class Executor(BaseExecutor):
               failure = True
 
             if ((ctx := node_conf.value.context.value) is not None) and (ctx.dimensionality != node_unit.dimensionality):
-              analysis.errors.append(OPCUAConfigurationError(f"Invalid context dimensionality", node_conf.value.context))
+              analysis.errors.append(OPCUAConfigurationError(f"Invalid dimensionality", node_conf.value.context))
+              failure = True
+
+            if ((resolution := node_conf.value.resolution.value) is not None) and (resolution.dimensionality != node_unit.dimensionality):
+              analysis.errors.append(OPCUAConfigurationError(f"Invalid dimensionality", node_conf.value.resolution))
               failure = True
           else:
             for key in ['context', 'min', 'max', 'resolution']:

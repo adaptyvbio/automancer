@@ -793,7 +793,7 @@ def PotentialExprType(obj_type: Type):
 class QuantityType(Type):
   def __init__(
     self,
-    unit: Optional[Unit | str],
+    unit: Dimensionality | str,
     *,
     allow_inverse: bool = False,
     allow_nil: bool = False,
@@ -802,7 +802,7 @@ class QuantityType(Type):
   ):
     self._allow_inverse = allow_inverse # TODO: Add implementation
     self._allow_nil = allow_nil
-    self._dimensionality = ureg.parse_unit(unit or "dimensionless").dimensionality
+    self._dimensionality = unit if isinstance(unit, Dimensionality) else ureg.parse_unit(unit).dimensionality
     self._max = max
     self._min = min
 
@@ -826,7 +826,7 @@ class QuantityType(Type):
     else:
       value = obj.value
 
-    analysis, result = self.check(value, self._dimensionality, target=obj)
+    analysis, result = self.check(LocatedValue(value, obj.area), self._dimensionality)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
@@ -842,7 +842,7 @@ class QuantityType(Type):
   def check(target: LocatedValue[Quantity], /, dimensionality: Dimensionality):
     match target.value:
       case Quantity() if (target.value.dimensionality == dimensionality):
-        return DiagnosticAnalysis(), LocatedValue.new(target, target.area)
+        return DiagnosticAnalysis(), target
       case Quantity() if target.value.dimensionless:
         return DiagnosticAnalysis(errors=[MissingUnitError(target)]), Ellipsis
       case Quantity():

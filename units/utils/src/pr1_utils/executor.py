@@ -86,6 +86,7 @@ class RandomNode(NumericNode, PollableReadableNode):
     super().__init__(
       dtype='f4',
       poll_interval=0.2,
+      range=(-1000 * ureg.dimensionless, 1000 * ureg.dimensionless),
       readable=True
     )
 

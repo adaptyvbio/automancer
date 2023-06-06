@@ -6,11 +6,28 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from io import IOBase
-from typing import Any, Iterable, Protocol, Self, Sequence, TypeVar
+from typing import Any, Generator, Iterable, Protocol, Self, Sequence, TypeVar
 
 
-FileObject = IOBase
+T = TypeVar('T')
+T_contra = TypeVar('T_contra', contravariant=True)
+
+class SupportsAdd(Protocol[T]):
+  def __add__(self, __x: T) -> T:
+    ...
+
+T_SupportsAdd = TypeVar('T_SupportsAdd', bound=SupportsAdd)
+
+def cumsum(items: Iterable[T_SupportsAdd]) -> Generator[T_SupportsAdd, None, None]:
+  it = iter(items)
+  total = next(it)
+
+  yield total
+
+  for item in it:
+    total += item
+    yield total
+
 
 def fast_hash(data: bytes | str, /):
   return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
@@ -21,11 +38,8 @@ def log_exception(logger, *, level = logging.DEBUG):
       logger.log(level, line)
 
 
-T = TypeVar('T')
-S = TypeVar('S', contravariant=True)
-
-class SequenceSplitter(Protocol[S]):
-  def __call__(self, item: S, /) -> bool:
+class SequenceSplitter(Protocol[T_contra]):
+  def __call__(self, item: T_contra, /) -> bool:
     ...
 
 def split_sequence(sequence: Sequence[T], func: SequenceSplitter[T], /):

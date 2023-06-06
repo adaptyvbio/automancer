@@ -76,6 +76,10 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   }
 
   override componentDidMount() {
+    this.props.app.shortcutManager.attach('Meta+Shift+S', () => {
+      this.setState({ startModalOpen: true });
+    }, { signal: this.controller.signal });
+
     this.pool.add(async () => {
       // This immediately updates item.readable, item.writable and item.lastModified
       // and calls setState() to update the analoguous properties on draft.
@@ -389,6 +393,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                               ? (
                                 <ErrorBoundary>
                                   <BlockInspector
+                                    app={this.props.app}
                                     blockPath={this.state.selectedBlockPath}
                                     host={this.props.host}
                                     protocol={this.state.compilation!.protocol}
@@ -442,6 +447,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         subtitle = null;
       }
     }
+
+    // console.log(this.state.compilation?.protocol)
 
     return (
       <main className={viewStyles.root}>

@@ -102,7 +102,10 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
   // Returns null -> point is null
   createPoint?(block: Block, location: Location | null, child: { key: number; point: unknown; } | null, context: GlobalContext): unknown | null;
 
-  getChildren?(block: Block, context: GlobalContext): ProtocolBlock[];
+  getChildren?(block: Block, context: GlobalContext): {
+    block: ProtocolBlock;
+    delay: number;
+  }[];
   getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[] | null;
   getLabel?(block: Block): ReactNode | null;
 }

@@ -44,6 +44,9 @@ class Program(BaseProgram):
     self._halting = False
     self._point: Optional[ProgramPoint]
 
+  def eta(self, location: ProgramLocation):
+    return self._child_program.eta() + sum(child.eta() for child in self._block.children[(location.index + 1):])
+
   def halt(self):
     assert not self._halting
 

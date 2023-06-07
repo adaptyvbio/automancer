@@ -225,7 +225,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 <div className={styles.detailInfoLabel}>Current user</div>
                 <div className={styles.detailInfoValue}>{(() => {
                   if (!owner) {
-                    return '–';
+                    return '\u2013';
                   } if (owned) {
                     return 'You';
                   } if (owner.type === 'client') {
@@ -279,7 +279,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 
                     if (!lastValueEvent?.value) {
                       // The value is unknown.
-                      magnitude = '–';
+                      magnitude = '\u2013';
                     } else if (lastValueEvent.value.type === 'null') {
                       // The device is disabled.
                       magnitude = '[disabled]';
@@ -332,7 +332,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                             onInput={(value) => void setValue((value !== null) ? [false, true][value] : null)}
                             options={[
                               { id: null,
-                                label: '–' },
+                                label: '\u2013' },
                               { id: 0,
                                 label: 'Off' },
                               { id: 1,
@@ -355,7 +355,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                             onInput={(value) => void setValue(value)}
                             options={[
                               { id: null,
-                                label: '–' },
+                                label: '\u2013' },
                               ...node.spec.cases.map((specCase) => ({
                                 id: specCase.id,
                                 label: (specCase.label ?? specCase.id.toString())
@@ -427,7 +427,7 @@ function NumericValueEditor(props: {
     currentMagnitude = ureg.formatMagnitude(currentTargetValue / currentOption.value, (props.spec.resolution ?? 0) / currentOption.value);
     currentOptionIndex = unitOptions.findIndex((option) => (option.value.value === currentOption.value));
   } else {
-    currentMagnitude = '\u2014';
+    currentMagnitude = '\u2013';
     currentOptionIndex = 0;
   }
 
@@ -469,27 +469,25 @@ function NumericValueEditor(props: {
           onInput={(event) => {
             let el = event.currentTarget;
             let value = el.value;
+
             let selectionStart = event.currentTarget.selectionStart;
+            let selectionEnd = event.currentTarget.selectionEnd;
 
-            let index: number;
+            let normalized = normalizeStringWithClusters(value, { '-': MINUS_CLUSTER }, [selectionStart ?? 0, selectionEnd ?? 0]);
 
-            while ((index = value.indexOf('-')) >= 0) {
-              value = value.replace('-', MINUS_CLUSTER);
+            console.log(normalized.string);
+            el.value = normalized.string;
 
-              if ((selectionStart !== null) && (selectionStart > index)) {
-                selectionStart += 1;
-              }
+            if (selectionStart !== null) {
+              el.selectionStart = normalized.positions[0];
+              el.selectionEnd = (selectionEnd !== null)
+                ? normalized.positions[1]
+                : el.selectionStart;
             }
-
-            value = value.replaceAll(/\u2212(?!\u2009)|(?<!\u2212)\u2009/g, '');
-
-            el.value = value;
-            el.selectionStart = selectionStart;
-            el.selectionEnd = selectionStart;
 
             setRawValue((rawValue) => ({
               ...rawValue!,
-              input: value
+              input: normalized.string
             }));
           }}
           onKeyDown={(event) => {
@@ -563,4 +561,55 @@ function NumericValueEditor(props: {
       })()}
     </>
   );
+}
+
+
+function normalizeStringWithClusters(string: string, clusters: Record<string, string>, positions: number[]) {
+  let outputPositions = Array.from(positions);
+  let outputString = '';
+
+  let specialChars = new Set(Object.values(clusters).flatMap((clusterValue) => clusterValue.split('')));
+
+  outer:
+  for (let charIndex = 0; charIndex < string.length;) {
+    let char = string[charIndex];
+
+    for (let [clusterChar, clusterValue] of Object.entries(clusters)) {
+      if (string.startsWith(clusterValue, charIndex)) {
+        charIndex += clusterValue.length;
+        outputString += clusterValue;
+        continue outer;
+      }
+
+      if (char === clusterChar) {
+        charIndex += 1;
+        outputString += clusterValue;
+
+        for (let [positionIndex, position] of positions.entries()) {
+          if (position >= charIndex) {
+            outputPositions[positionIndex] += (clusterValue.length - 1);
+          }
+        }
+
+        continue outer;
+      }
+    }
+
+    if (specialChars.has(char)) {
+      for (let [positionIndex, position] of positions.entries()) {
+        if (position > charIndex) {
+          outputPositions[positionIndex] -= 1;
+        }
+      }
+    } else {
+      outputString += char;
+    }
+
+    charIndex += 1;
+  }
+
+  return {
+    positions: outputPositions,
+    string: outputString
+  };
 }

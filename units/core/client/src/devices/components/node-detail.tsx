@@ -85,8 +85,6 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   }
 
   override componentDidUpdate(prevProps: Readonly<NodeDetailProps>, prevState: Readonly<NodeDetailState>, snapshot?: any) {
-    // console.log(this.props.nodeState);
-
     if (isValueNode(this.props.node) && (this.props.node.spec.type === 'numeric') && (this.props.nodeState.value?.value?.type === 'default')) {
       let newTime = this.props.nodeState.value.time;
       let newValue = this.props.nodeState.value.value.value.magnitude;
@@ -475,7 +473,6 @@ function NumericValueEditor(props: {
 
             let normalized = normalizeStringWithClusters(value, { '-': MINUS_CLUSTER }, [selectionStart ?? 0, selectionEnd ?? 0]);
 
-            console.log(normalized.string);
             el.value = normalized.string;
 
             if (selectionStart !== null) {

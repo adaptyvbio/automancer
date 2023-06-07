@@ -338,6 +338,12 @@ class Host:
 
         del self.experiments[request["experimentId"]]
 
+      case "getExperimentReportHeader":
+        experiment = self.experiments[request["experimentId"]]
+        header = experiment.report_reader.header
+
+        return header.export()
+
       case "requestToExecutor":
         return await self.executors[request["namespace"]].request(request["data"], agent=agent)
 

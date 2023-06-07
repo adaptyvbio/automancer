@@ -1,5 +1,6 @@
 import type { Master } from './master';
 import type { PluginName } from './plugin';
+import type { ProtocolBlock } from './protocol';
 import type { PluginInfo } from './unit';
 import type { Brand } from './util';
 
@@ -12,9 +13,15 @@ export type HostId = Brand<string, 'HostId'>;
 export interface Experiment {
   id: ExperimentId;
   creationDate: number;
+  hasReport: boolean;
   master: Master | null;
   runners: Record<PluginName, unknown>;
   title: string;
+}
+
+export interface ExperimentReportHeader {
+  name: string;
+  root: ProtocolBlock;
 }
 
 export interface HostState {

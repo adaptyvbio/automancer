@@ -18,6 +18,8 @@ from .langservice import *
 from .staticanalysis.expr import *
 from .ureg import *
 from .util.decorators import *
+from .util.asyncio import *
+from .util.pool import *
 
 from .fiber.parser import BaseParser, ProcessTransformer
 from .fiber.process import *

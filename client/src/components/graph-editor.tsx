@@ -20,7 +20,7 @@ import { Application } from '../application';
 export interface GraphEditorProps {
   app: Application;
   host: Host;
-  protocol: Protocol | null;
+  protocolRoot: ProtocolBlock | null;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selection: {
     blockPath: ProtocolBlockPath;
@@ -241,7 +241,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
 
     let getBlockImpl = (block: ProtocolBlock) => this.props.host.plugins[block.namespace].blocks[block.name];
 
-    if (this.props.protocol?.root) {
+    if (this.props.protocolRoot) {
       // console.log(this.props.tree);
       // console.log('---');
 
@@ -309,7 +309,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       // Render graph
 
       let origin: Point = { x: 1, y: 1 };
-      let treeMetrics = computeGraph(this.props.protocol.root, [], [], this.props.location ?? null);
+      let treeMetrics = computeGraph(this.props.protocolRoot, [], [], this.props.location ?? null);
 
       let rendered = treeMetrics.render(origin, {
         attachmentEnd: false,

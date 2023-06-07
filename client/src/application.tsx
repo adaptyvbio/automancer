@@ -20,14 +20,14 @@ import { StoreManager } from './store/store-manager';
 import { Pool } from './util';
 import { ViewConf } from './views/conf';
 import { ViewDraftWrapper } from './views/draft';
-import { ViewExecution } from './views/execution';
 import { ViewExperiments } from './views/experiments';
 import { ViewPluginView } from './views/plugin-view';
 import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
+import { ViewExperimentWrapper } from './views/experiment-wrapper';
 
 
-const Views: ViewType[] = [ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewExecution, ViewPluginView];
+const Views: ViewType[] = [ViewExperimentWrapper, ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewPluginView];
 
 const Routes: Route[] = Views.flatMap((View) =>
   View.routes.map((route) => ({

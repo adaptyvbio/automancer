@@ -1,5 +1,5 @@
 import { List } from 'immutable';
-import { ExperimentId, PluginName, ProtocolBlockPath } from 'pr1-shared';
+import { Experiment, ExperimentId, PluginName, ProtocolBlockPath } from 'pr1-shared';
 import { Component, createRef } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
@@ -12,25 +12,16 @@ import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { Pool } from '../util';
 import * as util from '../util';
-import { ViewHashOptions, ViewProps } from '../interfaces/view';
-import { BaseUrl } from '../constants';
-import { ViewExperiments } from './experiments';
-import { ViewChip } from './chip';
+import { ViewProps } from '../interfaces/view';
 import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
 import { ErrorBoundary } from '../components/error-boundary';
 import { Button } from '../components/button';
+import { ViewExperimentWrapperRoute } from './experiment-wrapper';
 
 
-export interface ViewExecutionRoute {
-  id: '_';
-  params: {
-    experimentId: ExperimentId;
-  };
-}
-
-export type ViewExecutionProps = ViewProps<ViewExecutionRoute>;
+export type ViewExecutionProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
 
 export interface ViewExecutionState {
   selection: {
@@ -55,33 +46,21 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     };
   }
 
-  get experiment() {
-    return this.props.host.state.experiments[this.props.route.params.experimentId];
-  }
-
   get master() {
-    return this.experiment.master!;
+    return this.props.experiment.master!;
   }
 
-  componentDidRender() {
-    if (!this.experiment) {
-      ViewExperiments.navigate();
-    } else if (!this.experiment.master) {
-      if (navigation.canGoBack) {
-        navigation.back();
-      } else {
-        ViewChip.navigate(this.experiment.id);
-      }
-    }
-  }
-
-  override componentDidMount() {
-    this.componentDidRender();
-  }
-
-  override componentDidUpdate() {
-    this.componentDidRender();
-  }
+  // componentDidRender() {
+  //   if (!this.props.experiment) {
+  //     ViewExperiments.navigate();
+  //   } else if (!this.props.experiment.master) {
+  //     if (navigation.canGoBack) {
+  //       navigation.back();
+  //     } else {
+  //       ViewChip.navigate(this.props.experiment.id);
+  //     }
+  //   }
+  // }
 
   private get activeBlockPaths() {
     return getRefPaths(this.master.protocol.root, this.master.location, this.globalContext);
@@ -111,10 +90,6 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
   }
 
   override render() {
-    if (!this.experiment?.master) {
-      return null;
-    }
-
     let activeBlockPaths = this.activeBlockPaths;
     let selectedBlockPath = (this.state.selection?.blockPath ?? null);
     let isSelectedBlockActive = selectedBlockPath && activeBlockPaths.some((path) => util.deepEqual(path, selectedBlockPath));
@@ -122,7 +97,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     return (
       <main className={viewStyles.root}>
         <TitleBar
-          title={this.experiment.title}
+          title={this.props.experiment.title}
           subtitle={`Running ‘${this.master.protocol.name!}’`}
           subtitleVisible={true}
           tools={[{
@@ -144,7 +119,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                       app={this.props.app}
                       host={this.props.host}
                       location={this.master.location}
-                      protocol={this.master.protocol}
+                      protocolRoot={this.master.protocol.root}
                       selectBlock={this.selectBlock.bind(this)}
                       selection={this.state.selection} />
                   </ErrorBoundary>
@@ -168,8 +143,9 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                             <ErrorBoundary>
                               <ExecutionInspector
                                 activeBlockPaths={activeBlockPaths}
+                                app={this.props.app}
                                 blockPath={selectedBlockPath}
-                                experiment={this.experiment}
+                                experiment={this.props.experiment}
                                 host={this.props.host}
                                 location={this.master.location}
                                 protocol={this.master.protocol}
@@ -209,7 +185,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                                         }
                                       }
 
-                                      let commonBlockContext = createBlockContext(commonBlockPath, this.experiment.id, this.globalContext);
+                                      let commonBlockContext = createBlockContext(commonBlockPath, this.props.experiment.id, this.globalContext);
 
                                       this.pool.add(async () => {
                                         await commonBlockContext.sendMessage({
@@ -290,17 +266,4 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
 
     return null;
   }
-
-
-  static hash(options: ViewHashOptions<ViewExecutionRoute>) {
-    return options.route.params.experimentId;
-  }
-
-  static navigate(experimentId: ExperimentId) {
-    return navigation.navigate(`${BaseUrl}/experiment/${experimentId}`);
-  }
-
-  static routes = [
-    { id: '_', pattern: `/experiment/:experimentId` }
-  ];
 }

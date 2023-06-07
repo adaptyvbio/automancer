@@ -1,10 +1,13 @@
+import functools
+from comserde import serializable
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any, Optional
-from .error import DiagnosticDocumentReference
-from .reader import LocationArea, Source
+
+from .reader import Source
 
 
+@serializable
 @dataclass(kw_only=True)
 class DocumentOwner:
   id: str
@@ -17,13 +20,20 @@ class DocumentOwner:
     }
 
 
+@serializable
+@dataclass(frozen=True, kw_only=True)
 class Document:
-  def __init__(self, *, contents: str, id: str, path: PurePosixPath, owner: Optional[DocumentOwner]):
-    self.id = id
-    self.owner = owner
-    self.path = path
-    self.source = Source(contents)
-    self.source.origin = self
+  contents: str
+  id: str
+  path: PurePosixPath
+  owner: Optional[DocumentOwner] = None
+
+  @functools.cached_property
+  def source(self):
+    source = Source(self.contents)
+    source.origin = self
+
+    return source
 
   def export(self):
     return {

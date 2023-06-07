@@ -195,11 +195,11 @@ class ApplierProgramMode:
 
 @dataclass
 class ApplierProgramLocation(Exportable):
-  mode: ApplierProgramMode.Any
+  mode: int
 
   def export(self):
     return {
-      "mode": self.mode.export()
+      "mode": self.mode
     }
 
 
@@ -234,7 +234,7 @@ class ApplierProgram(BaseProgram):
     apply_task = asyncio.create_task(self._runner.wait())
 
     self._mode = ApplierProgramMode.Applying(apply_task)
-    self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode)))
+    self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode.export())))
 
     try:
       await apply_task
@@ -245,7 +245,7 @@ class ApplierProgram(BaseProgram):
 
       owner = self._handle.create_child(self._block.child)
       self._mode = ApplierProgramMode.Normal(owner)
-      self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode)))
+      self._handle.send(ProgramExecEvent(location=ApplierProgramLocation(self._mode.export())))
 
       await owner.run(point, stack)
 

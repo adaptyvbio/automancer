@@ -24,11 +24,11 @@ import { Host } from '../host';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import * as util from '../util';
 import { Pool } from '../util';
-import { ViewExecution } from './execution';
 import { ViewDrafts } from './protocols';
 import { analyzeBlockPath } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
 import { formatAbsoluteTime, formatDuration, formatRelativeDate } from '../format';
+import { ViewExperimentWrapper } from './experiment-wrapper';
 
 
 export interface ViewDraftProps {
@@ -120,7 +120,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       let experiment = this.props.host.state.experiments[this.experimentIdAwaitingRedirection];
 
       if (experiment.master) {
-        ViewExecution.navigate(experiment.id);
+        ViewExperimentWrapper.navigate(experiment.id);
       }
     }
   }
@@ -376,7 +376,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     <GraphEditor
                       app={this.props.app}
                       host={this.props.host}
-                      protocol={this.state.compilation?.protocol ?? null}
+                      protocolRoot={this.state.compilation?.protocol?.root ?? null}
                       selectBlock={this.selectBlock.bind(this)}
                       selection={this.state.selectedBlockPath && {
                         blockPath: this.state.selectedBlockPath,

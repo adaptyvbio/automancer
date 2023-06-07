@@ -1,18 +1,21 @@
+from comserde import serializable
 from dataclasses import dataclass
 import functools
 from pathlib import PurePosixPath
 from typing import Any, Optional, TYPE_CHECKING
 
+from .document import Document
+
 if TYPE_CHECKING:
   from .fiber.parser import FiberProtocol
   from .input import LanguageServiceAnalysis
-  from .document import Document
   from .host import Host
 
 
-@dataclass(kw_only=True)
+@serializable
+@dataclass
 class Draft:
-  documents: list['Document']
+  documents: list[Document]
   entry_document_id: str
   id: str
 

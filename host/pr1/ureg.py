@@ -1,7 +1,7 @@
 from quantops import UnitRegistry
 
 
-ureg = UnitRegistry.load_default()
+ureg = UnitRegistry.get_default()
 
 
 __all__ = [

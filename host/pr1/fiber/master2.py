@@ -1,17 +1,20 @@
 from asyncio import Task
+from random import random
+import comserde
 from logging import Logger
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
+from pprint import pprint
 from traceback import StackSummary
-from typing import TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Optional
 import asyncio
 import traceback
 
 from ..util.asyncio import wait_all
 from ..host import logger
 from ..util.decorators import provide_logger
-from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
+from ..history import TreeAdditionChange, BaseTreeChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, IndexCounter
@@ -41,6 +44,7 @@ class Master:
     self._cleanup_callback = cleanup_callback
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
+    self._file: IO[bytes]
     self._location: Optional[ProgramHandleEventEntry] = None
     self._logger: Logger
     self._owner: ProgramOwner
@@ -61,23 +65,8 @@ class Master:
   def halt(self):
     self._handle._program.halt()
 
-  # def pause(self):
-  #   self._program.pause()
-
-  #   # Only set the future after in case the call was illegal and is rejected by the child program.
-  #   self._pause_future = Future()
-
-  # async def wait_pause(self):
-  #   self.pause()
-
-  #   assert self._pause_future
-  #   await self._pause_future
-
-  # def resume(self):
-  #   self._program.resume()
-
   async def run(self, update_callback: SimpleCallbackFunction):
-    from random import random
+    from ..report import ExperimentReportHeader
 
     def ExpPath(path: PathLike[str] | str):
       return self.experiment.path / path
@@ -121,9 +110,25 @@ class Master:
 
         await wait_all([runner.cleanup() for runner in self.runners.values()])
 
-    async with Pool.open() as pool:
-      self._pool = pool
-      self._pool.start_soon(func())
+    with self.experiment.report_path.open("wb") as self._file:
+      assert (self.protocol.name is not None)
+
+      protocol = ExperimentReportHeader(
+        self.protocol.draft,
+        self.protocol.name,
+        self.protocol.root
+      )
+
+      comserde.dump(protocol, self._file)
+      self._logger.debug(f"Saving data in {self.experiment.report_path}")
+
+      async with Pool.open() as self._pool:
+        self._pool.start_soon(func())
+
+    del self._file
+
+    self.experiment.has_report = True
+    self.experiment.save()
 
   def receive(self, exec_path: list[int], message: Any):
     current_handle = self._handle
@@ -158,7 +163,7 @@ class Master:
     analysis = MasterAnalysis()
     useful = False
 
-    changes = list[TreeChange]()
+    changes = list[BaseTreeChange]()
 
     def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry], entry_id: int = 0, parent_entry: Optional[ProgramHandleEventEntry] = None):
       nonlocal analysis, useful
@@ -234,30 +239,18 @@ class Master:
     # for change in changes:
     #   print(change.serialize())
 
-    print('---')
-    print(f"useful={useful}")
-    print(update_entry.format())
+    # print('---')
+    # print(f"useful={useful}")
+    # print(update_entry.format())
     # print()
     # print(self._location and self._location.format())
-    print(analysis)
+    # print(analysis)
     # pprint(changes)
     # data = comserde.dumps(changes, list[TreeChange])
     # pprint(comserde.loads(data, list[TreeChange]))
-    print('---')
+    # print('---')
 
-  # def update_soon(self):
-    # def func():
-    #   if self._update_status == 3:
-    #     self._update_status = 0
-    #     self.update()
-    #   else:
-    #     self._update_status += 1
-    #     asyncio.get_event_loop().call_soon(func)
-
-    # if self._update_status == 0:
-    #   asyncio.get_event_loop().call_soon(func)
-
-    # self._update_status = 1
+    comserde.dump(changes, self._file, list[TreeChange])
 
   def update_now(self):
     if self._update_handle:

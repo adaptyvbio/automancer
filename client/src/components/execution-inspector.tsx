@@ -13,10 +13,12 @@ import { BlockContext, GlobalContext } from '../interfaces/plugin';
 import { Pool } from '../util';
 import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
 import { FeatureEntry, FeatureList } from './features';
+import { Application } from '../application';
 
 
 export interface ExecutionInspectorProps {
   activeBlockPaths: ProtocolBlockPath[];
+  app: Application;
   blockPath: ProtocolBlockPath | null;
   experiment: Experiment;
   host: Host;
@@ -50,6 +52,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
     }
 
     let context: GlobalContext = {
+      app: this.props.app,
       host: this.props.host,
       pool: this.pool
     };
@@ -57,7 +60,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
     let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, this.props.blockPath, context);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
-    let leafGroup = blockAnalysis.groups.at(-1);
+    let leafGroup = blockAnalysis.groups.at(-1)!;
 
     let leafPair = blockAnalysis.pairs.at(-1)!;
     let leafBlockImpl = getBlockImpl(leafPair.block, context);

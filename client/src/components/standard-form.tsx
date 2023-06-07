@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { OrdinaryId } from 'pr1-shared';
 
 import formStyles from '../../styles/components/form.module.scss';
 import modalStyles from '../../styles/components/modal.module.scss';
@@ -114,9 +114,9 @@ export function Header(props: React.PropsWithChildren<{}>) {
   );
 }
 
-export function Select<T extends number | string | null>(props: {
+
+export interface UncontrolledSelectProps<T extends OrdinaryId | null> {
   disabled?: unknown;
-  label: string;
   onInput(value: T): void;
   options: {
     id: T;
@@ -125,28 +125,39 @@ export function Select<T extends number | string | null>(props: {
   }[];
   targetRef?: React.Ref<HTMLSelectElement>;
   value: T;
+}
+
+export function UncontrolledSelect<T extends OrdinaryId | null>(props: UncontrolledSelectProps<T>) {
+  return (
+    <div className={formStyles.fieldSelect}>
+      <select
+        disabled={!!props.disabled}
+        value={props.options.findIndex((option) => option.id === props.value)}
+        onInput={(event) => {
+          let optionIndex = parseInt(event.currentTarget.value);
+          props.onInput(props.options[optionIndex].id);
+        }}
+        ref={props.targetRef}>
+        {props.options.map((option, optionIndex) =>
+          <option value={optionIndex} disabled={!!option.disabled} key={option.id}>{option.label}</option>
+        )}
+      </select>
+      <Icon name="expand_more" />
+    </div>
+  );
+}
+
+export function Select<T extends OrdinaryId | null>(props: UncontrolledSelectProps<T> & {
+  label: string;
 }) {
   return (
     <label className={formStyles.fieldControl}>
       <div className={formStyles.fieldLabel}>{props.label}</div>
-      <div className={formStyles.fieldSelect}>
-        <select
-          disabled={!!props.disabled}
-          value={props.options.findIndex((option) => option.id === props.value)}
-          onInput={(event) => {
-            let optionIndex = parseInt(event.currentTarget.value);
-            props.onInput(props.options[optionIndex].id);
-          }}
-          ref={props.targetRef}>
-          {props.options.map((option, optionIndex) =>
-            <option value={optionIndex} disabled={!!option.disabled} key={option.id}>{option.label}</option>
-          )}
-        </select>
-        <Icon name="expand_more" />
-      </div>
+      <UncontrolledSelect {...props} />
     </label>
   );
 }
+
 
 export function TextArea(props: {
   label: string;

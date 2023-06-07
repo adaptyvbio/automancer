@@ -33,7 +33,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
     Parameters
       nullable: Whether the node's value can be set to a disabled state known as `Null`.
       readable: Whether the node is readable.
-      stable: Whether the node's value might change due to external cause, despite being claimed.
       writable: Whether the node is writable.
     """
 
@@ -161,9 +160,6 @@ class ValueNode(BaseNode, ABC, Generic[T]):
 
       await Future()
 
-  def watch_content(self, listener: NodeListener, /):
-    return self._attach_listener(listener, mode='content')
-
   def watch_ownership(self, listener: NodeListener, /):
     if not self.writable:
       raise NotImplementedError
@@ -227,6 +223,8 @@ class NodeValueWriter(Generic[T]):
   def set(self, value: Optional[T | NullType], /):
     self.target_value = (time.time(), value)
     self._change_event.set()
+
+    self.node._trigger_listeners(mode='target')
 
   async def _worker(self):
     from .watcher import Watcher

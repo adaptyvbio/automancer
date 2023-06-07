@@ -118,7 +118,7 @@ class Executor(BaseExecutor):
               failure = True
           else:
             for key in ['context', 'min', 'max', 'resolution']:
-              if getattr(node_conf.value, key) is not None:
+              if getattr(node_conf.value, key).value is not None:
                 analysis.errors.append(OPCUAConfigurationError(f"Invalid property '{key}' for non-numeric node", getattr(node_conf.value, key)))
 
         if not failure:

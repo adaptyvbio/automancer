@@ -265,13 +265,11 @@ class OPCUADevice(DeviceNode):
     Node = nodes_map[node_conf.type]
 
     opts: dict[str, Any] = dict(
-      context=(node_conf.context or node_conf.unit.find_context()),
       description=node_conf.description,
       device=self,
       id=node_conf.id,
       label=node_conf.label,
       location=UANodeId.from_string(node_conf.location),
-      resolution=node_conf.resolution,
       stable=node_conf.stable,
       type=node_conf.type,
       writable=node_conf.writable
@@ -281,9 +279,11 @@ class OPCUADevice(DeviceNode):
 
     if dtype is not None:
       opts |= dict(
+        context=(node_conf.context or node_conf.unit.find_context()),
         dtype=dtype,
         quantity=node_conf.unit,
-        range=((node_conf.min, node_conf.max) if node_conf.min and node_conf.max else None)
+        range=((node_conf.min, node_conf.max) if node_conf.min and node_conf.max else None),
+        resolution=node_conf.resolution,
       )
 
     return Node(**opts)

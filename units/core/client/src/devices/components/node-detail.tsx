@@ -1,14 +1,14 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { Button, Icon, StaticSelect, ureg, util } from 'pr1';
+import { Button, Form, Icon, StaticSelect, ureg, util } from 'pr1';
 import { Component, ReactNode, createElement, createRef, useEffect, useRef, useState } from 'react';
+import { OrdinaryId } from 'pr1-shared';
 
 import styles from '../styles.module.scss';
 
 import { BaseNode, Context, ExecutorState, NodePath, NodeState, NumericNodeSpec, namespace } from '../types';
 import { isValueNode } from '../util';
 import { NumericValue } from '../types';
-import { formatQuantity } from '../format';
 
 
 export interface WindowOption {
@@ -182,7 +182,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   override render() {
     let { node, nodePath, nodeState } = this.props;
 
-    let owner = nodeState.writable?.owner;
+    let owner = nodeState.writer?.owner;
     let owned = (owner?.type === 'client') && (owner.clientId === this.props.context.host.clientId);
 
     return (
@@ -194,7 +194,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
               <p className={styles.detailHeaderDescription}>{node.description ?? ' '}</p>
             </div>
             <div className={styles.detailHeaderActions}>
-              {nodeState.writable && (
+              {nodeState.writer && (
                 <Button onClick={() => {
                   this.props.context.pool.add(async () => {
                     await this.props.context.requestToExecutor({
@@ -204,7 +204,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                   });
                 }}>{owned ? 'Release' : 'Claim'}</Button>
               )}
-              <Button onClick={() => {}}>Pin</Button>
+              {/* <Button onClick={() => {}}>Pin</Button> */}
             </div>
           </div>
           <div className={styles.detailInfoRoot}>
@@ -220,7 +220,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 {nodeState.connected ? 'Connected' : 'Disconnected'}
               </div>
             </div>
-            {false && nodeState.writable && (
+            {false && nodeState.writer && (
               <div className={styles.detailInfoEntry}>
                 <div className={styles.detailInfoLabel}>Current user</div>
                 <div className={styles.detailInfoValue}>{(() => {
@@ -313,20 +313,55 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 <div className={styles.detailValueRoot}>
                   <div className={styles.detailValueLabel}>Target value</div>
                   {(() => {
-                    switch (node.spec.type) {
-                      case 'numeric':
-                        // if (node.spec.range) {
-                        //   console.log(ureg.formatRangeAsReact(
-                        //     node.spec.range[0],
-                        //     node.spec.range[1],
-                        //     0,
-                        //     ureg.deserializeContext(node.spec.context),
-                        //     { createElement }
-                        //   ));
-                        // }
+                    let targetValueEvent = nodeState.writer!.targetValueEvent;
 
+                    let setValue = (value: unknown) => {
+                      this.props.context.pool.add(async () => {
+                        this.props.context.requestToExecutor({
+                          type: 'set',
+                          nodePath: nodePath.toJS(),
+                          value
+                        });
+                      });
+                    };
+
+                    switch (node.spec.type) {
+                      case 'boolean':
                         return (
-                          <NumericValueEditor spec={node.spec} />
+                          <Form.UncontrolledSelect
+                            onInput={(value) => void setValue((value !== null) ? [false, true][value] : null)}
+                            options={[
+                              { id: null,
+                                label: '–' },
+                              { id: 0,
+                                label: 'Off' },
+                              { id: 1,
+                                label: 'On' }
+                            ]}
+                            value={(targetValueEvent?.value?.type === 'default') ? ((targetValueEvent.value.innerValue as boolean) ? 1 : 0) : null} />
+                        );
+
+                      case 'numeric':
+                        return (
+                          <NumericValueEditor
+                            nodeState={nodeState}
+                            spec={node.spec}
+                            onInput={(value) => void setValue(value)} />
+                        );
+
+                      case 'enum':
+                        return (
+                          <Form.UncontrolledSelect
+                            onInput={(value) => void setValue(value)}
+                            options={[
+                              { id: null,
+                                label: '–' },
+                              ...node.spec.cases.map((specCase) => ({
+                                id: specCase.id,
+                                label: (specCase.label ?? specCase.id.toString())
+                              }))
+                            ]}
+                            value={(targetValueEvent?.value?.type === 'default') ? (targetValueEvent.value.innerValue as OrdinaryId) : null} />
                         );
                     }
                   })()}
@@ -341,35 +376,33 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
 }
 
 
+const MINUS_CLUSTER = '\u2212\u2009'; // &minus;&thinsp;
+
 function NumericValueEditor(props: {
+  nodeState: NodeState;
+  onInput(value: number | null): void;
   spec: NumericNodeSpec;
 }) {
   let [rawValue, setRawValue] = useState<{
     input: string;
-    unitIndex: number;
+    optionIndex: number;
   } | null>(null);
 
   let refInput = useRef<HTMLInputElement>(null);
 
-  // let range = props.spec.range!;
-  // let unitOptions = ureg.filterRangeCompositeUnitFormats(
-  //   range[0],
-  //   range[1],
-  //   ureg.deserializeContext(props.spec.context),
-  //   { system: 'SI' }
-  // ).map((option, index) => ({
-  //   id: index,
-  //   label: ureg.form
-  //   value: option.value
-  // }));
+  let range = props.spec.range!;
+  let unitOptions = ureg.filterRangeCompositeUnitFormats(
+    range[0],
+    range[1],
+    ureg.deserializeContext(props.spec.context),
+    { system: 'SI' }
+  ).map((option, index) => ({
+    id: index,
+    label: ureg.formatAssemblyAsText(option.assembly),
+    value: option
+  }));
 
-  // console.log(x);
-
-  let unitExpressions = [
-    { id: 'Pa', label: 'Pa', value: 1 },
-    { id: 'kPa', label: 'kPa', value: 1e3 },
-    { id: 'MPa', label: 'MPa', value: 1e6 }
-  ];
+  let selectActive = rawValue && (unitOptions.length > 1);
 
 
   useEffect(() => {
@@ -378,59 +411,77 @@ function NumericValueEditor(props: {
     }
   }, [rawValue]);
 
+
+  let currentTargetValue = (props.nodeState.writer!.targetValueEvent?.value?.type === 'default')
+    ? (props.nodeState.writer!.targetValueEvent.value.innerValue as NumericValue).magnitude
+    : null;
+
+  let currentMagnitude: string;
+  let currentOptionIndex: number;
+
+  if (currentTargetValue !== null) {
+    let context = ureg.deserializeContext(props.spec.context);
+    let variant = ureg.findVariant(ureg.getContext(context), { system: 'SI' });
+    let currentOption = ureg.findBestVariantOption(currentTargetValue, variant);
+
+    currentMagnitude = ureg.formatMagnitude(currentTargetValue / currentOption.value, (props.spec.resolution ?? 0) / currentOption.value);
+    currentOptionIndex = unitOptions.findIndex((option) => (option.value.value === currentOption.value));
+  } else {
+    currentMagnitude = '\u2014';
+    currentOptionIndex = 0;
+  }
+
+
+  let floatValue: number | null = null;
+  let floatValueInRange = false;
+
+  if (rawValue) {
+    let strValue = rawValue.input.replaceAll(MINUS_CLUSTER, '-');
+
+    if (/^-?\d+(?:\.\d+)?$/.test(strValue)) {
+      floatValue = parseFloat(strValue) * unitOptions[rawValue.optionIndex].value.value;
+      floatValueInRange = (floatValue >= range[0]) && (floatValue <= range[1]);
+    }
+  }
+
+
   return (
     <>
       <div className={util.formatClass(styles.detailValueQuantity, { '_active': rawValue })}>
         <div className={styles.detailValueBackground}>
-          {rawValue?.input ?? '12.5'}
+          {rawValue?.input.replaceAll(' ', '\xa0') ?? currentMagnitude}
         </div>
         <input
           type="text"
           className={styles.detailValueMagnitude}
           spellCheck={false}
-          value={rawValue?.input ?? '12.5'}
+          value={rawValue?.input ?? currentMagnitude}
           onFocus={(event) => {
             if (!rawValue) {
               event.currentTarget.select();
 
               setRawValue({
-                input: '12.5',
-                unitIndex: 0
+                input: currentMagnitude,
+                optionIndex: currentOptionIndex
               });
             }
           }}
           onInput={(event) => {
-            // let match;
-
-            // let inputValue = event.currentTarget.value;
-            // let regexp = /-/;
-
-            // while ((match = regexp.exec(event.currentTarget.value)) !== null) {
-            //   console.log(match);
-            //   break;
-            //   if (match.index === regexp.lastIndex) {
-            //     regexp.lastIndex++;
-            //   }
-            // }
-
             let el = event.currentTarget;
             let value = el.value;
-            // let index = value.indexOf('-');
-
             let selectionStart = event.currentTarget.selectionStart;
-
 
             let index: number;
 
             while ((index = value.indexOf('-')) >= 0) {
-              value = value.replace('-', '− ');
+              value = value.replace('-', MINUS_CLUSTER);
 
               if ((selectionStart !== null) && (selectionStart > index)) {
                 selectionStart += 1;
               }
             }
 
-            value = value.replaceAll(/−(?! )|(?<!−) /g, '');
+            value = value.replaceAll(/\u2212(?!\u2009)|(?<!\u2212)\u2009/g, '');
 
             el.value = value;
             el.selectionStart = selectionStart;
@@ -449,43 +500,39 @@ function NumericValueEditor(props: {
             }
 
             if (event.key === 'Enter') {
-              setRawValue(null);
+              if ((floatValue !== null) && floatValueInRange) {
+                props.onInput(floatValue);
+                setRawValue(null);
+              }
             }
           }}
           ref={refInput} />
         <div className={styles.detailValueRight}>
           <StaticSelect
-            disabled={!rawValue}
-            options={unitExpressions}
+            disabled={!selectActive}
+            options={unitOptions}
             rootClassName={styles.detailValueUnitSelectRoot}
-            selectOption={(option, optionIndex) => void setRawValue({ ...rawValue!, unitIndex: optionIndex })}
-            selectedOption={unitExpressions[rawValue?.unitIndex ?? 0]}
+            selectOption={(option, optionIndex) => void setRawValue({ ...rawValue!, optionIndex: optionIndex })}
+            selectedOption={unitOptions[rawValue?.optionIndex ?? 0]}
             selectionClassName={styles.detailValueUnitSelectSelection}>
-            <div className={styles.detailValueUnit}>{unitExpressions[rawValue?.unitIndex ?? 0].label}</div>
-            {rawValue && <Icon name="height" className={styles.detailValueUnitSelectIcon} />}
+            <div className={styles.detailValueUnit}>{ureg.formatAssemblyAsReact(unitOptions[rawValue?.optionIndex ?? currentOptionIndex].value.assembly, { createElement })}</div>
+            {selectActive && <Icon name="height" className={styles.detailValueUnitSelectIcon} />}
           </StaticSelect>
         </div>
       </div>
       {rawValue && (() => {
-        let strValue = rawValue.input.replaceAll('− ', '-');
+        let error: ReactNode | null = null;
 
-        let min = 0;
-        let max = 10_000;
-
-        let error: ReactNode = null;
-
-        if (!/^-?\d+(?:\.\d+)?$/.test(strValue)) {
-          error = 'This value is not valid.';
-        } else {
-          let floatValue = parseFloat(strValue) * unitExpressions[rawValue.unitIndex].value;
-
-          if ((floatValue < min) || (floatValue > max)) {
+        if (floatValue !== null) {
+          if (!floatValueInRange) {
             error = (
               <>
-                The target value must be in the range 15.2 – {formatQuantity(max, { temperature: 1 }, { style: 'short' })}.
+                The target value must be in the range {ureg.formatRangeAsReact(range[0], range[1], (props.spec.resolution ?? 0), ureg.deserializeContext(props.spec.context), { createElement })}.
               </>
             );
           }
+        } else {
+          error = 'This value is not valid.';
         }
 
         return (
@@ -502,7 +549,10 @@ function NumericValueEditor(props: {
                 disabled={error}
                 shortcut="Enter"
                 onClick={() => {
-                  setRawValue(null);
+                  if ((floatValue !== null) && floatValueInRange) {
+                    props.onInput(floatValue);
+                    setRawValue(null);
+                  }
                 }}>
                 Confirm
               </Button>

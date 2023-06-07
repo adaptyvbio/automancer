@@ -1,22 +1,20 @@
+from asyncio import Future
 from typing import Any
 
+import pr1 as am
 from pr1.devices.claim import Claim
-from pr1.devices.nodes.common import BaseNode
-from pr1.devices.nodes.value import ValueNode
-from pr1.devices.nodes.watcher import Watcher
-from pr1.input import DictType
-from pr1.host import Host
 from pr1.units.base import BaseExecutor
+from quantops import Quantity
 
 from . import logger
 
 
 class Executor(BaseExecutor):
-  options_type = DictType({})
+  options_type = am.RecordType({})
 
-  def __init__(self, conf, *, host: Host):
+  def __init__(self, conf, *, host: am.Host):
     self._channels = set()
-    self._claims = dict[tuple[Any, ValueNode], Claim]()
+    self._claims = dict[tuple[Any, am.ValueNode], Claim]()
     self._host = host
 
     # from .mock import MockDevice
@@ -28,7 +26,7 @@ class Executor(BaseExecutor):
       case "claim":
         node = self._host.root_node.find(request["nodePath"])
 
-        if node and isinstance(node, ValueNode) and node.writable and not ((key := (agent, node)) in self._claims):
+        if node and isinstance(node, am.ValueNode) and node.writable and not ((key := (agent, node)) in self._claims):
           claim1 = node.claim(agent, force=True)
           self._claims[key] = claim1
 
@@ -55,14 +53,26 @@ class Executor(BaseExecutor):
       case "release":
         node = self._host.root_node.find(request["nodePath"])
 
-        if node and isinstance(node, ValueNode) and (claim2 := self._claims.get((agent, node))):
+        if node and isinstance(node, am.ValueNode) and (claim2 := self._claims.get((agent, node))):
           claim2.destroy()
+      case "set":
+        node = self._host.root_node.find(request["nodePath"])
+
+        match node:
+          case am.NumericNode():
+            node.writer.set(Quantity(
+              dimensionality=node.context.dimensionality,
+              registry=am.ureg,
+              value=request["value"]
+            ))
+          case am.BooleanNode() | am.EnumNode():
+            node.writer.set(request["value"])
 
   async def _listen(self):
     all_nodes = list(self._host.root_node.iter_all())
     node_paths_by_node = { node: node_path for node_path, node in all_nodes }
 
-    watcher = Watcher([node for _, node in all_nodes], modes={'connection', 'ownership', 'value'})
+    watcher = am.Watcher([node for _, node in all_nodes], modes={'connection', 'ownership', 'value', 'target'})
 
     async with watcher:
       yield [[node_path, export_node_state(node)] for node_path, node in all_nodes]
@@ -70,13 +80,18 @@ class Executor(BaseExecutor):
       async for event in watcher:
         yield [[node_paths_by_node[node], export_node_state(node)] for node, _ in event.items()]
 
-  async def destroy(self):
-    for channel in self._channels:
-      await channel.close()
+  async def start(self):
+    yield
 
-    self._channels.clear()
+    try:
+      await Future()
+    finally:
+      for channel in self._channels:
+        await channel.close()
 
-    logger.info("Stopped watching all nodes")
+      self._channels.clear()
+
+      logger.info("Stopped watching all nodes")
 
   def export(self):
     return {
@@ -84,14 +99,14 @@ class Executor(BaseExecutor):
     }
 
 
-def export_node_state(node: BaseNode, /):
+def export_node_state(node: am.BaseNode, /):
   state = {
     "connected": node.connected,
     "valueEvent": None,
-    "writable": None
+    "writer": None
   }
 
-  if isinstance(node, ValueNode):
+  if isinstance(node, am.ValueNode):
     state |= {
       "valueEvent": (node.value and {
         "time": (node.value[0] * 1000),
@@ -103,9 +118,12 @@ def export_node_state(node: BaseNode, /):
       owner = node.claimable.owner()
 
       state |= {
-        "writable": {
+        "writer": {
           "owner": (export_claim_marker(owner.marker) if owner else None),
-          "targetValueEvent": node.export_value(node.writer.target_value)
+          "targetValueEvent": ((target_value := node.writer.target_value) and {
+            "time": (target_value[0] * 1000),
+            "value": node.export_value(node.writer.target_value[1])
+          })
         }
       }
 

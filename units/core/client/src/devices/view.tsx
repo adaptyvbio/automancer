@@ -1,7 +1,5 @@
-import { ErrorBoundary, PluginViewComponentProps } from 'pr1';
-
 import { Map as ImMap, List } from 'immutable';
-import { TitleBar } from 'pr1';
+import { ErrorBoundary, PluginViewComponentProps, TitleBar } from 'pr1';
 import { ChannelId } from 'pr1-shared';
 import { useEffect, useState } from 'react';
 
@@ -43,7 +41,8 @@ export function DeviceControlView(props: PluginViewComponentProps<Context>) {
             return [nodePath, {
               connected: nodeStateChange.connected,
               history: (nodeState?.history ?? []),
-              lastValueEvent: nodeStateChange.valueEvent
+              lastValueEvent: nodeStateChange.valueEvent,
+              writer: nodeStateChange.writer
             }];
           })
         )));

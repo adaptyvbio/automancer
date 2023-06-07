@@ -81,14 +81,14 @@ export interface NodeStateLocation {
 export interface NodeStateChange {
   connected: boolean;
   valueEvent: ValueEvent | null;
-  writable: {
+  writer: {
     owner: {
       type: 'client';
       clientId: ClientId;
     } | {
       type: 'unknown';
     } | null;
-    targetValueEvent: ValueEvent;
+    targetValueEvent: ValueEvent | null;
   } | null;
 }
 
@@ -96,6 +96,7 @@ export interface NodeState {
   connected: boolean;
   history: ValueEvent[];
   lastValueEvent: ValueEvent | null;
+  writer: NodeStateChange['writer'];
 }
 
 export type NodeStates = ImMap<NodePath, NodeState>;

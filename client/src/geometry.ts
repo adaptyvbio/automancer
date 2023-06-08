@@ -30,3 +30,21 @@ export function squareDistance(a: Point, b: Point) {
 export function squareLength(point: Point) {
   return point.x ** 2 + point.y ** 2;
 }
+
+
+export class RectSurface {
+  readonly position: Point;
+  readonly size: Size;
+
+  constructor(position: Point, size: Size) {
+    this.position = position;
+    this.size = size;
+  }
+
+  get center(): Point {
+    return {
+      x: this.position.x + (this.size.width / 2),
+      y: this.position.y + (this.size.height / 2)
+    };
+  }
+}

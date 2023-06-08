@@ -6,6 +6,7 @@ import { PluginBlockImpl, BlockContext } from './interfaces/plugin';
 import { ComponentType } from 'react';
 import { FeatureDef } from './components/features';
 import { deepEqual } from './util';
+import { RectSurface } from './geometry';
 
 
 const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<unknown>> = (block, path, ancestors, location, options, context) => {
@@ -77,10 +78,7 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<un
         ),
         nodes: [{
           path,
-          position: {
-            x: position.x,// + (width * 0.5),
-            y: position.y,// + (height * 0.5)
-          }
+          surface: new RectSurface(position, { width, height })
         }]
       };
     }

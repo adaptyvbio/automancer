@@ -6,7 +6,7 @@ import graphEditorStyles from '../../styles/components/graph-editor.module.scss'
 
 import { FeatureList } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
-import { Point, SideValues, Size, squareDistance, squareLength } from '../geometry';
+import { Point, RectSurface, SideValues, Size, squareDistance, squareLength } from '../geometry';
 import { Host } from '../host';
 import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { GlobalContext, UnknownPluginBlockImpl } from '../interfaces/plugin';
@@ -35,6 +35,7 @@ export interface GraphEditorState {
 
   animatingView: boolean;
   offset: Point;
+  oldSelection: GraphEditorProps['selection'] | null;
   size: Size | null;
   trackSelectedBlock: boolean;
 }
@@ -42,13 +43,17 @@ export interface GraphEditorState {
 export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
   private controller = new AbortController();
   private initialized = false;
-  private lastRenderedNodePositions: ImMap<List<number>, Point> | null = null;
   private pool = new util.Pool();
-  private offsetBoundaries: { min: Point; max: Point; } | null = null;
   private refContainer = createRef<HTMLDivElement>();
   private settings: GraphRenderSettings | null = null;
 
-  private graphRootElement: ReactNode | null;
+  private lastComputation: {
+    element: ReactNode;
+    margin: SideValues;
+    nodeSurfaces: ImMap<List<number>, RectSurface>;
+    solidMargin: SideValues;
+    worldSize: Size;
+  } | null = null;
 
   private observer = new ResizeObserver((_entries) => {
     if (!this.initialized) {
@@ -75,8 +80,9 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
 
       animatingView: false,
       offset: { x: 0, y: 0 },
+      oldSelection: null,
       size: null,
-      trackSelectedBlock: true
+      trackSelectedBlock: false
     };
   }
 
@@ -107,12 +113,13 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     });
   }
 
-  getBoundOffset(point: Point): Point {
-    util.assert(this.offsetBoundaries);
+  getBoundOffset(point: Point, state: GraphEditorState = this.state): Point {
+    util.assert(this.lastComputation);
+    util.assert(state.size);
 
     return {
-      x: Math.min(Math.max(point.x, this.offsetBoundaries.min.x), this.offsetBoundaries.max.x),
-      y: Math.min(Math.max(point.y, this.offsetBoundaries.min.y), this.offsetBoundaries.max.y)
+      x: Math.min(Math.max(point.x, 0), this.lastComputation.worldSize.width - state.size.width),
+      y: Math.min(Math.max(point.y, 0), this.lastComputation.worldSize.height - state.size.height)
     };
   }
 
@@ -133,15 +140,19 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     container.addEventListener('wheel', (event) => {
       event.preventDefault();
 
-      if (this.offsetBoundaries) {
+      if (this.lastComputation && this.state.size) {
         this.setState((state) => ({
           offset: this.getBoundOffset({
             x: state.offset.x + event.deltaX * 1,
             y: state.offset.y + event.deltaY * 1
           }),
-          trackSelectedBlock: false
+          trackSelectedBlock: (state.trackSelectedBlock && !this.props.selection!.observed)
         }));
       }
+
+      this.setState({
+        animatingView: false
+      });
     }, { passive: false, signal: this.controller.signal });
 
 
@@ -175,19 +186,20 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
     }, { signal: this.controller.signal });
 
     this.props.app.shortcutManager.attach(['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'], (event, properties) => {
-      if (this.lastRenderedNodePositions) {
+      if (this.lastComputation) {
         let currentPath = this.props.selection && List(this.props.selection.blockPath);
-        let originPosition = currentPath && this.lastRenderedNodePositions.get(currentPath)!;
+        let originPosition = currentPath && this.lastComputation.nodeSurfaces.get(currentPath)!.center;
 
         let minDistance = Infinity;
         let minPath: List<number> | null = null;
 
-        for (let [path, position] of this.lastRenderedNodePositions) {
+        for (let [path, surface] of this.lastComputation.nodeSurfaces) {
           if (path.equals(currentPath)) {
             continue;
           }
 
           let distance: number;
+          let position = surface.center;
 
           if (originPosition) {
             if ((properties.key === 'ArrowDown') && !(position.y > originPosition.y)) {
@@ -228,6 +240,19 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         }
       }
     }, { signal: this.controller.signal });
+
+    this.props.app.shortcutManager.attach(['PageDown', 'PageUp'], (event, properties) => {
+      if (this.lastComputation) {
+        let result = List(this.lastComputation.nodeSurfaces).maxBy(([path, surface]) => {
+          return surface.center.y * ((properties.key === 'PageDown') ? 1 : -1);
+        });
+
+        if (result) {
+          let [path, surface] = result;
+          this.props.selectBlock(path.toArray());
+        }
+      }
+    }, { signal: this.controller.signal });
   }
 
   override componentWillUnmount() {
@@ -235,7 +260,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
   }
 
   private compute(props: GraphEditorProps, state: GraphEditorState) {
-    if (props.protocol?.root) {
+    if (props.protocolRoot && state.size) {
       let globalContext: GlobalContext = {
         app: this.props.app,
         host: props.host,
@@ -246,8 +271,6 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
 
       // console.log(this.props.tree);
       // console.log('---');
-
-      util.assert(state.size);
 
       let computeGraph = (
         groupRootBlock: ProtocolBlock,
@@ -312,24 +335,6 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
 
       // Render graph
 
-      let origin: Point = { x: 1, y: 1 };
-      let treeMetrics = computeGraph(props.protocolRoot, [], [], props.location ?? null);
-
-      let rendered = treeMetrics.render(origin, {
-        attachmentEnd: false,
-        attachmentStart: false
-      });
-
-      this.graphRootElement = rendered.element;
-
-      this.lastRenderedNodePositions = ImMap(rendered.nodes.map((nodeInfo) => [
-        List(nodeInfo.path),
-        nodeInfo.position
-      ]));
-
-
-      // Compute boundaries
-
       let margin: SideValues = {
         bottom: (this.props.summary ? 2 : 1),
         left: 1,
@@ -337,21 +342,47 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         top: 1
       };
 
-      let min: Point = {
-        x: (origin.x - margin.left) * settings.cellPixelSize,
-        y: (origin.y - margin.top) * settings.cellPixelSize
+      let solidMargin: SideValues = {
+        bottom: (this.props.summary ? 2 : 0),
+        left: 0,
+        right: 0,
+        top: 0
       };
 
-      this.offsetBoundaries = {
-        min,
-        max: {
-          x: Math.max(min.x, (origin.x + treeMetrics.size.width + margin.right) * settings.cellPixelSize - state.size.width),
-          y: Math.max(min.y, (origin.y + treeMetrics.size.height + margin.bottom) * settings.cellPixelSize - state.size.height)
-        }
+      let origin: Point = {
+        x: margin.left,
+        y: margin.top
+      };
+
+      let treeMetrics = computeGraph(props.protocolRoot, [], [], props.location ?? null);
+
+      let rendered = treeMetrics.render(origin, {
+        attachmentEnd: false,
+        attachmentStart: false
+      });
+
+      let nodeSurfaces = ImMap(rendered.nodes.map((nodeInfo) => [
+        List(nodeInfo.path),
+        nodeInfo.surface
+      ]));
+
+      let worldSize = {
+        width: Math.max(state.size.width, (treeMetrics.size.width + margin.left + margin.right) * settings.cellPixelSize),
+        height: Math.max(state.size.height, (treeMetrics.size.height + margin.top + margin.bottom) * settings.cellPixelSize)
+      };
+
+      this.lastComputation = {
+        element: rendered.element,
+        margin,
+        nodeSurfaces,
+        solidMargin,
+        worldSize
       };
     } else {
-      this.graphRootElement = null;
+      this.lastComputation = null;
     }
+
+    return this.lastComputation;
   }
 
   override render() {
@@ -359,11 +390,10 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       return <div className={graphEditorStyles.root} ref={this.refContainer} />;
     }
 
-    this.compute(this.props, this.state);
+    let computation = this.compute(this.props, this.state);
 
     let settings = this.settings!;
 
-    let frac = (x: number) => (x - Math.floor(x));
     let offsetX = this.state.offset.x;
     let offsetY = this.state.offset.y;
 
@@ -385,26 +415,30 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
             </pattern>
           </defs>
 
-          <rect
-            x="0" y="0"
-            width={(this.state.size.width + settings.cellPixelSize)}
-            height={(this.state.size.height + settings.cellPixelSize)}
-            fill="url(#grid)"
-            transform={`translate(${-frac(offsetX / settings.cellPixelSize) * settings.cellPixelSize} ${-frac(offsetY / settings.cellPixelSize) * settings.cellPixelSize})`} />
           <g transform={`translate(${-offsetX} ${-offsetY})`} onTransitionEnd={() => {
             this.setState({ animatingView: false });
           }}>
-            {this.graphRootElement}
+            <rect
+              x="0" y="0"
+              width={computation?.worldSize.width ?? this.state.size.width}
+              height={computation?.worldSize.height ?? this.state.size.height}
+              fill="url(#grid)" />
+            {this.lastComputation?.element}
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
           <div className={graphEditorStyles.actionsGroup}>
-            <button
-              type="button"
-              className={util.formatClass(graphEditorStyles.actionsButton, { '_active': this.state.trackSelectedBlock })}
-              onClick={() => void this.setState({ trackSelectedBlock: !this.state.trackSelectedBlock })}>
-              <Icon name="enable" className={graphEditorStyles.actionsIcon} />
-            </button>
+            {!!this.props.location && (
+              <button
+                type="button"
+                className={util.formatClass(graphEditorStyles.actionsButton, { '_active': (this.state.trackSelectedBlock && this.props.selection!.observed) })}
+                onClick={() => {
+                  this.setState({ trackSelectedBlock: !(this.state.trackSelectedBlock && this.props.selection!.observed) });
+                  this.props.selectBlock(null);
+                }}>
+                <Icon name="enable" className={graphEditorStyles.actionsIcon} />
+              </button>
+            )}
           </div>
           {/* <div className={graphEditorStyles.actionsGroup}>
             <button type="button" className={graphEditorStyles.actionsButton}><Icon name="add" className={graphEditorStyles.actionsIcon} /></button>
@@ -421,32 +455,45 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
   }
 
   static getDerivedStateFromProps(props: GraphEditorProps, state: GraphEditorState): Partial<GraphEditorState> | null {
-    if (state.trackSelectedBlock && state.size && props.selection) {
-      if (state.size) {
-        state.self.compute(props, state);
+    let computation = state.self.compute(props, state);
 
-        // console.log(props.selection.blockPath, state.self.lastRenderedNodePositions?.toJS());
+    if (computation && state.size && state.trackSelectedBlock && props.selection?.observed) {
+      if (computation) {
+        let surface = state.self.lastComputation!.nodeSurfaces.get(List(props.selection.blockPath));
 
-        let position = state.self.lastRenderedNodePositions!.get(List(props.selection.blockPath));
-
-        if (position) {
+        if (surface) {
           let settings = state.self.settings!;
-
-          // TODO: Problem, 'position' is center
-
-          // TODO: Substract origin
           let idealOffset: Point = {
-            x: ((position.x - 1) * settings.cellPixelSize),
-            y: ((position.y - 1) * settings.cellPixelSize)
+            x: Math.min((surface.position.x - computation.margin.left) * settings.cellPixelSize, computation.worldSize.width - state.size.width),
+            y: Math.min((surface.position.y - computation.margin.top) * settings.cellPixelSize, computation.worldSize.height - state.size.height)
           };
-
-          // console.log(position, idealOffset, state.offset);
 
           return {
             animatingView: true,
             offset: idealOffset
           };
         }
+      }
+    } else if (computation && state.size && props.selection && (props.selection !== state.oldSelection)) {
+      let surface = computation.nodeSurfaces.get(List(props.selection.blockPath));
+      let settings = state.self.settings!;
+
+      if (surface) {
+        let newOffset: Point = { ...state.offset };
+
+        if ((surface.position.y + computation.solidMargin.top) * settings.cellPixelSize < state.offset.y) {
+          newOffset.y = (surface.position.y - computation.margin.top) * settings.cellPixelSize;
+        }
+
+        if ((surface.position.y + surface.size.height + computation.solidMargin.bottom) * settings.cellPixelSize > state.offset.y + state.size.height) {
+          newOffset.y = (surface.position.y + surface.size.height + computation.margin.bottom) * settings.cellPixelSize - state.size.height;
+        }
+
+        return {
+          animatingView: true,
+          offset: newOffset,
+          oldSelection: props.selection
+        };
       }
     }
 

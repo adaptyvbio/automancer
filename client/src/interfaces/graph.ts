@@ -1,14 +1,14 @@
-import type { OrdinaryId, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import type { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import type { ReactNode } from 'react';
 
-import type { Point, Size } from '../geometry';
+import type { Point, RectSurface, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
 import type { GlobalContext } from './plugin';
 
 
 export interface ProtocolBlockGraphRendererNodeInfo {
   path: ProtocolBlockPath;
-  position: Point;
+  surface: RectSurface;
 }
 
 export interface ProtocolBlockGraphRendererMetrics {

@@ -11,7 +11,7 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
 import { Application } from '../application';
-import { formatAbsoluteTimePair, formatDuration } from '../format';
+import { formatAbsoluteTimePair, formatDurationTerm } from '../format';
 import { TimeSensitive } from './time-sensitive';
 
 
@@ -77,8 +77,10 @@ export function BlockInspector(props: {
 
               return (
                 <>
-                  <div>{formatDuration(leafPair.duration * 1000)}</div>
-                  <div>{formatAbsoluteTimePair(now + leafPair.startTime * 1000, now + leafPair.endTime * 1000, { mode: 'directional' })}</div>
+                  <div>{formatDurationTerm(leafPair.duration) ?? '\xa0'}</div>
+                  {(leafPair.startTime.type === 'duration') && (leafPair.endTime.type === 'duration') && (
+                    <div>{formatAbsoluteTimePair(now + leafPair.startTime.value, now + leafPair.endTime.value, { mode: 'directional' })}</div>
+                  )}
                 </>
               );
             }}

@@ -1,5 +1,5 @@
 import type { PluginName } from './plugin';
-import type { Brand, OrdinaryId } from './util';
+import type { Brand } from './util';
 
 
 export interface Protocol {
@@ -8,7 +8,7 @@ export interface Protocol {
 }
 
 export interface ProtocolBlock {
-  eta: number;
+  duration: AnyDurationTerm;
   name: ProtocolBlockName;
   namespace: PluginName;
 
@@ -22,3 +22,27 @@ export interface ProtocolProcess {
   data: unknown;
   namespace: PluginName;
 }
+
+
+export interface DatetimeTerm {
+  type: 'datetime';
+  resolution: number;
+  value: number;
+}
+
+export interface DurationTerm {
+  type: 'duration';
+  resolution: number;
+  value: number;
+}
+
+export interface ForeverTerm {
+  type: 'forever';
+}
+
+export interface UnknownTerm {
+  type: 'unknown';
+}
+
+export type AnyDurationTerm = DurationTerm | ForeverTerm | UnknownTerm;
+export type Term = DatetimeTerm | DurationTerm | ForeverTerm | UnknownTerm;

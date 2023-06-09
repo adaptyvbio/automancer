@@ -27,7 +27,7 @@ import { Pool } from '../util';
 import { ViewDrafts } from './protocols';
 import { analyzeBlockPath } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
-import { formatAbsoluteTime, formatDuration, formatRelativeDate } from '../format';
+import { formatAbsoluteTime, formatDurationTerm, formatRelativeDate } from '../format';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 
 
@@ -557,15 +557,29 @@ export function FilledDraftSummary(props: {
     let analysis = analyzeBlockPath(compilation.protocol, null, [], props.context);
     let pair = analysis.pairs[0];
 
-    etaText = [
-      formatDuration(pair.duration * 1000),
-      ' (ETA ',
-      <TimeSensitive
-        contents={() => formatAbsoluteTime(Date.now() + pair.endTime * 1000)}
-        interval={30e3}
-        key={0} />,
-      ')'
-    ];
+    let formattedDuration = formatDurationTerm(pair.duration);
+
+    if (formattedDuration !== null) {
+      etaText = [formattedDuration];
+
+      if (pair.endTime.type === 'duration') {
+        let endTime = pair.endTime;
+
+        etaText = [
+          formattedDuration,
+          ' (ETA ',
+          <TimeSensitive
+            contents={() => formatAbsoluteTime(Date.now() + endTime.value)}
+            interval={30e3}
+            key={0} />,
+          ')'
+        ];
+      } else {
+        etaText = formattedDuration;
+      }
+    } else {
+      etaText = null;
+    }
   } else {
     etaText = null;
   }

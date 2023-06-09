@@ -1,5 +1,5 @@
 import { DynamicValue, Plugin, PluginBlockImpl, formatDynamicValue } from 'pr1';
-import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { PluginName, ProtocolBlock, ProtocolBlockName, createZeroTerm } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -76,7 +76,7 @@ export default {
       getChildren(block, context) {
         return [{
           block: block.child,
-          delay: 0
+          delay: createZeroTerm()
         }];
       },
       getChildrenExecution(block, location, context) {

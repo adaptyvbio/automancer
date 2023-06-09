@@ -9,7 +9,6 @@ from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
-from pr1.eta import export_eta
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, export_value
 from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, EnumType,
@@ -100,8 +99,8 @@ class ApplierBlock(BaseBlock):
   def __get_node_name__(self):
     return "State applier"
 
-  def _eta(self):
-    return self.child.eta()
+  def duration(self):
+    return self.child.duration()
 
   def create_program(self, handle):
     from .program import ApplierProgram
@@ -116,7 +115,7 @@ class ApplierBlock(BaseBlock):
       "name": "applier",
 
       "child": self.child.export(),
-      "eta": export_eta(self.eta())
+      "duration": self.duration().export()
     }
 
 
@@ -133,8 +132,8 @@ class PublisherBlock(BaseBlock):
   def __get_node_name__(self):
     return "State publisher"
 
-  def _eta(self):
-    return self.child.eta()
+  def duration(self):
+    return self.child.duration()
 
   def create_program(self, handle):
     from .program import PublisherProgram
@@ -149,7 +148,7 @@ class PublisherBlock(BaseBlock):
       "name": "publisher",
 
       "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
-      "eta": export_eta(self.eta()),
+      "duration": self.duration().export(),
       "child": self.child.export(),
       "stable": self.stable
     }

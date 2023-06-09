@@ -1,11 +1,11 @@
 import { Point as GeometryPoint, GraphLink, Plugin, PluginBlockImpl, ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererNodeInfo } from 'pr1';
-import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { AnyDurationTerm, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import { Fragment } from 'react';
 
 
 export interface Block extends ProtocolBlock {
   children: ProtocolBlock[];
-  childrenDelays: number[];
+  childrenDelays: AnyDurationTerm[];
 }
 
 export interface Location {

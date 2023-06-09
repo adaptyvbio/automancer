@@ -5,8 +5,7 @@ from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
                     Sequence, TypeVar, final)
 
-from ..eta import normalize_duration_eta
-from .process import DurationETA
+from ..eta import DurationTerm
 from ..staticanalysis.expr import DeferredExprEval
 from ..staticanalysis.support import prelude
 from ..staticanalysis.expression import instantiate_type_instance
@@ -161,7 +160,6 @@ class BaseProgram(ABC):
       case "halt":
         self.halt()
       case "jump":
-        print("Jump", self, message)
         self.jump(self.__block.import_point(message["value"]))
       case _:
         raise ValueError(f"Unknown message type '{message['type']}'")
@@ -186,8 +184,8 @@ class BaseProgramPoint(ABC):
   pass
 
 class BaseBlock(ABC, HierarchyNode):
-  def eta(self):
-    return normalize_duration_eta(self._eta())
+  def duration(self):
+    return DurationTerm.unknown()
 
   @abstractmethod
   def create_program(self, handle: 'ProgramHandle') -> BaseProgram:
@@ -196,9 +194,6 @@ class BaseBlock(ABC, HierarchyNode):
   @abstractmethod
   def import_point(self, data: Any, /) -> BaseProgramPoint:
     ...
-
-  def _eta(self) -> DurationETA:
-    return math.nan
 
   @abstractmethod
   def export(self):

@@ -1,10 +1,8 @@
 from dataclasses import dataclass
-import math
 from types import EllipsisType
 from typing import Literal, TypedDict
 
 import pr1 as am
-from pr1.eta import export_eta
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
 from pr1.fiber.expr import Evaluable, EvaluableConstantValue
 from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
@@ -69,14 +67,14 @@ class Block(BaseBlock):
   def __get_node_name__(self):
     return ["Repeat"]
 
-  def _eta(self):
+  def duration(self):
     match self.count:
       case EvaluableConstantValue(LocatedValue('forever')):
-        return math.inf
+        return am.DurationTerm.forever()
       case EvaluableConstantValue(LocatedValue(int() as count)):
-        return count * self.block.eta()
+        return self.block.duration() * count
       case _:
-        return math.nan
+        return am.DurationTerm.unknown()
 
   def create_program(self, handle):
     from .program import Program
@@ -95,5 +93,5 @@ class Block(BaseBlock):
       "namespace": namespace,
       "count": self.count.export(),
       "child": self.block.export(),
-      "eta": export_eta(self.eta())
+      "duration": self.duration().export()
     }

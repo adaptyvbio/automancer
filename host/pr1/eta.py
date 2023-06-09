@@ -1,35 +1,87 @@
-from dataclasses import dataclass
-import datetime
 import math
+from dataclasses import dataclass
+from typing import Self
 
 
-DateLike = datetime.datetime | float
-DurationLike = datetime.timedelta | float
+@dataclass(frozen=True)
+class DatetimeTerm:
+  value: float
+  resolution: float = 0.0
 
-@dataclass
-class ApproximativeETA:
-  value: DurationLike
-  resolution: DurationLike
+  def __add__(self, other: 'DurationTerm | float', /) -> Self:
+    match other:
+      case DurationTerm(value, resolution):
+        return self.__class__(self.value + value, self.resolution + resolution)
+      case float():
+        return self.__class__(self.value + other, self.resolution)
+      case _:
+        return NotImplemented
 
-DurationETA = ApproximativeETA | DurationLike
+  def export(self):
+    if math.isnan(self.value):
+      return { "type": "unknown" }
+
+    return {
+      "type": "datetime",
+      "value": (self.value * 1000),
+      "resolution": (self.resolution * 1000)
+    }
 
 
-def export_eta(value: float, /):
-  return -1 if math.isnan(value) else value
+@dataclass(frozen=True, slots=True)
+class DurationTerm:
+  value: float
+  resolution: float = 0.0
 
-def normalize_duration_eta(value: DurationETA, /) -> float:
-  match value:
-    case datetime.timedelta():
-      return value.total_seconds()
-    case float():
-      return value
-    case ApproximativeETA(value, resolution):
-      return normalize_duration_eta(value)
+  def __add__(self, other: Self | float, /) -> Self:
+    match other:
+      case DurationTerm(value, resolution):
+        return self.__class__(self.value + value, self.resolution + resolution)
+      case float():
+        return self.__class__(self.value + other, self.resolution)
+      case _:
+        return NotImplemented
+
+  def __radd__(self, other: Self | float, /):
+    return self.__add__(other)
+
+  def __mul__(self, other: float, /):
+    return self.__class__(self.value * other, self.resolution * other)
+
+  def __rmul__(self, other: float, /):
+    return self.__mul__(other)
+
+  def export(self):
+    if math.isnan(self.value):
+      return { "type": "unknown" }
+
+    if math.isinf(self.value):
+      return { "type": "forever" }
+
+    return {
+      "type": "duration",
+      "value": (self.value * 1000),
+      "resolution": (self.resolution * 1000)
+    }
+
+  @classmethod
+  def forever(cls):
+    return cls(math.inf)
+
+  @classmethod
+  def unknown(cls):
+    return cls(math.nan)
+
+  @classmethod
+  def zero(cls):
+    return cls(0.0)
+
+
+Term = DatetimeTerm | DurationTerm
 
 
 __all__ = [
-  'ApproximativeETA',
-  'DateLike',
-  'DurationLike',
-  'DurationETA'
+  'DatetimeTerm',
+  'DurationTerm',
+  'Term'
 ]

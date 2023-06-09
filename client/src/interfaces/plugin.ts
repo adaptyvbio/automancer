@@ -1,4 +1,4 @@
-import type { Experiment, ExperimentId, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import type { AnyDurationTerm, Experiment, ExperimentId, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import type { ComponentType, ReactNode } from 'react';
 
 import type { Application } from '../application';
@@ -104,7 +104,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
 
   getChildren?(block: Block, context: GlobalContext): {
     block: ProtocolBlock;
-    delay: number;
+    delay: AnyDurationTerm;
   }[];
   getChildrenExecution?(block: Block, location: Location, context: GlobalContext): (PluginBlockExecutionRef | null)[] | null;
   getLabel?(block: Block): ReactNode | null;

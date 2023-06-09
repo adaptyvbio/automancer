@@ -1,7 +1,6 @@
-import { ExperimentId, Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { AnyDurationTerm, DurationTerm, ExperimentId, Protocol, ProtocolBlock, ProtocolBlockPath, addTerms } from 'pr1-shared';
 
 import { BlockContext, GlobalContext } from './interfaces/plugin';
-import { importEta } from './dynamic-value';
 
 
 export interface BlockGroup {
@@ -14,9 +13,9 @@ export interface BlockPair {
   block: ProtocolBlock;
   location: unknown | null;
 
-  duration: number;
-  startTime: number;
-  endTime: number;
+  duration: AnyDurationTerm;
+  startTime: AnyDurationTerm;
+  endTime: AnyDurationTerm;
 }
 
 
@@ -93,13 +92,21 @@ export function analyzeBlockPath(
   blockPath: ProtocolBlockPath,
   context: GlobalContext
 ) {
-  let pairs: BlockPair[] = [{
-    block: protocol.root,
-    location: rootLocation,
+  let currentBlock = protocol.root;
+  let currentLocation = rootLocation;
+  let currentStartTime: AnyDurationTerm = {
+    type: 'duration',
+    value: 0,
+    resolution: 0
+  } satisfies DurationTerm;
 
-    duration: protocol.root.eta,
-    endTime: protocol.root.eta,
-    startTime: 0
+  let pairs: BlockPair[] = [{
+    block: currentBlock,
+    location: currentLocation,
+
+    duration: protocol.root.duration,
+    endTime: protocol.root.duration,
+    startTime: currentStartTime
   }];
 
   let groups: BlockGroup[] = [{
@@ -110,11 +117,6 @@ export function analyzeBlockPath(
 
   let isLeafBlockTerminal = false;
 
-
-  let currentBlock = protocol.root;
-  let currentLocation = rootLocation;
-  let currentStartTime = 0;
-
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
 
@@ -123,16 +125,16 @@ export function analyzeBlockPath(
     let childInfo = currentBlockImpl.getChildren!(currentBlock, context)[key];
 
     currentBlock = childInfo.block;
-    currentStartTime += childInfo.delay;
+    currentStartTime = addTerms(currentStartTime, childInfo.delay);
 
-    let duration = importEta(currentBlock.eta);
+    let duration = currentBlock.duration;
 
     pairs.push({
       block: currentBlock,
       location: currentLocation,
 
       duration,
-      endTime: (currentStartTime + duration),
+      endTime: addTerms(currentStartTime, duration),
       startTime: currentStartTime
     });
   }

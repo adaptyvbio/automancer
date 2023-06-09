@@ -1,3 +1,4 @@
+import { AnyDurationTerm } from 'pr1-shared';
 import { ReactNode, createElement } from 'react';
 
 
@@ -177,4 +178,17 @@ export function formatAbsoluteTimePair(a: number, b: number, options?: {
     ' ',
     formatAbsoluteTime(b, { ref: (options?.ref ?? null) })
   ];
+}
+
+
+export function formatDurationTerm(term: AnyDurationTerm): ReactNode {
+  switch (term.type) {
+    case 'duration':
+      return formatDuration(term.value);
+    case 'forever':
+      return '\u221e'; // &infin;
+      // return '\u8734'; // &infin;
+    case 'unknown':
+      return null;
+  }
 }

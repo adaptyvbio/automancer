@@ -3,7 +3,6 @@ from types import EllipsisType
 from typing import Any, TypedDict, cast
 
 import pr1 as am
-from pr1.eta import export_eta
 from pr1.input import AnyType, Attribute, ListType
 from pr1.fiber.parser import (BaseBlock, BaseLeadTransformer, BaseParser,
                               FiberParser, Layer,
@@ -78,12 +77,12 @@ class Block(BaseBlock):
   def __get_node_name__(self):
     return "Sequence"
 
-  def _eta(self):
-    return sum(child.eta() for child in self.children)
-
   def create_program(self, handle):
     from .program import Program
     return Program(self, handle)
+
+  def duration(self):
+    return sum((child.duration() for child in self.children), am.DurationTerm.zero())
 
   def import_point(self, data, /):
     from .program import ProgramPoint
@@ -100,6 +99,6 @@ class Block(BaseBlock):
       "name": "_",
       "namespace": namespace,
       "children": [child.export() for child in self.children],
-      "childrenDelays": [0, *[export_eta(delay) for delay in cumsum([child.eta() for child in self.children])]][:-1],
-      "eta": export_eta(self.eta())
+      "childrenDelays": [am.DurationTerm.zero().export(), *[delay.export() for delay in cumsum([child.duration() for child in self.children])]][:-1],
+      "duration": self.duration().export()
     }

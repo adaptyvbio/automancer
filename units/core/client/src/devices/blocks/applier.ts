@@ -1,5 +1,5 @@
 import { PluginBlockImpl } from 'pr1';
-import { ProtocolBlock } from 'pr1-shared';
+import { ProtocolBlock, createZeroTerm } from 'pr1-shared';
 
 
 export interface ApplierBlock extends ProtocolBlock {
@@ -22,7 +22,7 @@ export default {
   getChildren(block, context) {
     return [{
       block: block.child,
-      delay: 0
+      delay: createZeroTerm()
     }];
   },
   getChildrenExecution(block, location, context) {

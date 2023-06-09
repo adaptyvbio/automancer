@@ -74,8 +74,3 @@ export function formatEvaluable<T>(value: EvaluableValue<T>, formatInnerValue: (
       return <Expression contents={value.contents} />;
   }
 }
-
-
-export function importEta(value: number): number {
-  return value >= 0 ? value : NaN;
-}

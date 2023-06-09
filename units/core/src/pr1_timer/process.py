@@ -7,7 +7,7 @@ from typing import Any, Callable, Literal, Optional, TypeVar
 
 import pr1 as am
 from pr1.fiber.expr import (Evaluable, EvaluableConstantValue,
-                            EvaluablePythonExpr, export_value)
+                            EvaluablePythonExpr)
 from pr1.reader import LocatedValue, PossiblyLocatedValue
 from quantops import Quantity
 
@@ -116,7 +116,7 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
         task_time = time.time()
 
         yield am.ProcessExecEvent(
-          duration=remaining_duration,
+          duration=am.DurationTerm(remaining_duration),
           location=ProcessLocation(duration=total_duration, progress=progress),
           pausable=True,
           time=task_time
@@ -197,14 +197,14 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
     return ProcessPoint(progress=data["progress"])
 
   @staticmethod
-  def eta(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
+  def duration(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
     match data:
       case EvaluableConstantValue(LocatedValue('forever')):
-        return math.inf
+        return am.DurationTerm.forever()
       case EvaluableConstantValue(LocatedValue(Quantity() as duration)):
-        return (duration / am.ureg.second).magnitude
+        return am.DurationTerm((duration / am.ureg.second).magnitude)
       case _:
-        return math.nan
+        return am.DurationTerm.unknown()
 
   @staticmethod
   def export_data(data: Evaluable[PossiblyLocatedValue[ProcessData]], /):

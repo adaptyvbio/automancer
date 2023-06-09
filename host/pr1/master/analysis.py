@@ -1,19 +1,24 @@
+import comserde
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, Optional, TypeVar
 
+from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticReference
 from ..util.misc import Exportable
 
-if TYPE_CHECKING:
-  from ..langservice import LanguageServiceAnalysis
+
+T_Exportable = TypeVar('T_Exportable', bound=Exportable)
 
 
-@dataclass
+@comserde.serializable
+@dataclass(kw_only=True)
 class Effect(ABC, Exportable):
-  references: list[DiagnosticReference] = field(default_factory=list, kw_only=True)
+  author_path: list[int]
+  references: list[DiagnosticReference] = field(default_factory=list)
+  time: float
 
   @abstractmethod
   def export(self) -> Any:
@@ -21,10 +26,12 @@ class Effect(ABC, Exportable):
       "references": [ref.export() for ref in self.references]
     }
 
+@comserde.serializable
 @dataclass
 class FileCreatedEffect(Effect):
   path: Path
 
+@comserde.serializable
 @dataclass
 class GenericEffect(Effect):
   message: str
@@ -36,70 +43,80 @@ class GenericEffect(Effect):
     }
 
 
+@comserde.serializable
 @dataclass(kw_only=True)
-class MasterError(Diagnostic):
-  id: str = field(default_factory=lambda: str(uuid.uuid4()))
-  path: list[int] = field(default_factory=list)
-  time: Optional[float] = None
+class TimedDiagnostic(Diagnostic):
+  time: float
 
-  def as_master(self, time: float, /):
-    return self
+@comserde.serializable
+@dataclass
+class RuntimeMasterAnalysisItem(Generic[T_Exportable]):
+  item: T_Exportable
+  _: KW_ONLY
+  author_path: list[int]
+  event_index: int
+  # id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
   def export(self):
-    return {
-      **super().export(),
-      "date": self.time,
-      "path": self.path
-    }
+    return self.item.export()
 
-class MasterErrorReference(DiagnosticReference):
-  target_id: str
+@comserde.serializable
+@dataclass
+class ComptimeMasterAnalysisItem(Generic[T_Exportable]):
+  item: T_Exportable
   _: KW_ONLY
-  relation: Literal['default', 'close'] = 'default'
+
+  def export(self):
+    return self.item.export()
+
+MasterAnalysisItem = ComptimeMasterAnalysisItem[T_Exportable] | RuntimeMasterAnalysisItem[T_Exportable]
 
 
-class SystemMasterError(MasterError):
-  def __init__(self, err: OSError, /):
-    super().__init__(message=f"{err.__class__.__name__}: {err}")
+# @comserde.serializable
+# @dataclass(kw_only=True)
+# class TimedAnalysis:
+#   errors: list[TimedDiagnostic | Diagnostic] = field(default_factory=list)
+#   warnings: list[TimedDiagnostic | Diagnostic] = field(default_factory=list)
 
-
-T = TypeVar('T')
-
+@comserde.serializable
 @dataclass(kw_only=True)
-class MasterAnalysis(Exportable):
+class RuntimeAnalysis(DiagnosticAnalysis):
   effects: list[Effect] = field(default_factory=list)
-  errors: list[MasterError] = field(default_factory=list)
-  warnings: list[MasterError] = field(default_factory=list)
 
-  @property
-  def empty(self):
-    return (not self.effects) and (not self.errors) and (not self.warnings)
+  def _add(self, other: DiagnosticAnalysis, /):
+    super()._add(other)
 
-  def __add__(self, other: 'MasterAnalysis'):
-    return MasterAnalysis(
-      effects=(self.effects + other.effects),
-      errors=(self.errors + other.errors),
-      warnings=(self.warnings + other.warnings)
-    )
+    if isinstance(other, RuntimeAnalysis):
+      self.effects += other.effects
 
-  def add(self, value: 'tuple[Analysis | MasterAnalysis, T]', /) -> T:
-    from ..langservice import LanguageServiceAnalysis
 
-    analysis, result = value
+@comserde.serializable
+@dataclass(kw_only=True)
+class MasterAnalysis:
+  effects: list[MasterAnalysisItem[Effect]] = field(default_factory=list)
+  errors: list[MasterAnalysisItem[Diagnostic]] = field(default_factory=list)
+  warnings: list[MasterAnalysisItem[Diagnostic]] = field(default_factory=list)
 
-    if isinstance(analysis, LanguageServiceAnalysis):
-      return self.add((MasterAnalysis.cast(analysis), result))
+  def add_comptime(self, other: DiagnosticAnalysis):
+    def add_items(items: list[T_Exportable]):
+      return [ComptimeMasterAnalysisItem(item) for item in items]
 
-    self.effects += analysis.effects
-    self.errors += analysis.errors
-    self.warnings += analysis.warnings
+    self.errors += add_items(other.errors)
+    self.warnings += add_items(other.warnings)
 
-    return result
+  def add_runtime(self, other: RuntimeAnalysis, /, author_path: list[int], event_index: int):
+    def add_items(items: list[T_Exportable]):
+      return [RuntimeMasterAnalysisItem(item, author_path=author_path, event_index=event_index) for item in items]
 
-  def clear(self):
-    self.effects.clear()
-    self.errors.clear()
-    self.warnings.clear()
+    self.effects += add_items(other.effects)
+    self.errors += add_items(other.errors)
+    self.warnings += add_items(other.warnings)
+
+  # def _add(self, other, /):
+  #   super()._add(other)
+
+  #   if isinstance(other, MasterAnalysis):
+  #     self.effects += other.effects
 
   def export(self):
     return {
@@ -108,9 +125,11 @@ class MasterAnalysis(Exportable):
       "warnings": [warning.export() for warning in self.warnings]
     }
 
-  @classmethod
-  def cast(cls, analysis: 'LanguageServiceAnalysis'):
-    return MasterAnalysis(
-      errors=[error.as_master() for error in analysis.errors],
-      warnings=[warning.as_master() for warning in analysis.warnings]
-    )
+
+__all__ = [
+  'Effect',
+  'FileCreatedEffect',
+  'GenericEffect',
+  'MasterAnalysis',
+  'RuntimeAnalysis'
+]

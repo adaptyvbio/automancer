@@ -225,6 +225,12 @@ class ApplierProgram(BaseProgram):
       case ApplierProgramMode.Normal(owner):
         owner.halt()
 
+  def term_info(self, children_terms):
+    if not (0 in children_terms):
+      return self._block.duration(), { 0: am.DurationTerm.zero() }
+
+    return children_terms[0], dict()
+
   async def run(self, point, stack):
     self._logger.debug("Applying")
 

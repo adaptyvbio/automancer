@@ -11,7 +11,7 @@ from .fiber.parser import BaseBlock
 class ExperimentReportHeader:
   draft: Draft
   name: str
-  root: Annotated[BaseBlock, comserde.SerializationEncoding('pickle')]
+  root: Annotated[BaseBlock, comserde.SerializationFormat('object')]
 
   def export(self):
     return {

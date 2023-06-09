@@ -1,7 +1,9 @@
+import comserde
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
+import pr1 as am
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import BaseProgramPoint, BaseProgram
 from pr1.fiber.process import ProgramExecEvent
@@ -16,6 +18,7 @@ class ProgramMode(IntEnum):
   Halting = 1
   Normal = 2
 
+@comserde.serializable
 @dataclass(kw_only=True)
 class ProgramLocation(Exportable):
   index: int
@@ -36,16 +39,12 @@ class Program(BaseProgram):
     super().__init__(block, handle)
 
     self._block = block
-    # self._block._children = [x.child for x in block._children]
     self._handle = handle
 
     self._child_index: int
     self._child_program: ProgramOwner
     self._halting = False
     self._point: Optional[ProgramPoint]
-
-  def eta(self, location: ProgramLocation):
-    return self._child_program.eta() + sum(child.eta() for child in self._block.children[(location.index + 1):])
 
   def halt(self):
     assert not self._halting
@@ -60,6 +59,15 @@ class Program(BaseProgram):
     elif point.child:
       self._child_program.jump(point.child)
 
+  def term_info(self, children_terms):
+    current_child_term = children_terms[self._child_index]
+    remaining_children_durations = [child_block.duration() for child_block in self._block.children[(self._child_index + 1):]]
+    remaining_children_terms = [(current_child_term + duration) for duration in [am.DurationTerm.zero(), *am.cumsum(remaining_children_durations)]]
+
+    return (remaining_children_terms[-1], {
+      (self._child_index + relative_child_index + 1): child_term for relative_child_index, child_term in enumerate(remaining_children_terms[:-1])
+    })
+
   async def run(self, point: ProgramPoint, stack):
     self._point = point or ProgramPoint(child=None, index=0)
 
@@ -72,7 +80,8 @@ class Program(BaseProgram):
       child_block = self._block.children[self._child_index]
 
       self._child_program = self._handle.create_child(child_block, id=self._child_index)
-      self._handle.send(ProgramExecEvent(location=ProgramLocation(index=self._child_index)))
+      self._handle.set_location(ProgramLocation(index=self._child_index))
+      self._handle.set_term()
 
       current_point = self._point
       self._point = None

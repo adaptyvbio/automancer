@@ -384,9 +384,7 @@ class Host:
         logger.info(f"Running protocol on experiment '{experiment.id}'")
 
         async def func():
-          assert compilation.protocol
-
-          experiment.master = Master(compilation.protocol, experiment, cleanup_callback=cleanup_callback, host=self)
+          experiment.master = Master(compilation, experiment, cleanup_callback=cleanup_callback, host=self)
           run_task = asyncio.create_task(experiment.master.run(update_callback))
 
           try:

@@ -1,4 +1,5 @@
 from asyncio import Task
+import math
 from random import random
 import comserde
 from logging import Logger
@@ -7,18 +8,22 @@ from os import PathLike
 from pathlib import Path
 from pprint import pprint
 from traceback import StackSummary
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Optional, Self
 import asyncio
 import traceback
 
+from ..eta import DurationTerm, Term
+
+from ..analysis import DiagnosticAnalysis
+from ..draft import DraftCompilation
 from ..util.asyncio import wait_all
 from ..host import logger
 from ..util.decorators import provide_logger
 from ..history import TreeAdditionChange, BaseTreeChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
-from ..util.misc import Exportable, IndexCounter
-from ..master.analysis import MasterAnalysis
+from ..util.misc import Exportable, HierarchyNode, IndexCounter
+from ..master.analysis import MasterAnalysis, RuntimeAnalysis, RuntimeMasterAnalysisItem
 from .process import ProgramExecEvent
 from .eval import EvalStack
 from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
@@ -31,24 +36,28 @@ if TYPE_CHECKING:
 
 @provide_logger(logger)
 class Master:
-  def __init__(self, protocol: FiberProtocol, /, experiment: Experiment, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
+  def __init__(self, compilation: DraftCompilation, /, experiment: Experiment, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
+    assert compilation.protocol
+
     self.experiment = experiment
     self.host = host
-    self.protocol = protocol
+    self.protocol = compilation.protocol
 
     self.runners = {
       namespace: unit.MasterRunner(self) for namespace, unit in self.host.units.items() if hasattr(unit, 'MasterRunner')
     }
 
     self._analysis = MasterAnalysis()
+    self._analysis.add_comptime(compilation.analysis)
+
     self._cleanup_callback = cleanup_callback
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._file: IO[bytes]
-    self._location: Optional[ProgramHandleEventEntry] = None
     self._logger: Logger
     self._owner: ProgramOwner
-    self._pool = Pool()
+    self._pool: Pool
+    self._root_entry: Optional[ProgramHandleEntry] = None
     self._update_callback: Optional[SimpleCallbackFunction] = None
     self._update_lock_depth = 0
     self._update_handle: Optional[asyncio.Handle] = None
@@ -113,13 +122,13 @@ class Master:
     with self.experiment.report_path.open("wb") as self._file:
       assert (self.protocol.name is not None)
 
-      protocol = ExperimentReportHeader(
+      report_header = ExperimentReportHeader(
         self.protocol.draft,
         self.protocol.name,
         self.protocol.root
       )
 
-      comserde.dump(protocol, self._file)
+      comserde.dump(report_header, self._file)
       self._logger.debug(f"Saving data in {self.experiment.report_path}")
 
       async with Pool.open() as self._pool:
@@ -140,12 +149,12 @@ class Master:
 
 
   def export(self):
-    if not self._location:
+    if not self._root_entry:
       return None
 
     return {
       "analysis": self._analysis.export(),
-      "location": self._location.export(),
+      "location": self._root_entry.export(),
       "protocol": self.protocol.export()
     }
 
@@ -160,26 +169,30 @@ class Master:
 
     self._update_traces.clear()
 
-    analysis = MasterAnalysis()
-    useful = False
-
     changes = list[BaseTreeChange]()
+    user_significant = False
 
-    def update_handle(handle: ProgramHandle, existing_entry: Optional[ProgramHandleEventEntry], entry_id: int = 0, parent_entry: Optional[ProgramHandleEventEntry] = None):
-      nonlocal analysis, useful
+    def update_handle(handle: ProgramHandle, parent_entry: Optional[ProgramHandleEntry] = None, entry_id: int = 0, entry_path: list[int] = list()):
+      nonlocal user_significant
 
-      update_entry = ProgramHandleEventEntry(
-        index=(existing_entry.index if existing_entry else self._entry_counter.new()),
-        location=(handle._location if handle._updated else None)
-      )
+      if parent_entry:
+        current_entry = parent_entry.children.get(entry_id)
+      else:
+        current_entry = self._root_entry
 
-      if not existing_entry:
+      if not current_entry:
         assert handle._location
+        assert handle._updated_term
+
+        current_entry = ProgramHandleEntry(
+          index=self._entry_counter.new(),
+          location=handle._location
+        )
 
         if parent_entry:
-          parent_entry.children[entry_id] = update_entry
+          parent_entry.children[entry_id] = current_entry
         else:
-          self._location = update_entry
+          self._root_entry = current_entry
 
         changes.append(TreeAdditionChange(
           block_child_id=entry_id,
@@ -187,28 +200,33 @@ class Master:
           parent_index=(parent_entry.index if parent_entry else 0)
         ))
 
-      elif handle._updated:
+      elif handle._updated_location:
         assert handle._location
-        existing_entry.location = handle._location
+        current_entry.location = handle._location
 
         changes.append(TreeUpdateChange(
-          index=existing_entry.index,
+          index=current_entry.index,
           location=handle._location
         ))
 
       # Collect errors here for their order to be correct.
-      analysis += handle._analysis
+      self._analysis.add_runtime(handle._analysis, entry_path, 0)
 
       for child_id, child_handle in list(handle._children.items()):
-        child_existing_entry = existing_entry and existing_entry.children.get(child_id)
-        update_entry.children[child_id] = update_handle(child_handle, child_existing_entry, child_id, existing_entry or update_entry)
+        update_handle(child_handle, current_entry, child_id, [*entry_path, child_id])
+
+      # Recalculate the term of this handle
+      # This must be done after updating children as their term needs to be correct.
+      if handle._updated_term:
+        handle._calculate_term()
+        assert handle._term_info
+        current_entry.term, current_entry.children_terms = handle._term_info
 
       if handle._consumed:
-        assert existing_entry
-        self._entry_counter.delete(existing_entry.index)
+        self._entry_counter.delete(current_entry.index)
 
         changes.append(TreeRemovalChange(
-          index=existing_entry.index
+          index=current_entry.index
         ))
 
         if isinstance(parent_handle := handle._parent, ProgramHandle):
@@ -217,20 +235,19 @@ class Master:
         if parent_entry:
           del parent_entry.children[entry_id]
         else:
-          self._location = None
+          self._root_entry = None
 
-      useful = useful or (handle._updated and (not handle._consumed))
+      user_significant = user_significant or (handle._updated_location and (not handle._consumed))
 
-      handle._analysis.clear()
-      handle._updated = False
+      # handle._analysis.clear()
+      handle._analysis = RuntimeAnalysis()
+      handle._updated_location = False
 
-      return update_entry
+    update_handle(self._handle)
 
-    update_entry = update_handle(self._handle, self._location)
+    # print(">", self._handle._term_info)
 
-    self._analysis += analysis
-
-    if self._update_callback and useful:
+    if self._update_callback and user_significant:
       self._update_callback()
 
     # from pprint import pprint
@@ -240,10 +257,11 @@ class Master:
     #   print(change.serialize())
 
     # print('---')
-    # print(f"useful={useful}")
+    # print(f"useful={user_significant}")
     # print(update_entry.format())
     # print()
-    # print(self._location and self._location.format())
+    # print(self._root_entry and self._root_entry.format_hierarchy())
+    # print()
     # print(analysis)
     # pprint(changes)
     # data = comserde.dumps(changes, list[TreeChange])
@@ -274,10 +292,53 @@ class Master:
 
 
 @dataclass(kw_only=True)
-class ProgramHandleEventEntry(Exportable):
-  children: 'dict[int, ProgramHandleEventEntry]' = field(default_factory=dict)
+class ProgramHandleEntry(HierarchyNode):
+  children: dict[int, Self] = field(default_factory=dict)
+  children_terms: dict[int, DurationTerm] = field(default_factory=dict)
+  index: int
+  location: Exportable
+  term: Term = field(default_factory=DurationTerm.unknown)
+
+  def __get_node_name__(self):
+    return f"[{self.index}] " + (f"\x1b[37m{self.location!r}\x1b[0m")
+
+  def __get_node_children__(self):
+    return self.children.values()
+
+  def export(self):
+    return {
+      "children": {
+        child_id: child.export() for child_id, child in self.children.items()
+      },
+      "term": self.term.export(),
+      **self.location.export()
+    }
+
+
+class ProgramHandleEntryChange(HierarchyNode):
+  children: dict[int, Self]
+  id: int
+  location: Optional[Exportable]
+
+  def __get_node_name__(self):
+    return f"[{self.id}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
+
+  def __get_node_children__(self):
+    return self.children.values()
+
+
+@dataclass(kw_only=True)
+class ProgramHandleEventEntry(Exportable, HierarchyNode):
+  children: dict[int, Self] = field(default_factory=dict)
   index: int
   location: Optional[Exportable] = None
+  parent: Optional[tuple[Self, int]] = None
+
+  def __get_node_name__(self):
+    return f"[{self.index}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
+
+  def __get_node_children__(self):
+    return self.children.values()
 
   def export(self):
     assert self.location
@@ -292,15 +353,6 @@ class ProgramHandleEventEntry(Exportable):
       **location_exported
     }
 
-  def format(self, *, prefix: str = "\n"):
-    output = f"[{self.index}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
-
-    for index, (child_id, child) in enumerate(self.children.items()):
-      last = index == (len(self.children) - 1)
-      output += prefix + ("└── " if last else "├── ") + f"({child_id}) " + child.format(prefix=(prefix + ("    " if last else "│   "))) + (str() if last else "\n")
-
-    return output
-
 
 class ProgramHandle:
   def __init__(self, parent: 'Master | ProgramHandle', id: int):
@@ -309,13 +361,15 @@ class ProgramHandle:
     self._parent = parent
     self._program: BaseProgram
 
-    self._analysis = MasterAnalysis()
+    self._analysis = RuntimeAnalysis()
     self._location: Optional[Exportable] = None
+    self._term_info: Optional[tuple[Term, dict[int, DurationTerm]]] = None
 
     self._consumed = False
     self._failed = False
     self._locked = False
-    self._updated = False
+    self._updated_location = False
+    self._updated_term = True
 
   @property
   def master(self) -> Master:
@@ -397,7 +451,7 @@ class ProgramHandle:
   def send(self, event: ProgramExecEvent, *, lock: bool = False):
     self._analysis += event.analysis
     self._location = event.location or self._location
-    self._updated = True
+    self._updated_location = True
 
     if (not self._locked) and lock:
       self._locked = True
@@ -408,6 +462,34 @@ class ProgramHandle:
         self.master._update_handle = None
     else:
       self.master.update_soon()
+
+  def set_analysis(self, analysis: RuntimeAnalysis):
+    self._analysis += analysis
+    self.master.update_soon()
+
+  def set_term(self):
+    self._updated_term = True
+    current_handle = self
+
+    while isinstance(current_handle := current_handle._parent, ProgramHandle):
+      current_handle._updated_term = True
+
+    self.master.update_soon()
+
+  def _calculate_term(self):
+    self._updated_term = False
+
+    current_children_terms = {
+      child_id: child_handle._term_info[0] for child_id, child_handle in self._children.items() if child_handle._term_info
+    }
+
+    self._term_info = self._program.term_info(current_children_terms)
+
+  def set_location(self, location: Exportable, /):
+    self._location = location
+    self._updated_location = True
+
+    self.master.update_soon()
 
   def release_lock(self, *, sure: bool = False):
     if self._locked:

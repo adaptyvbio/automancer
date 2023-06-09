@@ -5,7 +5,7 @@ from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
                     Sequence, TypeVar, final)
 
-from ..eta import DurationTerm
+from ..eta import DurationTerm, Term
 from ..staticanalysis.expr import DeferredExprEval
 from ..staticanalysis.support import prelude
 from ..staticanalysis.expression import instantiate_type_instance
@@ -163,6 +163,9 @@ class BaseProgram(ABC):
         self.jump(self.__block.import_point(message["value"]))
       case _:
         raise ValueError(f"Unknown message type '{message['type']}'")
+
+  def term_info(self, children_terms: dict[int, Term]) -> tuple[Term, dict[int, DurationTerm]]:
+    return DurationTerm.unknown(), dict()
 
   @abstractmethod
   async def run(self, point: 'Optional[BaseProgramPoint]', stack: EvalStack):

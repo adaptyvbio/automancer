@@ -1,4 +1,3 @@
-import datetime
 from abc import ABC, abstractmethod, abstractstaticmethod
 from asyncio import Event
 from dataclasses import dataclass, field
@@ -7,11 +6,13 @@ import time
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
 
-from ..eta import DurationETA, export_eta
+from ..eta import DatetimeTerm, DurationTerm
+
+from ..error import Diagnostic
 from ..reader import PossiblyLocatedValue
 from .expr import Evaluable
 from ..host import logger
-from ..master.analysis import MasterAnalysis, MasterError
+from ..master.analysis import RuntimeAnalysis
 from ..util.decorators import provide_logger
 from ..util.misc import Exportable, UnreachableError, log_exception
 from .eval import EvalContext, EvalStack
@@ -23,25 +24,25 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class ProgramExecEvent:
-  analysis: MasterAnalysis = field(default_factory=MasterAnalysis)
+  analysis: RuntimeAnalysis = field(default_factory=RuntimeAnalysis)
   location: Optional[Exportable] = None
   time: Optional[float] = None
 
 
 @dataclass(kw_only=True)
 class BaseProcessEvent:
-  analysis: MasterAnalysis = field(default_factory=MasterAnalysis)
+  analysis: RuntimeAnalysis = field(default_factory=RuntimeAnalysis)
   location: Optional[Exportable] = None
   time: Optional[float] = None
 
 @dataclass(kw_only=True)
 class ProcessExecEvent(BaseProcessEvent):
-  duration: Optional[DurationETA] = None
+  duration: Optional[DurationTerm] = None
   pausable: Optional[bool] = None
 
 @dataclass(kw_only=True)
 class ProcessPauseEvent(BaseProcessEvent):
-  duration: Optional[DurationETA] = None
+  duration: Optional[DurationTerm] = None
 
 @dataclass(kw_only=True)
 class ProcessFailureEvent(BaseProcessEvent):
@@ -87,8 +88,8 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
     ...
 
   @staticmethod
-  def eta(data: Any) -> DurationETA:
-    return math.nan
+  def duration(data: Any) -> DurationTerm:
+    return DurationTerm.unknown()
 
   @staticmethod
   def import_point(data: Any, /):
@@ -104,8 +105,8 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
     self._data = data
     self._ProcessType = ProcessType
 
-  def _eta(self):
-    return self._ProcessType.eta(self._data)
+  def duration(self):
+    return self._ProcessType.duration(self._data)
 
   def create_program(self, handle):
     return ProcessProgram(self, handle)
@@ -119,7 +120,7 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
       "namespace": self._ProcessType.namespace,
 
       "data": self._ProcessType.export_data(self._data),
-      "eta": export_eta(self.eta())
+      "duration": self.duration().export()
     }
 
 
@@ -153,11 +154,14 @@ class ProcessProgramMode:
 
   @dataclass
   class Normal():
+    term: DatetimeTerm = field(default_factory=DatetimeTerm.unknown)
+
     def export(self):
       return 2
 
   @dataclass
   class Pausing:
+    term: DatetimeTerm
     event: Event = field(default_factory=Event, repr=False)
 
     def export(self):
@@ -165,6 +169,8 @@ class ProcessProgramMode:
 
   @dataclass
   class Paused():
+    term: DurationTerm
+
     def export(self):
       return 4
 
@@ -190,17 +196,17 @@ class ProcessProgramMode:
 
 @dataclass(kw_only=True)
 class ProcessProgramLocation:
-  mode: ProcessProgramMode.Any
+  mode: int
   pausable: bool
   process: Optional[Exportable]
   time: float
 
   def export(self):
     return {
-      "mode": self.mode.export(),
+      "mode": self.mode,
       "pausable": self.pausable,
       "process": self.process and self.process.export(),
-      "time": self.time * 1000.0
+      "time": self.time * 1000
     }
 
 
@@ -213,6 +219,7 @@ class ProcessProgram(HeadProgram):
     self._mode: ProcessProgramMode.Any
     self._point: Optional[Any]
     self._process: BaseProcess
+    self._process_duration: DurationTerm # Optional[tuple[float, float]]
     self._process_location: Optional[Exportable]
     self._process_pausable: bool
 
@@ -237,21 +244,22 @@ class ProcessProgram(HeadProgram):
         if not self._process_pausable:
           return False
 
-        self._mode = ProcessProgramMode.Pausing()
-        self._handle.send(ProgramExecEvent(
-          location=ProcessProgramLocation(
-            mode=self._mode,
+        self._mode = ProcessProgramMode.Pausing(self._mode.term)
+
+        self._handle.set_location(
+          ProcessProgramLocation(
+            mode=self._mode.export(),
             pausable=self._process_pausable,
             process=self._process_location,
             time=time.time()
           )
-        ))
+        )
 
         self._process.pause()
 
         await self._mode.event.wait()
         return True
-      case ProcessProgramMode.Pausing(event):
+      case ProcessProgramMode.Pausing(event=event):
         await event.wait()
         return True
       case _:
@@ -265,7 +273,7 @@ class ProcessProgram(HeadProgram):
         self._mode = ProcessProgramMode.Resuming()
         self._handle.send(ProgramExecEvent(
           location=ProcessProgramLocation(
-            mode=self._mode,
+            mode=self._mode.export(),
             pausable=self._process_pausable,
             process=self._process_location,
             time=time.time()
@@ -293,6 +301,13 @@ class ProcessProgram(HeadProgram):
       case _:
         return super().receive(message)
 
+  def term_info(self, children_terms):
+    match self._mode:
+      case ProcessProgramMode.Normal() | ProcessProgramMode.Paused() | ProcessProgramMode.Pausing():
+        return self._mode.term, dict()
+      case _:
+        return DatetimeTerm.unknown(), dict()
+
   async def run(self, point, stack):
     global ProcessProgramMode
     Mode = ProcessProgramMode
@@ -302,9 +317,12 @@ class ProcessProgram(HeadProgram):
     if isinstance(data, EllipsisType):
       self._mode = Mode.Broken()
       self._handle.send(ProgramExecEvent(
-        analysis=MasterAnalysis.cast(analysis),
+        analysis=RuntimeAnalysis(
+          errors=analysis.errors,
+          warnings=analysis.warnings
+        ),
         location=ProcessProgramLocation(
-          mode=self._mode,
+          mode=self._mode.export(),
           pausable=False,
           process=None,
           time=time.time()
@@ -326,13 +344,14 @@ class ProcessProgram(HeadProgram):
       self._mode = Mode.Starting()
       self._point = None
       self._process = self._block._ProcessType(data.dislocate(), master=self._handle.master)
+      self._process_duration = DurationTerm.unknown()
       self._process_location = None
       self._process_pausable = False
 
       process_iter = self._process.run(current_point, stack)
 
       while True:
-        analysis = MasterAnalysis()
+        analysis = RuntimeAnalysis()
 
         try:
           try:
@@ -345,6 +364,8 @@ class ProcessProgram(HeadProgram):
           except Exception as e:
             raise ProcessInternalError(e) from e
 
+          event_time = event.time or time.time()
+
           analysis += event.analysis
           self._process_location = event.location or self._process_location
 
@@ -354,9 +375,6 @@ class ProcessProgram(HeadProgram):
                 raise ProcessProtocolError(f"Process sent a {ProcessExecEvent.__name__} event with a falsy location while starting")
 
               self._mode = Mode.Normal()
-
-              # if pausable is not None:
-              #   self._process_pausable = pausable
 
             case (Mode.Halting() | Mode.Normal(), ProcessExecEvent()):
               pass
@@ -371,9 +389,17 @@ class ProcessProgram(HeadProgram):
             ):
               self._mode = Mode.Broken()
 
-            case (Mode.Pausing(pausing_event), ProcessPauseEvent()):
+            case (Mode.Pausing(term, pausing_event), ProcessPauseEvent()):
               pausing_event.set()
-              self._mode = Mode.Paused()
+
+              self._mode = Mode.Paused(
+                DurationTerm(
+                  (term.value - event_time),
+                  term.resolution
+                ) if term else DurationTerm.unknown()
+              )
+
+              self._handle.set_term()
 
             case (
               Mode.Halting() | Mode.Normal() | Mode.Paused() | Mode.Resuming() | Mode.Starting(),
@@ -386,6 +412,22 @@ class ProcessProgram(HeadProgram):
 
           if isinstance(event, ProcessExecEvent) and (event.pausable is not None):
             self._process_pausable = event.pausable
+
+          # if isinstance(event, (ProcessExecEvent, ProcessPauseEvent)):
+          #   print()
+          #   print()
+          #   print(self._mode, event.duration)
+          #   print()
+          #   print()
+
+          if isinstance(self._mode, Mode.Normal) and isinstance(event, (ProcessExecEvent, ProcessPauseEvent)) and event.duration:
+            self._mode.term = DatetimeTerm(event_time) + event.duration
+            self._handle.set_term()
+
+          if isinstance(self._mode, Mode.Paused) and isinstance(event, (ProcessExecEvent, ProcessPauseEvent)) and event.duration:
+            self._mode.term = event.duration
+            self._handle.set_term()
+
         except (ProcessInternalError, ProcessProtocolError) as e:
           logger.error(f"Process protocol error: {e}")
           log_exception(logger)
@@ -398,9 +440,9 @@ class ProcessProgram(HeadProgram):
 
           match e:
             case ProcessInternalError():
-              error = MasterError("Process internal error")
+              error = Diagnostic("Process internal error")
             case ProcessProtocolError():
-              error = MasterError(e.message)
+              error = Diagnostic(e.message)
             case _:
               raise UnreachableError
 
@@ -409,7 +451,7 @@ class ProcessProgram(HeadProgram):
         self._handle.send(ProgramExecEvent(
           analysis=analysis,
           location=ProcessProgramLocation(
-            mode=self._mode,
+            mode=self._mode.export(),
             pausable=self._process_pausable,
             process=self._process_location,
             time=time.time()
@@ -425,7 +467,7 @@ class ProcessProgram(HeadProgram):
           self._mode = Mode.Terminated()
           self._handle.send(ProgramExecEvent(
             location=ProcessProgramLocation(
-              mode=self._mode,
+              mode=self._mode.export(),
               pausable=self._process_pausable,
               process=self._process_location,
               time=time.time()

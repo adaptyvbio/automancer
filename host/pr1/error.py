@@ -1,3 +1,4 @@
+import comserde
 from dataclasses import KW_ONLY, dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 import uuid
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
   from .reader import LocatedValue, LocationArea
 
 
+@comserde.serializable
 @dataclass(kw_only=True)
 class DiagnosticReference(Exportable):
   id: str
@@ -19,6 +21,7 @@ class DiagnosticReference(Exportable):
       "label": self.label
     }
 
+@comserde.serializable
 @dataclass(kw_only=True)
 class DiagnosticDocumentReference(DiagnosticReference, Exportable):
   area: 'Optional[LocationArea]'
@@ -73,18 +76,6 @@ class Diagnostic(Exportable):
   name: str = 'unknown'
   references: list[DiagnosticReference] = field(default_factory=list)
   trace: Optional[Trace] = None
-
-  def as_master(self, *, time: Optional[float] = None):
-    from .master.analysis import MasterError
-
-    return MasterError(
-      description=self.description,
-      message=self.message,
-      name=self.name,
-      id=(self.id or str(uuid.uuid4())),
-      references=self.references,
-      time=time
-    )
 
   def export(self):
     return {

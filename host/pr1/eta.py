@@ -27,6 +27,10 @@ class DatetimeTerm:
       "resolution": (self.resolution * 1000)
     }
 
+  @classmethod
+  def unknown(cls):
+    return cls(math.nan)
+
 
 @dataclass(frozen=True, slots=True)
 class DurationTerm:

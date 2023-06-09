@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from .. import logger as root_logger
 from ..input import AnyType
-from ..fiber.process import BaseProcess as ProcessProtocol
-from ..state import UnitStateInstance, UnitStateManager
 
 if TYPE_CHECKING:
   from ..fiber.master2 import Master
@@ -27,54 +25,7 @@ class BaseParser:
 
 
 class BaseRunner(Protocol):
-  Process: Optional[type[ProcessProtocol]] = None
-  StateConsumer: Optional[type[UnitStateInstance] | type[UnitStateManager]] = None
-  dependencies = set[str]()
-
-  def __init__(self, *, chip, host):
-    pass
-
-  async def command(self, data):
-    pass
-
-  def create(self):
-    pass
-
-  def duplicate(self, other, *, template):
-    self.unserialize(other.serialize())
-
-  def export(self):
-    return dict()
-
-  def serialize(self):
-    return None
-
-  def unserialize(self, state):
-    pass
-
-  def serialize_raw(self):
-    return pickle.dumps(self.serialize())
-
-  def unserialize_raw(self, data):
-    self.unserialize(pickle.loads(data))
-
-  def start_protocol(self, runner):
-    pass
-
-  def enter_segment(self, segment, seg_index):
-    pass
-
-  def leave_segment(self, segment, seg_index):
-    pass
-
-  def resume_segment(self, segment, seg_index, options):
-    pass
-
-  def pause(self, options):
-    pass
-
-  def update(self):
-    pass
+  pass
 
 
   def transfer_state(self):

@@ -6,7 +6,7 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, Protocol, Self, Sequence, TypeVar
+from typing import Any, Generator, Iterable, Optional, Protocol, Self, Sequence, TypeVar
 
 
 T = TypeVar('T')
@@ -20,7 +20,11 @@ T_SupportsAdd = TypeVar('T_SupportsAdd', bound=SupportsAdd)
 
 def cumsum(items: Iterable[T_SupportsAdd]) -> Generator[T_SupportsAdd, None, None]:
   it = iter(items)
-  total = next(it)
+
+  try:
+    total = next(it)
+  except StopIteration:
+    return
 
   yield total
 
@@ -141,3 +145,18 @@ def create_datainstance(data: Mapping[str, Any]) -> Any:
     setattr(obj, key, value)
 
   return obj
+
+
+__all__ = [
+  'BaseDataInstance',
+  'create_datainstance',
+  'cumsum',
+  'Exportable',
+  'ExportableABC',
+  'fast_hash',
+  'HierarchyNode',
+  'IndexCounter',
+  'log_exception',
+  'split_sequence',
+  'UnreachableError'
+]

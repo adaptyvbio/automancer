@@ -1,5 +1,5 @@
 import { DynamicValue, Plugin, PluginBlockImpl, formatDynamicValue } from 'pr1';
-import { PluginName, ProtocolBlock, ProtocolBlockName, createZeroTerm } from 'pr1-shared';
+import { MasterBlockLocation, PluginName, ProtocolBlock, ProtocolBlockName, createZeroTerm } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -7,8 +7,8 @@ export interface Block extends ProtocolBlock {
   count: DynamicValue;
 }
 
-export interface Location {
-  children: { 0: unknown; };
+export interface Location extends MasterBlockLocation {
+  children: { 0: MasterBlockLocation; };
   count: number | null;
   iteration: number | null;
   mode: LocationMode;

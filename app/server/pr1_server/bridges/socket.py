@@ -64,7 +64,7 @@ class Client(BaseClient):
 
   async def send(self, message: object, /):
     try:
-      self._writer.write((json.dumps(message) + "\n").encode("utf-8"))
+      self._writer.write((json.dumps(message, allow_nan=False) + "\n").encode("utf-8"))
     except BrokenPipeError as e:
       raise ClientClosed from e
 

@@ -7,6 +7,7 @@ export * from './term';
 export * from './types/analysis';
 export * from './types/communication';
 export * from './types/host';
+export * from './types/master';
 export * from './types/plugin';
 export * from './types/protocol';
 export * from './types/unit';

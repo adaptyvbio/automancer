@@ -1,60 +1,24 @@
-import type { DiagnosticReference } from './analysis';
-import type { PluginName } from './plugin';
-import type { Protocol } from './protocol';
+import type { Protocol, Term } from './protocol';
+import type { Brand } from './util';
 
 
-/** @deprecated */
-export interface ProtocolBlock {
-  namespace: PluginName;
-  [key: string]: unknown;
-}
+export type MasterBlockId = number;
 
-/** @deprecated */
-export type ProtocolBlockPath = unknown[];
-
-export interface ProtocolProcess {
-  data: unknown;
-  namespace: PluginName;
-}
-
-export type ProtocolState = Record<PluginName, unknown>;
-
-
-export interface ProtocolBlockAggregate {
-  blocks: ProtocolBlock[];
-  offset: number;
-  state: ProtocolState | null;
-}
-
-
-export interface ProtocolError {
-  id: string | null;
-  description: string[];
-  message: string;
-  references: DiagnosticReference[];
+export interface MasterBlockLocation {
+  children: Record<MasterBlockId, MasterBlockLocation>;
+  childrenTerms: Record<MasterBlockId, Term>;
+  startDate: number;
+  term: Term;
 }
 
 
 export interface Master {
   analysis: MasterAnalysis;
-  location: unknown;
+  location: MasterBlockLocation;
   protocol: Protocol;
 }
 
 export interface MasterAnalysis {
-  errors: MasterError[];
-  warnings: MasterError[];
+  errors: any[];
+  warnings: any[];
 }
-
-export interface MasterError extends ProtocolError {
-  id: string;
-  date: number;
-  path: ProtocolBlockPath;
-}
-
-export interface MasterProcessState {
-  time: number;
-  [key: string]: unknown;
-}
-
-export type MasterStateLocation = Record<PluginName, unknown> | null;

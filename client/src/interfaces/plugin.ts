@@ -1,4 +1,4 @@
-import type { AnyDurationTerm, Experiment, ExperimentId, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import type { AnyDurationTerm, Experiment, ExperimentId, MasterBlockLocation, OrdinaryId, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import type { ComponentType, ReactNode } from 'react';
 
 import type { Application } from '../application';
@@ -90,7 +90,7 @@ export interface PluginBlockImplCommand {
 }
 
 
-export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
+export interface PluginBlockImpl<Block extends ProtocolBlock, Location extends MasterBlockLocation> {
   Component?: ComponentType<PluginBlockImplComponentProps<Block, Location>>;
 
   computeGraph?: ProtocolBlockGraphRenderer<Block, Location>;
@@ -111,7 +111,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location> {
 }
 
 export interface PluginBlockExecutionRef {
-  location: unknown;
+  location: MasterBlockLocation;
 }
 
 export type UnknownPluginBlockImpl = PluginBlockImpl<any, any>;

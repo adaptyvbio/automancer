@@ -1,6 +1,7 @@
 from asyncio import Task
 import math
 from random import random
+import time
 import comserde
 from logging import Logger
 from dataclasses import dataclass, field
@@ -186,7 +187,8 @@ class Master:
 
         current_entry = ProgramHandleEntry(
           index=self._entry_counter.new(),
-          location=handle._location
+          location=handle._location,
+          start_time=time.time()
         )
 
         if parent_entry:
@@ -293,10 +295,11 @@ class Master:
 
 @dataclass(kw_only=True)
 class ProgramHandleEntry(HierarchyNode):
-  children: dict[int, Self] = field(default_factory=dict)
   children_terms: dict[int, DurationTerm] = field(default_factory=dict)
+  children: dict[int, Self] = field(default_factory=dict)
   index: int
   location: Exportable
+  start_time: float
   term: Term = field(default_factory=DurationTerm.unknown)
 
   def __get_node_name__(self):
@@ -310,6 +313,8 @@ class ProgramHandleEntry(HierarchyNode):
       "children": {
         child_id: child.export() for child_id, child in self.children.items()
       },
+      "childrenTerms": { child_id: child_term.export() for child_id, child_term in self.children_terms.items() },
+      "startDate": (self.start_time * 1000),
       "term": self.term.export(),
       **self.location.export()
     }

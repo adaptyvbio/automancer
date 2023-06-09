@@ -43,7 +43,7 @@ class Client(BaseClient):
 
   async def send(self, message):
     try:
-      await self.conn.send(json.dumps(message))
+      await self.conn.send(json.dumps(message, allow_nan=False))
     except websockets.exceptions.ConnectionClosed as e:
       raise ClientClosed from e
 

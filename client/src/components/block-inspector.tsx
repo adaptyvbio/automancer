@@ -1,4 +1,4 @@
-import { Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import { Fragment, ReactNode } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
@@ -13,6 +13,7 @@ import { Icon } from './icon';
 import { Application } from '../application';
 import { formatAbsoluteTimePair, formatDurationTerm } from '../format';
 import { TimeSensitive } from './time-sensitive';
+import { getDateFromTerm } from '../term';
 
 
 export function BlockInspector(props: {
@@ -20,6 +21,7 @@ export function BlockInspector(props: {
   blockPath: ProtocolBlockPath | null;
   footer?: [ReactNode, ReactNode] | null;
   host: Host;
+  location: MasterBlockLocation | null;
   protocol: Protocol;
   selectBlock(path: ProtocolBlockPath | null): void;
 }) {
@@ -39,13 +41,15 @@ export function BlockInspector(props: {
     pool
   };
 
-  let blockAnalysis = analyzeBlockPath(props.protocol, null, props.blockPath, globalContext);
+  let blockAnalysis = analyzeBlockPath(props.protocol, props.location, props.blockPath, globalContext);
 
   let ancestorGroups = blockAnalysis.groups.slice(0, -1);
   let leafGroup = blockAnalysis.groups.at(-1)!;
 
   let leafPair = blockAnalysis.pairs.at(-1)!;
   let leafBlockImpl = getBlockImpl(leafPair.block, globalContext);
+
+  console.log('*', leafPair.terms);
 
   return (
     <div className={spotlightStyles.root}>
@@ -74,12 +78,19 @@ export function BlockInspector(props: {
           <TimeSensitive
             contents={() => {
               let now = Date.now();
+              let terms = leafPair.terms;
+
+              if (!terms) {
+                return <div>Past step</div>;
+              }
+
+              let startDate = getDateFromTerm(terms.start, now);
 
               return (
                 <>
-                  <div>{formatDurationTerm(leafPair.duration) ?? '\xa0'}</div>
-                  {(leafPair.startTime.type === 'duration') && (leafPair.endTime.type === 'duration') && (
-                    <div>{formatAbsoluteTimePair(now + leafPair.startTime.value, now + leafPair.endTime.value, { mode: 'directional' })}</div>
+                  <div>{formatDurationTerm(leafPair.block.duration) ?? '\xa0'}</div>
+                  {(startDate !== null) && (
+                    <div>{formatAbsoluteTimePair(startDate, getDateFromTerm(terms.end, now), { mode: 'directional' })}</div>
                   )}
                 </>
               );

@@ -61,7 +61,7 @@ export function formatDuration(input: number, options?: {
       }
     } else {
       if ((unitRangeValue > 0) && withinResolution) {
-        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + (((style === 'long') && (unitInputValue > 1)) ? 's' : ''));
+        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + ((style === 'long') && (unitInputValue > 1) ? 's' : ''));
       }
     }
   }
@@ -71,7 +71,8 @@ export function formatDuration(input: number, options?: {
       return segments.join(':');
     case 'long':
       return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments);
-    default:
+    case 'narrow':
+    case 'short':
       return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments);
   }
 }
@@ -156,27 +157,33 @@ export function formatAbsoluteTime(input: number, options?: { ref?: number | nul
  * @param b The second time, in milliseconds.
  * @param options.mode The mode to use, either `directional` (`10:00 → 11:00`) or `range` (`10:00 – 11:00`).
  */
-export function formatAbsoluteTimePair(a: number, b: number, options?: {
+export function formatAbsoluteTimePair(a: number, b: number | null, options?: {
   mode?: 'directional' | 'range';
   ref?: number | null;
 }): ReactNode {
-  let diff = Math.abs(b - a);
-
   let symbol = {
     directional: '\u2192', // &rarr;
     range: '\u2013' // &ndash;
   }[options?.mode ?? 'range'];
 
-  if (diff < 60e3) {
-    return formatAbsoluteTime(a);
+  if (b !== null) {
+    let diff = Math.abs(b - a);
+
+    if (diff < 60e3) {
+      return formatAbsoluteTime(a);
+    }
   }
 
   return [
     formatAbsoluteTime(a, { ref: (options?.ref ?? null) }),
     '\xa0',
     symbol,
-    ' ',
-    formatAbsoluteTime(b, { ref: (options?.ref ?? null) })
+    ...((b !== null)
+      ? [
+        ' ',
+        formatAbsoluteTime(b, { ref: (options?.ref ?? null) })
+      ]
+      : [])
   ];
 }
 
@@ -187,8 +194,44 @@ export function formatDurationTerm(term: AnyDurationTerm): ReactNode {
       return formatDuration(term.value);
     case 'forever':
       return '\u221e'; // &infin;
-      // return '\u8734'; // &infin;
     case 'unknown':
       return null;
+  }
+}
+
+
+export function formatRemainingTime(input: number, options?: { style?: 'long' | 'short'; }): ReactNode {
+  if (input < 60e3) {
+    return 'Less than a minute left';
+  }
+
+  let style = (options?.style ?? 'short');
+
+  let inputRest = Math.round(input);
+
+  let segments: string[] = [];
+
+  for (let unit of TIME_UNITS.slice().reverse()) {
+    let potentialInputRest = inputRest % unit.factor;
+    let unitInputValue: number;
+
+    if (potentialInputRest < 60e3) {
+      unitInputValue = Math.round(inputRest / unit.factor);
+      inputRest = 0;
+    } else {
+      unitInputValue = Math.floor(inputRest / unit.factor);
+      inputRest = potentialInputRest;
+    }
+
+    if (unitInputValue > 0) {
+      segments.push(unitInputValue.toFixed() + ' ' + unit[style] + ((style === 'long') && (unitInputValue > 1) ? 's' : ''));
+    }
+  }
+
+  switch (style) {
+    case 'long':
+      return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments) + ' left';
+    case 'short':
+      return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments) + ' left';
   }
 }

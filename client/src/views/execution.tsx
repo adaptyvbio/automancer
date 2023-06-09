@@ -161,6 +161,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                             <BlockInspector
                               app={this.props.app}
                               blockPath={selectedBlockPath}
+                              location={this.master.location}
                               footer={selectedBlockPath && !isSelectedBlockActive
                                 ? [(
                                   <>

@@ -1,4 +1,4 @@
-import { Experiment, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Experiment, MasterBlockLocation, Protocol, ProtocolBlockPath, addTerms } from 'pr1-shared';
 import { Component, Fragment } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
@@ -14,6 +14,9 @@ import { Pool } from '../util';
 import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
 import { FeatureEntry, FeatureList } from './features';
 import { Application } from '../application';
+import { formatAbsoluteTimePair, formatRemainingTime } from '../format';
+import { TimeSensitive } from './time-sensitive';
+import { getDateFromTerm } from '../term';
 
 
 export interface ExecutionInspectorProps {
@@ -22,7 +25,7 @@ export interface ExecutionInspectorProps {
   blockPath: ProtocolBlockPath | null;
   experiment: Experiment;
   host: Host;
-  location: unknown;
+  location: MasterBlockLocation;
   protocol: Protocol;
   selectBlock(path: ProtocolBlockPath | null): void;
 }
@@ -66,6 +69,8 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
     let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment.id, context);
 
+    // console.log('*', blockAnalysis);
+
     return (
       <div className={spotlightStyles.root}>
         <div className={spotlightStyles.contents}>
@@ -96,6 +101,31 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                 <Icon name="chevron_right" className={spotlightStyles.navigationIcon} />
               </button>
             </div>
+          </div>
+
+          <div className={spotlightStyles.timeinfo}>
+            <TimeSensitive
+              contents={() => {
+                let now = Date.now();
+                let terms = leafPair.terms!;
+
+                let endDate = getDateFromTerm(terms.end, now);
+                let startDate = getDateFromTerm(terms.start, now);
+
+                return (
+                  <>
+                    {(endDate !== null)
+                      ? <div>{formatRemainingTime(endDate - now)}</div>
+                      : (terms.end.type === 'forever')
+                        ? <div>&infin;</div>
+                        : <div>Unknown time left</div>}
+                    {(startDate !== null) && (
+                      <div>{formatAbsoluteTimePair(startDate, endDate, { mode: 'directional' })}</div>
+                    )}
+                  </>
+                );
+              }}
+              interval={30e3} />
           </div>
 
           {blockAnalysis.isLeafBlockTerminal && (

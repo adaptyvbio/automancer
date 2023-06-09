@@ -21,6 +21,9 @@ class DatetimeTerm:
     if math.isnan(self.value):
       return { "type": "unknown" }
 
+    if math.isinf(self.value):
+      return { "type": "forever" }
+
     return {
       "type": "datetime",
       "value": (self.value * 1000),

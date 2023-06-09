@@ -21,6 +21,14 @@ export function addTerms(target: Term, other: Term): Term {
     };
   }
 
+  if ((target.type === 'datetime') && (other.type === 'duration')) {
+    return {
+      type: 'datetime',
+      resolution: (target.resolution + other.resolution),
+      value: (target.value + other.value)
+    };
+  }
+
   throw new Error('Invalid operation');
 }
 

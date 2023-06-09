@@ -1,5 +1,5 @@
 import { Point as GeometryPoint, GraphLink, Plugin, PluginBlockImpl, ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererNodeInfo } from 'pr1';
-import { AnyDurationTerm, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { AnyDurationTerm, MasterBlockLocation, PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
 import { Fragment } from 'react';
 
 
@@ -8,8 +8,7 @@ export interface Block extends ProtocolBlock {
   childrenDelays: AnyDurationTerm[];
 }
 
-export interface Location {
-  children: Record<number, unknown>;
+export interface Location extends MasterBlockLocation {
   index: number;
   interrupting: boolean;
 }

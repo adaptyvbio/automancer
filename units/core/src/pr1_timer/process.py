@@ -181,6 +181,7 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
           break
     else:
       yield am.ProcessExecEvent(
+        duration=am.DurationTerm.forever(),
         location=ProcessLocation(duration=None, progress=0.0)
       )
 

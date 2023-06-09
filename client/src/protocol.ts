@@ -1,4 +1,4 @@
-import { AnyDurationTerm, DurationTerm, ExperimentId, Protocol, ProtocolBlock, ProtocolBlockPath, addTerms } from 'pr1-shared';
+import { AnyDurationTerm, DatetimeTerm, DurationTerm, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
 
 import { BlockContext, GlobalContext } from './interfaces/plugin';
 
@@ -11,11 +11,12 @@ export interface BlockGroup {
 
 export interface BlockPair {
   block: ProtocolBlock;
-  location: unknown | null;
+  location: MasterBlockLocation | null;
 
-  duration: AnyDurationTerm;
-  startTime: AnyDurationTerm;
-  endTime: AnyDurationTerm;
+  terms: {
+    start: Term;
+    end: Term;
+  } | null;
 }
 
 
@@ -88,25 +89,33 @@ export function getRefPaths(block: ProtocolBlock, location: unknown, context: Gl
  */
 export function analyzeBlockPath(
   protocol: Protocol,
-  rootLocation: unknown | null,
+  rootLocation: MasterBlockLocation | null,
   blockPath: ProtocolBlockPath,
   context: GlobalContext
 ) {
   let currentBlock = protocol.root;
   let currentLocation = rootLocation;
-  let currentStartTime: AnyDurationTerm = {
-    type: 'duration',
-    value: 0,
-    resolution: 0
-  } satisfies DurationTerm;
+  let currentSimulated = !rootLocation;
+  let currentStartTerm: Term | null = currentLocation
+    ? {
+      type: 'datetime',
+      value: currentLocation?.startDate,
+      resolution: 0
+    } satisfies DatetimeTerm
+    : {
+      type: 'duration',
+      value: 0,
+      resolution: 0
+    } satisfies DurationTerm;
 
   let pairs: BlockPair[] = [{
     block: currentBlock,
     location: currentLocation,
 
-    duration: protocol.root.duration,
-    endTime: protocol.root.duration,
-    startTime: currentStartTime
+    terms: {
+      end: (currentLocation?.term ?? currentBlock.duration),
+      start: currentStartTerm
+    }
   }];
 
   let groups: BlockGroup[] = [{
@@ -119,23 +128,35 @@ export function analyzeBlockPath(
 
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
-
-    currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, context)?.[key]?.location ?? null);
-
     let childInfo = currentBlockImpl.getChildren!(currentBlock, context)[key];
+    let childLocation = (currentLocation?.children[key] ?? null);
+
+    if (childLocation) {
+      currentStartTerm = {
+        type: 'datetime',
+        resolution: 0,
+        value: childLocation.startDate
+      } satisfies DatetimeTerm;
+    } else if (currentLocation?.childrenTerms[key]) {
+      currentStartTerm = currentLocation.childrenTerms[key];
+      currentSimulated = true;
+    } else if (currentSimulated) {
+      currentStartTerm = addTerms(currentStartTerm!, childInfo.delay);
+    } else {
+      currentStartTerm = null;
+    }
 
     currentBlock = childInfo.block;
-    currentStartTime = addTerms(currentStartTime, childInfo.delay);
-
-    let duration = currentBlock.duration;
+    currentLocation = childLocation;
 
     pairs.push({
       block: currentBlock,
       location: currentLocation,
 
-      duration,
-      endTime: addTerms(currentStartTime, duration),
-      startTime: currentStartTime
+      terms: currentStartTerm && {
+        end: (currentLocation?.term ?? addTerms(currentStartTerm, currentBlock.duration)),
+        start: currentStartTerm
+      }
     });
   }
 

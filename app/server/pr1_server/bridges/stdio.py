@@ -27,7 +27,7 @@ class Client(BaseClient):
     return json.loads(await fut)
 
   async def send(self, message):
-    sys.stdout.write(json.dumps(message) + "\n")
+    sys.stdout.write(json.dumps(message, allow_nan=False) + "\n")
     sys.stdout.flush()
 
 

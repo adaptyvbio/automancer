@@ -241,10 +241,10 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       }
     }, { signal: this.controller.signal });
 
-    this.props.app.shortcutManager.attach(['PageDown', 'PageUp'], (event, properties) => {
+    this.props.app.shortcutManager.attach(['Meta+ArrowDown', 'Meta+ArrowUp'], (event, properties) => {
       if (this.lastComputation) {
         let result = List(this.lastComputation.nodeSurfaces).maxBy(([path, surface]) => {
-          return surface.center.y * ((properties.key === 'PageDown') ? 1 : -1);
+          return surface.center.y * ((properties.key === 'ArrowDown') ? 1 : -1);
         });
 
         if (result) {
@@ -474,7 +474,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           };
         }
       }
-    } else if (computation && state.size && props.selection && (props.selection !== state.oldSelection)) {
+    } else if (computation && state.size && props.selection && (props.selection !== state.oldSelection) && !props.selection.observed) {
       let surface = computation.nodeSurfaces.get(List(props.selection.blockPath));
       let settings = state.self.settings!;
 

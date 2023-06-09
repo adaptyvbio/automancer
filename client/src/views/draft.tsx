@@ -405,6 +405,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                                     app={this.props.app}
                                     blockPath={this.state.selectedBlockPath}
                                     host={this.props.host}
+                                    location={null}
                                     protocol={this.state.compilation!.protocol}
                                     selectBlock={this.selectBlock.bind(this)} />
                                 </ErrorBoundary>
@@ -556,20 +557,21 @@ export function FilledDraftSummary(props: {
   if (compilation.protocol) {
     let analysis = analyzeBlockPath(compilation.protocol, null, [], props.context);
     let pair = analysis.pairs[0];
+    let terms = pair.terms!;
 
-    let formattedDuration = formatDurationTerm(pair.duration);
+    let formattedDuration = formatDurationTerm(pair.block.duration);
 
     if (formattedDuration !== null) {
       etaText = [formattedDuration];
 
-      if (pair.endTime.type === 'duration') {
-        let endTime = pair.endTime;
+      if (terms.end.type === 'duration') {
+        let endTerm = terms.end;
 
         etaText = [
           formattedDuration,
           ' (ETA ',
           <TimeSensitive
-            contents={() => formatAbsoluteTime(Date.now() + endTime.value)}
+            contents={() => formatAbsoluteTime(Date.now() + endTerm.value)}
             interval={30e3}
             key={0} />,
           ')'

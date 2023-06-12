@@ -50,6 +50,12 @@ class BaseAnalysis():
     pass
 
   @classmethod
+  def downcast(cls, obj: Self, /):
+    analysis = cls()
+    analysis._add(obj)
+    return analysis
+
+  @classmethod
   def sequence(cls, obj: Sequence[tuple[Self, T]], /) -> tuple[Self, list[T]]:
     analysis = cls()
     output = list[T]()
@@ -81,6 +87,12 @@ class DiagnosticAnalysis(BaseAnalysis):
         if isinstance(ref, DiagnosticDocumentReference) and ref.area:
           for line in ref.area.format().splitlines():
             logger.debug(line)
+
+  def export(self):
+    return {
+      "errors": [error.export() for error in self.errors],
+      "warnings": [warning.export() for warning in self.warnings]
+    }
 
 
   def _add(self, other: 'DiagnosticAnalysis', /):

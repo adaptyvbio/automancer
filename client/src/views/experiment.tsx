@@ -1,4 +1,4 @@
-import { Experiment, ExperimentId, ExperimentReportHeader, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Experiment, ExperimentId, ExperimentReportInfo, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import { Component } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
@@ -15,12 +15,14 @@ import { ErrorBoundary } from '../components/error-boundary';
 import { GraphEditor } from '../components/graph-editor';
 import { BlockInspector } from '../components/block-inspector';
 import { TabNav } from '../components/tab-nav';
+import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
+import { ReportInspector } from '../components/report-inspector';
 
 
 export type ViewExperimentProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
 
 export interface ViewExperimentState {
-  reportHeader: ExperimentReportHeader | null;
+  reportInfo: ExperimentReportInfo | null;
   selectedBlockPath: ProtocolBlockPath | null;
 }
 
@@ -29,30 +31,30 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
     super(props);
 
     this.state = {
-      reportHeader: null,
+      reportInfo: null,
       selectedBlockPath: null
     };
   }
 
   override componentDidMount() {
     this.props.app.pool.add(async () => {
-      let reportHeader = await this.props.host.client.request({
-        type: 'getExperimentReportHeader',
+      let reportInfo = await this.props.host.client.request({
+        type: 'getExperimentReportInfo',
         experimentId: this.props.experiment.id
       });
 
-      this.setState({ reportHeader });
+      this.setState({ reportInfo });
     });
   }
 
   override render() {
-    if (!this.state.reportHeader) {
+    if (!this.state.reportInfo) {
       return null;
     }
 
     let protocol: Protocol = {
-      name: this.state.reportHeader.name,
-      root: this.state.reportHeader.root
+      name: this.state.reportInfo.name,
+      root: this.state.reportInfo.root
     };
 
     return (
@@ -67,7 +69,7 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                     <GraphEditor
                       app={this.props.app}
                       host={this.props.host}
-                      protocolRoot={this.state.reportHeader.root}
+                      protocolRoot={this.state.reportInfo.root}
                       selectBlock={(selectedBlockPath) => void this.setState({ selectedBlockPath })}
                       selection={this.state.selectedBlockPath && {
                         blockPath: this.state.selectedBlockPath,
@@ -85,12 +87,24 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                       shortcut: 'I',
                       contents: () => (
                         <ErrorBoundary>
-                          <BlockInspector
+                          <ReportInspector
                             app={this.props.app}
                             blockPath={this.state.selectedBlockPath}
                             host={this.props.host}
+                            location={null}
                             protocol={protocol}
+                            reportInfo={this.state.reportInfo!}
                             selectBlock={(selectedBlockPath) => void this.setState({ selectedBlockPath })} />
+                        </ErrorBoundary>
+                      )
+                    },
+                    {
+                      id: 'report',
+                      label: 'Report',
+                      shortcut: 'R',
+                      contents: () => (
+                        <ErrorBoundary>
+                          <ExecutionDiagnosticsReport master={this.state.reportInfo!} />
                         </ErrorBoundary>
                       )
                     }

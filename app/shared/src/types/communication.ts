@@ -1,5 +1,5 @@
 import type { ChannelId, ClientId } from '../client';
-import type { ExperimentId, ExperimentReportHeader, HostIdentifier, HostState } from './host';
+import type { ExperimentId, ExperimentReportInfo, HostIdentifier, HostState } from './host';
 import type { PluginName } from './plugin';
 import type { ProtocolBlockPath } from './protocol';
 import type { UnionToIntersection } from './util';
@@ -33,9 +33,9 @@ export type RequestFunc = UnionToIntersection<
     }) => Promise<void>
   ) | (
     (options: {
-      type: 'getExperimentReportHeader';
+      type: 'getExperimentReportInfo';
       experimentId: ExperimentId;
-    }) => Promise<ExperimentReportHeader>
+    }) => Promise<ExperimentReportInfo>
   ) | (
     (options: {
       type: 'reloadUnits';

@@ -39,7 +39,7 @@ class ProgramMode:
 
 @dataclass
 class ProgramLocation:
-  mode: ProgramMode.Any
+  mode: int
   _: KW_ONLY
   count: Optional[int] = None
   iteration: Optional[int] = None
@@ -48,7 +48,7 @@ class ProgramLocation:
     return {
       "count": self.count,
       "iteration": self.iteration,
-      "mode": self.mode.export()
+      "mode": self.mode
     }
 
 @dataclass(kw_only=True)
@@ -64,6 +64,7 @@ class Program(BaseProgram):
     self._block = block
     self._handle = handle
 
+    self._iteration_count: Optional[int]
     self._iteration: int
     self._mode: ProgramMode.Any
     self._point: Optional[ProgramPoint]
@@ -84,13 +85,11 @@ class Program(BaseProgram):
   #   elif point.child:
   #     self._child_program.jump(point.child)
 
-  # def term_info(self, children_terms):
-  #   if self._count is None:
-  #     return am.DurationTerm.forever()
-  #   # if self._iteration is None:
-  #   #   return self._block.duration()
+  def term_info(self, children_terms):
+    if self._iteration_count is None:
+      return am.DurationTerm.forever()
 
-  #   return (children_terms[0] + self._block.duration() * (self._count - self._iteration), {})
+    return (children_terms[0] + self._block.block.duration() * (self._iteration_count - self._iteration - 1), {})
 
   # def swap(self, block):
   #   if not isinstance(block, Block):
@@ -113,14 +112,14 @@ class Program(BaseProgram):
         break
 
       self._mode = ProgramMode.Failed()
-      self._handle.set_location(ProgramLocation(self._mode))
+      self._handle.set_location(ProgramLocation(self._mode.export()))
 
       await self._mode.event.wait()
 
       if isinstance(self._mode, ProgramMode.Halting):
         return
 
-    iteration_count = result.value if (result.value != 'forever') else None
+    self._iteration_count = result.value if (result.value != 'forever') else None
 
     self._point = point or ProgramPoint(child=None, iteration=0)
 
@@ -130,15 +129,15 @@ class Program(BaseProgram):
       self._iteration = current_point.iteration
       self._point = None
 
-      if (iteration_count is not None) and (self._iteration >= iteration_count):
+      if (self._iteration_count is not None) and (self._iteration >= self._iteration_count):
         break
 
       owner = self._handle.create_child(self._block.block)
       self._mode = ProgramMode.Normal(owner)
 
       self._handle.set_location(ProgramLocation(
-        self._mode,
-        count=iteration_count,
+        self._mode.export(),
+        count=self._iteration_count,
         iteration=self._iteration
       ))
 
@@ -150,7 +149,7 @@ class Program(BaseProgram):
 
       if self._point:
         pass
-      elif isinstance(self._mode, ProgramMode.Halting) or ((iteration_count is not None) and ((self._iteration + 1) >= iteration_count)):
+      elif isinstance(self._mode, ProgramMode.Halting) or ((self._iteration_count is not None) and ((self._iteration + 1) >= self._iteration_count)):
         break
 
       self._point = ProgramPoint(child=None, iteration=(self._iteration + 1))

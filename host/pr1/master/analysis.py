@@ -48,35 +48,28 @@ class GenericEffect(Effect):
 class TimedDiagnostic(Diagnostic):
   time: float
 
+  def export(self):
+    return {
+      **super().export(),
+      "type": "timed",
+      "date": (self.time * 1000)
+    }
+
 @comserde.serializable
 @dataclass
 class RuntimeMasterAnalysisItem(Generic[T_Exportable]):
-  item: T_Exportable
+  value: T_Exportable
   _: KW_ONLY
   author_path: list[int]
   event_index: int
-  # id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
   def export(self):
-    return self.item.export()
+    return {
+      "authorPath": self.author_path,
+      "eventIndex": self.event_index,
+      "value": self.value.export()
+    }
 
-@comserde.serializable
-@dataclass
-class ComptimeMasterAnalysisItem(Generic[T_Exportable]):
-  item: T_Exportable
-  _: KW_ONLY
-
-  def export(self):
-    return self.item.export()
-
-MasterAnalysisItem = ComptimeMasterAnalysisItem[T_Exportable] | RuntimeMasterAnalysisItem[T_Exportable]
-
-
-# @comserde.serializable
-# @dataclass(kw_only=True)
-# class TimedAnalysis:
-#   errors: list[TimedDiagnostic | Diagnostic] = field(default_factory=list)
-#   warnings: list[TimedDiagnostic | Diagnostic] = field(default_factory=list)
 
 @comserde.serializable
 @dataclass(kw_only=True)
@@ -92,17 +85,10 @@ class RuntimeAnalysis(DiagnosticAnalysis):
 
 @comserde.serializable
 @dataclass(kw_only=True)
-class MasterAnalysis:
-  effects: list[MasterAnalysisItem[Effect]] = field(default_factory=list)
-  errors: list[MasterAnalysisItem[Diagnostic]] = field(default_factory=list)
-  warnings: list[MasterAnalysisItem[Diagnostic]] = field(default_factory=list)
-
-  def add_comptime(self, other: DiagnosticAnalysis):
-    def add_items(items: list[T_Exportable]):
-      return [ComptimeMasterAnalysisItem(item) for item in items]
-
-    self.errors += add_items(other.errors)
-    self.warnings += add_items(other.warnings)
+class MasterAnalysis(BaseAnalysis):
+  effects: list[RuntimeMasterAnalysisItem[Effect]] = field(default_factory=list)
+  errors: list[RuntimeMasterAnalysisItem[Diagnostic]] = field(default_factory=list)
+  warnings: list[RuntimeMasterAnalysisItem[Diagnostic]] = field(default_factory=list)
 
   def add_runtime(self, other: RuntimeAnalysis, /, author_path: list[int], event_index: int):
     def add_items(items: list[T_Exportable]):
@@ -112,11 +98,12 @@ class MasterAnalysis:
     self.errors += add_items(other.errors)
     self.warnings += add_items(other.warnings)
 
-  # def _add(self, other, /):
-  #   super()._add(other)
+  def _add(self, other: 'MasterAnalysis', /):
+    super()._add(other)
 
-  #   if isinstance(other, MasterAnalysis):
-  #     self.effects += other.effects
+    self.errors += other.errors
+    self.effects += other.effects
+    self.warnings += other.warnings
 
   def export(self):
     return {

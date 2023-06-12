@@ -13,8 +13,8 @@ from typing import IO, TYPE_CHECKING, Any, Optional, Self
 import asyncio
 import traceback
 
+from ..report import ExperimentReportEvent
 from ..eta import DurationTerm, Term
-
 from ..analysis import DiagnosticAnalysis
 from ..draft import DraftCompilation
 from ..util.asyncio import wait_all
@@ -48,8 +48,9 @@ class Master:
       namespace: unit.MasterRunner(self) for namespace, unit in self.host.units.items() if hasattr(unit, 'MasterRunner')
     }
 
-    self._analysis = MasterAnalysis()
-    self._analysis.add_comptime(compilation.analysis)
+    # TODO: Add additional analysis items (e.g. unavailable device)
+    self._initial_analysis = DiagnosticAnalysis.downcast(compilation.analysis)
+    self._master_analysis = MasterAnalysis()
 
     self._cleanup_callback = cleanup_callback
     self._entry_counter = IndexCounter(start=1)
@@ -123,9 +124,10 @@ class Master:
       assert (self.protocol.name is not None)
 
       report_header = ExperimentReportHeader(
-        self.protocol.draft,
-        self.protocol.name,
-        self.protocol.root
+        analysis=self._initial_analysis,
+        draft=self.protocol.draft,
+        name=self.protocol.name,
+        root=self.protocol.root
       )
 
       comserde.dump(report_header, self._file)
@@ -153,8 +155,9 @@ class Master:
       return None
 
     return {
-      "analysis": self._analysis.export(),
+      "initialAnalysis": self._initial_analysis.export(),
       "location": self._root_entry.export(),
+      "masterAnalysis": self._master_analysis.export(),
       "protocol": self.protocol.export()
     }
 
@@ -169,7 +172,8 @@ class Master:
 
     self._update_traces.clear()
 
-    changes = list[BaseTreeChange]()
+    analysis = MasterAnalysis()
+    changes = list[TreeChange]()
     user_significant = False
 
     def update_handle(handle: ProgramHandle, parent_entry: Optional[ProgramHandleEntry] = None, entry_id: int = 0, entry_path: list[int] = list()):
@@ -211,7 +215,7 @@ class Master:
         ))
 
       # Collect errors here for their order to be correct.
-      self._analysis.add_runtime(handle._analysis, entry_path, 0)
+      analysis.add_runtime(handle._analysis, entry_path, 0)
 
       for child_id, child_handle in list(handle._children.items()):
         update_handle(child_handle, current_entry, child_id, [*entry_path, child_id])
@@ -240,16 +244,22 @@ class Master:
 
       user_significant = user_significant or (handle._updated_location and (not handle._consumed))
 
-      # handle._analysis.clear()
       handle._analysis = RuntimeAnalysis()
       handle._updated_location = False
 
     update_handle(self._handle)
-
-    # print(">", self._handle._term_info)
+    self._master_analysis += analysis
 
     if self._update_callback and user_significant:
       self._update_callback()
+
+    event = ExperimentReportEvent(
+      analysis=analysis,
+      changes=changes,
+      time=time.time()
+    )
+
+    comserde.dump(event, self._file)
 
     # from pprint import pprint
     # pprint(changes)
@@ -268,8 +278,6 @@ class Master:
     # data = comserde.dumps(changes, list[TreeChange])
     # pprint(comserde.loads(data, list[TreeChange]))
     # print('---')
-
-    comserde.dump(changes, self._file, list[TreeChange])
 
   def update_now(self):
     if self._update_handle:
@@ -316,45 +324,6 @@ class ProgramHandleEntry(HierarchyNode):
       "startDate": (self.start_time * 1000),
       "term": self.term.export(),
       **self.location.export()
-    }
-
-
-class ProgramHandleEntryChange(HierarchyNode):
-  children: dict[int, Self]
-  id: int
-  location: Optional[Exportable]
-
-  def __get_node_name__(self):
-    return f"[{self.id}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
-
-  def __get_node_children__(self):
-    return self.children.values()
-
-
-@dataclass(kw_only=True)
-class ProgramHandleEventEntry(Exportable, HierarchyNode):
-  children: dict[int, Self] = field(default_factory=dict)
-  index: int
-  location: Optional[Exportable] = None
-  parent: Optional[tuple[Self, int]] = None
-
-  def __get_node_name__(self):
-    return f"[{self.index}] " + (f"\x1b[37m{self.location!r}\x1b[0m" if self.location else "<no change>")
-
-  def __get_node_children__(self):
-    return self.children.values()
-
-  def export(self):
-    assert self.location
-
-    location_exported = self.location.export()
-    assert isinstance(location_exported, dict)
-
-    return {
-      "children": {
-        child_id: child.export() for child_id, child in self.children.items()
-      },
-      **location_exported
     }
 
 

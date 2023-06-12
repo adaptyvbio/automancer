@@ -122,7 +122,7 @@ class Host:
 
       units_conf = {
         namespace: create_datainstance({
-          **conf.units[namespace]._asdict(),
+          **conf.units[namespace]._asdict(), # type: ignore
           'options': raw_unit_conf.value.options
         }) for namespace, raw_unit_conf in (raw_conf.value.units or dict()).items()
       }
@@ -338,11 +338,9 @@ class Host:
 
         del self.experiments[request["experimentId"]]
 
-      case "getExperimentReportHeader":
+      case "getExperimentReportInfo":
         experiment = self.experiments[request["experimentId"]]
-        header = experiment.report_reader.header
-
-        return header.export()
+        return experiment.report_reader.export()
 
       case "requestToExecutor":
         return await self.executors[request["namespace"]].request(request["data"], agent=agent)

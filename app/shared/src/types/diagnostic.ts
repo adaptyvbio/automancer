@@ -1,12 +1,19 @@
-export interface Diagnostic {
-  description: string[];
+import { DocumentId } from './draft';
+
+
+export type Diagnostic = {
   id: string | null;
+  description: string[];
   message: string;
   name: string;
   references: DiagnosticReference[];
-  trace: (DiagnosticReference[]) | null;
-}
-
+  trace: DiagnosticReference[] | null;
+} & ({
+  type: 'default';
+} | {
+  type: 'timed';
+  date: number;
+});
 
 export type DiagnosticReference = DiagnosticDocumentReference | DiagnosticFileReference;
 
@@ -18,8 +25,8 @@ export interface DiagnosticBaseReference {
 
 export type DiagnosticDocumentReference = DiagnosticBaseReference & {
   type: 'document';
-  documentId: string;
-  ranges: [number, number][]; // DraftRange[]
+  documentId: DocumentId;
+  ranges: [number, number][];
 }
 
 export type DiagnosticFileReference = DiagnosticBaseReference & {

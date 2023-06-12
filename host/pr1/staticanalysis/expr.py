@@ -47,8 +47,6 @@ class CompositeExprDef(BaseExprDef):
 
   @classmethod
   def assemble(cls, type: TypeInstance, exprs: Sequence[BaseExprDef], get_node: Callable[[list[ast.expr]], ast.expr]):
-    max_phase = max([expr.phase for expr in exprs])
-
     components = dict[str, BaseExprDef]()
     items = list[ast.expr]()
 
@@ -57,22 +55,19 @@ class CompositeExprDef(BaseExprDef):
         result_node = None
         break
 
-      if expr.phase > 0:
+      if isinstance(expr, CompositeExprDef):
+        components |= expr.components
+        items.append(expr.node)
+      else:
         name = generate_name()
         components[name] = expr
         items.append(transfer_node_location(expr.node, ast.Name(name, ctx=ast.Load())))
-      else:
-        if isinstance(expr, CompositeExprDef):
-          components |= expr.components
-
-        items.append(expr.node)
     else:
       result_node = get_node(items)
 
     return cls(
       components=components,
       node=result_node,
-      phase=0,
       type=type
     )
 

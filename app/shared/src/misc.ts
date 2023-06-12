@@ -1,4 +1,4 @@
-import type { Diagnostic } from './types/analysis';
+import type { Diagnostic } from './types/diagnostic';
 
 
 export function concatenateDiagnostics(analysis: {

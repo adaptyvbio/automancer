@@ -1,5 +1,6 @@
+import type { CompilationAnalysis } from './compilation';
+import type { Diagnostic } from './diagnostic';
 import type { Protocol, Term } from './protocol';
-import type { Brand } from './util';
 
 
 export type MasterBlockId = number;
@@ -13,12 +14,19 @@ export interface MasterBlockLocation {
 
 
 export interface Master {
-  analysis: MasterAnalysis;
+  initialAnalysis: CompilationAnalysis;
   location: MasterBlockLocation;
+  masterAnalysis: MasterAnalysis;
   protocol: Protocol;
 }
 
 export interface MasterAnalysis {
-  errors: any[];
-  warnings: any[];
+  errors: MasterDiagnosticItem<Diagnostic>[];
+  warnings: MasterDiagnosticItem<Diagnostic>[];
+}
+
+export interface MasterDiagnosticItem<T> {
+  authorPath: number[];
+  eventIndex: number;
+  value: T;
 }

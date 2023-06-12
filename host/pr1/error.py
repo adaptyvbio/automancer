@@ -81,6 +81,7 @@ class Diagnostic(Exportable):
 
   def export(self):
     return {
+      "type": "default",
       "description": self.description,
       "id": self.id,
       "message": self.message,

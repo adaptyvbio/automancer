@@ -1,4 +1,4 @@
-import { MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { ExperimentReportInfo, ExperimentReportStaticEntry, MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import { Fragment, ReactNode } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
@@ -16,13 +16,13 @@ import { TimeSensitive } from './time-sensitive';
 import { getDateFromTerm } from '../term';
 
 
-export function BlockInspector(props: {
+export function ReportInspector(props: {
   app: Application;
   blockPath: ProtocolBlockPath | null;
-  footer?: [ReactNode, ReactNode] | null;
   host: Host;
   location: MasterBlockLocation | null;
   protocol: Protocol;
+  reportInfo: ExperimentReportInfo;
   selectBlock(path: ProtocolBlockPath | null): void;
 }) {
   let pool = usePool();
@@ -49,6 +49,10 @@ export function BlockInspector(props: {
   let leafPair = blockAnalysis.pairs.at(-1)!;
   let leafBlockImpl = getBlockImpl(leafPair.block, globalContext);
 
+  console.log(props.reportInfo.rootStaticEntry);
+
+  let staticEntry = props.blockPath.reduce<ExperimentReportStaticEntry | null>((staticEntry, childId) => (staticEntry?.children[childId] ?? null), props.reportInfo.rootStaticEntry);
+
   return (
     <div className={spotlightStyles.root}>
       <div className={spotlightStyles.contents}>
@@ -73,27 +77,8 @@ export function BlockInspector(props: {
         </div>
 
         <div className={spotlightStyles.timeinfo}>
-          <TimeSensitive
-            contents={() => {
-              let now = Date.now();
-              let terms = leafPair.terms;
-
-              if (!terms) {
-                return <div>Past step</div>;
-              }
-
-              let startDate = getDateFromTerm(terms.start, now);
-
-              return (
-                <>
-                  <div>{formatDurationTerm(leafPair.block.duration) ?? '\xa0'}</div>
-                  {(startDate !== null) && (
-                    <div>{formatAbsoluteTimePair(startDate, getDateFromTerm(terms.end, now), { mode: 'directional' })}</div>
-                  )}
-                </>
-              );
-            }}
-            interval={30e3} />
+          <div>A</div>
+          <div>{JSON.stringify(staticEntry?.accesses)}</div>
         </div>
 
         {blockAnalysis.isLeafBlockTerminal && (
@@ -118,16 +103,6 @@ export function BlockInspector(props: {
           )}
         </div>
       </div>
-      {props.footer && (
-        <div className={spotlightStyles.footerRoot}>
-          <div className={spotlightStyles.footerActions}>
-            {props.footer[0]}
-          </div>
-          <div className={spotlightStyles.footerActions}>
-            {props.footer[1]}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

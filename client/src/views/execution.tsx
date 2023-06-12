@@ -212,7 +212,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                         label: 'Report',
                         shortcut: 'R',
                         contents: () => (
-                          <ExecutionDiagnosticsReport analysis={this.master.analysis} />
+                          <ExecutionDiagnosticsReport master={this.master} />
                         )
                       }
                     ]} />

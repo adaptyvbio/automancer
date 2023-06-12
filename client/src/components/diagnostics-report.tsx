@@ -1,15 +1,13 @@
-import { concatenateDiagnostics, Diagnostic } from 'pr1-shared';
-import * as React from 'react';
+import { Analysis, concatenateDiagnostics } from 'pr1-shared';
 
 import styles from '../../styles/components/diagnostics-report.module.scss';
 
-import { DraftCompilation } from '../draft';
 import * as util from '../util';
 import { Icon } from './icon';
 
 
 export function DiagnosticsReport(props: {
-  analysis: DraftCompilation['analysis'] | null;
+  analysis: Analysis;
 }) {
   return (
     <div className={styles.root}>

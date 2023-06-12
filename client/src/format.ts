@@ -18,6 +18,8 @@ export const TIME_UNITS: TimeUnit[] = [
   { factor: 3600e3 * 24 * 7, narrow: 'w', short: 'week', long: 'week' }
 ];
 
+export const CLOCK_TIME_UNITS = TIME_UNITS.slice(1, 4).reverse();
+
 
 /**
  * Formats a duration.
@@ -112,12 +114,38 @@ export function formatRelativeDate(date: Date | number): string {
   throw new Error();
 }
 
-export function formatRelativeTime(input: number): string {
-  let seconds = Math.round(input / 1000);
-  let minutes = Math.floor(seconds / 60) % 60;
-  let hours = Math.floor(seconds / 3600);
 
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+export function formatDayDifference(value: number): ReactNode {
+  return (value !== 0)
+    ? createElement('sup', { key: 0 }, [
+      (value > 0) ? '+' : '\u2212', // &minus;
+      Math.abs(value).toFixed(0)
+    ])
+    : null;
+}
+
+
+/**
+ * Formats a relative time.
+ *
+ * @param input The time, in milliseconds.
+ */
+export function formatRelativeTime(input: number): ReactNode {
+  let rest = input;
+
+  let [hours, minutes, seconds] = CLOCK_TIME_UNITS.map((unit) => {
+    let value = Math.floor(rest / unit.factor);
+    rest %= unit.factor;
+
+    return value;
+  });
+
+  let dayDifference = Math.floor(input / 24 / 3600e3);
+
+  return [
+    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
+    formatDayDifference(dayDifference)
+  ];
 }
 
 
@@ -140,12 +168,7 @@ export function formatAbsoluteTime(input: number, options?: { ref?: number | nul
 
   return [
     `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
-    (dayDifference !== 0)
-      ? createElement('sup', { key: 0 }, [
-        (dayDifference > 0) ? '+' : '\u2212', // &minus;
-        Math.abs(dayDifference).toFixed(0)
-      ])
-      : null
+    formatDayDifference(dayDifference)
   ];
 }
 

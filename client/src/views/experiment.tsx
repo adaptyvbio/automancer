@@ -1,4 +1,5 @@
-import { Experiment, ExperimentId, ExperimentReportInfo, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Experiment, ExperimentId, ExperimentReportEventIndex, ExperimentReportInfo, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import hash from 'object-hash';
 import { Component } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
@@ -91,10 +92,11 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                             app={this.props.app}
                             blockPath={this.state.selectedBlockPath}
                             host={this.props.host}
-                            location={null}
+                            experiment={this.props.experiment}
                             protocol={protocol}
                             reportInfo={this.state.reportInfo!}
-                            selectBlock={(selectedBlockPath) => void this.setState({ selectedBlockPath })} />
+                            selectBlock={(selectedBlockPath) => void this.setState({ selectedBlockPath })}
+                            key={hash(this.state.selectedBlockPath)} />
                         </ErrorBoundary>
                       )
                     },

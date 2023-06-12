@@ -1,5 +1,6 @@
 import type { ChannelId, ClientId } from '../client';
-import type { ExperimentId, ExperimentReportInfo, HostIdentifier, HostState } from './host';
+import type { ExperimentId, ExperimentReportEventIndex, ExperimentReportEvents, ExperimentReportInfo } from './experiment';
+import type { HostIdentifier, HostState } from './host';
 import type { PluginName } from './plugin';
 import type { ProtocolBlockPath } from './protocol';
 import type { UnionToIntersection } from './util';
@@ -36,6 +37,12 @@ export type RequestFunc = UnionToIntersection<
       type: 'getExperimentReportInfo';
       experimentId: ExperimentId;
     }) => Promise<ExperimentReportInfo>
+  ) | (
+    (options: {
+      type: 'getExperimentReportEvents';
+      eventIndices: ExperimentReportEventIndex[];
+      experimentId: ExperimentId;
+    }) => Promise<ExperimentReportEvents>
   ) | (
     (options: {
       type: 'reloadUnits';

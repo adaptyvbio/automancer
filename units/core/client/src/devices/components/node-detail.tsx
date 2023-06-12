@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
 import * as fc from 'd3fc';
-import { Button, Form, Icon, StaticSelect, ureg, util } from 'pr1';
+import { Button, Form, Icon, OldStaticSelect, ureg, util } from 'pr1';
 import { Component, ReactNode, createElement, createRef, useEffect, useRef, useState } from 'react';
 import { OrdinaryId } from 'pr1-shared';
 
@@ -503,7 +503,7 @@ function NumericValueEditor(props: {
           }}
           ref={refInput} />
         <div className={styles.detailValueRight}>
-          <StaticSelect
+          <OldStaticSelect
             disabled={!selectActive}
             options={unitOptions}
             rootClassName={styles.detailValueUnitSelectRoot}
@@ -512,7 +512,7 @@ function NumericValueEditor(props: {
             selectionClassName={styles.detailValueUnitSelectSelection}>
             <div className={styles.detailValueUnit}>{ureg.formatAssemblyAsReact(unitOptions[rawValue?.optionIndex ?? currentOptionIndex].value.assembly, { createElement })}</div>
             {selectActive && <Icon name="height" className={styles.detailValueUnitSelectIcon} />}
-          </StaticSelect>
+          </OldStaticSelect>
         </div>
       </div>
       {rawValue && (() => {

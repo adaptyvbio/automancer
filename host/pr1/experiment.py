@@ -1,23 +1,21 @@
-import itertools
-from pprint import pprint
-import sys
-import comserde
 import functools
+import itertools
 import pickle
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, NewType, Optional, Self
+from pprint import pprint
+from typing import TYPE_CHECKING, Any, NewType, Optional, Self
 
+import comserde
+
+from .history import TreeAdditionChange, TreeRemovalChange, TreeUpdateChange
 from .master.analysis import MasterAnalysis
-
+from .report import ExperimentReportEvent, ExperimentReportHeader
 from .util.misc import Exportable, HierarchyNode, IndexCounter
-from .history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 
 if TYPE_CHECKING:
   from .fiber.master2 import Master
-
-
 
 
 EventIndex = NewType('EventIndex', int)
@@ -40,20 +38,31 @@ class ReportStaticEntry:
 
 class ExperimentReportReader:
   def __init__(self, path: Path, /):
-    from .report import ExperimentReportHeader, ExperimentReportEvent
-
     self._path = path
-
 
     with self._get_file() as file:
       self.header: ExperimentReportHeader = comserde.load(file, ExperimentReportHeader)
       self._header_size = file.tell()
 
+    self.master_analysis = MasterAnalysis()
+
+    for event_index, event, root_entry in self._iter_events():
+      self.end_time = event.time
+
+      if event.analysis:
+        self.master_analysis += event.analysis
+
+      # if root_entry:
+      #   print(root_entry.format_hierarchy())
+      #   print()
+
+  def _iter_events(self):
+    with self._get_file() as file:
+      file.seek(self._header_size)
 
       entries = dict[int, ReportEntry]()
       entry_counter = IndexCounter(start=1)
 
-      self.master_analysis = MasterAnalysis()
       self.root_static_entry = ReportStaticEntry()
 
       entries[0] = ReportEntry(
@@ -62,14 +71,13 @@ class ExperimentReportReader:
         static_counterpart=self.root_static_entry
       )
 
-      for event_index in itertools.count():
+      for raw_event_index in itertools.count():
+        event_index = EventIndex(raw_event_index)
+
         try:
           event: ExperimentReportEvent = comserde.load(file, ExperimentReportEvent)
         except comserde.DeserializationError:
           break
-
-        if event.analysis:
-          self.master_analysis += event.analysis
 
         for change in event.changes:
           match change:
@@ -83,8 +91,8 @@ class ExperimentReportReader:
                 static_counterpart=parent_entry.static_counterpart.children.setdefault(change.block_child_id, ReportStaticEntry())
               )
 
-              if entry.static_counterpart.access_count < 20:
-                entry.static_counterpart.accesses.append((EventIndex(event_index), None))
+              if (entry.static_counterpart.access_count < 20) or event.analysis:
+                entry.static_counterpart.accesses.append((event_index, None))
 
               entry.static_counterpart.access_count += 1
 
@@ -95,7 +103,7 @@ class ExperimentReportReader:
               entries[change.index].location = change.location
             case TreeRemovalChange():
               entry = entries[change.index]
-              entry.static_counterpart.accesses[-1] = (entry.static_counterpart.accesses[-1][0], EventIndex(event_index))
+              entry.static_counterpart.accesses[-1] = (entry.static_counterpart.accesses[-1][0], event_index)
 
               del entries[change.index]
 
@@ -104,18 +112,27 @@ class ExperimentReportReader:
 
               entry_counter.delete(change.index)
 
-        if 1 in entries:
-          print(entries[1].format_hierarchy())
-          print()
-
-      pprint(self.root_static_entry)
+        yield event_index, event, entries.get(1)
 
   def _get_file(self):
     return self._path.open("rb")
 
+  def export_events(self, event_indices: set[EventIndex], /):
+    result = dict[EventIndex, Any]()
+
+    for event_index, event, root_entry in self._iter_events():
+      if event_index in event_indices:
+        result[event_index] = {
+          "date": (event.time * 1000),
+          "location": root_entry and root_entry.export()
+        }
+
+    return result
+
   def export(self):
     return {
       **self.header.export(),
+      "endDate": (self.end_time * 1000),
       "masterAnalysis": self.master_analysis.export(),
       "rootStaticEntry": self.root_static_entry.children[0].export()
     }
@@ -138,14 +155,11 @@ class ReportEntry(Exportable, HierarchyNode):
   def export(self):
     assert self.location
 
-    location_exported = self.location.export()
-    assert isinstance(location_exported, dict)
-
     return {
       "children": {
         child_id: child.export() for child_id, child in self.children.items()
       },
-      **location_exported
+      **self.location.export()
     }
 
 
@@ -159,10 +173,12 @@ class Experiment:
   archived: bool = field(default=False, init=False)
   creation_time: float = field(default_factory=time.time, init=False)
   id: ExperimentId
-  has_report: bool = field(default=False, init=False) # TODO: Make sure this is not serialized
-  master: 'Optional[Master]' = field(default=None, init=False)
+  has_report: bool = comserde.field(default=False, init=False, serialize=False)
+  master: 'Optional[Master]' = comserde.field(default=None, init=False, serialize=False)
   path: Path
   title: str
+
+  _report_reader: Optional[ExperimentReportReader] = comserde.field(default=None, init=False, repr=False, serialize=False)
 
   def __post_init__(self):
     self.path.mkdir(parents=True)
@@ -179,9 +195,15 @@ class Experiment:
   def report_path(self):
     return (self.path / "execution.dat")
 
-  @functools.cached_property
+  @property
   def report_reader(self):
-    return ExperimentReportReader(self.report_path)
+    if not self._report_reader:
+      self._report_reader = ExperimentReportReader(self.report_path)
+
+    return self._report_reader
+
+  def prepare(self):
+    self._report_reader = None
 
   def export(self):
     return {

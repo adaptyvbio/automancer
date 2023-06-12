@@ -342,6 +342,10 @@ class Host:
         experiment = self.experiments[request["experimentId"]]
         return experiment.report_reader.export()
 
+      case "getExperimentReportEvents":
+        experiment = self.experiments[request["experimentId"]]
+        return experiment.report_reader.export_events(set(request["eventIndices"]))
+
       case "requestToExecutor":
         return await self.executors[request["namespace"]].request(request["data"], agent=agent)
 
@@ -382,7 +386,9 @@ class Host:
         logger.info(f"Running protocol on experiment '{experiment.id}'")
 
         async def func():
+          experiment.prepare()
           experiment.master = Master(compilation, experiment, cleanup_callback=cleanup_callback, host=self)
+
           run_task = asyncio.create_task(experiment.master.run(update_callback))
 
           try:

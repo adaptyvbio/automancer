@@ -43,6 +43,7 @@ class Master:
     self.experiment = experiment
     self.host = host
     self.protocol = compilation.protocol
+    self.start_time: float
 
     self.runners = {
       namespace: unit.MasterRunner(self) for namespace, unit in self.host.units.items() if hasattr(unit, 'MasterRunner')
@@ -101,6 +102,8 @@ class Master:
     self._update_lock_depth = 0
     self._update_callback = update_callback
 
+    self.start_time = time.time()
+
     self._handle = ProgramHandle(self, id=0)
     self._handle._program = self.protocol.root.create_program(self._handle)
     self._owner = ProgramOwner(self._handle, self._handle._program)
@@ -127,7 +130,8 @@ class Master:
         analysis=self._initial_analysis,
         draft=self.protocol.draft,
         name=self.protocol.name,
-        root=self.protocol.root
+        root=self.protocol.root,
+        start_time=self.start_time
       )
 
       comserde.dump(report_header, self._file)

@@ -1,5 +1,5 @@
-import { ExperimentReportInfo, ExperimentReportStaticEntry, MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
-import { Fragment, ReactNode } from 'react';
+import { Experiment, ExperimentReportEvents, ExperimentReportInfo, ExperimentReportStaticEntry, MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Fragment, ReactNode, useEffect, useState } from 'react';
 
 import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
@@ -11,16 +11,19 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
 import { Application } from '../application';
-import { formatAbsoluteTimePair, formatDurationTerm } from '../format';
+import { formatAbsoluteTime, formatAbsoluteTimePair, formatDurationTerm } from '../format';
 import { TimeSensitive } from './time-sensitive';
 import { getDateFromTerm } from '../term';
+import { formatRelativeDate } from '../format';
+import { formatRelativeTime } from '../format';
+import { StaticSelect } from './static-select';
 
 
 export function ReportInspector(props: {
   app: Application;
   blockPath: ProtocolBlockPath | null;
   host: Host;
-  location: MasterBlockLocation | null;
+  experiment: Experiment;
   protocol: Protocol;
   reportInfo: ExperimentReportInfo;
   selectBlock(path: ProtocolBlockPath | null): void;
@@ -35,23 +38,40 @@ export function ReportInspector(props: {
     );
   }
 
+  let [events, setEvents] = useState<ExperimentReportEvents | null>(null);
+  let [selectedOccurenceIndex, setSelectedOccurenceIndex] = useState<number | null>(null);
+
   let globalContext: GlobalContext = {
     app: props.app,
     host: props.host,
     pool
   };
 
-  let blockAnalysis = analyzeBlockPath(props.protocol, props.location, props.blockPath, globalContext);
+  let staticEntry = props.blockPath.reduce<ExperimentReportStaticEntry | null>((staticEntry, childId) => (staticEntry?.children[childId] ?? null), props.reportInfo.rootStaticEntry);
+
+  useEffect(() => {
+    pool.add(async () => {
+      let events = await props.host.client.request({
+        type: 'getExperimentReportEvents',
+        eventIndices: (staticEntry?.accesses ?? []).flat(),
+        experimentId: props.experiment.id
+      });
+
+      setEvents(events);
+    });
+  }, []);
+
+  let location = (selectedOccurenceIndex !== null)
+    ? events![staticEntry!.accesses[selectedOccurenceIndex][0]].location
+    : null;
+
+  let blockAnalysis = analyzeBlockPath(props.protocol, location, props.blockPath, globalContext);
 
   let ancestorGroups = blockAnalysis.groups.slice(0, -1);
   let leafGroup = blockAnalysis.groups.at(-1)!;
 
   let leafPair = blockAnalysis.pairs.at(-1)!;
   let leafBlockImpl = getBlockImpl(leafPair.block, globalContext);
-
-  console.log(props.reportInfo.rootStaticEntry);
-
-  let staticEntry = props.blockPath.reduce<ExperimentReportStaticEntry | null>((staticEntry, childId) => (staticEntry?.children[childId] ?? null), props.reportInfo.rootStaticEntry);
 
   return (
     <div className={spotlightStyles.root}>
@@ -77,12 +97,31 @@ export function ReportInspector(props: {
         </div>
 
         <div className={spotlightStyles.timeinfo}>
-          <div>A</div>
-          <div>{JSON.stringify(staticEntry?.accesses)}</div>
+          <div>Occurences</div>
+          <div>
+            {events && staticEntry && (
+              <StaticSelect
+                options={[
+                  { id: null, label: 'General form' },
+                  ...staticEntry.accesses.map((access, accessIndex) => {
+                    let startEvent = events![access[0]];
+                    let endEvent = events![access[1]];
+
+                    return {
+                      id: accessIndex,
+                      label: `${new Date(startEvent.date).toLocaleString()} ${new Date(endEvent.date).toLocaleString()}`
+                    };
+                  })
+                ]}
+                selectedOptionId={selectedOccurenceIndex}
+                selectOption={(occurenceIndex) => void setSelectedOccurenceIndex(occurenceIndex)} />
+            )}
+          </div>
+          {/* <div>{JSON.stringify(staticEntry?.accesses)}</div> */}
         </div>
 
         {blockAnalysis.isLeafBlockTerminal && (
-          <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext)} />
+          <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext)} />
         )}
 
         <div className={featureStyles.root}>

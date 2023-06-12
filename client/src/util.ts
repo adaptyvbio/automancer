@@ -1,5 +1,5 @@
-import { List, Range, type Set as ImSet, fromJS, is } from 'immutable';
-import * as React from 'react';
+import { List, fromJS, is, Set as ImSet } from 'immutable';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 
 
 export function assert(condition: unknown): asserts condition {
@@ -64,9 +64,9 @@ export function findWithIndex<T>(arr: T[], fn: (item: T, index: number, arr: T[]
 
 
 export function usePrevious<T>(value: T): T | undefined {
-  let ref = React.useRef<T>();
+  let ref = useRef<T>();
 
-  React.useEffect(() => {
+  useEffect(() => {
     ref.current = value;
   }, [value]);
 
@@ -74,7 +74,7 @@ export function usePrevious<T>(value: T): T | undefined {
 }
 
 export function useForceUpdate() {
-  let [_, setValue] = React.useState(0);
+  let [_, setValue] = useState(0);
   return () => void setValue(value => value + 1);
 }
 
@@ -355,7 +355,12 @@ export class Pool {
 }
 
 export function usePool() {
-  let ref = React.useRef<Pool>();
+  let ref = useRef<Pool>();
   ref.current ??= new Pool();
   return ref.current;
+}
+
+
+function joinReactNodes(nodes: ReactNode[], glue: ReactNode) {
+  return nodes.flatMap((node, index) => (index === 0) ? [node] : [glue, node]);
 }

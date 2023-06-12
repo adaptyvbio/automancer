@@ -57,7 +57,7 @@ export class TabNav<T extends OrdinaryId> extends Component<TabNavProps<T>, TabN
             <button
               type="button"
               disabled={!!entry.disabled}
-              className={util.formatClass(styles.entry, { '_active': entry.id === activeEntryId })}
+              className={util.formatClass(styles.entry, { '_active': (entry.id === activeEntryId) })}
               onClick={() => void this.setActiveEntryId(entry.id)}
               key={entry.id}>
               <ExpandableText>

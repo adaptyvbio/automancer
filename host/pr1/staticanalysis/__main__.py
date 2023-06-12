@@ -137,12 +137,12 @@ phA = result.to_evaluated()
 
 # print("\n---\n")
 
-ph0 = phA.evaluate(variables={ 'A': 42 })
+ph0 = phA.evaluate(stack={ 'A': 42 })
 
 # pprint(ph0)
 # sys.exit()
 
-ph1 = ph0.evaluate(variables={
+ph1 = ph0.evaluate(stack={
   'B': time.time()
 })
 

@@ -1,6 +1,6 @@
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NewType, Optional
 
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..reader import LocatedString, LocatedValue, LocationArea
@@ -12,7 +12,7 @@ from ..staticanalysis.types import TypeInstance, UnknownDef
 class EvalEnvValue(ComplexVariable):
   deprecated: bool = False
   description: Optional[str] = None
-  type: TypeInstance = field(default_factory=(lambda: UnknownDef()))
+  type: TypeInstance = field(default_factory=UnknownDef)
 
 @dataclass
 class EvalEnv:
@@ -20,6 +20,7 @@ class EvalEnv:
   _: KW_ONLY
   name: Optional[str] = None
   readonly: bool = False
+  symbol: 'EvalSymbol'
 
   def instantiate(self):
     return EvalEnvInstance(self)
@@ -39,7 +40,8 @@ class EvalEnvInstance:
 
 EvalEnvs = list[EvalEnv]
 EvalVariables = dict[str, Any]
-EvalStack = dict[EvalEnv, Optional[EvalVariables]]
+EvalSymbol = NewType('EvalSymbol', int)
+EvalStack = dict[EvalSymbol, Any]
 
 @dataclass
 class EvalContext:

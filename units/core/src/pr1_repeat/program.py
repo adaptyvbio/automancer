@@ -4,6 +4,7 @@ import math
 from types import EllipsisType
 from typing import Optional
 
+import pr1 as am
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import BaseProgram, BaseProgramPoint
@@ -83,27 +84,36 @@ class Program(BaseProgram):
   #   elif point.child:
   #     self._child_program.jump(point.child)
 
-  def eta(self, location: ProgramLocation):
-    if location.count is None:
-      return math.inf
-    if location.iteration is None:
-      return self._block.eta()
+  # def term_info(self, children_terms):
+  #   if self._count is None:
+  #     return am.DurationTerm.forever()
+  #   # if self._iteration is None:
+  #   #   return self._block.duration()
 
-    return self._owner.duration_eta() + self._block.eta() * (location.count - location.iteration)
+  #   return (children_terms[0] + self._block.duration() * (self._count - self._iteration), {})
+
+  # def swap(self, block):
+  #   if not isinstance(block, Block):
+  #     return False
+
+  #   self.block = block
+
+  #   if not self._child_owner.swap(block.child):
+  #     self._child_owner.halt()
+  #     self._point = (...)
+
+  #   return True
 
   async def run(self, point: Optional[ProgramPoint], stack):
     while True:
       analysis, result = self._block.count.evaluate_final(EvalContext(stack))
+      self._handle.set_analysis(analysis)
 
       if not isinstance(result, EllipsisType):
         break
 
       self._mode = ProgramMode.Failed()
-
-      self._handle.send(ProgramExecEvent(
-        analysis=MasterAnalysis.cast(analysis),
-        location=ProgramLocation(self._mode)
-      ))
+      self._handle.set_location(ProgramLocation(self._mode))
 
       await self._mode.event.wait()
 
@@ -111,10 +121,6 @@ class Program(BaseProgram):
         return
 
     iteration_count = result.value if (result.value != 'forever') else None
-
-    self._handle.send(ProgramExecEvent(
-      analysis=MasterAnalysis.cast(analysis)
-    ))
 
     self._point = point or ProgramPoint(child=None, iteration=0)
 
@@ -130,15 +136,14 @@ class Program(BaseProgram):
       owner = self._handle.create_child(self._block.block)
       self._mode = ProgramMode.Normal(owner)
 
-      self._handle.send(ProgramExecEvent(location=ProgramLocation(
+      self._handle.set_location(ProgramLocation(
         self._mode,
         count=iteration_count,
         iteration=self._iteration
-      )))
+      ))
 
-      child_stack: EvalStack = {
-        **stack,
-        self._block.env: { 'index': self._iteration }
+      child_stack: EvalStack = stack | {
+        self._block.symbol: { 'index': self._iteration }
       }
 
       await owner.run(current_point.child, child_stack)
@@ -150,5 +155,3 @@ class Program(BaseProgram):
 
       self._point = ProgramPoint(child=None, iteration=(self._iteration + 1))
       self._handle.collect_children()
-
-      # await self._handle.resume_parent()

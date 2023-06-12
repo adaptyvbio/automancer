@@ -144,7 +144,7 @@ UnaryOpMethodMap: dict[type[ast.unaryop], str] = {
 
 def evaluate_eval_expr(
     node: ast.expr, /,
-    foreign_symbols: tuple[ExportedTypeDefs, dict[str, ComplexVariable]],
+    foreign_symbols: tuple[ExportedTypeDefs, dict[str, tuple[ComplexVariable, int]]],
     prelude_symbols: tuple[PreludeTypeDefs, PreludeTypeInstances],
     context: StaticAnalysisContext
 ) -> tuple[StaticAnalysisAnalysis, BaseExprDef]:
@@ -197,10 +197,10 @@ def evaluate_eval_expr(
       arg_exprs = analysis.add_sequence([evaluate_eval_expr(arg, foreign_symbols, prelude_symbols, context) for arg in args])
       kwarg_exprs = analysis.add_mapping({ keyword.arg: evaluate_eval_expr(keyword.value, foreign_symbols, prelude_symbols, context) for keyword in keywords if keyword.arg })
 
-      if isinstance(func_expr, UnknownDef):
+      if isinstance(func_expr.type, UnknownDef):
         result_type = UnknownDef()
 
-      elif isinstance(func_expr, ClassConstructorDef):
+      elif isinstance(func_expr.type, ClassConstructorDef):
         cls_with_type_args = instantiate_type_instance(func_expr.target)
 
         if isinstance(cls_with_type_args, UnknownDef):
@@ -283,11 +283,14 @@ def evaluate_eval_expr(
       return analysis, CompositeExprDef.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
 
     case ast.Name(id=name, ctx=ast.Load()):
-      if var := foreign_variables.get(name):
+      if pair := foreign_variables.get(name):
+        var, symbol = pair
+
         return StaticAnalysisAnalysis(), ComplexExprDef(
           ExprEvalType=var.ExprEvalType,
           node=node,
           phase=1000,
+          symbol=symbol,
           type=var.type
         )
 

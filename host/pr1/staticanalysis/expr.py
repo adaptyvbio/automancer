@@ -12,7 +12,7 @@ from .types import TypeInstance
 
 @dataclass
 class ComplexVariable:
-  ExprEvalType: 'Callable[[], BaseExprEval]'
+  ExprEvalType: 'Callable[[int], BaseExprEval]'
   type: TypeInstance
 
 
@@ -71,10 +71,11 @@ class CompositeExprDef(BaseExprDef):
 
 @dataclass(frozen=True)
 class ComplexExprDef(BaseExprDef):
-  ExprEvalType: 'Callable[[], BaseExprEval]'
+  ExprEvalType: 'Callable[[int], BaseExprEval]'
+  symbol: int
 
   def to_evaluated(self):
-    return self.ExprEvalType()
+    return self.ExprEvalType(self.symbol)
 
 
 # Phase 2
@@ -85,7 +86,7 @@ class EvaluationError(Exception):
 
 class BaseExprEval(ABC):
   @abstractmethod
-  def evaluate(self, variables: dict[str, Any]) -> Self:
+  def evaluate(self, stack: dict[int, Any]) -> Self:
     ...
 
   def to_watched(self) -> 'BaseExprWatch':
@@ -95,7 +96,7 @@ class BaseExprEval(ABC):
 class ConstantExprEval(BaseExprEval):
   value: Any
 
-  def evaluate(self, variables):
+  def evaluate(self, stack):
     return self
 
   def to_watched(self):
@@ -106,17 +107,19 @@ class CompositeExprEval(BaseExprEval):
   components: dict[str, BaseExprEval]
   expr: CompositeExprDef
 
-  def evaluate(self, variables):
+  def evaluate(self, stack):
     evaluated_components = {
-      name: component.evaluate(variables)
+      name: component.evaluate(stack)
       for name, component in self.components.items()
     }
 
     if all(isinstance(component, ConstantExprEval) for component in evaluated_components.values()):
-      all_variables = variables | { name: component.value for name, component in evaluated_components.items() } # type: ignore
+      all_variables = {
+        name: component.value for name, component in evaluated_components.items() # type: ignore
+      }
 
       try:
-        result = eval(self.expr.code, globals(), all_variables)
+        result = eval(self.expr.code, dict(), all_variables)
       except Exception as e:
         raise EvaluationError(e) from e
       else:
@@ -137,9 +140,22 @@ class CompositeExprEval(BaseExprEval):
 class DeferredExprEval(BaseExprEval):
   name: str
   phase: int
+  symbol: int
 
-  def evaluate(self, variables):
-    return ConstantExprEval(variables[self.name]) if (self.phase < 1) else self.__class__(self.name, self.phase - 1)
+  def evaluate(self, stack):
+    return ConstantExprEval(stack[self.symbol][self.name]) if (self.phase < 1) else self.__class__(self.name, self.phase - 1, self.symbol)
+
+  @classmethod
+  def create(cls, name: str, phase: int):
+    return KnownDeferredExprEval(name, phase)
+
+@dataclass(frozen=True)
+class KnownDeferredExprEval:
+  name: str
+  phase: int
+
+  def __call__(self, symbol: int):
+    return DeferredExprEval(self.name, self.phase, symbol)
 
 
 # Phase 3
@@ -228,4 +244,5 @@ __all__ = [
   'Container',
   'DeferredExprEval',
   'Dependency',
+  'KnownDeferredExprEval'
 ]

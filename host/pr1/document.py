@@ -2,7 +2,7 @@ import functools
 from comserde import serializable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, Optional
+from typing import Any, NewType, Optional
 
 from .reader import Source
 
@@ -20,18 +20,20 @@ class DocumentOwner:
     }
 
 
+DocumentId = NewType('DocumentId', str)
+
 @serializable
 @dataclass(frozen=True, kw_only=True)
 class Document:
   contents: str
-  id: str
+  id: DocumentId
   path: PurePosixPath
   owner: Optional[DocumentOwner] = None
 
   @functools.cached_property
   def source(self):
     source = Source(self.contents)
-    source.origin = self
+    source.origin = self.id
 
     return source
 
@@ -59,7 +61,7 @@ class Document:
   def text(cls, contents: str, id: str = 'default', path: PurePosixPath = PurePosixPath('/default')):
     return cls(
       contents=contents,
-      id=id,
+      id=DocumentId(id),
       owner=None,
       path=path
     )

@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
+import getpass
 import math
 from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
                     Sequence, TypeVar, final)
 
 from ..eta import DurationTerm, Term
-from ..staticanalysis.expr import DeferredExprEval
+from ..staticanalysis.expr import KnownDeferredExprEval
 from ..staticanalysis.support import prelude
 from ..staticanalysis.expression import instantiate_type_instance
 from .. import input as lang
@@ -18,7 +19,7 @@ from ..reader import LocatedString, LocatedValue, LocationArea
 from ..ureg import ureg
 from ..util.decorators import debug
 from ..util.misc import Exportable, HierarchyNode
-from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack
+from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack, EvalSymbol, EvalVariables
 from .expr import Evaluable
 
 if TYPE_CHECKING:
@@ -474,10 +475,9 @@ class AnalysisContext:
 class FiberProtocol(Exportable):
   details: ProtocolDetails
   draft: Draft
-  global_env: EvalEnv
+  global_symbol: EvalSymbol
   name: Optional[str]
   root: BaseBlock
-  user_env: EvalEnv
 
   def export(self):
     return {
@@ -489,11 +489,11 @@ class FiberProtocol(Exportable):
 
 class FiberParser:
   def __init__(self, draft: Draft, *, Parsers: Sequence[type[BaseParser]], host: 'Host'):
+    self._next_eval_symbol = 0
     self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
     self.draft = draft
     self.host = host
-    self.user_env = EvalEnv(name="User")
 
     self.analysis, protocol = self._parse()
     self.protocol = protocol if not isinstance(protocol, EllipsisType) else None
@@ -503,26 +503,32 @@ class FiberParser:
 
     analysis = LanguageServiceAnalysis()
 
-    # ComplexVariable(
-    #   ExprEvalType=(lambda: DeferredExprEval(name='A', phase=0)),
-    #   type=ClassDefWithTypeArgs(ClassDef("A"))
-    # )
-
+    global_symbol = self.allocate_eval_symbol()
     global_env = EvalEnv({
-      # 'ExpPath': EvalEnvValue(),
-      # 'Path': EvalEnvValue(),
+      'Path': EvalEnvValue(
+        ExprEvalType=KnownDeferredExprEval(name='Path', phase=0),
+        description="The Path class from the pathlib module.",
+      ),
+      'open': EvalEnvValue(
+        ExprEvalType=KnownDeferredExprEval(name='open', phase=2),
+        description="The open() function, with the current experiment's directory as the current working directory."
+      ),
+      'math': EvalEnvValue(
+        ExprEvalType=KnownDeferredExprEval(name='math', phase=0),
+        description="The math module.",
+      ),
       'unit': EvalEnvValue(
-        ExprEvalType=(lambda: DeferredExprEval(name='unit', phase=0)),
+        ExprEvalType=KnownDeferredExprEval(name='unit', phase=0),
         description="The unit registry."
       ),
       'username': EvalEnvValue(
-        ExprEvalType=(lambda: DeferredExprEval(name='username', phase=0)),
+        ExprEvalType=KnownDeferredExprEval(name='username', phase=0),
         description="The user's name.",
         type=instantiate_type_instance(prelude[0].get('str'))
       )
-    }, name="Global", readonly=True)
+    }, name="Global", symbol=global_symbol)
 
-    envs = [global_env, self.user_env]
+    root_envs = [global_env]
 
 
     # Syntax
@@ -587,8 +593,8 @@ class FiberParser:
       if isinstance(unit_attrs, EllipsisType):
         continue
 
-      protocol_unit_data = analysis.add(parser.enter_protocol(unit_attrs, envs))
-      envs += protocol_unit_data.envs
+      protocol_unit_data = analysis.add(parser.enter_protocol(unit_attrs, root_envs))
+      root_envs += protocol_unit_data.envs
 
       if protocol_unit_data.details:
         protocol_details[parser.namespace] = protocol_unit_data.details
@@ -622,19 +628,17 @@ class FiberParser:
     #   raise NotImplementedError
 
     adoption_stack: EvalStack = {
-      global_env: {
-        # 'ExpPath': PurePath,
-        # 'Path': Path,
-        # 'open': adoption_open,
+      global_symbol: {
+        'math': math,
         'unit': ureg,
-        'username': '34'
+        'username': getpass.getuser()
       }
     }
 
     for protocol_unit_details in protocol_details.values():
       adoption_stack |= protocol_unit_details.create_adoption_stack()
 
-    layer = analysis.add(self.parse_layer(root_result_native['steps'], envs))
+    layer = analysis.add(self.parse_layer(root_result_native['steps'], root_envs))
 
     if isinstance(layer, EllipsisType):
       return analysis, Ellipsis
@@ -657,12 +661,17 @@ class FiberParser:
     return analysis, FiberProtocol(
       details=protocol_details,
       draft=self.draft,
-      global_env=global_env,
+      global_symbol=global_symbol,
       name=root_result_native['name'],
-      root=root_block,
-      user_env=self.user_env
+      root=root_block
     )
 
+
+  def allocate_eval_symbol(self):
+    symbol = EvalSymbol(self._next_eval_symbol)
+    self._next_eval_symbol += 1
+
+    return symbol
 
   def parse_layer(
     self,
@@ -721,7 +730,7 @@ class FiberParser:
       parser = next(parser for parser in self._parsers if transformer in parser.transformers)
 
       current_envs = envs + extra_envs
-      context = AnalysisContext(envs=envs)
+      context = AnalysisContext(envs=current_envs)
 
       if parser.layer_attributes is not None:
         unit_attrs = result_by_parser[parser]

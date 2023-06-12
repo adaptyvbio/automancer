@@ -287,6 +287,8 @@ class Parser(BaseParser):
         case _:
           return None
 
+    symbol = self._fiber.allocate_eval_symbol()
+
     env = EvalEnv({
       # 'devices': EvalEnvValue(
       #   type=ClassRef(ClassDef(
@@ -296,7 +298,7 @@ class Parser(BaseParser):
       #     }
       #   ))
       # )
-    }, name="Devices", readonly=True)
+    }, name="Devices", symbol=symbol)
 
     return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), envs=[env])
 

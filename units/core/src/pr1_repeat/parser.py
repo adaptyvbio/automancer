@@ -3,9 +3,9 @@ from types import EllipsisType
 from typing import Literal, TypedDict
 
 import pr1 as am
-from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
 from pr1.fiber.expr import Evaluable, EvaluableConstantValue
-from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer,
+from pr1.fiber.parser import (BaseBlock, BaseParser, BasePassiveTransformer, FiberParser,
                               PassiveTransformerPreparationResult,
                               TransformerAdoptionResult)
 from pr1.reader import LocatedValue
@@ -21,45 +21,54 @@ class Transformer(BasePassiveTransformer):
   attributes = {
     'repeat': am.Attribute(
       description="Repeats a block a fixed number of times.",
-      type=am.AutoExprContextType(am.IntType(mode='positive_or_null'))
+      type=am.AutoExprContextType(am.PotentialExprType(am.IntType(mode='positive_or_null')))
     )
   }
 
-  def __init__(self):
-    self.env = EvalEnv({
-      'index': EvalEnvValue(
-        description="The current iteration index.",
-        ExprEvalType=(lambda: am.DeferredExprEval(name='index', phase=1)),
-      )
-    }, name="Repeat", readonly=True)
+  def __init__(self, fiber: FiberParser):
+    self._fiber = fiber
 
   def prepare(self, data: Attributes, /, envs):
     if (attr := data.get('repeat')):
-      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult(attr, envs=[self.env])
+      symbol = self._fiber.allocate_eval_symbol()
+
+      env = EvalEnv({
+        'index': EvalEnvValue(
+          description="The current iteration index.",
+          ExprEvalType=am.KnownDeferredExprEval(name='index', phase=1)
+        )
+      }, name="Repeat", symbol=symbol)
+
+      return am.LanguageServiceAnalysis(), PassiveTransformerPreparationResult((attr, symbol), envs=[env])
     else:
       return am.LanguageServiceAnalysis(), None
 
-  def adopt(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, adoption_stack, trace):
-    analysis, count = data.evaluate_provisional(EvalContext(adoption_stack))
+  def adopt(self, data: tuple[Evaluable[LocatedValue[int | Literal['forever']]], EvalSymbol], /, adoption_stack, trace):
+    attr, symbol = data
+    analysis, count = attr.evaluate_provisional(EvalContext(adoption_stack))
 
     if isinstance(count, EllipsisType):
       return analysis, Ellipsis
 
-    return analysis, TransformerAdoptionResult(count)
+    return analysis, TransformerAdoptionResult((count, symbol))
 
-  def execute(self, data: Evaluable[LocatedValue[int | Literal['forever']]], /, block):
-    return am.LanguageServiceAnalysis(), Block(block, count=data, env=self.env)
+  def execute(self, data: tuple[Evaluable[LocatedValue[int | Literal['forever']]], EvalSymbol], /, block):
+    count, symbol = data
+    return am.BaseAnalysis(), Block(block, count, symbol)
 
 class Parser(BaseParser):
   namespace = namespace
-  transformers = [Transformer()]
+
+  def __init__(self, fiber):
+    super().__init__(fiber)
+    self.transformers = [Transformer(fiber)]
 
 
 @dataclass
 class Block(BaseBlock):
   block: BaseBlock
   count: Evaluable[LocatedValue[int | Literal['forever']]]
-  env: EvalEnv
+  symbol: EvalSymbol
 
   def __get_node_children__(self):
     return [self.block]

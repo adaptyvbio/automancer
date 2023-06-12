@@ -37,16 +37,18 @@ class DiagnosticDocumentReference(DiagnosticReference, Exportable):
 
   @classmethod
   def from_area(cls, area: 'LocationArea', *, id: str = 'target'):
-    from .document import Document
+    from .document import DocumentId
 
     assert area.source
 
-    document = area.source.origin
-    assert isinstance(document, Document)
+    document_id = area.source.origin
+
+    if TYPE_CHECKING:
+      assert isinstance(document_id, DocumentId)
 
     return cls(
       area=area,
-      document_id=document.id,
+      document_id=document_id,
       id=id
     )
 

@@ -18,12 +18,12 @@ from ..langservice import LanguageServiceAnalysis
 from ..reader import (LocatedString, LocatedValue, LocationArea,
                       PossiblyLocatedValue)
 from ..staticanalysis.context import StaticAnalysisContext
-from ..staticanalysis.expr import (BaseExprEval, ConstantExprEval,
+from ..staticanalysis.expr import (BaseExprEval, ComplexVariable, ConstantExprEval,
                                    EvaluationError)
 from ..staticanalysis.expression import evaluate_eval_expr
 from ..staticanalysis.support import prelude
 from ..util.misc import Exportable, log_exception
-from .eval import EvalContext, EvalEnvs, EvalOptions
+from .eval import EvalContext, EvalEnvs, EvalOptions, EvalSymbol, EvalVariables
 from .eval import evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
 
@@ -172,15 +172,6 @@ class PythonExpr:
       tree=tree
     )
 
-  @classmethod
-  def parse(cls, raw_str: LocatedString, /):
-    match = expr_regexp_exact.search(raw_str)
-
-    if not match:
-      return None
-
-    return cls._parse_match(match)
-
 
 T = TypeVar('T', bound=PossiblyLocatedValue, covariant=True)
 
@@ -224,29 +215,19 @@ class Evaluable(Exportable, ABC, Generic[T]):
 
 @dataclass
 class PythonExprObject:
-  """
-  A wrapper around `PythonExpr` which provides pre- and post-evaluation analysis.
-
-  Parameters
-    depth: The post-evaluation depth of the expression. A depth of 0 means that `evaluate()` will return the evaluation's result directly, otherwise it will a return a `ValueAsPythonExpr` instance.
-    envs: The evaluation environments of the expression, used for static analysis and evaluation.
-    expr: The `PythonExpr` instance to wrap.
-    type: The type of the expression, used after evaluation.
-  """
-
   contents: LocatedString
   tree: ast.Expression
   _: KW_ONLY
-  depth: int
   envs: EvalEnvs
 
   def analyze(self):
     from ..langservice import LanguageServiceAnalysis
 
-    variables = dict[str, Any]()
+    variables = dict[str, tuple[ComplexVariable, int]]()
 
     for env in self.envs:
-      variables |= env.values
+      for name, value in env.values.items():
+        variables[name] = (value, env.symbol)
 
     try:
       analysis, result = evaluate_eval_expr(self.tree.body, ({}, variables), prelude, StaticAnalysisContext(
@@ -257,7 +238,7 @@ class PythonExprObject:
       traceback.print_exc()
       return LanguageServiceAnalysis(errors=[Diagnostic("Static analysis failure")]), Ellipsis
 
-    return analysis, EvaluablePythonExpr(self.contents, self.envs, result.to_evaluated())
+    return analysis, EvaluablePythonExpr(self.contents, result.to_evaluated(), [env.symbol for env in self.envs])
 
   @classmethod
   def parse(cls, raw_str: LocatedString, /):
@@ -284,26 +265,20 @@ class PythonExprObject:
 @dataclass
 class EvaluablePythonExpr(Evaluable):
   contents: LocatedString
-  envs: EvalEnvs
   expr: BaseExprEval
+  symbols: list[EvalSymbol]
 
   def evaluate(self, context):
-    variables = dict[str, Any]()
-
-    for env in self.envs:
-      if (env_vars := context.stack.get(env)) is not None:
-        variables |= env_vars
-
     try:
       # Idea: check that the expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
-      result = self.expr.evaluate(variables)
+      result = self.expr.evaluate(context.stack)
     except EvaluationError as e:
       return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
     else:
       if isinstance(result, ConstantExprEval):
         return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
 
-      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, self.envs, result)
+      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result, self.symbols)
 
   def export(self):
     return {
@@ -324,8 +299,8 @@ class EvaluableConstantValue(Evaluable[S], Generic[S]):
   def export(self):
     return export_value(self.inner_value)
 
-  def unwrap(self):
-    return self.value
+  # def unwrap(self):
+  #   return self.inner_value
 
   def __repr__(self):
     return f"{self.__class__.__name__}({self.inner_value!r})"

@@ -770,7 +770,7 @@ class PossibleExprType(Type):
         #   analysis.errors.append(InvalidExprKind(obj))
         #   return analysis, Ellipsis
 
-        expr_object = PythonExprObject(expr_contents, expr_ast, depth=context.eval_depth, envs=context.envs)
+        expr_object = PythonExprObject(expr_contents, expr_ast, envs=context.envs)
         expr_result = analysis.add(expr_object.analyze())
 
         return analysis, expr_result
@@ -1262,20 +1262,22 @@ __all__ = [
   'Attribute',
   'AutoExprContextType',
   'BoolType',
+  'ChainType',
   'DataTypeType',
   'DictType',
   'EllipsisType',
   'EnumType',
+  'EvaluableChain',
   'EvaluableContainerType',
   'HasAttrType',
   'IdentifierType',
   'IntType',
   'KVDictType',
-  'QuantityContextType',
   'ListType',
   'PostAnalysisType',
   'PotentialExprType',
   'PrimitiveType',
+  'QuantityContextType',
   'QuantityType',
   'RecordType',
   'StrType',

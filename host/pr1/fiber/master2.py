@@ -84,15 +84,14 @@ class Master:
     def runtime_open(path: PathLike[str] | str, /, **kwargs):
       return open(ExpPath(path), **kwargs)
 
-    runtime_stack = {
-      self.protocol.global_env: {
+    runtime_stack: EvalStack = {
+      self.protocol.global_symbol: {
         'ExpPath': ExpPath,
         'Path': Path,
         'open': runtime_open,
         'random': random,
         'unit': ureg
-      },
-      self.protocol.user_env: dict()
+      }
     }
 
     for namespace, protocol_unit_details in self.protocol.details.items():
@@ -468,7 +467,7 @@ class ProgramHandle:
     else:
       self.master.update_soon()
 
-  def set_analysis(self, analysis: RuntimeAnalysis):
+  def set_analysis(self, analysis: DiagnosticAnalysis):
     self._analysis += analysis
     self.master.update_soon()
 

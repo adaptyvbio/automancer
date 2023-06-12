@@ -1,3 +1,5 @@
+from ast import Expr
+import ast
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
@@ -9,7 +11,7 @@ from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
-from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue
+from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
 from pr1.fiber.expr import Evaluable, export_value
 from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, EnumType,
                                    PotentialExprType, PrimitiveType,
@@ -20,9 +22,8 @@ from pr1.fiber.parser import (BaseBlock, BaseParser,
                               BasePassiveTransformer, BaseProgram, BlockUnitState,
                               FiberParser, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
-from pr1.fiber.staticanalysis import (ClassDef, ClassRef, CommonVariables,
-                                      StaticAnalysisAnalysis)
 from pr1.reader import LocatedValue
+from pr1.staticanalysis.expr import BaseExprEval, BaseExprWatch
 from pr1.util.decorators import debug
 
 from . import namespace
@@ -31,60 +32,13 @@ if TYPE_CHECKING:
   from .runner import Runner
 
 
-EXPR_DEPENDENCY_METADATA_NAME = f"{namespace}.dependencies"
-
-@dataclass(eq=True, frozen=True, kw_only=True)
-class NodeDependencyMetadata:
-  endpoint: Literal['connected', 'value']
-  path: NodePath
-
-NodeDependenciesMetadata = set[NodeDependencyMetadata]
-
-class TrackedReadableNodeClassRef(ClassRef):
-  def __init__(self, type_def: ClassDef, /, metadata: NodeDependencyMetadata):
-    super().__init__(type_def)
-    self.metadata = metadata
-
-  def analyze_access(self):
-    return StaticAnalysisAnalysis(metadata={
-      EXPR_DEPENDENCY_METADATA_NAME: NodeDependenciesMetadata({self.metadata})
-    })
-
-
-class CollectionNodeWrapper:
-  def __init__(self, node: CollectionNode, /):
-    for child_node in node.nodes.values():
-      if (wrapped_node := wrap_node(child_node)):
-        setattr(self, child_node.id, wrapped_node)
-
-class NumericReadableNodeWrapper:
-  def __init__(self, node: NumericNode):
-    self._node = node
-
-  @property
-  def value(self):
-    return self._node.value
-
-
-def wrap_node(node: BaseNode, /):
-  match node:
-    case CollectionNode():
-      return CollectionNodeWrapper(node)
-    case NumericNode() if node.readable:
-      return NumericReadableNodeWrapper(node)
-    case _:
-      return None
-
-
 @dataclass
 class DevicesProtocolDetails(ProtocolUnitDetails):
-  env: EvalEnv
+  symbol: EvalSymbol
 
   def create_runtime_stack(self, runner: 'Runner'):
     return {
-      self.env: {
-        'devices': wrap_node(runner._master.host.root_node)
-      }
+      self.symbol: runner._master.host.root_node
     }
 
 
@@ -253,35 +207,21 @@ class Parser(BaseParser):
   def enter_protocol(self, attrs, /, envs):
     def create_type(node: BaseNode, parent_path: NodePath = ()):
       node_path = (*parent_path, node.id)
-      connected_ref = TrackedReadableNodeClassRef(
-        CommonVariables['bool'],
-        NodeDependencyMetadata(
-          endpoint='connected',
-          path=node_path
-        )
-      )
-
       match node:
-        case CollectionNode():
-          return ClassRef(ClassDef(
-            name=node.id,
+        case am.CollectionNode():
+          return am.ClassDefWithTypeArgs(am.ClassDef(
+            name='ConnectionNode',
             instance_attrs={
-              'connected': connected_ref,
+              'connected': am.instantiate_type_instance(am.prelude[0]['bool']),
               **{ child_node.id: child_node_type for child_node in node.nodes.values() if (child_node_type := create_type(child_node, node_path)) }
             }
           ))
-        case NumericNode() if node.readable:
-          return ClassRef(ClassDef(
-            name=node.id,
+        case am.ValueNode() if node.readable:
+          return am.ClassDefWithTypeArgs(am.ClassDef(
+            name='NumericNode',
             instance_attrs={
-              'connected': connected_ref,
-              'value': TrackedReadableNodeClassRef(
-                CommonVariables['unknown'],
-                NodeDependencyMetadata(
-                  endpoint='value',
-                  path=node_path
-                )
-              )
+              'connected': am.instantiate_type_instance(am.prelude[0]['bool']),
+              'value': am.UnknownDef()
             }
           ))
         case _:
@@ -290,17 +230,129 @@ class Parser(BaseParser):
     symbol = self._fiber.allocate_eval_symbol()
 
     env = EvalEnv({
-      # 'devices': EvalEnvValue(
-      #   type=ClassRef(ClassDef(
-      #     name='Devices',
-      #     instance_attrs={
-      #       device_node.id: device_node_type for device_node in self._fiber.host.root_node.nodes.values() if (device_node_type := create_type(device_node))
-      #     }
-      #   ))
-      # )
+      'devices': EvalEnvValue(
+        lambda node: DevicesExprDef(self._fiber.host.root_node, NodePath(), symbol)
+      )
     }, name="Devices", symbol=symbol)
 
-    return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(env), envs=[env])
+    return am.LanguageServiceAnalysis(), ProtocolUnitData(details=DevicesProtocolDetails(symbol), envs=[env])
+
+
+@dataclass(frozen=True)
+class DevicesExprDef(am.BaseExprDef):
+  system_node: am.BaseNode
+  path: am.NodePath
+  symbol: int
+
+  # @functools.cached_property
+  # def _node(self):
+  #   return self.root_node.find(self.path)
+
+  @property
+  def node(self):
+    return None
+
+  @property
+  def phase(self):
+    return 1000
+
+  @property
+  def type(self):
+    match self.system_node:
+      case am.CollectionNode():
+        return am.ClassDefWithTypeArgs(am.ClassDef(
+          name='ConnectionNode',
+          instance_attrs={
+            'connected': am.instantiate_type_instance(am.prelude[0]['bool']),
+          } | {
+            child_node.id: am.UnknownDef() for child_node in self.system_node.nodes.values()
+          }
+        ))
+      case am.ValueNode(readable=True):
+        return am.ClassDefWithTypeArgs(am.ClassDef(
+          name='NumericNode',
+          instance_attrs={
+            'connected': am.instantiate_type_instance(am.prelude[0]['bool']),
+            'value': am.UnknownDef()
+          }
+        ))
+
+  def get_attribute(self, name, node):
+    if name == 'connected':
+      return None
+
+    match self.system_node:
+      case am.CollectionNode() if (child_node := self.system_node.nodes.get(name)):
+        return self.__class__(
+          child_node,
+          (*self.path, name),
+          symbol=self.symbol
+        )
+      case am.ValueNode(readable=True) if name == 'value':
+        return ValueNodeValueExprDef(self.path, self.symbol, node)
+      case _:
+        return None
+
+  def to_evaluated(self) -> am.BaseExprEval:
+    return super().to_evaluated()
+
+@dataclass
+class ValueNodeValueExprDef(am.BaseExprDef):
+  path: NodePath
+  symbol: int
+  node: ast.expr
+
+  @property
+  def phase(self):
+    return 1000
+
+  @property
+  def type(self):
+    return am.UnknownDef()
+
+  def to_evaluated(self) -> am.BaseExprEval:
+    return ValueNodeValueComptimeExprEval(self.path, self.symbol)
+
+@dataclass
+class ValueNodeValueComptimeExprEval(am.BaseExprEval):
+  path: am.NodePath
+  symbol: int
+
+  def evaluate(self, stack):
+    if self.symbol in stack:
+      root_node = stack[self.symbol]
+      node = root_node.find(self.path)
+
+      return ValueNodeValueRuntimeExprEval(node, self.path)
+    else:
+      return self
+
+@dataclass
+class ValueNodeValueRuntimeExprEval(am.BaseExprEval):
+  node: am.ValueNode
+  path: am.NodePath
+
+  def evaluate(self, stack):
+    return self
+
+  def to_watched(self) -> am.BaseExprWatch:
+    return ValueNodeValueExprWatch(self.node, self.path)
+
+@dataclass
+class ValueNodeValueExprWatch(am.BaseExprWatch):
+  node: am.ValueNode
+  path: am.NodePath
+
+  @property
+  def dependencies(self):
+    return {ValueNodeValueDependency(self.path)}
+
+  def evaluate(self, changed_dependencies):
+    return self.node.value and self.node.value[0]
+
+@dataclass(frozen=True)
+class ValueNodeValueDependency(am.Dependency):
+  path: am.NodePath
 
 
 @debug

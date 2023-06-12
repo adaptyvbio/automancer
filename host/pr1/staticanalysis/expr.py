@@ -7,31 +7,33 @@ import os
 from dataclasses import KW_ONLY, dataclass, field
 from typing import Any, Callable, ClassVar, Generic, Optional, Protocol, Self, Sequence, TypeVar
 
-from .types import TypeInstance
-
-
-@dataclass
-class ComplexVariable:
-  ExprEvalType: 'Callable[[int], BaseExprEval]'
-  type: TypeInstance
+from .types import TypeInstance, UnknownDef
 
 
 # Phase 1
 
-@dataclass(frozen=True)
 class BaseExprDef(ABC):
-  node: ast.expr
-  type: TypeInstance
-  _: KW_ONLY
-  phase: int = 0
+  node: ClassVar[Optional[ast.expr]] # If phase > 0, this is just used to obtain the node's location
+  type: ClassVar[TypeInstance]
+  phase: ClassVar[int]
+
+  def get_attribute(self, name: str, /, node: ast.expr) -> 'Optional[BaseExprDef]':
+    return None
 
   @abstractmethod
   def to_evaluated(self) -> 'BaseExprEval':
     ...
 
+BaseExprDefFactory = Callable[[ast.expr], BaseExprDef]
+
+
 @dataclass(frozen=True)
 class CompositeExprDef(BaseExprDef):
+  node: Optional[ast.expr]
+  type: TypeInstance
+  _: KW_ONLY
   components: dict[str, BaseExprDef] = field(default_factory=dict)
+  phase: int = 0
 
   @functools.cached_property
   def code(self):
@@ -51,7 +53,10 @@ class CompositeExprDef(BaseExprDef):
     items = list[ast.expr]()
 
     for expr in exprs:
-      # TODO: Check and improve
+      if not expr.node:
+        result_node = None
+        break
+
       if expr.phase > 0:
         name = generate_name()
         components[name] = expr
@@ -61,21 +66,27 @@ class CompositeExprDef(BaseExprDef):
           components |= expr.components
 
         items.append(expr.node)
+    else:
+      result_node = get_node(items)
 
     return cls(
       components=components,
-      node=get_node(items),
+      node=result_node,
       phase=0,
       type=type
     )
 
-@dataclass(frozen=True)
-class ComplexExprDef(BaseExprDef):
-  ExprEvalType: 'Callable[[int], BaseExprEval]'
+@dataclass
+class DeferredExprDef(BaseExprDef):
+  name: str
+  node: ast.expr
+  _: KW_ONLY
+  phase: int
   symbol: int
+  type: TypeInstance = field(default_factory=UnknownDef)
 
   def to_evaluated(self):
-    return self.ExprEvalType(self.symbol)
+    return DeferredExprEval(self.name, self.phase, self.symbol)
 
 
 # Phase 2
@@ -83,6 +94,9 @@ class ComplexExprDef(BaseExprDef):
 @dataclass
 class EvaluationError(Exception):
   cause: Exception
+
+class InvalidExpressionError(Exception):
+  pass
 
 class BaseExprEval(ABC):
   @abstractmethod
@@ -118,6 +132,9 @@ class CompositeExprEval(BaseExprEval):
         name: component.value for name, component in evaluated_components.items() # type: ignore
       }
 
+      if not self.expr.node:
+        raise InvalidExpressionError
+
       try:
         result = eval(self.expr.code, dict(), all_variables)
       except Exception as e:
@@ -145,25 +162,12 @@ class DeferredExprEval(BaseExprEval):
   def evaluate(self, stack):
     return ConstantExprEval(stack[self.symbol][self.name]) if (self.phase < 1) else self.__class__(self.name, self.phase - 1, self.symbol)
 
-  @classmethod
-  def create(cls, name: str, phase: int):
-    return KnownDeferredExprEval(name, phase)
-
-@dataclass(frozen=True)
-class KnownDeferredExprEval:
-  name: str
-  phase: int
-
-  def __call__(self, symbol: int):
-    return DeferredExprEval(self.name, self.phase, symbol)
-
 
 # Phase 3
 
 class Dependency:
   pass
 
-@dataclass
 class BaseExprWatch(ABC):
   dependencies: ClassVar[set[Dependency]]
 
@@ -232,17 +236,16 @@ class Container(Generic[T]):
 
 __all__ = [
   'BaseExprDef',
+  'BaseExprDefFactory',
   'BaseExprEval',
   'BaseExprWatch',
-  'ComplexExprDef',
-  'ComplexVariable',
   'CompositeExprDef',
   'CompositeExprEval',
   'CompositeExprWatch',
   'ConstantExprEval',
   'ConstantExprWatch',
   'Container',
+  'DeferredExprDef',
   'DeferredExprEval',
-  'Dependency',
-  'KnownDeferredExprEval'
+  'Dependency'
 ]

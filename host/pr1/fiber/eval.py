@@ -4,15 +4,15 @@ from typing import Any, NewType, Optional
 
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..reader import LocatedString, LocatedValue, LocationArea
-from ..staticanalysis.expr import ComplexVariable
-from ..staticanalysis.types import TypeInstance, UnknownDef
+from ..staticanalysis.expr import BaseExprDefFactory
 
 
-@dataclass(kw_only=True)
-class EvalEnvValue(ComplexVariable):
+@dataclass
+class EvalEnvValue:
+  ExprDefFactory: BaseExprDefFactory
+  _: KW_ONLY
   deprecated: bool = False
   description: Optional[str] = None
-  type: TypeInstance = field(default_factory=UnknownDef)
 
 @dataclass
 class EvalEnv:

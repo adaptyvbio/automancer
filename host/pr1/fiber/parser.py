@@ -7,7 +7,7 @@ from typing import (TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional,
                     Sequence, TypeVar, final)
 
 from ..eta import DurationTerm, Term
-from ..staticanalysis.expr import KnownDeferredExprEval
+from ..staticanalysis.expr import DeferredExprDef
 from ..staticanalysis.support import prelude
 from ..staticanalysis.expression import instantiate_type_instance
 from .. import input as lang
@@ -506,25 +506,24 @@ class FiberParser:
     global_symbol = self.allocate_eval_symbol()
     global_env = EvalEnv({
       'Path': EvalEnvValue(
-        ExprEvalType=KnownDeferredExprEval(name='Path', phase=0),
-        description="The Path class from the pathlib module.",
+        lambda node: DeferredExprDef('Path', node=node, phase=0, symbol=global_symbol),
+        description="The Path class from the pathlib module."
       ),
       'open': EvalEnvValue(
-        ExprEvalType=KnownDeferredExprEval(name='open', phase=2),
+        lambda node: DeferredExprDef('open', node=node, phase=0, symbol=global_symbol),
         description="The open() function, with the current experiment's directory as the current working directory."
       ),
       'math': EvalEnvValue(
-        ExprEvalType=KnownDeferredExprEval(name='math', phase=0),
-        description="The math module.",
+        lambda node: DeferredExprDef('math', node=node, phase=0, symbol=global_symbol),
+        description="The math module."
       ),
       'unit': EvalEnvValue(
-        ExprEvalType=KnownDeferredExprEval(name='unit', phase=0),
+        lambda node: DeferredExprDef('unit', node=node, phase=0, symbol=global_symbol),
         description="The unit registry."
       ),
       'username': EvalEnvValue(
-        ExprEvalType=KnownDeferredExprEval(name='username', phase=0),
-        description="The user's name.",
-        type=instantiate_type_instance(prelude[0].get('str'))
+        lambda node: DeferredExprDef('username', node=node, phase=0, symbol=global_symbol, type=instantiate_type_instance(prelude[0]['str'])),
+        description="The user's name."
       )
     }, name="Global", symbol=global_symbol)
 

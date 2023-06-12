@@ -11,12 +11,15 @@ from .devices.nodes.readable import *
 from .devices.nodes.value import *
 from .devices.nodes.watcher import *
 from .eta import *
-from .host import Host
+from .host import *
 from .input import *
 from .input.file import *
 from .langservice import *
 from .master.analysis import *
 from .staticanalysis.expr import *
+from .staticanalysis.expression import *
+from .staticanalysis.support import *
+from .staticanalysis.types import *
 from .ureg import *
 from .util.asyncio import *
 from .util.decorators import *

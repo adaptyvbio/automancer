@@ -18,15 +18,15 @@ from ..langservice import LanguageServiceAnalysis
 from ..reader import (LocatedString, LocatedValue, LocationArea,
                       PossiblyLocatedValue)
 from ..staticanalysis.context import StaticAnalysisContext
-from ..staticanalysis.expr import (BaseExprEval, ComplexVariable, ConstantExprEval,
-                                   EvaluationError)
+from ..staticanalysis.expr import (BaseExprDefFactory, BaseExprEval,
+                                   ConstantExprEval, EvaluationError,
+                                   InvalidExpressionError)
 from ..staticanalysis.expression import evaluate_eval_expr
 from ..staticanalysis.support import prelude
 from ..util.misc import Exportable, log_exception
 from .eval import EvalContext, EvalEnvs, EvalOptions, EvalSymbol, EvalVariables
 from .eval import evaluate as dynamic_evaluate
 from .staticeval import evaluate as static_evaluate
-
 
 expr_regexp = re.compile(r"^([$@%])?{{((?:\\.|[^\\}]|}(?!}))*)}}$")
 escape_regexp = re.compile(r"\\(.)")
@@ -183,6 +183,8 @@ class Evaluable(Exportable, ABC, Generic[T]):
   def evaluate_final(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
     analysis, result = self.evaluate(context)
 
+    # print(result._obj.expr.to_watched().dependencies)
+
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
@@ -223,11 +225,11 @@ class PythonExprObject:
   def analyze(self):
     from ..langservice import LanguageServiceAnalysis
 
-    variables = dict[str, tuple[ComplexVariable, int]]()
+    variables = dict[str, BaseExprDefFactory]()
 
     for env in self.envs:
       for name, value in env.values.items():
-        variables[name] = (value, env.symbol)
+        variables[name] = value.ExprDefFactory
 
     try:
       analysis, result = evaluate_eval_expr(self.tree.body, ({}, variables), prelude, StaticAnalysisContext(
@@ -274,6 +276,8 @@ class EvaluablePythonExpr(Evaluable):
       result = self.expr.evaluate(context.stack)
     except EvaluationError as e:
       return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
+    except InvalidExpressionError:
+      return DiagnosticAnalysis(), Ellipsis
     else:
       if isinstance(result, ConstantExprEval):
         return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))

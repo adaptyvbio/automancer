@@ -40,13 +40,14 @@ class float:
     ...
 
 class int:
-  self.x: float
-
   def __add__(self, other: int, /) -> int:
     ...
 
   def __mul__(self, other: int, /) -> int:
     ...
+
+class bool:
+  ...
 
 class slice:
   pass

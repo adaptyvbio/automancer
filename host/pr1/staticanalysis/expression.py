@@ -1,7 +1,7 @@
 import ast
 from pprint import pprint
 
-from .expr import BaseExprDef, ComplexVariable, CompositeExprDef, ComplexExprDef, generate_name, transfer_node_location
+from .expr import BaseExprDef, BaseExprDefFactory, CompositeExprDef, transfer_node_location
 
 from .context import (StaticAnalysisAnalysis, StaticAnalysisContext,
                       StaticAnalysisDiagnostic)
@@ -144,7 +144,7 @@ UnaryOpMethodMap: dict[type[ast.unaryop], str] = {
 
 def evaluate_eval_expr(
     node: ast.expr, /,
-    foreign_symbols: tuple[ExportedTypeDefs, dict[str, tuple[ComplexVariable, int]]],
+    foreign_symbols: tuple[ExportedTypeDefs, dict[str, BaseExprDefFactory]],
     prelude_symbols: tuple[PreludeTypeDefs, PreludeTypeInstances],
     context: StaticAnalysisContext
 ) -> tuple[StaticAnalysisAnalysis, BaseExprDef]:
@@ -157,8 +157,11 @@ def evaluate_eval_expr(
       attr_type = get_attribute(obj_expr.type, attr_name)
 
       if not attr_type:
-        analysis.errors.append(StaticAnalysisDiagnostic("Invalid attribute name", obj, context))
+        analysis.errors.append(StaticAnalysisDiagnostic("Invalid attribute name", node, context))
         attr_type = UnknownDef()
+
+      if attr_expr := obj_expr.get_attribute(attr_name, node):
+        return analysis, attr_expr
 
       return analysis, CompositeExprDef.assemble(
         attr_type,
@@ -283,21 +286,13 @@ def evaluate_eval_expr(
       return analysis, CompositeExprDef.assemble(list_type, elts_exprs, lambda elts: transfer_node_location(node, ast.List(elts, ctx=ast.Load())))
 
     case ast.Name(id=name, ctx=ast.Load()):
-      if pair := foreign_variables.get(name):
-        var, symbol = pair
-
-        return StaticAnalysisAnalysis(), ComplexExprDef(
-          ExprEvalType=var.ExprEvalType,
-          node=node,
-          phase=1000,
-          symbol=symbol,
-          type=var.type
-        )
+      if value := foreign_variables.get(name):
+        return StaticAnalysisAnalysis(), value(node)
 
       variable_value = prelude_variables.get(name)
 
       if not variable_value:
-        return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), CompositeExprDef(node, UnknownDef())
+        return StaticAnalysisDiagnostic("Invalid reference to missing symbol", node, context, name='missing_symbol').analysis(), CompositeExprDef(None, UnknownDef())
 
       return StaticAnalysisAnalysis(), CompositeExprDef(node, variable_value.type)
 
@@ -365,3 +360,9 @@ def evaluate_eval_expr(
     case _:
       print("Missing evaluate_eval_expr()", ast.dump(node, indent=2))
       return StaticAnalysisAnalysis(), UnknownDef()
+
+
+__all__ = [
+  'evaluate_eval_expr',
+  'instantiate_type_instance'
+]

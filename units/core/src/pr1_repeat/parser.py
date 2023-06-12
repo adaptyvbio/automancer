@@ -34,8 +34,8 @@ class Transformer(BasePassiveTransformer):
 
       env = EvalEnv({
         'index': EvalEnvValue(
+          lambda node: am.DeferredExprDef('index', node=node, phase=1, symbol=symbol),
           description="The current iteration index.",
-          ExprEvalType=am.KnownDeferredExprEval(name='index', phase=1)
         )
       }, name="Repeat", symbol=symbol)
 

@@ -159,6 +159,7 @@ Symbols = tuple[ExportedTypeDefs, TypeInstances]
 # Prelude
 
 class PreludeTypeDefs(TypedDict):
+  bool: ClassDef
   float: ClassDef
   int: ClassDef
   list: ClassDef
@@ -169,3 +170,31 @@ class PreludeTypeInstances(TypedDict):
   float: ClassDefWithTypeArgs
   int: ClassDefWithTypeArgs
   list: ClassDef
+
+
+__all__ = [
+  'ClassConstructorDef',
+  'ClassDef',
+  'ClassDefWithTypeArgs',
+  'ExportedKnownTypeDef',
+  'ExportedTypeDef',
+  'ExportedTypeDefs',
+  'FuncArgDef',
+  'FuncDef',
+  'FuncKwArgDef',
+  'FuncOverloadDef',
+  'KnownTypeDef',
+  'KnownTypeInstance',
+  'OrderedTypeVariables',
+  'PreludeTypeDefs',
+  'PreludeTypeInstances',
+  'Symbols',
+  'TypeDef',
+  'TypeDefs',
+  'TypeInstance',
+  'TypeInstances',
+  'TypeValues',
+  'TypeVariables',
+  'UnionDef',
+  'UnknownDef'
+]

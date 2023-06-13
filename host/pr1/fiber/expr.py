@@ -11,6 +11,7 @@ from typing import Any, Generic, Literal, TypeVar, cast, overload
 
 from quantops import Quantity
 
+from ..util.asyncio import try_all
 from ..analysis import DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticDocumentReference
 from ..host import logger
@@ -19,7 +20,7 @@ from ..reader import (LocatedString, LocatedValue, LocationArea,
                       PossiblyLocatedValue)
 from ..staticanalysis.context import StaticAnalysisContext
 from ..staticanalysis.expr import (BaseExprDefFactory, BaseExprEval,
-                                   ConstantExprEval, EvaluationError,
+                                   ConstantExprEval, Dependency, EvaluationError,
                                    InvalidExpressionError)
 from ..staticanalysis.expression import evaluate_eval_expr
 from ..staticanalysis.support import prelude
@@ -176,20 +177,33 @@ class PythonExpr:
 T = TypeVar('T', bound=PossiblyLocatedValue, covariant=True)
 
 class Evaluable(Exportable, ABC, Generic[T]):
+  dependencies: set[Dependency]
+
   @abstractmethod
-  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
+  def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     ...
 
   def evaluate_final(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
     analysis, result = self.evaluate(context)
-
-    # print(result._obj.expr.to_watched().dependencies)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
 
     assert isinstance(result, EvaluableConstantValue)
     return analysis, result.inner_value
+
+  async def evaluate_final_async(self, context: EvalContext):
+    analysis = LanguageServiceAnalysis()
+    raw_result = analysis.add(self.evaluate(context))
+
+    if isinstance(raw_result, EllipsisType):
+      return analysis, Ellipsis
+
+    await try_all([dependency.init() for dependency in raw_result.dependencies])
+
+    result = analysis.add(raw_result.evaluate_final(EvalContext(stack=None)))
+
+    return analysis, result
 
   def evaluate_provisional(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     return self.evaluate(context) # type: ignore
@@ -271,18 +285,32 @@ class EvaluablePythonExpr(Evaluable):
   symbols: list[EvalSymbol]
 
   def evaluate(self, context):
-    try:
-      # Idea: check that the expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
-      result = self.expr.evaluate(context.stack)
-    except EvaluationError as e:
-      return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
-    except InvalidExpressionError:
-      return DiagnosticAnalysis(), Ellipsis
-    else:
-      if isinstance(result, ConstantExprEval):
-        return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
+    if context.stack is None:
+      watched = self.expr.to_watched()
 
-      return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result, self.symbols)
+      try:
+        result = watched.evaluate(watched.dependencies)
+      except EvaluationError as e:
+        return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
+      else:
+        return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result, area=self.contents.area, deep=True))
+    else:
+      try:
+        # Idea: check that the expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
+        result = self.expr.evaluate(context.stack)
+      except EvaluationError as e:
+        return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
+      except InvalidExpressionError:
+        return DiagnosticAnalysis(), Ellipsis
+      else:
+        if isinstance(result, ConstantExprEval):
+          return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
+
+        return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result, self.symbols)
+
+  @property
+  def dependencies(self):
+    return self.expr.to_watched().dependencies
 
   def export(self):
     return {
@@ -296,6 +324,10 @@ S = TypeVar('S', bound=PossiblyLocatedValue)
 @dataclass(frozen=True)
 class EvaluableConstantValue(Evaluable[S], Generic[S]):
   inner_value: S
+
+  @property
+  def dependencies(self):
+    return set()
 
   def evaluate(self, context):
     return DiagnosticAnalysis(), self

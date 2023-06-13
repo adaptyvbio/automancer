@@ -98,7 +98,7 @@ export function ReportInspector(props: {
         <div className={spotlightStyles.timeinfo}>
           <div>Occurences</div>
           <div>
-            {events && staticEntry && (
+            {events && (
               <StaticSelect
                 options={[
                   { id: null, label: 'General form' },
@@ -136,27 +136,31 @@ export function ReportInspector(props: {
           </div>
         </div>
 
-        {blockAnalysis.isLeafBlockTerminal && (
-          <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext)} />
+        {events && (
+          <>
+            {blockAnalysis.isLeafBlockTerminal && (
+              <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext)} />
+            )}
+
+            <div className={featureStyles.root}>
+              {blockAnalysis.groups.slice().reverse().map((group) =>
+                group.pairs.slice().reverse().map((pair, pairIndex) => {
+                  let blockImpl = getBlockImpl(pair.block, globalContext);
+
+                  if (!blockImpl.createFeatures) {
+                    return null;
+                  }
+
+                  return (
+                    <FeatureEntry
+                      features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
+                      key={pairIndex} />
+                  );
+                })
+              )}
+            </div>
+          </>
         )}
-
-        <div className={featureStyles.root}>
-          {blockAnalysis.groups.slice().reverse().map((group) =>
-            group.pairs.slice().reverse().map((pair, pairIndex) => {
-              let blockImpl = getBlockImpl(pair.block, globalContext);
-
-              if (!blockImpl.createFeatures) {
-                return null;
-              }
-
-              return (
-                <FeatureEntry
-                  features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
-                  key={pairIndex} />
-              );
-            })
-          )}
-        </div>
       </div>
     </div>
   );

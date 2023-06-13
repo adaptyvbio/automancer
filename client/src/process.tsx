@@ -1,4 +1,4 @@
-import { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { MasterBlockLocation, ProtocolBlock } from 'pr1-shared';
 
 import { GraphNode } from './components/graph-editor';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
@@ -90,11 +90,11 @@ export interface ProcessBlock<Data> extends ProtocolBlock {
   data: Data;
 }
 
-export interface ProcessLocation<Location> {
+export interface ProcessLocation<Location> extends MasterBlockLocation {
   children: {};
   mode: ProcessLocationMode;
   pausable: boolean;
-  process: Location;
+  process: Location | null;
   time: number;
 }
 
@@ -129,7 +129,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
 
       let Component = options.Component;
 
-      if (Component) {
+      if (Component && props.location.process) {
         return (
           <Component
             data={props.block.data}

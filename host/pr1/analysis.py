@@ -10,7 +10,7 @@ T = TypeVar('T')
 S = TypeVar('S')
 
 @dataclass(kw_only=True)
-class BaseAnalysis():
+class BaseAnalysis:
   def add(self, other: 'tuple[BaseAnalysis, T]', /) -> T:
     other_analysis, other_value = other
     old_self = self
@@ -50,9 +50,10 @@ class BaseAnalysis():
     pass
 
   @classmethod
-  def downcast(cls, obj: Self, /):
+  def downcast(cls, obj: 'BaseAnalysis', /):
     analysis = cls()
     analysis._add(obj)
+
     return analysis
 
   @classmethod

@@ -5,7 +5,7 @@ import functools
 import math
 import os
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Any, Callable, ClassVar, Generic, Optional, Protocol, Self, Sequence, TypeVar
+from typing import Any, AsyncGenerator, Callable, ClassVar, Generic, Optional, Protocol, Self, Sequence, TypeVar
 
 from .types import TypeInstance, UnknownDef
 
@@ -160,8 +160,13 @@ class DeferredExprEval(BaseExprEval):
 
 # Phase 3
 
-class Dependency:
-  pass
+class Dependency(ABC):
+  async def init(self) -> None:
+    ...
+
+  @abstractmethod
+  async def watch(self) -> AsyncGenerator[None, None]:
+    ...
 
 class BaseExprWatch(ABC):
   dependencies: ClassVar[set[Dependency]]

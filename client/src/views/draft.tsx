@@ -27,7 +27,7 @@ import { Pool } from '../util';
 import { ViewDrafts } from './protocols';
 import { analyzeBlockPath } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
-import { formatDurationTerm, formatTimeDifference } from '../format';
+import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 
 
@@ -566,12 +566,13 @@ export function FilledDraftSummary(props: {
 
       if (terms.end.type === 'duration') {
         let endTerm = terms.end;
+        let now = Date.now();
 
         etaText = [
           formattedDuration,
           ' (ETA ',
           <TimeSensitive
-            contents={() => formatAbsoluteTime(Date.now() + endTerm.value)}
+            contents={() => formatDigitalDate(now + endTerm.value, now, { format: 'react' })}
             interval={30e3}
             key={0} />,
           ')'

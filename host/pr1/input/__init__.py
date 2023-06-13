@@ -3,14 +3,13 @@ import copy
 import functools
 import re
 from dataclasses import dataclass
-from tokenize import TokenError
 from types import EllipsisType
 from typing import (TYPE_CHECKING, Any, Callable, Generic, Literal, Optional,
                     Protocol, TypeVar, cast)
 
-from quantops import Dimensionality, Quantity, QuantityContext, Unit
 import numpy as np
 import quantops
+from quantops import Dimensionality, Quantity, QuantityContext
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticDocumentReference
@@ -513,7 +512,7 @@ class RecordType(DivisibleCompositeDictType):
 
 @dataclass
 class EvaluableRecord(Evaluable):
-  value: PossiblyLocatedValue[dict[PossiblyLocatedValue[str], Evaluable]]
+  items: PossiblyLocatedValue[dict[PossiblyLocatedValue[str], Evaluable]]
 
   def __getitem__(self, key: str, /):
     return self._value.value[key] # type: ignore
@@ -522,7 +521,7 @@ class EvaluableRecord(Evaluable):
     analysis = LanguageServiceAnalysis()
     result = dict[PossiblyLocatedValue[str], Any]()
 
-    for key, value in self.value.value.items():
+    for key, value in self.items.value.items():
       item_result = analysis.add(value.evaluate(context))
 
       # TODO: Same as lists
@@ -531,7 +530,7 @@ class EvaluableRecord(Evaluable):
 
       result[key] = item_result
 
-    return analysis, self.new(LocatedValue.new(result, self.value.area))
+    return analysis, self.new(LocatedValue.new(result, self.items.area))
 
   def export(self):
     raise NotImplementedError
@@ -1232,6 +1231,10 @@ class EvaluableChain(Evaluable):
   _obj: Evaluable
   _types: list[Type]
 
+  @property
+  def dependencies(self):
+    return self._obj.dependencies
+
   def evaluate(self, context):
     from ..fiber.parser import AnalysisContext
 
@@ -1253,7 +1256,6 @@ class EvaluableChain(Evaluable):
 
   def export(self):
     return self._obj.export()
-
 
 
 __all__ = [

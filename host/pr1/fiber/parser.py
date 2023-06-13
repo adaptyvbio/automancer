@@ -323,6 +323,7 @@ class ProcessTransformer(BaseLeadTransformer):
     assert attributes and (len(attributes) == 1)
 
     for attr in attributes.values():
+      # TODO: Change this depending on whether attr._type is a DynamicType instance
       attr._type = lang.AutoExprContextType(lang.PotentialExprType(attr._type))
 
     super().__init__(attributes)

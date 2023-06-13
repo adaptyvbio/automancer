@@ -266,6 +266,24 @@ def evaluate_eval_expr(
     case ast.Constant(str()):
       return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['str']))
 
+    case ast.FormattedValue(value, conversion, format_spec):
+      analysis, expr = evaluate_eval_expr(value, foreign_symbols, prelude_symbols, context)
+
+      return analysis, CompositeExprDef.assemble(
+        UnknownDef(), # Not used downstream
+        [expr],
+        lambda nodes: transfer_node_location(node, ast.FormattedValue(nodes[0], conversion, format_spec))
+      )
+
+    case ast.JoinedStr(values):
+      analysis, exprs = StaticAnalysisAnalysis.sequence([evaluate_eval_expr(value, foreign_symbols, prelude_symbols, context) for value in values])
+
+      return analysis, CompositeExprDef.assemble(
+        instantiate_type_instance(prelude_type_defs['str']),
+        exprs,
+        lambda nodes: transfer_node_location(node, ast.JoinedStr(nodes))
+      )
+
     case ast.IfExp(test, body, orelse):
       analysis = StaticAnalysisAnalysis()
 

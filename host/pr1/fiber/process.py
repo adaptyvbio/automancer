@@ -312,22 +312,30 @@ class ProcessProgram(HeadProgram):
     global ProcessProgramMode
     Mode = ProcessProgramMode
 
-    analysis, data = self._block._data.evaluate_final(EvalContext(stack, cwd_path=self._handle.master.experiment.path))
+    self._mode = Mode.Starting()
+    self._handle.set_location(
+      ProcessProgramLocation(
+        mode=self._mode.export(),
+        pausable=False,
+        process=None,
+        time=time.time()
+      )
+    )
+
+    analysis, data = await self._block._data.evaluate_final_async(EvalContext(stack, cwd_path=self._handle.master.experiment.path))
+
+    self._handle.set_analysis(RuntimeAnalysis.downcast(analysis))
 
     if isinstance(data, EllipsisType):
       self._mode = Mode.Broken()
-      self._handle.send(ProgramExecEvent(
-        analysis=RuntimeAnalysis(
-          errors=analysis.errors,
-          warnings=analysis.warnings
-        ),
-        location=ProcessProgramLocation(
+      self._handle.set_location(
+        ProcessProgramLocation(
           mode=self._mode.export(),
           pausable=False,
           process=None,
           time=time.time()
         )
-      ))
+      )
 
       await self._mode.event.wait()
 

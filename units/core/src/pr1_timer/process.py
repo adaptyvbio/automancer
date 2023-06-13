@@ -223,7 +223,7 @@ def export_evaluable(target: Evaluable[PossiblyLocatedValue[T]], /, export_inner
         "type": "constant",
         "innerValue": export_inner_value(inner_value.value)
       }
-    case EvaluablePythonExpr(contents) | am.EvaluableChain(EvaluablePythonExpr(contents)):
+    case EvaluablePythonExpr(contents) | am.EvaluableChain(EvaluablePythonExpr(contents)) | am.EvaluableDynamicValue(EvaluablePythonExpr(contents)):
       return {
         "type": "expression",
         "contents": contents.value

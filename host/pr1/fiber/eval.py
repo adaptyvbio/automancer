@@ -45,7 +45,7 @@ EvalStack = dict[EvalSymbol, Any]
 
 @dataclass
 class EvalContext:
-  stack: EvalStack
+  stack: Optional[EvalStack]
   _: KW_ONLY
   cwd_path: Optional[Path] = None
 

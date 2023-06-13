@@ -22,14 +22,14 @@ EventIndex = NewType('EventIndex', int)
 
 @dataclass
 class ReportStaticEntry:
-  access_count: int = 0
-  accesses: list[tuple[EventIndex, Optional[EventIndex]]] = field(default_factory=list)
+  occurence_count: int = 0
+  occurences: list[tuple[EventIndex, Optional[EventIndex]]] = field(default_factory=list)
   children: dict[int, Self] = field(default_factory=dict)
 
   def export(self):
     return {
-      "accessCount": self.access_count,
-      "accesses": self.accesses,
+      "occurenceCount": self.occurence_count,
+      "occurences": self.occurences,
       "children": {
         child_id: child.export() for child_id, child in self.children.items()
       }
@@ -91,10 +91,10 @@ class ExperimentReportReader:
                 static_counterpart=parent_entry.static_counterpart.children.setdefault(change.block_child_id, ReportStaticEntry())
               )
 
-              if (entry.static_counterpart.access_count < 20) or event.analysis:
-                entry.static_counterpart.accesses.append((event_index, None))
+              if (entry.static_counterpart.occurence_count < 20) or event.analysis:
+                entry.static_counterpart.occurences.append((event_index, None))
 
-              entry.static_counterpart.access_count += 1
+              entry.static_counterpart.occurence_count += 1
 
               entries[entry_index] = entry
               parent_entry.children[change.block_child_id] = entry
@@ -103,7 +103,7 @@ class ExperimentReportReader:
               entries[change.index].location = change.location
             case TreeRemovalChange():
               entry = entries[change.index]
-              entry.static_counterpart.accesses[-1] = (entry.static_counterpart.accesses[-1][0], event_index)
+              entry.static_counterpart.occurences[-1] = (entry.static_counterpart.occurences[-1][0], event_index)
 
               del entries[change.index]
 

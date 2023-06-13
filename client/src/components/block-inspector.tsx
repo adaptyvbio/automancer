@@ -11,7 +11,7 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
 import { Application } from '../application';
-import { formatAbsoluteTimePair, formatDurationTerm } from '../format';
+import { formatDateOrTimePair, formatDurationTerm } from '../format';
 import { TimeSensitive } from './time-sensitive';
 import { getDateFromTerm } from '../term';
 
@@ -88,7 +88,7 @@ export function BlockInspector(props: {
                 <>
                   <div>{formatDurationTerm(leafPair.block.duration) ?? '\xa0'}</div>
                   {(startDate !== null) && (
-                    <div>{formatAbsoluteTimePair(startDate, getDateFromTerm(terms.end, now), { mode: 'directional' })}</div>
+                    <div>{formatDateOrTimePair(startDate, getDateFromTerm(terms.end, now), now, { display: 'date', format: 'react', mode: 'directional' })}</div>
                   )}
                 </>
               );

@@ -10,4 +10,13 @@
     inset: 0;
     opacity: 0;
   }
+
+  :global(.icon) {
+    @include icon($size: 20px);
+
+    line-height: 0;
+    vertical-align: middle;
+
+    translate: 0 -1px;
+  }
 }

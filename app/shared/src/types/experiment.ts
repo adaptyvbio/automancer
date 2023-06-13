@@ -29,8 +29,8 @@ export interface ExperimentReportInfo {
 }
 
 export interface ExperimentReportStaticEntry {
-  accessCount: number;
-  accesses: [ExperimentReportEventIndex, ExperimentReportEventIndex][];
+  occurenceCount: number;
+  occurences: [ExperimentReportEventIndex, ExperimentReportEventIndex][];
   children: Record<number, ExperimentReportStaticEntry>;
 }
 

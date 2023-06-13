@@ -14,7 +14,7 @@ import { Pool } from '../util';
 import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
 import { FeatureEntry, FeatureList } from './features';
 import { Application } from '../application';
-import { formatAbsoluteTimePair, formatRemainingTime } from '../format';
+import { formatDateOrTimePair, formatRemainingDuration } from '../format';
 import { TimeSensitive } from './time-sensitive';
 import { getDateFromTerm } from '../term';
 
@@ -115,12 +115,12 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                 return (
                   <>
                     {(endDate !== null)
-                      ? <div>{formatRemainingTime(endDate - now)}</div>
+                      ? <div>{formatRemainingDuration(endDate - now)}</div>
                       : (terms.end.type === 'forever')
                         ? <div>&infin;</div>
                         : <div>Unknown time left</div>}
                     {(startDate !== null) && (
-                      <div>{formatAbsoluteTimePair(startDate, endDate, { mode: 'directional' })}</div>
+                      <div>{formatDateOrTimePair(startDate, endDate, now, { display: 'date', format: 'react',  mode: 'directional' })}</div>
                     )}
                   </>
                 );

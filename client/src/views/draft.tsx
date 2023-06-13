@@ -27,7 +27,7 @@ import { Pool } from '../util';
 import { ViewDrafts } from './protocols';
 import { analyzeBlockPath } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
-import { formatAbsoluteTime, formatDurationTerm, formatRelativeDate } from '../format';
+import { formatDurationTerm, formatTimeDifference } from '../format';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 
 
@@ -444,11 +444,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         subtitle = (
           <TimeSensitive
             contents={() => {
-              let delta = (Date.now() - lastModified);
+              let delta = Date.now() - lastModified;
 
               return (delta < 5e3)
                 ? 'Just saved'
-                : `Last saved ${formatRelativeDate(lastModified)}`;
+                : `Last saved ${formatTimeDifference(-delta)}`;
               }
             }
             interval={1e3} />

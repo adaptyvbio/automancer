@@ -6,10 +6,10 @@ import viewStyles from '../../styles/components/view.module.scss';
 import { ContextMenuArea } from '../components/context-menu-area';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
-import { formatRelativeDate } from '../format';
 import { ViewProps } from '../interfaces/view';
 import * as util from '../util';
 import { Pool } from '../util';
+import { formatTimeDifference } from '../format';
 
 
 export class ViewExperiments extends Component<ViewProps> {
@@ -73,7 +73,7 @@ export class ViewExperiments extends Component<ViewProps> {
                         </div>
                         <dl className="clist-data">
                           <dt>Created</dt>
-                          <dd>{formatRelativeDate(experiment.creationDate)}</dd>
+                          <dd>{formatTimeDifference(experiment.creationDate - Date.now())}</dd>
                           <dt>Protocol</dt>
                           <dd>{experiment.master?.protocol.name ?? 'Idle'}</dd>
                         </dl>

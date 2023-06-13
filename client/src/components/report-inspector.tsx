@@ -11,11 +11,9 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
 import { Application } from '../application';
-import { formatAbsoluteTime, formatAbsoluteTimePair, formatDurationTerm } from '../format';
+import { formatDateOrTimePair, formatDigitalDate, formatDigitalTime, formatDurationTerm, formatPair } from '../format';
 import { TimeSensitive } from './time-sensitive';
 import { getDateFromTerm } from '../term';
-import { formatRelativeDate } from '../format';
-import { formatRelativeTime } from '../format';
 import { StaticSelect } from './static-select';
 
 
@@ -38,8 +36,11 @@ export function ReportInspector(props: {
     );
   }
 
+  let staticEntry = props.blockPath.reduce<ExperimentReportStaticEntry | null>((staticEntry, childId) => (staticEntry?.children[childId] ?? null), props.reportInfo.rootStaticEntry);
+  let occurences = (staticEntry?.occurences ?? []);
+
   let [events, setEvents] = useState<ExperimentReportEvents | null>(null);
-  let [selectedOccurenceIndex, setSelectedOccurenceIndex] = useState<number | null>(null);
+  let [selectedOccurenceIndex, setSelectedOccurenceIndex] = useState<number | null>((occurences.length > 0) ? 0 : null);
 
   let globalContext: GlobalContext = {
     app: props.app,
@@ -47,13 +48,11 @@ export function ReportInspector(props: {
     pool
   };
 
-  let staticEntry = props.blockPath.reduce<ExperimentReportStaticEntry | null>((staticEntry, childId) => (staticEntry?.children[childId] ?? null), props.reportInfo.rootStaticEntry);
-
   useEffect(() => {
     pool.add(async () => {
       let events = await props.host.client.request({
         type: 'getExperimentReportEvents',
-        eventIndices: (staticEntry?.accesses ?? []).flat(),
+        eventIndices: occurences.flat(),
         experimentId: props.experiment.id
       });
 
@@ -61,8 +60,8 @@ export function ReportInspector(props: {
     });
   }, []);
 
-  let location = (selectedOccurenceIndex !== null)
-    ? events![staticEntry!.accesses[selectedOccurenceIndex][0]].location
+  let location = events && (selectedOccurenceIndex !== null)
+    ? events[occurences[selectedOccurenceIndex][0]].location
     : null;
 
   let blockAnalysis = analyzeBlockPath(props.protocol, location, props.blockPath, globalContext);
@@ -103,21 +102,38 @@ export function ReportInspector(props: {
               <StaticSelect
                 options={[
                   { id: null, label: 'General form' },
-                  ...staticEntry.accesses.map((access, accessIndex) => {
-                    let startEvent = events![access[0]];
-                    let endEvent = events![access[1]];
+                  ...occurences.map(([startEventIndex, endEventIndex], occurenceIndex) => {
+                    let startEvent = events![startEventIndex];
+                    let endEvent = events![endEventIndex];
 
                     return {
-                      id: accessIndex,
-                      label: `${new Date(startEvent.date).toLocaleString()} ${new Date(endEvent.date).toLocaleString()}`
+                      id: occurenceIndex,
+                      label: formatDateOrTimePair(startEvent.date, endEvent.date, props.reportInfo.startDate, { display: 'time', format: 'text' })
                     };
                   })
                 ]}
                 selectedOptionId={selectedOccurenceIndex}
-                selectOption={(occurenceIndex) => void setSelectedOccurenceIndex(occurenceIndex)} />
+                selectOption={(occurenceIndex) => void setSelectedOccurenceIndex(occurenceIndex)}>
+                {(() => {
+                  if (selectedOccurenceIndex === null) {
+                    return 'General form';
+                  }
+
+                  let occurence = occurences[selectedOccurenceIndex];
+                  let startEvent = events![occurence[0]];
+                  let endEvent = events![occurence[1]];
+
+                  return (
+                    <>
+                      {formatDateOrTimePair(startEvent.date, endEvent.date, props.reportInfo.startDate, { display: 'time', format: 'react' })} (
+                      {formatDateOrTimePair(startEvent.date, endEvent.date, props.reportInfo.startDate, { display: 'date', format: 'react' })})
+                    </>
+                  );
+                })()}
+                <Icon name="height" />
+              </StaticSelect>
             )}
           </div>
-          {/* <div>{JSON.stringify(staticEntry?.accesses)}</div> */}
         </div>
 
         {blockAnalysis.isLeafBlockTerminal && (

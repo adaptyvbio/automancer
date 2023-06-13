@@ -1,214 +1,52 @@
 import { AnyDurationTerm } from 'pr1-shared';
+import { formatSuperscript } from 'quantops';
 import { ReactNode, createElement } from 'react';
 
 
 export interface TimeUnit {
   factor: number;
+  long: string;
+  name: Intl.RelativeTimeFormatUnit | null;
   narrow: string;
   short: string;
-  long: string;
 }
 
 export const TIME_UNITS: TimeUnit[] = [
-  { factor: 1, narrow: 'ms', short: 'msec', long: 'millisecond' },
-  { factor: 1000, narrow: 's', short: 'sec', long: 'second' },
-  { factor: 60e3, narrow: 'm', short: 'min', long: 'minute' },
-  { factor: 3600e3, narrow: 'h', short: 'hr', long: 'hour' },
-  { factor: 3600e3 * 24, narrow: 'd', short: 'day', long: 'day' },
-  { factor: 3600e3 * 24 * 7, narrow: 'w', short: 'week', long: 'week' }
+  { factor: 3600e3 * 24 * 7,
+    long: 'week',
+    name: 'week',
+    narrow: 'w',
+    short: 'week' },
+  { factor: 3600e3 * 24,
+    long: 'day',
+    name: 'day',
+    narrow: 'd',
+    short: 'day' },
+  { factor: 3600e3,
+    long: 'hour',
+    name: 'hour',
+    narrow: 'h',
+    short: 'hr' },
+  { factor: 60e3,
+    long: 'minute',
+    name: 'minute',
+    narrow: 'm',
+    short: 'min' },
+  { factor: 1000,
+    long: 'second',
+    name: 'second',
+    narrow: 's',
+    short: 'sec' },
+  { factor: 1,
+    long: 'millisecond',
+    name: null,
+    narrow: 'ms',
+    short: 'msec' }
 ];
 
-export const CLOCK_TIME_UNITS = TIME_UNITS.slice(1, 4).reverse();
+export const TIME_UNITS_REVERSED = TIME_UNITS.slice().reverse();
 
-
-/**
- * Formats a duration.
- *
- * To be replaced with [`Intl.DurationFormat`](https://github.com/tc39/proposal-intl-duration-format) once stable.
- *
- * @param input The duration, in milliseconds.
- * @param resolution The smallest fraction of the input to display. Defaults to `0.01` (1%).
- * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`), `narrow` (`1h 40m`) or `numeric` (`01:40`).
- */
-export function formatDuration(input: number, options?: {
-  range?: number;
-  resolution?: number;
-  style?: ('long' | 'narrow' | 'numeric' | 'short');
-}) {
-  let range = (options?.range ?? input);
-  let style = (options?.style ?? 'short');
-
-  let inputRest = Math.round(input);
-  let rangeRest = Math.round(range);
-  let resolution = inputRest * (options?.resolution ?? 0.01);
-
-  let units = (style !== 'numeric')
-    ? TIME_UNITS.slice()
-    : TIME_UNITS.slice(1, 4);
-
-  let segments: string[] = [];
-
-  for (let unit of units.reverse()) {
-    let withinResolution = inputRest > resolution;
-
-    let unitInputValue = Math.floor(inputRest / unit.factor);
-    let unitRangeValue = Math.floor(rangeRest / unit.factor);
-
-    inputRest %= unit.factor;
-    rangeRest %= unit.factor;
-
-    if (style === 'numeric') {
-      if ((unitRangeValue > 0) || TIME_UNITS.slice(1, 3).includes(unit)) {
-        segments.push(unitInputValue.toFixed().padStart(2, '0'));
-      }
-    } else {
-      if ((unitRangeValue > 0) && withinResolution) {
-        segments.push(unitInputValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + ((style === 'long') && (unitInputValue > 1) ? 's' : ''));
-      }
-    }
-  }
-
-  switch (style) {
-    case 'numeric':
-      return segments.join(':');
-    case 'long':
-      return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments);
-    case 'narrow':
-    case 'short':
-      return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments);
-  }
-}
-
-
-const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', {
-  localeMatcher: 'best fit',
-  numeric: 'auto',
-  style: 'long'
-});
-
-
-const timeDivisions: {
-  amount: number;
-  name: Intl.RelativeTimeFormatUnit;
-}[] = [
-  { amount: 60, name: 'seconds' },
-  { amount: 60, name: 'minutes' },
-  { amount: 24, name: 'hours' },
-  { amount: 7, name: 'days' },
-  { amount: 4.34524, name: 'weeks' },
-  { amount: 12, name: 'months' },
-  { amount: Infinity, name: 'years' }
-];
-
-export function formatRelativeDate(date: Date | number): string {
-  let duration = (new Date(date).getTime() - Date.now()) / 1000;
-
-  for (let division of timeDivisions) {
-    if (Math.abs(duration) < division.amount) {
-      return relativeTimeFormatter.format(Math.round(duration), division.name);
-    }
-
-    duration /= division.amount;
-  }
-
-  throw new Error();
-}
-
-
-export function formatDayDifference(value: number): ReactNode {
-  return (value !== 0)
-    ? createElement('sup', { key: 0 }, [
-      (value > 0) ? '+' : '\u2212', // &minus;
-      Math.abs(value).toFixed(0)
-    ])
-    : null;
-}
-
-
-/**
- * Formats a relative time.
- *
- * @param input The time, in milliseconds.
- */
-export function formatRelativeTime(input: number): ReactNode {
-  let rest = input;
-
-  let [hours, minutes, seconds] = CLOCK_TIME_UNITS.map((unit) => {
-    let value = Math.floor(rest / unit.factor);
-    rest %= unit.factor;
-
-    return value;
-  });
-
-  let dayDifference = Math.floor(input / 24 / 3600e3);
-
-  return [
-    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
-    formatDayDifference(dayDifference)
-  ];
-}
-
-
-/**
- * Formats an absolute time.
- *
- * @param input The time, in milliseconds.
- * @param options.ref A reference time used to indicate the time's day difference.
- */
-export function formatAbsoluteTime(input: number, options?: { ref?: number | null; }): ReactNode {
-  let date = new Date(input);
-
-  let ref = (options?.ref ?? Date.now());
-  let midnight = new Date(ref);
-  midnight.setHours(0, 0, 0, 0);
-
-  let dayDifference = (ref !== null)
-    ? Math.floor((input - midnight.getTime()) / 24 / 3600e3)
-    : 0;
-
-  return [
-    `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
-    formatDayDifference(dayDifference)
-  ];
-}
-
-
-/**
- * Formats a pair of absolute times.
- *
- * @param a The first time, in milliseconds.
- * @param b The second time, in milliseconds.
- * @param options.mode The mode to use, either `directional` (`10:00 → 11:00`) or `range` (`10:00 – 11:00`).
- */
-export function formatAbsoluteTimePair(a: number, b: number | null, options?: {
-  mode?: 'directional' | 'range';
-  ref?: number | null;
-}): ReactNode {
-  let symbol = {
-    directional: '\u2192', // &rarr;
-    range: '\u2013' // &ndash;
-  }[options?.mode ?? 'range'];
-
-  if (b !== null) {
-    let diff = Math.abs(b - a);
-
-    if (diff < 60e3) {
-      return formatAbsoluteTime(a);
-    }
-  }
-
-  return [
-    formatAbsoluteTime(a, { ref: (options?.ref ?? null) }),
-    '\xa0',
-    symbol,
-    ...((b !== null)
-      ? [
-        ' ',
-        formatAbsoluteTime(b, { ref: (options?.ref ?? null) })
-      ]
-      : [])
-  ];
-}
+export const CLOCK_TIME_UNITS = TIME_UNITS.slice(2, 5);
 
 
 export function formatDurationTerm(term: AnyDurationTerm): ReactNode {
@@ -223,38 +61,302 @@ export function formatDurationTerm(term: AnyDurationTerm): ReactNode {
 }
 
 
-export function formatRemainingTime(input: number, options?: { style?: 'long' | 'short'; }): ReactNode {
-  if (input < 60e3) {
-    return 'Less than a minute left';
-  }
+// ---
 
+
+export function formatUnitQuantity(unitValue: number, unit: TimeUnit, style: 'long' | 'narrow' | 'short') {
+  return unitValue.toFixed() + ((style !== 'narrow') ? ' ' : '') + unit[style] + ((style === 'long') && (unitValue > 1) ? 's' : '');
+}
+
+
+/**
+ * Format a duration in natural language.
+ *
+ * To be replaced with [`Intl.DurationFormat`](https://github.com/tc39/proposal-intl-duration-format) once stable.
+ *
+ * @param input The duration, in milliseconds.
+ * @param options.absoluteResolution The smallest absolute fraction of the input to display. Defaults to `0`, meaning all of the duration is displayed before taking `relativeResolution` into account.
+ * @param options.relativeResolution The smallest relative fraction of the input to display. Defaults to `0.01`, meaning at least 99% of the duration is displayed before taking `relativeResolution` into account.
+ * @param options.style The duration's style: `long` (`1 hour and 40 minutes`), `short` (`1 hr 40 min`), `narrow` (`1h 40m`) or `numeric` (`01:40`).
+ */
+export function formatDuration(input: number, options?: {
+  absoluteResolution?: number;
+  relativeResolution?: number;
+  style?: 'long' | 'narrow' | 'short';
+}) {
   let style = (options?.style ?? 'short');
+  let rest = Math.round(input);
 
-  let inputRest = Math.round(input);
+  let absoluteResolution = (options?.absoluteResolution ?? 0);
+  let relativeResolution = rest * (options?.relativeResolution ?? 0.01);
 
   let segments: string[] = [];
 
-  for (let unit of TIME_UNITS.slice().reverse()) {
-    let potentialInputRest = inputRest % unit.factor;
-    let unitInputValue: number;
+  for (let unit of TIME_UNITS) {
+    let unitValue = Math.floor(rest / unit.factor);
+    let newRest = rest % unit.factor;
 
-    if (potentialInputRest < 60e3) {
-      unitInputValue = Math.round(inputRest / unit.factor);
-      inputRest = 0;
+    if ((newRest < relativeResolution) || (newRest < absoluteResolution)) {
+      unitValue = Math.round(rest / unit.factor);
+      rest = 0;
     } else {
-      unitInputValue = Math.floor(inputRest / unit.factor);
-      inputRest = potentialInputRest;
+      rest = newRest;
     }
 
-    if (unitInputValue > 0) {
-      segments.push(unitInputValue.toFixed() + ' ' + unit[style] + ((style === 'long') && (unitInputValue > 1) ? 's' : ''));
+    if (unitValue > 0) {
+      segments.push(formatUnitQuantity(unitValue, unit, style));
+    }
+
+    if (rest <= 0) {
+      break;
     }
   }
 
   switch (style) {
     case 'long':
-      return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments) + ' left';
+      return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments);
+    case 'narrow':
     case 'short':
-      return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments) + ' left';
+      return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' }).format(segments);
   }
+}
+
+/**
+ * Format a remaining duration in natural language, returning values such as "3 minutes left".
+ *
+ * @param input The duration, in milliseconds.
+ * @param options.style The style to use, one of `long` (`2 minutes left`), `short` (`2 min left`) or `narrow` (`2m left`). Defaults to `short`.
+ * @returns The formatted duration, suitable for both text and React.
+ */
+export function formatRemainingDuration(input: number, options?: {
+  style?: 'long' | 'narrow' | 'short';
+}) {
+  if (input < 60e3) {
+    return 'Less than a minute left';
+  }
+
+  for (let unit of TIME_UNITS) {
+    if (input > unit.factor) {
+      let unitValue = Math.round(input / unit.factor);
+
+      return formatUnitQuantity(unitValue, unit, options?.style ?? 'short') + ' left';
+    }
+  }
+
+  throw new Error();
+}
+
+
+export function formatDigitialDisplayWithoutDays(hours: number, minutes: number, seconds: number) {
+  return [hours, minutes]
+    .map((value) => value.toString().padStart(2, '0'))
+    .join(':');
+}
+
+export function formatDigitalDisplayAsReact(days: number, hours: number, minutes: number, seconds: number): ReactNode {
+  return [
+    formatDigitialDisplayWithoutDays(hours, minutes, seconds),
+    (days !== 0)
+      ? createElement('sup', { key: 0 }, [
+        (days > 0) ? '+' : '\u2212', // &minus;
+        Math.abs(days).toFixed(0)
+      ])
+      : null
+  ];
+}
+
+export function formatDigitalDisplayAsText(days: number, hours: number, minutes: number, seconds: number) {
+  return formatDigitialDisplayWithoutDays(hours, minutes, seconds)
+    + ((days !== 0)
+      ? formatSuperscript(days, { sign: true })
+      : '');
+}
+
+
+/**
+ * Format a digital display, returning values such as "01:02:03⁺¹".
+ *
+ * @param days The number of days.
+ * @param hours The number of hours.
+ * @param minutes The number of minutes.
+ * @param seconds The number of seconds.
+ * @param options.format The format to use, either `react` (React nodes) or `text` (plain text).
+ */
+export function formatDigitalDisplay(days: number, hours: number, minutes: number, seconds: number, options: { format: 'react'; }): ReactNode;
+export function formatDigitalDisplay(days: number, hours: number, minutes: number, seconds: number, options: { format: 'text'; }): string;
+export function formatDigitalDisplay(days: number, hours: number, minutes: number, seconds: number, options: { format: 'react' | 'text'; }) {
+  switch (options.format) {
+    case 'react':
+      return formatDigitalDisplayAsReact(days, hours, minutes, seconds);
+    case 'text':
+      return formatDigitalDisplayAsText(days, hours, minutes, seconds);
+  }
+}
+
+
+/**
+ * Format a date with a digital layout.
+ *
+ * @param input The date, in milliseconds.
+ * @param ref The reference date used to calculate the day difference, in milliseconds.
+ */
+export function formatDigitalDate(input: number, ref: number, options: { format: 'text' }): string;
+export function formatDigitalDate(input: number, ref: number, options: { format: 'react' }): ReactNode;
+export function formatDigitalDate(input: number, ref: number, options: { format: any; }) {
+  let date = new Date(input);
+
+  let midnight = new Date(ref);
+  midnight.setHours(0, 0, 0, 0);
+
+  let days = (ref !== null)
+    ? Math.floor((input - midnight.getTime()) / 24 / 3600e3)
+    : 0;
+
+    return formatDigitalDisplay(days, date.getHours(), date.getMinutes(), date.getSeconds(), { format: options.format });
+}
+
+
+/**
+ * Format a time with a digital layout.
+ *
+ * @param input The time, in milliseconds.
+ */
+export function formatDigitalTime(input: number, options: { format: 'text' }): string;
+export function formatDigitalTime(input: number, options: { format: 'react' }): ReactNode;
+export function formatDigitalTime(input: number, options: { format: any; }) {
+  let rest = input;
+
+  let [hours, minutes, seconds] = CLOCK_TIME_UNITS.map((unit) => {
+    let value = Math.floor(rest / unit.factor);
+    rest %= unit.factor;
+
+    return value;
+  });
+
+  let days = Math.floor(input / 24 / 3600e3);
+
+  return formatDigitalDisplay(days, hours, minutes, seconds, { format: options.format });
+}
+
+
+/**
+ * Format a pair of dates or times.
+ *
+ * @param a The first time, in milliseconds.
+ * @param b The second time, in milliseconds. If `null`, it is omitted.
+ * @param ref The reference time used to calculate the day difference, in milliseconds.
+ * @param options.display The display to use, either `date` or `time`.
+ * @param options.mode The mode to use, either `directional` (`10:00 → 11:00`) or `range` (`10:00 – 11:00`).
+ */
+export function formatDateOrTimePair(a: number, b: number | null, ref: number, options: {
+  display: 'date' | 'time';
+  format: 'react';
+  mode?: 'directional' | 'range';
+}): ReactNode;
+export function formatDateOrTimePair(a: number, b: number | null, ref: number, options: {
+  display: 'date' | 'time';
+  format: 'text';
+  mode?: 'directional' | 'range';
+}): string;
+export function formatDateOrTimePair(a: number, b: number | null, ref: number, options: {
+  display: 'date' | 'time';
+  format: any;
+  mode?: 'directional' | 'range';
+}): ReactNode {
+  let symbol = {
+    directional: '\u2192', // &rarr;
+    range: '\u2013' // &ndash;
+  }[options?.mode ?? 'range'];
+
+  let format = (item: number) => {
+    switch (options.display) {
+      case 'date':
+        return formatDigitalDate(item, ref, { format: options.format });
+      case 'time':
+        return formatDigitalTime(item - ref, { format: options.format });
+    }
+  };
+
+  if (b !== null) {
+    let diff = Math.abs(b - a);
+
+    if (diff < 60e3) {
+      return format(a);
+    }
+  }
+
+  return [
+    format(a),
+    '\xa0',
+    symbol,
+    ...((b !== null)
+      ? [' ', format(b)]
+      : [])
+  ];
+}
+
+
+/**
+ * Format a pair of values.
+ *
+ * @param a The first value.
+ * @param b The second value. If `null`, it is omitted.
+ * @param options.mode The mode to use, either `directional` (`10 → 11`) or `range` (`10 – 11`).
+ */
+export function formatPair(a: ReactNode, b: ReactNode | null, options: {
+  format: 'react';
+  mode?: 'directional' | 'range';
+}): ReactNode;
+export function formatPair(a: string, b: string | null, options: {
+  format: 'text';
+  mode?: 'directional' | 'range';
+}): string;
+export function formatPair(a: ReactNode | string, b: ReactNode | string | null, options: {
+  format: any;
+  mode?: 'directional' | 'range';
+}) {
+  if (b === null) {
+    return a;
+  }
+
+  let symbol = {
+    directional: '\u2192', // &rarr;
+    range: '\u2013' // &ndash;
+  }[options?.mode ?? 'range'];
+
+  switch (options.format) {
+    case 'react':
+      return [a, '\xa0', symbol, ' ', b];
+    case 'text':
+      return a + '\xa0' + symbol + ' ' + b;
+    default:
+      throw new Error();
+  }
+}
+
+
+/**
+ * Format a relative time difference.
+ *
+ * @param input The time difference, in milliseconds.
+ * @param options.style The style to use, one of `long`, `short` or `narrow`. Defaults to `long`.
+ */
+export function formatTimeDifference(input: number, options?: {
+  style: 'long' | 'narrow' | 'short';
+}) {
+  const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', {
+    localeMatcher: 'best fit',
+    numeric: 'auto',
+    style: (options?.style ?? 'long')
+  });
+
+  for (let [unitIndex, unit] of TIME_UNITS_REVERSED.entries()) {
+    let nextUnit = TIME_UNITS_REVERSED[unitIndex + 1];
+
+    if (unit.name && (!nextUnit || (Math.abs(input) < nextUnit.factor))) {
+      return relativeTimeFormatter.format(Math.round(input / unit.factor), unit.name);
+    }
+  }
+
+  return relativeTimeFormatter.format(0, 'second');
 }

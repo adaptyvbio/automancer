@@ -17,8 +17,7 @@ from ..fiber.expr import (Evaluable, EvaluableConstantValue, PythonExpr,
                           PythonExprKind, PythonExprObject)
 from ..langservice import *
 from ..reader import (LocatedDict, LocatedString, LocatedValue,
-                      PossiblyLocatedValue, ReliableLocatedDict,
-                      UnlocatedValue)
+                      PossiblyLocatedValue, ReliableLocatedDict)
 from ..ureg import ureg
 from ..util.misc import create_datainstance
 from ..util.parser import is_identifier
@@ -391,7 +390,8 @@ class DivisibleCompositeDictType(Type, Generic[T]):
     if isinstance(primitive_result, EllipsisType):
       return analysis, Ellipsis
 
-    assert isinstance(obj, LocatedDict)
+    assert isinstance(obj, LocatedValue)
+    assert isinstance(obj.value, dict)
 
     if isinstance(obj, ReliableLocatedDict) and self._foldable:
       if self._foldable:
@@ -409,7 +409,7 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     attr_values = { key: dict[LocatedString, Any]() for key in self._attributes_by_key.keys() }
 
-    for obj_key, obj_value in obj.items():
+    for obj_key, obj_value in obj.value.items():
       unique_attr = self._attributes_by_unique_name.get(obj_key)
 
       # e.g. 'foo/bar'
@@ -449,14 +449,14 @@ class DivisibleCompositeDictType(Type, Generic[T]):
           analysis.errors.append(MissingKeyError(obj, attr_name))
           failure = True
 
-    return analysis, (attr_values if not failure else Ellipsis)
+    return analysis, (LocatedValue(attr_values, obj.area) if not failure else Ellipsis)
 
-  def analyze_namespace(self, attr_values: dict[T, dict[LocatedString, Any]], /, context: 'AnalysisContext', *, key: T):
+  def analyze_namespace(self, attr_values: LocatedValue[dict[T, dict[LocatedString, Any]]], /, context: 'AnalysisContext', *, key: T):
     analysis = LanguageServiceAnalysis()
     failure = False
     result = dict[PossiblyLocatedValue[str], Any]()
 
-    for attr_name, attr_value in attr_values[key].items():
+    for attr_name, attr_value in attr_values.value[key].items():
       attr = self._attributes_by_key[key][attr_name]
       attr_result = analysis.add(attr.analyze(attr_value, attr_name, context))
 
@@ -470,8 +470,8 @@ class DivisibleCompositeDictType(Type, Generic[T]):
 
     for attr_name, attr in self._attributes_by_key[key].items():
       if not (attr_name in result) and not isinstance(attr._default, EllipsisType):
-        located_default = UnlocatedValue(attr._default)
-        result[UnlocatedValue(attr_name)] = EvaluableConstantValue(located_default) if context.auto_expr else located_default
+        located_default = LocatedValue(attr._default, attr_values.area)
+        result[LocatedValue(attr_name, attr_values.area)] = EvaluableConstantValue(located_default) if context.auto_expr else located_default
 
     return analysis, result
 

@@ -24,7 +24,7 @@ from .expr import Evaluable
 
 if TYPE_CHECKING:
   from ..host import Host
-  from ..units.base import BaseMasterRunner
+  from ..units.base import BaseRunner
   from .master2 import ProgramHandle
   from .process import BaseProcess
 
@@ -108,7 +108,7 @@ class ProtocolUnitDetails:
   def create_adoption_stack(self):
     return EvalStack()
 
-  def create_runtime_stack(self, runner: 'BaseMasterRunner'):
+  def create_runtime_stack(self, runner: 'BaseRunner'):
     return EvalStack()
 
 @dataclass

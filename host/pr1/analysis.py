@@ -28,6 +28,12 @@ class BaseAnalysis:
 
     return self, other_value
 
+  def add_downcast(self, other: 'tuple[BaseAnalysis, T]', /) -> T:
+    other_analysis, other_value = other
+    self += self.downcast(other_analysis)
+
+    return other_value
+
   def add_mapping(self, other: dict[T, tuple[Self, S]], /) -> dict[T, S]:
     return { key: self.add(value) for key, value in other.items() }
 

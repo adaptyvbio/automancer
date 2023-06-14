@@ -4,13 +4,12 @@ import shutil
 import sys
 import time
 import uuid
-from graphlib import TopologicalSorter
 from types import EllipsisType
 from typing import Any, Optional, Protocol, cast
 
 from . import logger, reader
 from .analysis import DiagnosticAnalysis
-from .devices.nodes.collection import CollectionNode, DeviceNode
+from .devices.nodes.collection import CollectionNode
 from .devices.nodes.common import BaseNode, NodeId, NodePath
 from .document import Document
 from .draft import Draft, DraftCompilation
@@ -20,8 +19,7 @@ from .fiber.parser import AnalysisContext
 from .input import (Attribute, BoolType, KVDictType, PrimitiveType, RecordType,
                     StrType)
 from .langservice import LanguageServiceAnalysis
-from .unit import UnitManager
-from .ureg import ureg
+from .plugin.manager import PluginManager
 from .util.misc import create_datainstance
 from .util.pool import Pool
 
@@ -55,6 +53,19 @@ class HostRootNode(CollectionNode):
     return node
 
 
+class PluginConf(Protocol):
+  development: bool
+  enabled: bool
+  module: Optional[str]
+  options: reader.LocatedValue[dict[str, Any]]
+  path: Optional[str]
+
+class HostConf(Protocol):
+  id: str
+  name: str
+  plugin: dict[str, PluginConf]
+
+
 class Host:
   def __init__(self, backend, update_callback):
     self.backend = backend
@@ -65,7 +76,7 @@ class Host:
     self.experiments_path = self.data_dir / "experiments"
     self.experiments_path.mkdir(exist_ok=True)
 
-    self.devices = dict[str, DeviceNode]()
+    self.devices = dict[NodeId, BaseNode]()
     self.pool: Pool
     self.root_node = HostRootNode(self.devices)
 
@@ -76,29 +87,15 @@ class Host:
 
     # -- Load configuration -------------------------------
 
-    class PluginConf(Protocol):
-      development: str
-      enabled: bool
-      module: Optional[str]
-      options: Optional[dict[str, Any]]
-      path: Optional[str]
-
-    class HostConf(Protocol):
-      id: str
-      name: str
-      units: dict[str, PluginConf]
-
     conf_type = RecordType({
       'id': StrType(),
       'name': StrType(),
-      'units': KVDictType(
+      'plugins': KVDictType(
         StrType(),
         RecordType({
           'development': Attribute(BoolType(), default=False),
           'enabled': Attribute(BoolType(), default=True),
-          'module': Attribute(StrType(), default=None),
-          'options': Attribute(PrimitiveType(dict), default=None),
-          'path': Attribute(StrType(), default=None)
+          'options': Attribute(PrimitiveType(dict), default={})
         })
       ),
       'version': PrimitiveType(int)
@@ -106,36 +103,35 @@ class Host:
 
     conf_path = (self.data_dir / "setup.yml")
 
-    if conf_path.exists():
-      document = Document.text((self.data_dir / "setup.yml").open().read())
-
-      analysis = LanguageServiceAnalysis()
-      conf_data = analysis.add(reader.loads2(document.source))
-      raw_conf = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
-
-      analysis.log_diagnostics(logger)
-
-      if isinstance(raw_conf, EllipsisType) or analysis.errors:
-        sys.exit(1)
-
-      conf: HostConf = cast(reader.LocatedValue, raw_conf).dislocate()
-
-      units_conf = {
-        namespace: create_datainstance({
-          **conf.units[namespace]._asdict(), # type: ignore
-          'options': raw_unit_conf.value.options
-        }) for namespace, raw_unit_conf in (raw_conf.value.units or dict()).items()
-      }
-    else:
+    if not conf_path.exists():
       conf: HostConf = create_datainstance({
         'id': hex(uuid.getnode())[2:],
         'name': platform.node(),
-        'units': {},
+        'plugins': {},
         'version': 1
       })
 
-      units_conf = dict()
       conf_path.open("w").write(reader.dumps(conf))
+
+    document = Document.text((self.data_dir / "setup.yml").open().read())
+
+    analysis = LanguageServiceAnalysis()
+    conf_data = analysis.add(reader.loads2(document.source))
+    raw_conf = analysis.add(conf_type.analyze(conf_data, AnalysisContext()))
+
+    analysis.log_diagnostics(logger)
+
+    if isinstance(raw_conf, EllipsisType) or analysis.errors:
+      sys.exit(1)
+
+    conf: HostConf = cast(reader.LocatedValue, raw_conf).dislocate()
+
+    plugins_conf = {
+      namespace.value: create_datainstance({
+        **conf.plugins[namespace]._asdict(), # type: ignore
+        'options': raw_plugin_conf.value.options
+      }) for namespace, raw_plugin_conf in (raw_conf.value.plugins or dict()).items()
+    }
 
     self.id = conf.id
     self.name = conf.name
@@ -145,44 +141,32 @@ class Host:
     # -- Load units ---------------------------------------
 
     self.executors = dict()
-    self.manager = UnitManager(units_conf)
+    self.manager = PluginManager(reader.LocatedValue(plugins_conf, raw_conf))
 
-    logger.info(f"Loaded {len(self.manager.units)} units")
+    logger.info(f"Loaded {len(self.manager.plugins)} plugins")
 
     analysis = DiagnosticAnalysis()
 
-    for namespace in self.manager.units.keys():
-      unit_analysis, executor = self.manager.create_executor(namespace, host=self)
-      analysis += unit_analysis
+    for namespace in self.manager.plugins.keys():
+      executor = analysis.add_downcast(self.manager.create_executor(namespace, host=self))
 
-      if executor and not isinstance(executor, EllipsisType):
+      if not isinstance(executor, EllipsisType):
         self.executors[namespace] = executor
 
     analysis.log_diagnostics(logger)
 
-
   @property
-  def ordered_namespaces(self):
-    graph = {
-      namespace: unit.Runner.dependencies for namespace, unit in self.units.items() if hasattr(unit, 'Runner')
-    }
-
-    return list(TopologicalSorter(graph).static_order())
-
-  @property
-  def units(self):
-    return self.manager.units
+  def plugins(self):
+    return self.manager.plugins
 
   async def start(self):
     logger.info("Initializing host")
 
-    async with Pool.open("Host pool") as pool:
-      self.pool = pool
-
+    async with Pool.open("Host pool") as self.pool:
       logger.debug("Initializing executors")
 
       for executor in self.executors.values():
-        await pool.wait_until_ready(executor.start())
+        await self.pool.wait_until_ready(executor.start())
 
       logger.debug("Initialized executors")
       yield
@@ -212,7 +196,7 @@ class Host:
 
     analysis = DiagnosticAnalysis()
 
-    for unit_info in self.manager.units_info.values():
+    for unit_info in self.manager.plugin_infos.values():
       namespace = unit_info.namespace
 
       if unit_info.enabled and unit_info.development:
@@ -223,7 +207,7 @@ class Host:
         unit_analysis, executor = self.manager.create_executor(namespace, host=self)
         analysis += unit_analysis
 
-        if executor and not isinstance(executor, EllipsisType):
+        if not isinstance(executor, EllipsisType):
           self.executors[namespace] = executor
           await executor.initialize()
 
@@ -237,25 +221,25 @@ class Host:
         "name": self.name,
         "startTime": self.start_time,
         "units": {
-          unit_info.namespace: {
-            "development": unit_info.development,
-            "enabled": unit_info.enabled,
-            "hasClient": hasattr(unit_info.unit, 'client_path'),
+          plugin_info.namespace: {
+            "development": plugin_info.development,
+            "enabled": plugin_info.enabled,
+            "hasClient": hasattr(plugin_info.plugin, 'client_path'),
             "metadata": {
-              "author": unit_info.metadata.author,
-              "description": unit_info.metadata.description,
+              "author": plugin_info.metadata.author,
+              "description": plugin_info.metadata.description,
               "icon": {
-                "kind": unit_info.metadata.icon.kind,
-                "value": unit_info.metadata.icon.value
-              } if unit_info.metadata.icon else None,
-              "license": unit_info.metadata.license,
-              "title": unit_info.metadata.title,
-              "url": unit_info.metadata.url,
-              "version": unit_info.metadata.version
+                "kind": plugin_info.metadata.icon.kind,
+                "value": plugin_info.metadata.icon.value
+              } if plugin_info.metadata.icon else None,
+              "license": plugin_info.metadata.license,
+              "title": plugin_info.metadata.title,
+              "url": plugin_info.metadata.url,
+              "version": plugin_info.metadata.version
             },
-            "namespace": unit_info.namespace,
-            "version": unit_info.version
-          } for unit_info in self.manager.units_info.values()
+            "namespace": plugin_info.namespace,
+            "version": plugin_info.version
+          } for plugin_info in self.manager.plugin_infos.values()
         }
       },
       "experiments": {

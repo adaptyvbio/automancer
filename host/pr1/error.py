@@ -89,3 +89,12 @@ class Diagnostic(Exportable):
       "references": [ref.export() for ref in self.references],
       "trace": [ref.export() for ref in self.trace] if (self.trace is not None) else None
     }
+
+
+__all__ = [
+  'Diagnostic',
+  'DiagnosticDocumentReference',
+  'DiagnosticReference',
+  'ErrorFileReference',
+  'Trace'
+]

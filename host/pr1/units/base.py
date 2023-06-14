@@ -1,59 +1,34 @@
 import asyncio
 import functools
-import pickle
 from abc import ABC
 from asyncio import Future
 from collections import namedtuple
-from typing import TYPE_CHECKING, Any, Optional, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .. import logger as root_logger
-from ..input import AnyType
+from ..input import RecordType, Type
 
 if TYPE_CHECKING:
   from ..fiber.master2 import Master
+  from ..host import Host
 
 
 Metadata = namedtuple("Metadata", ["author", "description", "icon", "license", "title", "url", "version"], defaults=[None, None, None, None, None, None, None])
 MetadataIcon = namedtuple("MetadataIcon", ["kind", "value"])
 
 
-logger = root_logger.getChild("unit")
+plugin_logger = root_logger.getChild("plugin")
+
+# @deprecated
+logger = plugin_logger
 
 
 class BaseParser:
   pass
 
 
-class BaseRunner(Protocol):
-  pass
-
-
-  def transfer_state(self):
-    pass
-
-  def write_state(self):
-    pass
-
-
-class BaseProcessRunner(BaseRunner):
-  def get_state(self):
-    return dict()
-
-  def export_state(self, state):
-    return None
-
-  def import_state(self, data_state):
-    return None
-
-  async def run_process(self, segment, seg_index, state):
-    pass
-
-  def pause_process(self, segment, seg_index):
-    return dict()
-
-
 class BaseExecutor:
-  options_type = AnyType()
+  options_type: ClassVar[Type] = RecordType({})
 
   """
   Constructs an executor.
@@ -63,7 +38,7 @@ class BaseExecutor:
   conf : dict
     Section of the setup configuration regarding that unit. An empty dict if not specified in the configuration.
   """
-  def __init__(self, conf, *, host):
+  def __init__(self, conf, *, host: 'Host'):
     pass
 
   def load(self, context):
@@ -126,7 +101,7 @@ class BaseExecutor:
     return str()
 
 
-class BaseMasterRunner(ABC):
+class BaseRunner(ABC):
   def __init__(self, master: 'Master'):
     ...
 
@@ -138,3 +113,14 @@ class BaseMasterRunner(ABC):
 
   async def request(self, request: Any, /, agent) -> Any:
     pass
+
+
+__all__ = [
+  'BaseExecutor',
+  'BaseParser',
+  'BaseRunner',
+  'BaseRunner',
+  'Metadata',
+  'MetadataIcon',
+  'plugin_logger'
+]

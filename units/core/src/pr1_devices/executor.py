@@ -10,8 +10,6 @@ from . import logger
 
 
 class Executor(BaseExecutor):
-  options_type = am.RecordType({})
-
   def __init__(self, conf, *, host: am.Host):
     self._channels = set()
     self._claims = dict[tuple[Any, am.ValueNode], Claim]()

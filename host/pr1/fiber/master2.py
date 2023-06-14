@@ -46,7 +46,7 @@ class Master:
     self.start_time: float
 
     self.runners = {
-      namespace: unit.MasterRunner(self) for namespace, unit in self.host.units.items() if hasattr(unit, 'MasterRunner')
+      namespace: plugin.Runner(self) for namespace, plugin in self.host.plugins.items() if hasattr(plugin, 'Runner')
     }
 
     # TODO: Add additional analysis items (e.g. unavailable device)

@@ -1,12 +1,10 @@
 import * as idb from 'idb-keyval';
 
 import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
-import { Pool } from '../util';
-import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
-import { DraftId, DraftPrimitive } from '../draft';
-import * as util from '../util';
 import { BrowserStorageStore } from '../store/browser-storage';
-import { Store } from '../store/base';
+import * as util from '../util';
+import { Pool } from '../util';
+import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 
 
 interface BrowserStoreMainEntry {
@@ -21,21 +19,22 @@ export type BrowserStoreDraftsEntry = Record<DraftInstanceId, {
 
 
 export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot> implements DraftDocument {
-  id: DraftDocumentId = crypto.randomUUID() as DraftDocumentId;
-  lastModified: number | null = null;
+  id = crypto.randomUUID() as DraftDocumentId;
+  contents: string | null = null;
+  lastExternalModificationDate: number | null = null;
+  lastModificationDate: number | null = null;
   readonly = false;
-  source: {
-    contents: string;
-    lastModified: number;
-  } | null = null;
 
   readable: boolean = false;
   writable: boolean = false;
 
-  _attachedDraftInstances = new Set<BrowserDraftInstance>();
   _handle: FileSystemFileHandle;
-  _loadingPromise: Promise<void> | null = null;
-  _writing = false;
+  private _loadingPromise: Promise<void> | null = null;
+  private _polling = false;
+  private _pollTimeoutId: number | null = null;
+  private _pool = new Pool();
+  private _watcherCount = 0;
+  private _writing = false;
 
   constructor(handle: FileSystemFileHandle) {
     super();
@@ -47,12 +46,13 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
       model: this,
 
       id: this.id,
+      contents: this.contents,
       deleted: false,
-      lastModified: this.lastModified,
+      lastExternalModificationDate: this.lastExternalModificationDate,
+      lastModificationDate: this.lastModificationDate,
       path: [this._handle.name],
       possiblyWritable: true,
       readable: this.readable,
-      source: this.source,
       writable: this.writable
     };
   }
@@ -62,17 +62,15 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     this.writable = ((await this._handle.queryPermission({ mode: 'readwrite' })) === 'granted');
   }
 
-  async _load() {
+  private async _load() {
     if (!this._loadingPromise) {
       this._loadingPromise = (async () => {
         let file = await this._handle.getFile();
 
-        if (file.lastModified !== this.lastModified) {
-          this.lastModified = file.lastModified;
-          this.source = {
-            contents: await file.text(),
-            lastModified: file.lastModified
-          };
+        if (file.lastModified !== this.lastModificationDate) {
+          this.contents = await file.text();
+          this.lastExternalModificationDate = file.lastModified;
+          this.lastModificationDate = file.lastModified;
 
           this._update();
         }
@@ -82,6 +80,44 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     }
 
     await this._loadingPromise;
+  }
+
+  private _poll() {
+    this._pollTimeoutId = setTimeout(() => {
+      this._pollTimeoutId = null;
+
+      this._pool.add(async () => {
+        await this._load();
+
+        if (this._polling) {
+          this._poll();
+        }
+      });
+    }, 1000);
+  }
+
+  private _shouldPoll() {
+    return (this._watcherCount > 0) && this.readable;
+  }
+
+  private _updatePolling() {
+    if (this._polling && !this._shouldPoll()) {
+      this._polling = false;
+
+      if (this._pollTimeoutId !== null) {
+        clearTimeout(this._pollTimeoutId);
+        this._pollTimeoutId = null;
+      }
+    }
+
+    if (!this._polling && this._shouldPoll()) {
+      this._polling = true;
+
+      this._pool.add(async () => {
+        await this._load();
+        this._poll();
+      });
+    }
   }
 
   async request() {
@@ -107,6 +143,16 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     }
   }
 
+  async watchContents(options: { signal: AbortSignal; }) {
+    this._watcherCount += 1;
+    this._updatePolling();
+
+    options.signal.addEventListener('abort', () => {
+      this._watcherCount -= 1;
+      this._updatePolling();
+    });
+  }
+
   async write(contents: string) {
     if (this._writing) {
       throw new Error('Already writing');
@@ -120,7 +166,7 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
 
     let file = await this._handle.getFile();
 
-    this.lastModified = file.lastModified;
+    this.lastModificationDate = file.lastModified;
     this._update();
     this._writing = false;
 
@@ -214,78 +260,6 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
 }
 
 
-export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
-  closed: Promise<void>;
-
-  private _appBackend: BrowserAppBackend;
-  private _callback: ((changedDocumentIds: Set<DraftDocumentId>) => void);
-  private _documents = new Set<BrowserDraftDocument>();
-  private _pool = new Pool();
-  private _signal: AbortSignal;
-  private _timeoutId!: number | null;
-
-  constructor(callback: ((changedDocumentIds: Set<DraftDocumentId>) => void), options: { signal: AbortSignal; }, appBackend: BrowserAppBackend) {
-    this._appBackend = appBackend;
-    this._callback = callback;
-    this._signal = options.signal;
-
-    this._planPoll();
-
-    this.closed = new Promise<void>((resolve) => {
-      this._signal.addEventListener('abort', () => void resolve());
-    }).then(async () => {
-      if (this._timeoutId !== null) {
-        clearTimeout(this._timeoutId);
-        this._timeoutId = null;
-      }
-
-      await this._pool.wait();
-    });
-  }
-
-  async _poll() {
-    for (let document of this._documents) {
-      if (document.readable && !document._writing) {
-        await document._load();
-      }
-    }
-  }
-
-  _planPoll() {
-    this._timeoutId = setTimeout(() => {
-      this._pool.add(this._poll());
-      this._planPoll();
-    }, 1000);
-  }
-
-  async add(documentIds: Iterable<DraftDocumentId>) {
-    let documents = Array.from(documentIds).map((id) => this._appBackend._documents[id]);
-
-    for (let document of documents) {
-      document.watchSnapshot(() => {
-        this._callback(new Set([document.id]));
-      });
-    }
-
-    for (let document of documents) {
-      if (document.readable) {
-        await document._load();
-      }
-    }
-
-    for (let document of documents) {
-      this._documents.add(document);
-    }
-  }
-
-  remove(documentIds: Iterable<DraftDocumentId>) {
-    for (let documentId of documentIds) {
-      this._documents.delete(this._appBackend._documents[documentId]);
-    }
-  }
-}
-
-
 export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> implements AppBackend {
   static version = 1;
 
@@ -363,10 +337,6 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     }
 
     return candidates;
-  }
-
-  watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }) {
-    return new BrowserDraftDocumentWatcher(callback, options, this);
   }
 
   async _createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {

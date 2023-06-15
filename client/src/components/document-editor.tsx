@@ -43,7 +43,7 @@ export class DocumentEditor extends React.Component<DocumentEditorProps, Documen
             </div>
           </div>
         )}
-        {this.props.documentItem.model && (
+        {this.props.documentItem.textModel && (
           <TextEditor {...this.props} />
         )}
       </>

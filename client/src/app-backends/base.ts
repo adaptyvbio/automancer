@@ -71,7 +71,15 @@ export interface DraftDocument extends SnapshotTarget<DraftDocumentSnapshot> {
   reveal?(): Promise<void>;
 
   /**
-   * Writes to the document.
+   * Watch the document for content changes.
+   *
+   * @param options.signal An `AbortSignal` used to cancel stop watching the document.
+   */
+  watchContents(options: { signal: AbortSignal; }): void;
+
+  /**
+   * Write to the document.
+   *
    * @param contents The contents to write to the document, encoded as UTF-8.
    * @returns A promise that resolves to an object which indicates the date on which the document was written.
    */
@@ -82,15 +90,17 @@ export interface DraftDocumentSnapshot {
   model: DraftDocument;
 
   id: DraftDocumentId;
+  contents: string | null;
   deleted: boolean;
-  lastModified: number | null;
+  lastModificationDate: number | null;
+  lastExternalModificationDate: number | null;
   path: DraftDocumentPath;
   possiblyWritable: boolean;
   readable: boolean;
-  source: {
-    contents: string;
-    lastModified: number;
-  } | null;
+  // source: {
+  //   contents: string;
+  //   lastModified: number;
+  // } | null;
   writable: boolean;
 }
 
@@ -105,14 +115,6 @@ export interface DraftCandidate {
    * Create a {@link DraftInstance} from this candidate.
    */
   createInstance(): Promise<DraftInstance>;
-}
-
-
-export interface DraftDocumentWatcher {
-  closed: Promise<void>;
-
-  add(documentIds: Iterable<DraftDocumentId>): Promise<void>;
-  remove(documentIds: Iterable<DraftDocumentId>): void;
 }
 
 
@@ -139,15 +141,6 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
    * @param options.directory Whether to open a directory dialog rather than a file dialog. Used in browser frontends only.
    */
   queryDraftCandidates(options: { directory: boolean; }): Promise<DraftCandidate[]>;
-
-  /**
-   * Watch a set of documents for changes.
-   *
-   * The callback is not called immediately after calling `watchDocuments()` nor after writing to a document with {@link DraftDocument.write}.
-   *
-   * @returns A watcher object that can be used to add or remove documents to watch.
-   */
-  watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): DraftDocumentWatcher;
 }
 
 export interface AppBackendSnapshot {

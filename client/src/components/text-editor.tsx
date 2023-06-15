@@ -45,10 +45,7 @@ export interface TextEditorState {
 export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
-  isModelContentChangeExternal = false;
   markerManager!: MarkerManager;
-  modelChanged = false;
-  outdatedCompilation = false;
   pool = new util.Pool();
   ref = React.createRef<HTMLDivElement>();
   refWidgetContainer = React.createRef<HTMLDivElement>();
@@ -79,7 +76,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   }
 
   get model() {
-    return this.props.documentItem.model!;
+    return this.props.documentItem.textModel!;
   }
 
   override componentDidMount() {
@@ -131,16 +128,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     });
 
     this.model.onDidChangeContent(() => {
-      if (!this.isModelContentChangeExternal) {
-        this.modelChanged = true;
-        this.startMarkerUpdateTimeout();
-
-        // if (!this.props.autoSave) {
-        //   this.setState({ changeTime: Date.now() });
-        // }
-      }
-
-      this.isModelContentChangeExternal = false;
+      this.startMarkerUpdateTimeout();
     });
 
 
@@ -445,36 +433,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     }, { signal: this.controller.signal });
   }
 
-  override componentDidUpdate(prevProps: TextEditorProps) {
-    // if (this.props.draft.revision !== prevProps.draft.revision) {
-    //   let position = this.editor.getPosition();
-
-    //   this.isModelContentChangeExternal = true;
-    //   this.model.setValue(this.props.draft.item.source!);
-
-    //   if (position) {
-    //     this.editor.setPosition(position);
-    //   }
-
-    //   if (this.props.compilation === prevProps.compilation) {
-    //     this.awaitingCompilationDeferred = util.defer();
-    //   }
-    // }
-
-    // if (this.props.compilation !== prevProps.compilation) {
-    //   this.outdatedCompilation = false;
-    // }
-
-    // if ((this.props.compilation !== prevProps.compilation) && this.awaitingCompilationDeferred) {
-    //   this.awaitingCompilationDeferred.resolve();
-    //   this.awaitingCompilationDeferred = null;
-    // }
-
-    // if (this.state.changeTime && (this.props.draft.lastModified! >= this.state.changeTime)) {
-    //   this.setState({ changeTime: null });
-    // }
-  }
-
   override componentWillUnmount() {
     this.controller.abort();
   }
@@ -490,31 +448,11 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   override render() {
     return (
       <div className={textEditorStyles.root} onKeyDown={(event) => {
-        if (this.editor.hasTextFocus()) {
+        if (this.editor.hasTextFocus() && !event.ctrlKey && !event.metaKey) {
           event.stopPropagation();
         }
       }}>
-        <div ref={this.ref} onKeyDown={!this.props.autoSave
-          ? ((event) => {
-            if ((event.key === 's') && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
-              event.preventDefault();
-
-              this.pool.add(async () => {
-                if (this.startMarkerUpdateTimeout.isActive()) {
-                  this.startMarkerUpdateTimeout.cancel();
-                  await this.markerManager.update();
-                }
-
-                // let source = this.model.getValue();
-                // let compilation = await this.getCompilation();
-                // this.props.save(compilation, source);
-
-                let contents = this.model.getValue();
-                await this.props.documentItem.snapshot.model.write(contents);
-              });
-            }
-          })
-          : undefined} />
+        <div ref={this.ref} />
         {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         {/* {this.props.summary && (
           <div className={textEditorStyles.summary}>

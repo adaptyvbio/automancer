@@ -29,8 +29,6 @@ export abstract class SnapshotProvider<T extends object> implements SnapshotTarg
   }
 
   _update() {
-    console.log('update', this);
-
     this._updated = true;
 
     for (let callback of this._watchers) {

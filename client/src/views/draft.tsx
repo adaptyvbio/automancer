@@ -1,46 +1,46 @@
 import * as monaco from 'monaco-editor';
-import { ExperimentId, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { ExperimentId, ProtocolBlockPath } from 'pr1-shared';
 import { Component, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
-import { DraftDocumentId, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstanceSnapshot } from '../app-backends/base';
-import type { Application } from '../application';
-import { Button } from '../components/button';
+import { OrderedMap } from 'immutable';
+import { DraftDocumentId, DraftDocumentSnapshot, DraftInstanceId, DraftInstanceSnapshot } from '../app-backends/base';
+import { Application } from '../application';
+import { BlockInspector } from '../components/block-inspector';
+import { DiagnosticsReport } from '../components/diagnostics-report';
 import { DocumentEditor } from '../components/document-editor';
 import { DraftSummary } from '../components/draft-summary';
+import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
+import { GraphEditor } from '../components/graph-editor';
 import { SplitPanels } from '../components/split-panels';
+import { TabNav } from '../components/tab-nav';
 import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
 import { DraftCompilation, DraftId } from '../draft';
 import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { Host } from '../host';
-import { DraftLanguageAnalysis, HostDraftCompilerResult } from '../interfaces/draft';
+import { HostDraftCompilerResult } from '../interfaces/draft';
 import { GlobalContext } from '../interfaces/plugin';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
 import { analyzeBlockPath } from '../protocol';
-import * as util from '../util';
-import { Pool } from '../util';
+import { Pool, formatClass } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
-import { GraphEditor } from '../components/graph-editor';
-import { TabNav } from '../components/tab-nav';
-import { ErrorBoundary } from '../components/error-boundary';
-import { BlockInspector } from '../components/block-inspector';
-import { DiagnosticsReport } from '../components/diagnostics-report';
 import { StartProtocolModal } from '../components/modals/start-protocol';
 
 
 export interface DocumentItem {
-  analysis: DraftLanguageAnalysis | null;
-  model: monaco.editor.ITextModel | null;
+  controller: AbortController;
   snapshot: DraftDocumentSnapshot;
+  textModel: monaco.editor.ITextModel | null;
   unsaved: boolean;
 
   meta: {
+    currentVersionId: number | null;
     updated: boolean; // = Updated since the last start of a compilation.
   };
 }
@@ -56,13 +56,12 @@ export interface ViewDraftState {
   compilation: HostDraftCompilerResult | null;
   compiling: boolean;
   cursorPosition: monaco.Position | null;
-  documentItems: DocumentItem[];
+  documentItems: OrderedMap<DraftDocumentId, DocumentItem>;
   requesting: boolean;
   selectedBlockPath: ProtocolBlockPath | null;
   selectedDocumentId: DraftDocumentId;
   startModalOpen: boolean;
 
-  draggedTrack: number | null;
   graphOpen: boolean;
   inspectorEntryId: string | null;
   inspectorOpen: boolean;
@@ -75,43 +74,59 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   private controller = new AbortController();
   private pool = new Pool();
   private refTitleBar = createRef<TitleBar>();
-  private watcher: DraftDocumentWatcher;
 
   constructor(props: ViewDraftProps) {
     super(props);
 
     let entryDocument = this.props.app.state.documents[this.props.draft.entryDocumentId].model;
+
     let entryDocumentItem: DocumentItem = {
-      analysis: null,
-      model: null,
+      controller: new AbortController(),
       snapshot: entryDocument.getSnapshot(),
+      textModel: null,
       unsaved: false,
 
       meta: {
+        currentVersionId: null,
         updated: true
       }
     };
 
     let getModelOfDocumentItem = (documentItem: DocumentItem, snapshot: DraftDocumentSnapshot = documentItem.snapshot) => {
-      if (documentItem.model || !snapshot.source) {
-        return documentItem.model;
-      }
-
-      let model = monaco.editor.createModel(snapshot.source.contents, 'prl');
-      documentItem.meta.updated = true;
-
-      model.onDidChangeContent(() => {
+      if (documentItem.textModel && (snapshot.lastExternalModificationDate === snapshot.lastModificationDate)) {
+        documentItem.meta.currentVersionId = documentItem.textModel.getVersionId() + 1;
         documentItem.meta.updated = true;
 
-        // this.setState((state) => ({
-        //   documentItems: state.documentItems[0]
-        // }));
+        documentItem.textModel.setValue(snapshot.contents!);
+
+        this.setDocumentItem(snapshot.id, {
+          unsaved: false
+        });
+      }
+
+      if (documentItem.textModel || (snapshot.contents === null)) {
+        return documentItem.textModel;
+      }
+
+      let model = monaco.editor.createModel(snapshot.contents, 'prl');
+
+      documentItem.meta.updated = true;
+
+      model.onDidChangeContent((event) => {
+        if (documentItem.meta.currentVersionId !== event.versionId) {
+          documentItem.meta.currentVersionId = null;
+          documentItem.meta.updated = true;
+
+          this.setDocumentItem(documentItem.snapshot.id, {
+            unsaved: true
+          });
+        }
       });
 
       return model;
     };
 
-    let documentItems = [entryDocumentItem].map((documentItem) => ({
+    let documentItems = OrderedMap([[entryDocument.id, entryDocumentItem]]).map((documentItem) => ({
       ...documentItem,
       model: getModelOfDocumentItem(documentItem)
     }));
@@ -127,33 +142,37 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       selectedDocumentId: entryDocument.id,
       startModalOpen: false,
 
-      draggedTrack: null,
       graphOpen: true,
       inspectorEntryId: 'inspector',
       inspectorOpen: true
     };
 
-    this.watcher = this.props.app.appBackend.watchDocuments((changedDocumentIds) => {
-      this.setState((state) => ({
-        documentItems: state.documentItems.map((documentItem) => {
-          if (changedDocumentIds.has(documentItem.snapshot.id)) {
-            let snapshot = documentItem.snapshot.model.getSnapshot();
+    entryDocument.watchSnapshot((snapshot) => {
+      let documentItem = this.state.documentItems.get(snapshot.id)!;
+      let textModel = getModelOfDocumentItem(documentItem, snapshot);
 
-            return {
-              ...documentItem,
-              model: getModelOfDocumentItem(documentItem, snapshot),
-              snapshot
-            };
-          } else {
-            return documentItem;
-          }
-        })
-      }));
-    }, { signal: this.controller.signal });
+      // console.log('ℹ️ Snapshot', snapshot.lastModificationDate, snapshot.lastExternalModificationDate);
+
+      this.setDocumentItem(snapshot.id, {
+        snapshot,
+        textModel
+      });
+    });
+
+    entryDocument.watchContents({ signal: entryDocumentItem.controller.signal });
   }
 
   get selectedDocumentItem() {
     return this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
+  }
+
+  private setDocumentItem(documentId: DraftDocumentId, patch: Partial<DocumentItem>) {
+    this.setState((state) => ({
+      documentItems: state.documentItems.set(documentId, {
+        ...state.documentItems.get(documentId)!,
+        ...patch
+      })
+    }));
   }
 
   override componentDidMount() {
@@ -173,9 +192,21 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       }, { signal: this.controller.signal });
     }
 
-    this.pool.add(async () => {
-      await this.watcher.add(this.state.documentItems.map((item) => item.snapshot.id));
-    });
+    this.props.app.shortcutManager.attach('Meta+S', () => {
+      let documentItem = this.selectedDocumentItem;
+
+      if (documentItem.textModel && documentItem.snapshot.writable) {
+        let contents = documentItem.textModel.getValue();
+
+        this.pool.add(async () => {
+          await documentItem.snapshot.model.write(contents);
+
+          this.setDocumentItem(documentItem.snapshot.id, {
+            unsaved: false
+          });
+        });
+      }
+    }, { signal: this.controller.signal });
   }
 
   override componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
@@ -183,8 +214,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     let prevSelectedDocumentItem = prevState.documentItems.find((item) => item.snapshot.id === selectedDocumentItem.snapshot.id);
 
     if (prevSelectedDocumentItem) {
-      let prevLastModified = prevSelectedDocumentItem.snapshot.lastModified;
-      let lastModified = selectedDocumentItem.snapshot.lastModified;
+      let prevLastModified = prevSelectedDocumentItem.snapshot.lastModificationDate;
+      let lastModified = selectedDocumentItem.snapshot.lastModificationDate;
 
       if ((prevLastModified !== null) && (lastModified !== prevLastModified)) {
         this.refTitleBar.current!.notify();
@@ -202,13 +233,18 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
   override componentWillUnmount() {
     this.controller.abort();
+
+    for (let documentItem of this.state.documentItems.values()) {
+      documentItem.controller.abort();
+      documentItem.textModel?.dispose();
+    }
   }
 
 
   async getCompilation() {
     let updated = this.state.documentItems.some((item) => item.meta.updated);
 
-    for (let documentItem of this.state.documentItems) {
+    for (let documentItem of this.state.documentItems.values()) {
       documentItem.meta.updated = false;
     }
 
@@ -230,7 +266,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     this.setState((state) => !state.compiling ? { compiling: true } : null);
 
 
-    let documentItems: DocumentItem[] = this.state.documentItems;
+    let documentItems = this.state.documentItems;
     let result: HostDraftCompilerResult;
 
     while (true) {
@@ -238,14 +274,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         type: 'compileDraft',
         draft: {
           id: this.props.draft.id,
-          documents: documentItems.map((item) => ({
-            id: item.snapshot.id,
-            contents: item.model!.getValue(),
-            // contents: item.meta.updated
-            //   ? item.model!.getValue()
-            //   : null,
-            path: item.snapshot.path
-          })),
+          documents: documentItems.valueSeq().map((documentItem) => ({
+            id: documentItem.snapshot.id,
+            contents: documentItem.textModel!.getValue(),
+            path: documentItem.snapshot.path
+          })).toArray(),
           entryDocumentId: this.props.draft.entryDocumentId
         },
         options: {
@@ -253,29 +286,26 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         }
       });
 
-      let addedDocument = false;
+      // for (let documentPath of result.missingDocumentPaths) {
+      //   let document = await this.props.draft.model.getDocument(documentPath);
 
-      for (let documentPath of result.missingDocumentPaths) {
-        let document = await this.props.draft.model.getDocument(documentPath);
+      //   if (document) {
+      //     await this.watcher.add([document.id]);
 
-        if (document) {
-          await this.watcher.add([document.id]);
-          addedDocument = true;
+      //     documentItems = documentItems.set(document.id, {
+      //       analysis: null,
+      //       textModel: null,
+      //       snapshot: document.getSnapshot(),
+      //       unsaved: false,
 
-          documentItems.push({
-            analysis: null,
-            model: null,
-            snapshot: document.getSnapshot(),
-            unsaved: false,
+      //       meta: {
+      //         updated: false
+      //       }
+      //     });
+      //   }
+      // }
 
-            meta: {
-              updated: false
-            }
-          });
-        }
-      }
-
-      if (addedDocument) {
+      if (documentItems !== this.state.documentItems) {
         this.setState({ documentItems });
       } else {
         break;
@@ -329,63 +359,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
 
   override render() {
-    // let component: React.ReactNode;
-    // let subtitle: React.ReactNode | null = null;
-    // let subtitleVisible = false;
-
-    // if (!this.props.draft.readable && !this.state.requesting) {
-    //   component = (
-    //     <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
-    //       <div className={viewStyles.blankInner}>
-    //         <p>Please grant read and write permissions on this file to continue.</p>
-
-    //         <div className={viewStyles.blankActions}>
-    //           <Button onClick={() => {
-    //             this.pool.add(async () => {
-    //               await this.props.draft.item.request!();
-
-    //               // if (this.props.draft.item.readable) {
-    //               //   this.pool.add(async () => {
-    //               //     await this.compile({ global: true });
-    //               //   });
-    //               // }
-    //             });
-    //           }}>Open protocol</Button>
-    //         </div>
-    //       </div>
-    //     </div>
-    //   );
-
-    //   subtitle = 'Permission required';
-    //   subtitleVisible = true;
-    // } else if (this.state.requesting || (this.props.draft.revision === 0)) {
-    //   component = (
-    //     <div className={viewStyles.contents} />
-    //   );
-    // } else {
-    //   let summary = (
-    //     <FilledDraftSummary
-    //       compiling={this.state.compiling}
-    //       compilation={this.state.compilation}
-    //       onStart={() => {
-    //         this.setState({ startModalOpen: true });
-    //       }} />
-    //   );
-
-
-    //   if (this.props.draft.lastModified) {
-    //     let delta = Date.now() - this.props.draft.lastModified;
-
-    //     if (delta < 5e3) {
-    //       subtitle = 'Just saved';
-    //     } else {
-    //       subtitle = `Last saved ${format.formatRelativeDate(this.props.draft.lastModified)}`;
-    //     }
-    //   } else {
-    //     subtitle = null;
-    //   }
-    // }
-
     let selectedDocumentItem = this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
 
     let subtitle = null;
@@ -398,33 +371,10 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     };
 
     if (!selectedDocumentItem.snapshot.readable) {
-    // if (!this.props.draft.readable && !this.state.requesting) {
-      // component = (
-      //   <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
-      //     <div className={viewStyles.blankInner}>
-      //       <p>Please grant read and write permissions on this file to continue.</p>
-
-      //       <div className={viewStyles.blankActions}>
-      //         <Button onClick={() => {
-      //           this.pool.add(async () => {
-      //             await this.props.draft.item.request!();
-
-      //             // if (this.props.draft.item.readable) {
-      //             //   this.pool.add(async () => {
-      //             //     await this.compile({ global: true });
-      //             //   });
-      //             // }
-      //           });
-      //         }}>Open protocol</Button>
-      //       </div>
-      //     </div>
-      //   </div>
-      // );
-
       subtitle = 'Permission required';
       subtitleVisible = true;
-    } else if (selectedDocumentItem.snapshot.lastModified !== null) {
-      let lastModified = selectedDocumentItem.snapshot.lastModified;
+    } else if (selectedDocumentItem.snapshot.lastModificationDate !== null) {
+      let lastModified = selectedDocumentItem.snapshot.lastModificationDate;
 
       subtitle = (
         <TimeSensitive
@@ -464,8 +414,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
             }
           }]}
           ref={this.refTitleBar} />
-        <div className={util.formatClass(viewStyles.contents, editorStyles.root)}>
-          {/* {this.state.startModalOpen && (
+        <div className={formatClass(viewStyles.contents, editorStyles.root)}>
+          {this.state.startModalOpen && (
             <StartProtocolModal
               host={this.props.host}
               onCancel={() => void this.setState({ startModalOpen: false })}
@@ -485,13 +435,12 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       experimentId,
                       draft: {
                         id: this.props.draft.id,
-                        documents: [
-                          { id: '_',
-                            contents: this.props.draft.item.source!,
-                            owner: null,
-                            path: 'draft.yml' }
-                        ],
-                        entryDocumentId: '_'
+                        documents: this.state.documentItems.valueSeq().map((documentItem) => ({
+                          id: documentItem.snapshot.id,
+                          contents: documentItem.textModel!.getValue(),
+                          path: documentItem.snapshot.path
+                        })).toArray(),
+                        entryDocumentId: this.props.draft.entryDocumentId
                       },
                       options: {
                         trusted: true
@@ -501,17 +450,15 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     this.experimentIdAwaitingRedirection = null;
                     throw err;
                   }
-
-                  // console.clear();
                 });
               }} />
-          )} */}
+          )}
 
           <SplitPanels
             panels={[
               { component: (
                 <div className={editorStyles.editorPanel}>
-                  <FileTabNav entries={this.state.documentItems.map((documentItem, index) => {
+                  <FileTabNav entries={this.state.documentItems.valueSeq().toArray().map((documentItem, index) => {
                     let document = documentItem.snapshot.model;
 
                     return {
@@ -519,33 +466,33 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       label: documentItem.snapshot.path.at(-1)!,
                       unsaved: documentItem.unsaved,
                       selected: (documentItem.snapshot.id === this.state.selectedDocumentId),
-                      createMenu: () => [
-                        { id: 'close', name: 'Close', disabled: (index === 0) },
-                        { id: '_divider', type: 'divider' },
-                        { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !document.reveal },
-                        { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !document.open },
-                        { id: '_divider2', type: 'divider' },
-                        { id: 'copy_file', name: 'Copy', icon: 'content_paste', disabled: !documentItem.snapshot.source },
-                        { id: 'copy_path', name: 'Copy absolute path' },
-                        { id: '_divider3', type: 'divider' },
-                        { id: 'rename', name: 'Rename', icon: 'edit' },
-                        { id: 'delete', name: 'Move to trash', icon: 'delete' }
-                      ],
-                      onSelectMenu: (path) => {
-                        switch (path.first()) {
-                          case 'copy_file': {
-                            let blob = new Blob([documentItem.snapshot.source!.contents], { type: 'plain/text' });
+                      // createMenu: () => [
+                      //   { id: 'close', name: 'Close', disabled: (index === 0) },
+                      //   { id: '_divider', type: 'divider' },
+                      //   { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !document.reveal },
+                      //   { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !document.open },
+                      //   { id: '_divider2', type: 'divider' },
+                      //   { id: 'copy_file', name: 'Copy', icon: 'content_paste', disabled: !documentItem.snapshot.source },
+                      //   { id: 'copy_path', name: 'Copy absolute path' },
+                      //   { id: '_divider3', type: 'divider' },
+                      //   { id: 'rename', name: 'Rename', icon: 'edit' },
+                      //   { id: 'delete', name: 'Move to trash', icon: 'delete' }
+                      // ],
+                      // onSelectMenu: (path) => {
+                      //   switch (path.first()) {
+                      //     case 'copy_file': {
+                      //       let blob = new Blob([documentItem.snapshot.source!.contents], { type: 'plain/text' });
 
-                            this.pool.add(async () => {
-                              await navigator.clipboard.write([
-                                new ClipboardItem({
-                                  [blob.type]: blob
-                                })
-                              ]);
-                            });
-                          }
-                        }
-                      },
+                      //       this.pool.add(async () => {
+                      //         await navigator.clipboard.write([
+                      //           new ClipboardItem({
+                      //             [blob.type]: blob
+                      //           })
+                      //         ]);
+                      //       });
+                      //     }
+                      //   }
+                      // }
                     };
                   })} />
                   <DocumentEditor
@@ -633,7 +580,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
               )}
             </div>
             <div className={editorStyles.infobarRight}>
-              <div>Last saved: {this.selectedDocumentItem.snapshot.lastModified ? new Date(this.selectedDocumentItem.snapshot.lastModified).toLocaleTimeString() : '–'}</div>
+              <div>Last saved: {this.selectedDocumentItem.snapshot.lastModificationDate ? new Date(this.selectedDocumentItem.snapshot.lastModificationDate).toLocaleTimeString() : '–'}</div>
             </div>
           </div>
         </div>
@@ -651,32 +598,32 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 export interface ViewDraftWrapperRoute {
   id: '_';
   params: {
-    draftId: DraftId;
+    draftId: DraftInstanceId;
   };
 }
 
 export type ViewDraftWrapperProps = ViewProps<ViewDraftWrapperRoute>;
 
 export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
-  get draft() {
+  get draftInstanceSnapshot() {
     return this.props.app.state.drafts[this.props.route.params.draftId];
   }
 
   override componentDidMount() {
-    if (!this.draft) {
+    if (!this.draftInstanceSnapshot) {
       ViewDrafts.navigate();
     }
   }
 
   override render() {
-    if (!this.draft) {
+    if (!this.draftInstanceSnapshot) {
       return null;
     }
 
     return (
       <ViewDraft
         app={this.props.app}
-        draft={this.draft}
+        draft={this.draftInstanceSnapshot}
         host={this.props.host} />
     );
   }

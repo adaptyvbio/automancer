@@ -6,9 +6,9 @@ import * as ReactDOM from 'react-dom';
 
 import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
-import { Draft, DraftCompilation, DraftRange } from '../draft';
+import { DraftRange } from '../draft';
 import { HostDraftCompilerResult } from '../interfaces/draft';
-import { LanguageName, setLanguageService } from '../language-service';
+import { LanguageName, SEMANTIC_TOKEN_TYPES, setLanguageService } from '../language-service';
 import * as util from '../util';
 import { DocumentItem } from '../views/draft';
 
@@ -24,13 +24,11 @@ window.MonacoEnvironment = {
 };
 
 
-export const SEMANTIC_TOKEN_TYPES = ['lead'];
-
-
 export interface TextEditorProps {
   autoSave: boolean;
   documentItem: DocumentItem;
   getCompilation(): Promise<HostDraftCompilerResult>;
+  onCursorChange(position: monaco.Position): void;
 
   // autoSave: boolean;
   // compilation: DraftCompilation | null;
@@ -120,7 +118,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     });
 
     // @ts-expect-error
-    this.editor._themeService._theme.getTokenStyleMetadata = (type: string, modifiers: never, language) => {
+    this.editor._themeService._theme.getTokenStyleMetadata = (type: string, modifiers, language) => {
       if (type === 'lead') {
         return {
           underline: true
@@ -131,9 +129,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.signal.addEventListener('abort', () => {
       this.editor.dispose();
     });
-
-
-    return;
 
     this.model.onDidChangeContent(() => {
       if (!this.isModelContentChangeExternal) {
@@ -146,6 +141,13 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       }
 
       this.isModelContentChangeExternal = false;
+    });
+
+
+    // Watch for cursor movement
+
+    this.editor.onDidChangeCursorPosition((event) => {
+      this.props.onCursorChange(event.position);
     });
 
 
@@ -283,11 +285,13 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }) ?? null;
       },
       provideFoldingRanges: async (model, context, token) => {
-        if (!this.props.compilation || this.outdatedCompilation) {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
           return null;
         }
 
-        return this.props.compilation.analysis.folds.map((fold) => {
+        return compilation.analysis.folds.map((fold) => {
           let range = getModelRangeFromDraftRange(model, fold.range);
 
           return {
@@ -297,12 +301,14 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           };
         });
       },
-      provideHover: async (model, position, _token) => {
-        if (!this.props.compilation || this.outdatedCompilation) {
+      provideHover: async (model, position, token) => {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
           return null;
         }
 
-        let result = this.props.compilation.analysis.hovers
+        let result = compilation.analysis.hovers
           .map((hover) => ({
             hover,
             range: getModelRangeFromDraftRange(model, hover.range)
@@ -355,11 +361,13 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
           : null;
       },
       provideSelectionRanges: async (model, positions, token) => {
-        if (!this.props.compilation || this.outdatedCompilation) {
+        let compilation = await this.getCompilation();
+
+        if (token.isCancellationRequested) {
           return null;
         }
 
-        let modelRanges = this.props.compilation.analysis.selections.map((draftRange) => getModelRangeFromDraftRange(model, draftRange));
+        let modelRanges = compilation.analysis.selections.map((draftRange) => getModelRangeFromDraftRange(model, draftRange));
 
         return positions.map((position) =>
           modelRanges
@@ -395,7 +403,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
       getLegend: () => ({
         tokenModifiers: [],
-        tokenTypes: SEMANTIC_TOKEN_TYPES
+        tokenTypes: []
       }),
       provideDocumentSemanticTokens: async (model, lastResultId, token) => {
         let compilation = await this.getCompilation();
@@ -471,17 +479,9 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.abort();
   }
 
-  // async getCompilation(): Promise<DraftCompilation> {
-  //   let promise = this.props.getCompilation(
-  //     this.modelChanged
-  //       ? { source: this.model.getValue() }
-  //       : {}
-  //   );
-
-  //   this.modelChanged = false;
-
-  //   return await promise;
-  // }
+  async getCompilation() {
+    return await this.props.getCompilation();
+  }
 
   undo() {
     this.editor.trigger(undefined, 'undo', undefined);

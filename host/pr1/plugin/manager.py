@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, NewType, Optional, Protocol
 
 from .. import logger
 from ..analysis import DiagnosticAnalysis
-from ..fiber.parser import AnalysisContext
+from ..fiber.parser import AnalysisContext, BaseParser
 from ..reader import LocatedValue
-from ..units.base import BaseExecutor, BaseParser, BaseRunner, Metadata
+from ..units.base import BaseExecutor, BaseRunner, Metadata
 from ..util.misc import create_datainstance
 
 if TYPE_CHECKING:

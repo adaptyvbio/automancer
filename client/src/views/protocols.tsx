@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { Component } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
@@ -15,21 +15,13 @@ import { formatDuration } from '../format';
 import { ViewProps } from '../interfaces/view';
 import { BaseUrl } from '../constants';
 import { ViewDraft } from './draft';
-
 import { Button } from '../components/button';
 
 
-const rtf = new Intl.RelativeTimeFormat('en', {
-  localeMatcher: 'best fit',
-  numeric: 'auto',
-  style: 'long'
-});
-
-
-export class ViewDrafts extends React.Component<ViewProps, {}> {
+export class ViewDrafts extends Component<ViewProps, {}> {
   pool = new Pool();
 
-  render() {
+  override render() {
     let documents = this.props.app.state.documents;
     let drafts = Object.values(this.props.app.state.drafts);
 

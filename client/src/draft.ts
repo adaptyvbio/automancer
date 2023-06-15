@@ -40,6 +40,12 @@ export interface DraftFold {
   range: DraftRange;
 }
 
+export interface DraftMarker {
+  kind: 'deprecated' | 'unnecessary';
+  message: string;
+  reference: DiagnosticDocumentReference;
+}
+
 export interface DraftRelation {
   definitionBody: DiagnosticDocumentReference;
   definitionName: DiagnosticDocumentReference;
@@ -51,6 +57,11 @@ export interface DraftRename {
 }
 
 export type DraftSelection = DraftRange;
+
+export interface DraftToken {
+  name: string;
+  reference: DiagnosticDocumentReference;
+}
 
 export interface DraftMarker {
   kind: 'deprecated' | 'unnecessary';
@@ -82,6 +93,7 @@ export interface DraftCompilation {
   valid: boolean;
 }
 
+/** @deprecated */
 export interface Draft {
   id: DraftId;
   compilation: DraftCompilation | null;
@@ -97,14 +109,17 @@ export interface Draft {
   };
 }
 
+/** @deprecated */
 export interface DraftPrimitive {
   name?: string | null;
   source?: string;
 }
 
+/** @deprecated */
 export type DraftsRecord = Record<DraftId, Draft>;
 
 
+/** @deprecated */
 export function createDraftFromItem(draftItem: DraftItem): Draft {
   return {
     id: draftItem.id,

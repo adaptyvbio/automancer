@@ -1,6 +1,7 @@
-import type { DraftId, DraftPrimitive } from '../draft';
-import { Store } from '../store/base';
-import { SnapshotTarget } from '../snapshot';
+import type { Brand } from 'pr1-shared';
+
+import type { Store } from '../store/base';
+import type { SnapshotTarget } from '../snapshot';
 
 
 export const DraftDocumentExtension = '.yml';
@@ -8,34 +9,39 @@ export const DraftDocumentExtension = '.yml';
 
 export type DraftDocumentPath = string[];
 
-export type DraftInstanceId = string;
-export type DraftDocumentId = string;
+export type DraftInstanceId = Brand<string, 'DraftInstanceId'>;
+export type DraftDocumentId = Brand<string, 'DraftDocumentId'>;
 
 export interface DraftInstance<T extends DraftDocument = DraftDocument> extends SnapshotTarget<DraftInstanceSnapshot> {
   id: DraftInstanceId;
   entryDocument: T;
 
   /**
-   * Returns a {@link DraftDocument} object required by this instance.
+   * Return a {@link DraftDocument} object required by this instance.
+   *
    * @param path A path relative to the instance's parent directory.
    * @returns A promise that resolves to a {@link DraftDocument} object or `null` if the document does not exist.
    */
   getDocument(path: DraftDocumentPath): Promise<T | null>;
 
   /**
-   * Removes the instance.
+   * Remove the instance.
+   *
    * @returns A promise that resolves once the instance has been removed.
    */
   remove(): Promise<void>;
 
   /**
-   * Watches all documents of the instance for changes. The callback is not called immediately after calling `watch()` nor after writing to a document with {@link DraftDocument.write}.
+   * Watch all documents of the instance for changes.
+
+   * The callback is not called immediately after calling `watch()` nor after writing to a document with {@link DraftDocument.write}.
+   *
    * @param callback A function called every time a change occurs.
    * @param options.signal A signal used to stop watching.
    * @returns A promise that resolves once the watch operation has started.
    */
   // watch(callback: (documentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): Promise<void>;
-};
+}
 
 export interface DraftInstanceSnapshot {
   model: DraftInstance;
@@ -50,17 +56,17 @@ export interface DraftDocument extends SnapshotTarget<DraftDocumentSnapshot> {
   id: DraftDocumentId;
 
   /**
-   * Opens the document in an external application. Optional.
+   * Open the document in an external application. Optional.
    */
   open?(): Promise<void>;
 
   /**
-   * Requests permission to read or read and write to the document. Optional when permission is always granted.
+   * Request permission to read or read and write to the document. Optional when permission is always granted.
    */
   request?(): Promise<void>;
 
   /**
-   * Reveals the document in the file explorer. Optional.
+   * Reveal the document in the file explorer. Optional.
    */
   reveal?(): Promise<void>;
 
@@ -96,7 +102,7 @@ export interface DraftCandidate {
   path: DraftDocumentPath;
 
   /**
-   * Creates a {@link DraftInstance} from this candidate.
+   * Create a {@link DraftInstance} from this candidate.
    */
   createInstance(): Promise<DraftInstance>;
 }
@@ -112,29 +118,33 @@ export interface DraftDocumentWatcher {
 
 export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
   /**
-   * Initializes the backend. Called before any other method.
+   * Initialize the backend. Called before any other method.
    * @returns A promise that resolves once the backend has been initialized.
    */
   initialize(): Promise<void>;
 
-  // createDraft(options: { directory: boolean; source: string; }): Promise<DraftItem | null>;
-  // deleteDraft(draftId: DraftId): Promise<void>;
-  // listDrafts(): Promise<DraftItem[]>;
-  // loadDraft(options: { directory: boolean; }): Promise<DraftItem | null>;
-  // requestDraft?(draftId: DraftId): Promise<void>;
-
-  // notify(message: string): Promise<void>;
-
-  createStore(name: string, options: { type: 'persistent' | 'session' }): Store;
+  /**
+   * Create a {@link Store} object.
+   *
+   * @param name The name of the store.
+   * @param options.type The type of the store.
+   */
+  createStore(name: string, options: { type: 'persistent' | 'session'; }): Store;
 
   /**
-   * Triggers a file or directory open dialog and returns an array of corresponding {@link DraftCandidate} objects. Returns an empty array if the operations is aborted.
+   * Trigger a file or directory open dialog and return an array of corresponding {@link DraftCandidate} objects.
+
+   * Returns an empty array if the operation is aborted.
+
    * @param options.directory Whether to open a directory dialog rather than a file dialog. Used in browser frontends only.
    */
   queryDraftCandidates(options: { directory: boolean; }): Promise<DraftCandidate[]>;
 
   /**
-   * Watches a set of documents for changes. The callback is not called immediately after calling `watchDocuments()` nor after writing to a document with {@link DraftDocument.write}.
+   * Watch a set of documents for changes.
+   *
+   * The callback is not called immediately after calling `watchDocuments()` nor after writing to a document with {@link DraftDocument.write}.
+   *
    * @returns A watcher object that can be used to add or remove documents to watch.
    */
   watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): DraftDocumentWatcher;

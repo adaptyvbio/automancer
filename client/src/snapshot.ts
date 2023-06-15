@@ -29,6 +29,8 @@ export abstract class SnapshotProvider<T extends object> implements SnapshotTarg
   }
 
   _update() {
+    console.log('update', this);
+
     this._updated = true;
 
     for (let callback of this._watchers) {
@@ -39,9 +41,14 @@ export abstract class SnapshotProvider<T extends object> implements SnapshotTarg
 
 export interface SnapshotTarget<T extends object> {
   /**
-   * Returns a snapshot of the object, an immutable object which will remain identical to the previous one returned until the object is updated.
+   * Return a snapshot of the object, an immutable object which will remain identical to the previous one returned until the object is updated.
    */
   getSnapshot(): T;
+
+  /**
+   * Watch the object for changes.
+   */
+  watchSnapshot(callback: SnapshotWatchCallback<T>, options?: { signal?: AbortSignal; }): void;
 }
 
 export function getRecordSnapshot<T extends { [key: number | string | symbol]: SnapshotTarget<object>; }>(record: T): {

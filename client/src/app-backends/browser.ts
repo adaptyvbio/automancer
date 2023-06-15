@@ -1,12 +1,9 @@
 import * as idb from 'idb-keyval';
 
-import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
 import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
-import * as util from '../util';
 import { Pool } from '../util';
 import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 import { DraftId, DraftPrimitive } from '../draft';
-import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
 import { BrowserStorageStore } from '../store/browser-storage';
 import { Store } from '../store/base';
@@ -22,11 +19,9 @@ export type BrowserStoreDraftsEntry = Record<DraftInstanceId, {
   rootHandle: FileSystemDirectoryHandle | null;
 }>;
 
-export type BrowserStoreHostSettingsEntry = HostSettingsData;
-
 
 export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot> implements DraftDocument {
-  id: DraftDocumentId = crypto.randomUUID();
+  id: DraftDocumentId = crypto.randomUUID() as DraftDocumentId;
   lastModified: number | null = null;
   readonly = false;
   source: {
@@ -140,10 +135,9 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
   entryDocument: BrowserDraftDocument;
   name: string | null;
 
+  _appBackend: BrowserAppBackend;
   _attachedDocuments = new Set<BrowserDraftDocument>();
   _rootHandle: FileSystemDirectoryHandle | null;
-
-  #appBackend: BrowserAppBackend;
 
   constructor(
     options: {
@@ -156,10 +150,10 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
   ) {
     super();
 
-    this.#appBackend = appBackend;
+    this._appBackend = appBackend;
 
     this.entryDocument = options.entryDocument;
-    this.id = options.id ?? crypto.randomUUID();
+    this.id = options.id ?? (crypto.randomUUID() as DraftInstanceId);
     this.name = options.name ?? null;
 
     this._rootHandle = options.rootHandle;
@@ -190,7 +184,7 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
       return null;
     }
 
-    let document = await this.#appBackend._createDocument(documentHandle);
+    let document = await this._appBackend._createDocument(documentHandle);
     this._attachedDocuments.add(document);
 
     return document;
@@ -200,10 +194,10 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
     await idb.update<BrowserStoreDraftsEntry>('drafts', (entry) => {
       let { [this.id]: _, ...rest } = (entry ?? {});
       return rest;
-    }, this.#appBackend._store);
+    }, this._appBackend._store);
 
-    delete this.#appBackend.draftInstances[this.id];
-    this.#appBackend._update();
+    delete this._appBackend.draftInstances![this.id];
+    this._appBackend._update();
   }
 
   async _save() {
@@ -215,7 +209,7 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
         name: this.name,
         rootHandle: this._rootHandle
       }
-    }), this.#appBackend._store);
+    }), this._appBackend._store);
   }
 }
 
@@ -257,50 +251,14 @@ export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
     }
   }
 
-  // async _old_poll() {
-  //   let changedDocumentIds = new Set<DraftDocumentId>();
-
-  //   for (let document of this._documents) {
-  //     if (document.readable && !document._writing) {
-  //       let file = await document._handle.getFile();
-
-  //       if (file.lastModified !== document.lastModified) {
-  //         changedDocumentIds.add(document.id);
-
-  //         document.lastModified = file.lastModified;
-  //         document.source = await file.text();
-  //         document._update();
-  //       }
-  //     }
-  //   }
-
-  //   if (this._signal.aborted) {
-  //     return;
-  //   }
-
-  //   // Make sure that changed documents have not been removed from the watcher.
-  //   for (let changedDocumentId of changedDocumentIds) {
-  //     let document = this._appBackend._documents[changedDocumentId];
-
-  //     if (!document || !this._documents.has(document)) {
-  //       changedDocumentIds.delete(changedDocumentId);
-  //     }
-  //   }
-
-  //   if (changedDocumentIds.size > 0) {
-  //     this._callback(changedDocumentIds);
-  //   }
-
-  //   this._planPoll();
-  // }
-
   _planPoll() {
     this._timeoutId = setTimeout(() => {
       this._pool.add(this._poll());
+      this._planPoll();
     }, 1000);
   }
 
-  async add(documentIds: Iterable<string>) {
+  async add(documentIds: Iterable<DraftDocumentId>) {
     let documents = Array.from(documentIds).map((id) => this._appBackend._documents[id]);
 
     for (let document of documents) {
@@ -320,7 +278,7 @@ export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
     }
   }
 
-  remove(documentIds: Iterable<string>) {
+  remove(documentIds: Iterable<DraftDocumentId>) {
     for (let documentId of documentIds) {
       this._documents.delete(this._appBackend._documents[documentId]);
     }
@@ -331,7 +289,7 @@ export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
 export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> implements AppBackend {
   static version = 1;
 
-  draftInstances!: Record<DraftInstanceId, BrowserDraftInstance>;
+  draftInstances: Record<DraftInstanceId, BrowserDraftInstance> | null = null;
 
   _documents: Record<DraftDocumentId, BrowserDraftDocument> = {};
   _store = idb.createStore('pr1', 'data');
@@ -339,15 +297,18 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
   protected _createSnapshot() {
     return {
       documents: getRecordSnapshot(this._documents),
-      drafts: getRecordSnapshot(this.draftInstances)
+      drafts: getRecordSnapshot(this.draftInstances!)
     };
   }
 
-  async initialize() {
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
+  createStore(name: string, options: { type: 'persistent' | 'session'; }) {
+    return new BrowserStorageStore(options.type === 'persistent' ? localStorage : sessionStorage, name);
+  }
 
+  async initialize() {
+    // if (Notification.permission === 'default') {
+    //   await Notification.requestPermission();
+    // }
 
     let mainEntry = await idb.get<BrowserStoreMainEntry>('main', this._store);
 
@@ -365,57 +326,16 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     this.draftInstances = Object.fromEntries(
       await Promise.all(
         Object.entries(draftsEntry ?? {}).map(async ([id, item]) => ([id, new BrowserDraftInstance({
-          id,
+          id: (id as DraftInstanceId),
           entryDocument: await this._createDocument(item.entryDocumentHandle),
           name: item.name,
           rootHandle: item.rootHandle
         }, this)]))
       )
     );
+
+    this._update();
   }
-
-
-  createStore(name: string, options: { type: 'persistent' | 'session'; }) {
-    return new BrowserStorageStore(options.type === 'persistent' ? localStorage : sessionStorage, name);
-  }
-
-  async deleteHostSettings(hostSettingsId: HostSettingsId) {
-    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => {
-      let { [hostSettingsId]: _, ...hosts } = hostSettingsEntry!.hosts;
-
-      return {
-        ...hostSettingsEntry!,
-        hosts
-      };
-    }, this._store);
-  }
-
-  async initialize() {
-    // if (Notification.permission === 'default') {
-    //   await Notification.requestPermission();
-    // }
-
-    // return hostSettingsEntry;
-  }
-
-  async setDefaultHostSettings(hostSettingsId: HostSettingsId | null) {
-    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => ({
-      ...hostSettingsEntry!,
-      defaultHostSettingsId: hostSettingsId
-    }), this._store);
-  }
-
-  async setHostSettings(settings: HostSettings) {
-    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => ({
-      ...hostSettingsEntry!,
-      hosts: {
-        ...hostSettingsEntry!.hosts,
-        [settings.id]: settings
-      }
-    }), this._store);
-  }
-
-
 
   async queryDraftCandidates(options: { directory: boolean; }) {
     let selectedHandle = options.directory
@@ -450,7 +370,7 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
   }
 
   async _createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
-    for (let draftInstance of Object.values(this.draftInstances)) {
+    for (let draftInstance of Object.values(this.draftInstances!)) {
       if (await draftInstance.entryDocument._handle.isSameEntry(entryDocumentHandle)) {
         return draftInstance;
       }
@@ -463,7 +383,7 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
     await draftInstance._save();
 
-    this.draftInstances[draftInstance.id] = draftInstance;
+    this.draftInstances![draftInstance.id] = draftInstance;
     this._update();
 
     return draftInstance;
@@ -480,7 +400,11 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     await document._initialize();
 
     this._documents[document.id] = document;
-    this._update();
+
+    // If the app backend is not being initialized
+    if (this.draftInstances) {
+      this._update();
+    }
 
     return document;
   }

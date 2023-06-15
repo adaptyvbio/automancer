@@ -6,14 +6,11 @@ import { DocumentItem } from '../views/draft';
 import * as util from '../util';
 import { Button } from './button';
 import { Pool } from '../util';
-import { TextEditor } from './text-editor';
+import { TextEditor, TextEditorProps } from './text-editor';
 import { HostDraftCompilerResult } from '../interfaces/draft';
 
 
-export interface DocumentEditorProps {
-  documentItem: DocumentItem;
-  getCompilation(): Promise<HostDraftCompilerResult>;
-}
+export type DocumentEditorProps = TextEditorProps;
 
 export interface DocumentEditorState {
 
@@ -28,7 +25,7 @@ export class DocumentEditor extends React.Component<DocumentEditorProps, Documen
     this.state = {};
   }
 
-  render() {
+  override render() {
     return (
       <>
         {!this.props.documentItem.snapshot.readable && (
@@ -47,10 +44,7 @@ export class DocumentEditor extends React.Component<DocumentEditorProps, Documen
           </div>
         )}
         {this.props.documentItem.model && (
-          <TextEditor
-            autoSave={false}
-            documentItem={this.props.documentItem}
-            getCompilation={this.props.getCompilation} />
+          <TextEditor {...this.props} />
         )}
       </>
     );

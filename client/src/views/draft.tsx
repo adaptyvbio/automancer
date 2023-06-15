@@ -1,43 +1,37 @@
 import * as monaco from 'monaco-editor';
-import { ExperimentId, ProtocolBlockPath } from 'pr1-shared';
+import { ExperimentId, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import { Component, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
+import { DraftDocumentId, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstanceSnapshot } from '../app-backends/base';
 import type { Application } from '../application';
-import { BlockInspector } from '../components/block-inspector';
 import { Button } from '../components/button';
-import { DiagnosticsReport } from '../components/diagnostics-report';
+import { DocumentEditor } from '../components/document-editor';
 import { DraftSummary } from '../components/draft-summary';
-import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
-import { GraphEditor } from '../components/graph-editor';
-import { TabNav } from '../components/tab-nav';
-import { BlockInspector } from '../components/block-inspector';
-import * as format from '../format';
-import { Protocol, ProtocolBlockPath } from '../interfaces/protocol';
-import { StartProtocolModal } from '../components/modals/start-protocol';
 import { SplitPanels } from '../components/split-panels';
-import { TabNav } from '../components/tab-nav';
-import { TextEditor } from '../components/text-editor';
 import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
-import { Draft, DraftCompilation, DraftId } from '../draft';
+import { DraftCompilation, DraftId } from '../draft';
+import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { Host } from '../host';
+import { DraftLanguageAnalysis, HostDraftCompilerResult } from '../interfaces/draft';
+import { GlobalContext } from '../interfaces/plugin';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
+import { analyzeBlockPath } from '../protocol';
 import * as util from '../util';
 import { Pool } from '../util';
-import { ViewDrafts } from './protocols';
-import { analyzeBlockPath } from '../protocol';
-import { GlobalContext } from '../interfaces/plugin';
-import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { ViewExperimentWrapper } from './experiment-wrapper';
-import { DraftDocument, DraftDocumentId, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstanceSnapshot } from '../app-backends/base';
-import { DraftLanguageAnalysis, HostDraftCompilerResult } from '../interfaces/draft';
-import { DocumentEditor } from '../components/document-editor';
-import { TimeSensitive } from '../components/time-sensitive';
+import { ViewDrafts } from './protocols';
+import { GraphEditor } from '../components/graph-editor';
+import { TabNav } from '../components/tab-nav';
+import { ErrorBoundary } from '../components/error-boundary';
+import { BlockInspector } from '../components/block-inspector';
+import { DiagnosticsReport } from '../components/diagnostics-report';
+import { StartProtocolModal } from '../components/modals/start-protocol';
 
 
 export interface DocumentItem {
@@ -59,11 +53,9 @@ export interface ViewDraftProps {
 }
 
 export interface ViewDraftState {
-  compilation: {
-    protocol: Protocol | null;
-    valid: boolean;
-  } | null;
+  compilation: HostDraftCompilerResult | null;
   compiling: boolean;
+  cursorPosition: monaco.Position | null;
   documentItems: DocumentItem[];
   requesting: boolean;
   selectedBlockPath: ProtocolBlockPath | null;
@@ -100,11 +92,28 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       }
     };
 
+    let getModelOfDocumentItem = (documentItem: DocumentItem, snapshot: DraftDocumentSnapshot = documentItem.snapshot) => {
+      if (documentItem.model || !snapshot.source) {
+        return documentItem.model;
+      }
+
+      let model = monaco.editor.createModel(snapshot.source.contents, 'prl');
+      documentItem.meta.updated = true;
+
+      model.onDidChangeContent(() => {
+        documentItem.meta.updated = true;
+
+        // this.setState((state) => ({
+        //   documentItems: state.documentItems[0]
+        // }));
+      });
+
+      return model;
+    };
+
     let documentItems = [entryDocumentItem].map((documentItem) => ({
       ...documentItem,
-      model: (!documentItem.model && documentItem.snapshot.source)
-        ? monaco.editor.createModel(documentItem.snapshot.source.contents, 'prl')
-        : documentItem.model
+      model: getModelOfDocumentItem(documentItem)
     }));
 
     this.state = {
@@ -112,6 +121,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
       compilation: null,
       compiling: true, // The draft will soon be compiling if it's readable.
+      cursorPosition: null,
       requesting: false,
       selectedBlockPath: null,
       selectedDocumentId: entryDocument.id,
@@ -128,13 +138,10 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         documentItems: state.documentItems.map((documentItem) => {
           if (changedDocumentIds.has(documentItem.snapshot.id)) {
             let snapshot = documentItem.snapshot.model.getSnapshot();
-            documentItem.meta.updated = true;
 
             return {
               ...documentItem,
-              model: (!documentItem.model && snapshot.source)
-                ? monaco.editor.createModel(snapshot.source.contents, 'prl')
-                : documentItem.model,
+              model: getModelOfDocumentItem(documentItem, snapshot),
               snapshot
             };
           } else {
@@ -143,6 +150,10 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         })
       }));
     }, { signal: this.controller.signal });
+  }
+
+  get selectedDocumentItem() {
+    return this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
   }
 
   override componentDidMount() {
@@ -164,22 +175,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
     this.pool.add(async () => {
       await this.watcher.add(this.state.documentItems.map((item) => item.snapshot.id));
-
-      // This immediately updates item.readable, item.writable and item.lastModified
-      // and calls setState() to update the analoguous properties on draft.
-      // await this.props.app.watchDraft(this.props.draft.id, { signal: this.controller.signal });
-
-      // if (!this.props.draft.item.readable) {
-      //   await this.props.draft.item.request!();
-      // }
-
-      // if (this.state.requesting) {
-      //   this.setState({ requesting: false });
-      // }
-
-      // if (this.props.draft.item.readable) {
-      //   await this.getCompilation();
-      // }
     });
   }
 
@@ -196,20 +191,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       }
     }
 
-    // Trigger a compilation if the external revision changed.
-    // if (prevProps.draft.revision && (this.props.draft.revision !== prevProps.draft.revision)) {
-    //   this.pool.add(async () => {
-    //     await this.compile({ global: true });
-    //   });
-    // }
-
-    // TODO: Handle unsaved drafts
-    // if (this.props.host.state.info.instanceRevision !== prevProps.host.state.info.instanceRevision) {
-    //   this.pool.add(async () => {
-    //     await this.compile({ global: true });
-    //   });
-    // }
-
     if (this.experimentIdAwaitingRedirection) {
       let experiment = this.props.host.state.experiments[this.experimentIdAwaitingRedirection];
 
@@ -225,24 +206,24 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
 
   async getCompilation() {
-    let updated = this.state.documentItems.some((item) => item.meta.updated)
+    let updated = this.state.documentItems.some((item) => item.meta.updated);
 
-    if (!updated && this.compilationPromise) {
-      return await this.compilationPromise;
+    for (let documentItem of this.state.documentItems) {
+      documentItem.meta.updated = false;
     }
 
-    if (this.compilationController) {
-      this.compilationController.abort();
+    if (updated || !this.compilationPromise) {
+      if (this.compilationController) {
+        this.compilationController.abort();
+      }
+
+      this.compilationPromise = this.runCompilation();
     }
 
-    this.compilationPromise = this._getCompilation();
     return await this.compilationPromise;
   }
 
-  // getCompilationFromDocument() {
-  // }
-
-  async _getCompilation() {
+  private async runCompilation() {
     let compilationController = new AbortController();
     this.compilationController = compilationController;
 
@@ -255,19 +236,20 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     while (true) {
       result = await this.props.host.client.request({
         type: 'compileDraft',
-          draft: {
-            id: this.props.draft.id,
-            documents: documentItems.map((item) => ({
-              id: item.snapshot.id,
-              contents: item.meta.updated
-                ? item.model!.getValue()
-                : null,
-              path: item.snapshot.path
-            }))
-          },
-          options: {
-            trusted: true
-          }
+        draft: {
+          id: this.props.draft.id,
+          documents: documentItems.map((item) => ({
+            id: item.snapshot.id,
+            contents: item.model!.getValue(),
+            // contents: item.meta.updated
+            //   ? item.model!.getValue()
+            //   : null,
+            path: item.snapshot.path
+          })),
+          entryDocumentId: this.props.draft.entryDocumentId
+        },
+        options: {
+          trusted: true
         }
       });
 
@@ -277,8 +259,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         let document = await this.props.draft.model.getDocument(documentPath);
 
         if (document) {
-          await this.watcher.add(document.id);
-
+          await this.watcher.add([document.id]);
           addedDocument = true;
 
           documentItems.push({
@@ -306,35 +287,31 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     }
 
     this.setState({
-      compilation: {
-        protocol: result.protocol,
-        valid: result.valid
-      },
+      compilation: result,
       compiling: false
     });
 
     // return result;
 
-      if (this.state.selectedBlockPath) {
-        let currentBlock = compilation.protocol?.root;
+    // if (this.state.selectedBlockPath) {
+    //   let currentBlock = compilation.protocol?.root;
 
-        for (let key of this.state.selectedBlockPath) {
-          if (!currentBlock) {
-            this.setState({ selectedBlockPath: null });
-            break;
-          }
+    //   for (let key of this.state.selectedBlockPath) {
+    //     if (!currentBlock) {
+    //       this.setState({ selectedBlockPath: null });
+    //       break;
+    //     }
 
-          // let currentBlockImpl = getBlockImpl(currentBlock, this.globalContext);
-          // currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
-        }
+    //     // let currentBlockImpl = getBlockImpl(currentBlock, this.globalContext);
+    //     // currentBlock = currentBlockImpl.getChild?.(currentBlock, key);
+    //   }
 
-        if (!currentBlock) {
-          this.setState({ selectedBlockPath: null });
-        }
-      }
-    }
+    //   if (!currentBlock) {
+    //     this.setState({ selectedBlockPath: null });
+    //   }
+    // }
 
-    // return compilation;
+    return result;
   }
 
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }) {
@@ -422,27 +399,27 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
     if (!selectedDocumentItem.snapshot.readable) {
     // if (!this.props.draft.readable && !this.state.requesting) {
-      component = (
-        <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
-          <div className={viewStyles.blankInner}>
-            <p>Please grant read and write permissions on this file to continue.</p>
+      // component = (
+      //   <div className={util.formatClass(viewStyles.contents, viewStyles.blankOuter)}>
+      //     <div className={viewStyles.blankInner}>
+      //       <p>Please grant read and write permissions on this file to continue.</p>
 
-            <div className={viewStyles.blankActions}>
-              <Button onClick={() => {
-                this.pool.add(async () => {
-                  await this.props.draft.item.request!();
+      //       <div className={viewStyles.blankActions}>
+      //         <Button onClick={() => {
+      //           this.pool.add(async () => {
+      //             await this.props.draft.item.request!();
 
-                  // if (this.props.draft.item.readable) {
-                  //   this.pool.add(async () => {
-                  //     await this.compile({ global: true });
-                  //   });
-                  // }
-                });
-              }}>Open protocol</Button>
-            </div>
-          </div>
-        </div>
-      );
+      //             // if (this.props.draft.item.readable) {
+      //             //   this.pool.add(async () => {
+      //             //     await this.compile({ global: true });
+      //             //   });
+      //             // }
+      //           });
+      //         }}>Open protocol</Button>
+      //       </div>
+      //     </div>
+      //   </div>
+      // );
 
       subtitle = 'Permission required';
       subtitleVisible = true;
@@ -450,15 +427,27 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       let lastModified = selectedDocumentItem.snapshot.lastModified;
 
       subtitle = (
-        <TimeSensitive child={() => {
-          let delta = Date.now() - lastModified;
+        <TimeSensitive
+          contents={() => {
+            let delta = Date.now() - lastModified;
 
-          return delta < 5e3
-            ? <>Just saved</>
-            : <>Last saved {format.formatRelativeDate(lastModified)}</>;
-        }} />
-      )
+            return (delta < 5e3)
+              ? 'Just saved'
+              : `Last saved ${formatTimeDifference(-delta)}`;
+          }}
+          interval={1e3} />
+      );
     }
+
+    let summary = (
+      <FilledDraftSummary
+        compiling={this.state.compiling}
+        compilation={this.state.compilation}
+        context={globalContext}
+        onStart={() => {
+          this.setState({ startModalOpen: true });
+        }} />
+    );
 
     return (
       <main className={viewStyles.root}>
@@ -527,7 +516,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
                     return {
                       id: documentItem.snapshot.id,
-                      label: documentItem.snapshot.path.at(-1),
+                      label: documentItem.snapshot.path.at(-1)!,
                       unsaved: documentItem.unsaved,
                       selected: (documentItem.snapshot.id === this.state.selectedDocumentId),
                       createMenu: () => [
@@ -560,8 +549,12 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     };
                   })} />
                   <DocumentEditor
+                    autoSave={false}
                     documentItem={this.state.documentItems.find((documentItem) => documentItem.snapshot.id === this.state.selectedDocumentId)!}
-                    getCompilation={this.getCompilation.bind(this)} />
+                    getCompilation={this.getCompilation.bind(this)}
+                    onCursorChange={(position) => {
+                      this.setState({ cursorPosition: position });
+                    }} />
                   {/* <TextEditor
                     autoSave={false}
                     documentItem={this.state.documentItems.find((documentItem) => documentItem.snapshot.id === this.state.selectedDocumentId)!}
@@ -579,56 +572,68 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     {/* summary={!this.state.graphOpen ? summary : null} /> */}
                 </div>
               ) },
-              // { onToggle: (graphOpen) => void this.setState({ graphOpen }),
-              //   open: this.state.graphOpen,
-              //   component: (
-              //     <GraphEditor
-              //       host={this.props.host}
-              //       selectBlock={this.selectBlock.bind(this)}
-              //       selectedBlockPath={this.state.selectedBlockPath}
-              //       summary={summary}
-              //       tree={this.state.compilation?.protocol?.root ?? null} />
-              //   ) },
-              // { nominalSize: CSSNumericValue.parse('400px'),
-              //   onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
-              //   open: this.state.inspectorOpen,
-              //   component: (
-              //     <div>
-              //       <TabNav
-              //         activeEntryId={this.state.inspectorEntryId}
-              //         setActiveEntryId={(id) => void this.setState({ inspectorEntryId: id })}
-              //         entries={[
-              //           { id: 'inspector',
-              //             label: 'Inspector',
-              //             contents: () => (
-              //               this.state.compilation?.protocol
-              //                 ? (
-              //                   <BlockInspector
-              //                     blockPath={this.state.selectedBlockPath}
-              //                     host={this.props.host}
-              //                     protocol={this.state.compilation!.protocol}
-              //                     selectBlock={this.selectBlock.bind(this)} />
-              //                 )
-              //                 : <div />
-              //             ) },
-              //           { id: 'report',
-              //             label: 'Report',
-              //             contents: () => (
-              //               <DiagnosticsReport diagnostics={this.state.compilation?.analysis.diagnostics ?? []} />
-              //             ) }
-              //         ]} />
-              //     </div>
-              //   ) }
+              { onToggle: (graphOpen) => void this.setState({ graphOpen }),
+                open: this.state.graphOpen,
+                component: (
+                  <ErrorBoundary>
+                    <GraphEditor
+                      app={this.props.app}
+                      host={this.props.host}
+                      protocolRoot={this.state.compilation?.protocol?.root ?? null}
+                      selectBlock={this.selectBlock.bind(this)}
+                      selection={this.state.selectedBlockPath && {
+                        blockPath: this.state.selectedBlockPath,
+                        observed: false
+                      }}
+                      summary={summary} />
+                  </ErrorBoundary>
+                ) },
+              { nominalSize: CSS.px(400),
+                onToggle: (inspectorOpen) => void this.setState({ inspectorOpen }),
+                open: this.state.inspectorOpen,
+                component: (
+                  <div>
+                    <TabNav
+                      activeEntryId={this.state.inspectorEntryId}
+                      setActiveEntryId={(id) => void this.setState({ inspectorEntryId: id })}
+                      entries={[
+                        { id: 'inspector',
+                          label: 'Inspector',
+                          shortcut: 'E',
+                          contents: () => (
+                            this.state.compilation?.protocol
+                              ? (
+                                <ErrorBoundary>
+                                  <BlockInspector
+                                    app={this.props.app}
+                                    blockPath={this.state.selectedBlockPath}
+                                    host={this.props.host}
+                                    location={null}
+                                    protocol={this.state.compilation!.protocol}
+                                    selectBlock={this.selectBlock.bind(this)} />
+                                </ErrorBoundary>
+                              )
+                              : <div />
+                          ) },
+                        { id: 'report',
+                          label: 'Report',
+                          shortcut: 'R',
+                          contents: () => (
+                            <DiagnosticsReport
+                              analysis={this.state.compilation?.analysis ?? null} />
+                          ) }
+                      ]} />
+                  </div>
+                ) }
             ]} />
           <div className={editorStyles.infobarRoot}>
             <div className={editorStyles.infobarLeft}>
-              {/* {this.state.cursorPosition && (
-                  <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
-                )} */}
-              {/* <div>Last saved: {this.props.draft.lastModified ? new Date(this.props.draft.lastModified).toLocaleTimeString() : '–'}</div> */}
+              {this.state.cursorPosition && (
+                <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
+              )}
             </div>
             <div className={editorStyles.infobarRight}>
-              <div>Foo</div>
+              <div>Last saved: {this.selectedDocumentItem.snapshot.lastModified ? new Date(this.selectedDocumentItem.snapshot.lastModified).toLocaleTimeString() : '–'}</div>
             </div>
           </div>
         </div>

@@ -78,7 +78,7 @@ class DraftCompilation:
         "tokens": [token.export() for token in self.analysis.tokens],
         "warnings": [warning.export() for warning in self.analysis.warnings]
       },
-      "documentPaths": [str(path) for path in self.document_paths],
+      "missingDocumentPaths": [], # str(path).split("/") for path in self.document_paths],
       "protocol": self.protocol and self.protocol.export(),
       "valid": (not self.analysis.errors)
     }

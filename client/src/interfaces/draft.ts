@@ -1,6 +1,6 @@
-import type { DraftDocumentId } from '../app-backends/base';
-import type { DraftCompletion, DraftDiagnostic, DraftFold, DraftHover, DraftRelation, DraftRename, DraftSelection } from '../draft';
-import type { Protocol } from './protocol';
+import type { Diagnostic, Protocol } from 'pr1-shared';
+import type { DraftCompletion, DraftFold, DraftHover, DraftMarker, DraftRelation, DraftRename, DraftSelection, DraftToken } from '../draft';
+import type { DraftDocumentPath } from '../app-backends/base';
 
 
 export type HostDraftId = string;
@@ -24,10 +24,8 @@ export interface HostDraftCompilerOptions {
 
 
 export interface HostDraftCompilerResult {
-  documents: Record<DraftDocumentId, {
-    analysis: DraftLanguageAnalysis;
-  }>;
-  missingDocumentPaths: string[][];
+  analysis: DraftLanguageAnalysis;
+  missingDocumentPaths: DraftDocumentPath[];
   protocol: Protocol | null;
   valid: boolean;
 }
@@ -35,10 +33,12 @@ export interface HostDraftCompilerResult {
 
 export interface DraftLanguageAnalysis {
   completions: DraftCompletion[];
-  diagnostics: DraftDiagnostic[];
+  diagnostics: Diagnostic[];
   folds: DraftFold[];
   hovers: DraftHover[];
+  markers: DraftMarker[];
   relations: DraftRelation[];
   renames: DraftRename[];
   selections: DraftSelection[];
+  tokens: DraftToken[];
 }

@@ -23,6 +23,7 @@ plugin_logger = root_logger.getChild("plugin")
 logger = plugin_logger
 
 
+# @deprecated
 class BaseParser:
   pass
 

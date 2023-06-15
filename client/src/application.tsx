@@ -1,37 +1,29 @@
-import { Set as ImSet } from 'immutable';
 import { Client, PluginName } from 'pr1-shared';
 import { Component } from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
-import type { AppBackend, DraftDocumentId, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
-import type { Chip, ChipId } from './backends/common';
-import type { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
-import styles from '../styles/components/application.module.scss';
-
-import type { AppBackend } from './app-backends/base';
+import type { AppBackend, DraftDocumentId, DraftDocumentSnapshot, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
 import { ErrorBoundary } from './components/error-boundary';
 import { Sidebar } from './components/sidebar';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { ApplicationStoreContext } from './contexts';
-import { Draft, DraftCompilation, DraftId, DraftsRecord, createDraftFromItem } from './draft';
-import { createDraftFromItem, Draft, DraftCompilation, DraftId } from './draft';
 import type { Host } from './host';
 import { HostInfo } from './interfaces/host';
 import { Plugins, UnknownPlugin } from './interfaces/plugin';
-import { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
+import type { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
 import { ShortcutManager } from './shortcuts';
 import { ApplicationPersistentStoreDefaults, ApplicationPersistentStoreEntries, ApplicationSessionStoreDefaults, ApplicationSessionStoreEntries, ApplicationStoreConsumer } from './store/application';
 import { StoreManager } from './store/store-manager';
 import { Pool } from './util';
 import { ViewConf } from './views/conf';
 import { ViewDraftWrapper } from './views/draft';
+import { ViewExperimentWrapper } from './views/experiment-wrapper';
 import { ViewExperiments } from './views/experiments';
 import { ViewPluginView } from './views/plugin-view';
 import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
-import { ViewExperimentWrapper } from './views/experiment-wrapper';
-import { BaseUrl, BaseUrlPathname } from './constants';
+import { Draft } from './draft';
 
 
 const Views: ViewType[] = [ViewExperimentWrapper, ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewPluginView];
@@ -334,6 +326,10 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     this.pool.add(async () => {
       // Initialize the app backend
 
+      this.appBackend.watchSnapshot((snapshot) => {
+        this.setState(snapshot);
+      }, { signal: this.controller.signal });
+
       await this.appBackend.initialize();
 
 
@@ -376,11 +372,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
       }
 
 
-      // List and compile known drafts if available
-
-      this.setState(() => this.appBackend.getSnapshot());
-
-
       // Initialize the route
 
       let url = navigation.currentEntry.url;
@@ -393,36 +384,31 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
   }
 
 
-  async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-    let sample = await this.state.host!.client.request({ type: 'createDraftSample' });
-    let draftItem = await this.appBackend.createDraft({
-      directory: options.directory,
-      source: sample
-    });
+  // async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
+  //   let sample = await this.state.host!.client.request({ type: 'createDraftSample' });
+  //   let draftItem = await this.appBackend.createDraft({
+  //     directory: options.directory,
+  //     source: sample
+  //   });
 
-    if (draftItem) {
-      this.setState((state) => ({
-        drafts: {
-          ...state.drafts,
-          [draftItem!.id]: createDraftFromItem(draftItem!)
-        }
-      }));
-    }
+  //   if (draftItem) {
+  //     this.setState((state) => ({
+  //       drafts: {
+  //         ...state.drafts,
+  //         [draftItem!.id]: createDraftFromItem(draftItem!)
+  //       }
+  //     }));
+  //   }
 
-    return (draftItem?.id ?? null);
-  }
+  //   return (draftItem?.id ?? null);
+  // }
 
-  async deleteDraft(draftId: DraftId) {
+  async deleteDraft(draftId: DraftInstanceId) {
     let instance = this.state.drafts[draftId].model;
     await instance.remove();
-
-    this.setState((state) => ({
-      ...state,
-      ...this.appBackend.getSnapshot()
-    }));
   }
 
-  async queryDraft(options: { directory: boolean; }): Promise<DraftInstanceId | null> {
+  async queryDraft(options: { directory: boolean; }) {
     let candidates = await this.appBackend.queryDraftCandidates({ directory: options.directory });
     let candidate = candidates[0];
 
@@ -431,10 +417,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     }
 
     let instance = await candidate.createInstance();
-    this.setState(() => this.appBackend.getSnapshot());
 
     return instance.id;
-
   }
 
   async saveDraftSource(draft: Draft, source: string) {
@@ -456,54 +440,54 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     });
   }
 
-  async saveDraftCompilation(draft: Draft, compilation: DraftCompilation) {
-    this.setState((state) => {
-      let stateDraft = state.drafts[draft.id];
+  // async saveDraftCompilation(draft: Draft, compilation: DraftCompilation) {
+  //   this.setState((state) => {
+  //     let stateDraft = state.drafts[draft.id];
 
-      if (!stateDraft) {
-        return null;
-      }
+  //     if (!stateDraft) {
+  //       return null;
+  //     }
 
-      return {
-        drafts: {
-          ...state.drafts,
-          [draft.id]: {
-            ...stateDraft,
-            compilation,
-            name: compilation!.protocol?.name ?? stateDraft.name // ?? draft.item.name
-          }
-        }
-      }
-    });
+  //     return {
+  //       drafts: {
+  //         ...state.drafts,
+  //         [draft.id]: {
+  //           ...stateDraft,
+  //           compilation,
+  //           name: compilation!.protocol?.name ?? stateDraft.name // ?? draft.item.name
+  //         }
+  //       }
+  //     }
+  //   });
 
-    if (compilation.protocol?.name) {
-      await draft.item.write({
-        name: compilation.protocol.name
-      });
-    }
-  }
+  //   if (compilation.protocol?.name) {
+  //     await draft.item.write({
+  //       name: compilation.protocol.name
+  //     });
+  //   }
+  // }
 
-  async watchDraft(draftId: DraftId, options: { signal: AbortSignal; }) {
-    await this.state.drafts[draftId].item.watch(() => {
-      this.setState((state) => {
-        let draft = state.drafts[draftId];
-        let draftItem = draft.item;
+  // async watchDraft(draftId: DraftId, options: { signal: AbortSignal; }) {
+  //   await this.state.drafts[draftId].item.watch(() => {
+  //     this.setState((state) => {
+  //       let draft = state.drafts[draftId];
+  //       let draftItem = draft.item;
 
-        return {
-          drafts: {
-            ...state.drafts,
-            [draftId]: {
-              ...draft,
-              lastModified: draftItem.lastModified,
-              revision: draftItem.revision,
-              readable: draftItem.readable,
-              writable: draftItem.writable
-            }
-          }
-        };
-      });
-    }, { signal: options.signal });
-  }
+  //       return {
+  //         drafts: {
+  //           ...state.drafts,
+  //           [draftId]: {
+  //             ...draft,
+  //             lastModified: draftItem.lastModified,
+  //             revision: draftItem.revision,
+  //             readable: draftItem.readable,
+  //             writable: draftItem.writable
+  //           }
+  //         }
+  //       };
+  //     });
+  //   }, { signal: options.signal });
+  // }
 
 
   override render() {

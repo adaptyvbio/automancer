@@ -4,6 +4,8 @@ import * as monaco from 'monaco-editor';
 export const LanguageName = 'prl';
 export const ThemeName = 'prl-theme';
 
+export const SEMANTIC_TOKEN_TYPES = ['lead'];
+
 export type LanguageService =
     monaco.languages.CompletionItemProvider
   & monaco.languages.DefinitionProvider
@@ -38,14 +40,13 @@ monaco.languages.registerDefinitionProvider(LanguageName, {
 });
 
 monaco.languages.registerDocumentSemanticTokensProvider(LanguageName, {
-  getLegend: () => (currentLanguageService?.getLegend() ?? {
+  getLegend: () => ({
     tokenModifiers: [],
-    tokenTypes: []
+    tokenTypes: SEMANTIC_TOKEN_TYPES
   }),
   provideDocumentSemanticTokens: async (model, lastResultId, token) =>
-    (await currentLanguageService?.provideDocumentSemanticTokens(model, lastResultId, token)) ?? null,
-  releaseDocumentSemanticTokens: (resultId) =>
-    currentLanguageService?.releaseDocumentSemanticTokens(resultId),
+    (await languageServices.get(model)?.provideDocumentSemanticTokens(model, lastResultId, token)) ?? null,
+  releaseDocumentSemanticTokens: (resultId) => {}
 })
 
 monaco.languages.registerFoldingRangeProvider(LanguageName, {

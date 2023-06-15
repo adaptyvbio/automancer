@@ -1,7 +1,8 @@
-import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
 
 import styles from '../../styles/components/modal.module.scss';
+
+import { Component, createRef } from 'react';
 
 
 export type ModalProps = React.PropsWithChildren<{
@@ -12,8 +13,8 @@ export interface ModalState {
 
 }
 
-export class Modal extends React.Component<ModalProps, ModalState> {
-  refDialog = React.createRef<HTMLDialogElement>();
+export class Modal extends Component<ModalProps, ModalState> {
+  private refDialog = createRef<HTMLDialogElement>();
 
   constructor(props: ModalProps) {
     super(props);
@@ -21,13 +22,13 @@ export class Modal extends React.Component<ModalProps, ModalState> {
     this.state = {};
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.refDialog.current!.showModal();
   }
 
-  render() {
+  override render() {
     return (
-      ReactDOM.createPortal((
+      createPortal((
         <dialog
           className={styles.root}
           ref={this.refDialog}

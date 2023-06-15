@@ -23,11 +23,13 @@ import { Pool } from '../util';
 import { ViewExperimentWrapperRoute } from './experiment-wrapper';
 import { createPluginContext } from '../plugin';
 import { ShortcutCode } from '../shortcuts';
+import { EditProtocolModal } from '../components/modals/edit-protocol';
 
 
 export type ViewExecutionProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
 
 export interface ViewExecutionState {
+  editModalOpen: boolean;
   selection: {
     blockPath: ProtocolBlockPath;
     observed: boolean;
@@ -45,6 +47,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
     super(props);
 
     this.state = {
+      editModalOpen: false,
       selection: null,
       toolsTabId: 'inspector',
       toolsOpen: true
@@ -146,7 +149,10 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                       location={this.master.location}
                       protocolRoot={this.master.protocol.root}
                       selectBlock={this.selectBlock.bind(this)}
-                      selection={this.state.selection} />
+                      selection={this.state.selection}
+                      onEditDraft={() => {
+                        this.setState({ editModalOpen: true });
+                      }} />
                   </ErrorBoundary>
                 )
               },
@@ -267,6 +273,16 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
               }
             ]} />
         </div>
+
+        {this.state.editModalOpen && (
+          <EditProtocolModal
+            onCancel={() => {
+              this.setState({ editModalOpen: false });
+            }}
+            onSubmit={(mode) => {
+
+            }} />
+        )}
       </main>
     );
   }

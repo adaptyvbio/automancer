@@ -1,7 +1,10 @@
 import type { CompilationAnalysis } from './compilation';
 import type { Diagnostic } from './diagnostic';
 import type { Protocol, Term } from './protocol';
+import type { Brand } from './util';
 
+
+export type MasterId = Brand<string, 'MasterId'>;
 
 export type MasterBlockId = number;
 
@@ -14,10 +17,12 @@ export interface MasterBlockLocation {
 
 
 export interface Master {
+  id: MasterId;
   initialAnalysis: CompilationAnalysis;
   location: MasterBlockLocation;
   masterAnalysis: MasterAnalysis;
   protocol: Protocol;
+  startDate: number;
 }
 
 export interface MasterAnalysis {

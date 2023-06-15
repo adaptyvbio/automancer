@@ -28,6 +28,7 @@ class ExperimentReportHeader:
     }
 
 
+@comserde.serializable
 @dataclass
 class ExperimentReportEvent:
   analysis: Optional[MasterAnalysis]

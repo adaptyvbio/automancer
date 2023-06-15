@@ -44,7 +44,7 @@ export function StartProtocolModal(props: {
           (experimentId === NewExperimentOptionId)
             ? { experimentId: null, newExperimentTitle: (newExperimentTitle.trim() || null) }
             : { experimentId, newExperimentTitle: null }
-        )
+        );
       }}>
         <h2>Start protocol</h2>
 

@@ -2,6 +2,7 @@ from asyncio import Task
 import math
 from random import random
 import time
+from uuid import uuid4
 import comserde
 from logging import Logger
 from dataclasses import dataclass, field
@@ -40,6 +41,7 @@ class Master:
   def __init__(self, compilation: DraftCompilation, /, experiment: Experiment, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
     assert compilation.protocol
 
+    self.id = str(uuid4())
     self.experiment = experiment
     self.host = host
     self.protocol = compilation.protocol
@@ -159,10 +161,12 @@ class Master:
       return None
 
     return {
+      "id": self.id,
       "initialAnalysis": self._initial_analysis.export(),
       "location": self._root_entry.export(),
       "masterAnalysis": self._master_analysis.export(),
-      "protocol": self.protocol.export()
+      "protocol": self.protocol.export(),
+      "startDate": (self.start_time * 1000)
     }
 
 

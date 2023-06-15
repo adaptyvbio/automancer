@@ -369,9 +369,11 @@ class Host:
 
         logger.info(f"Running protocol on experiment '{experiment.id}'")
 
+        experiment.prepare()
+        experiment.master = Master(compilation, experiment, cleanup_callback=cleanup_callback, host=self)
+
         async def func():
-          experiment.prepare()
-          experiment.master = Master(compilation, experiment, cleanup_callback=cleanup_callback, host=self)
+          assert experiment.master
 
           run_task = asyncio.create_task(experiment.master.run(update_callback))
 
@@ -387,6 +389,10 @@ class Host:
           self.update_callback()
 
         self.pool.start_soon(func(), priority=10)
+
+        return {
+          "masterId": experiment.master.id
+        }
 
     self.update_callback()
 

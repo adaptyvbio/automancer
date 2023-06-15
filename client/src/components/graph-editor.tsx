@@ -20,6 +20,7 @@ import { Application } from '../application';
 export interface GraphEditorProps {
   app: Application;
   host: Host;
+  onEditDraft?(): void;
   protocolRoot: ProtocolBlock | null;
   selectBlock(path: ProtocolBlockPath | null, options?: { showInspector?: unknown; }): void;
   selection: {
@@ -427,12 +428,22 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
+          {this.props.onEditDraft && (
+            <div className={graphEditorStyles.actionsGroup}>
+              <button type="button" className={graphEditorStyles.actionsButton} onClick={() => void this.props.onEditDraft!()}>
+                {/* <Icon name="edit_note" className={graphEditorStyles.actionsIcon} /> */}
+                Edit
+              </button>
+            </div>
+          )}
           <div className={graphEditorStyles.actionsGroup}>
             {!!this.props.location && (
               <button
                 type="button"
                 className={util.formatClass(graphEditorStyles.actionsButton, { '_active': (this.state.trackSelectedBlock && this.props.selection!.observed) })}
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation();
+
                   this.setState({ trackSelectedBlock: !(this.state.trackSelectedBlock && this.props.selection!.observed) });
                   this.props.selectBlock(null);
                 }}>

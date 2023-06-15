@@ -25,6 +25,7 @@ class PluginProtocol(Protocol):
   Executor: type[BaseExecutor] # Optional
   Parser: type[BaseParser] # Optional
   Runner: type[BaseRunner] # Optional
+  client_path: str # Optional
   metadata: Metadata # Optional
   namespace: PluginName
   version: int

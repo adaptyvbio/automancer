@@ -1,6 +1,7 @@
 import type { ChannelId, ClientId } from '../client';
 import type { ExperimentId, ExperimentReportEventIndex, ExperimentReportEvents, ExperimentReportInfo } from './experiment';
 import type { HostIdentifier, HostState } from './host';
+import type { MasterId } from './master';
 import type { PluginName } from './plugin';
 import type { ProtocolBlockPath } from './protocol';
 import type { UnionToIntersection } from './util';
@@ -75,10 +76,14 @@ export type RequestFunc = UnionToIntersection<
   ) | (
     (options: {
       type: 'startDraft';
-      draftId: any;
+      draft: any;
       experimentId: ExperimentId;
-      source: string;
-    }) => Promise<void>
+      options: {
+        trusted: boolean;
+      };
+    }) => Promise<{
+      masterId: MasterId;
+    }>
   )
 >;
 

@@ -1,14 +1,21 @@
-import { Analysis, concatenateDiagnostics } from 'pr1-shared';
+import { concatenateDiagnostics } from 'pr1-shared';
 
 import styles from '../../styles/components/diagnostics-report.module.scss';
 
 import * as util from '../util';
 import { Icon } from './icon';
+import { PanelPlaceholder } from '../libraries/panel';
 
 
 export function DiagnosticsReport(props: {
-  analysis: Analysis;
+  analysis: any;
 }) {
+  if ((props.analysis.errors.length + props.analysis.warnings.length) < 1) {
+    return (
+      <PanelPlaceholder message="Nothing to report" />
+    );
+  }
+
   return (
     <div className={styles.root}>
       {concatenateDiagnostics(props.analysis).map(([diagnostic, kind], index) => (

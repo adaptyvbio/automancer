@@ -1,0 +1,106 @@
+@use "../mixins" as *;
+
+
+// Root components
+
+.root {
+  overflow-y: auto;
+}
+
+.loader {
+  display: flex;
+
+  .spinner {
+    margin: auto;
+  }
+}
+
+.placeholder {
+  display: flex;
+  height: 100%;
+
+  p {
+    width: 100%;
+
+    margin: auto 0;
+    padding: 1rem;
+
+    color: #666;
+    font-weight: 500;
+    text-align: center;
+  }
+}
+
+
+// Content components
+
+.section {
+  padding: 0 1.2rem;
+
+  & + & {
+    border-top: 1px solid #ddd;
+  }
+
+  h2 {
+    margin: 1rem 0;
+
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 1rem 0;
+  }
+}
+
+.actions {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+  margin: 1rem 0;
+}
+
+.action {
+  width: 100%;
+}
+
+.datalist {
+  display: grid;
+  gap: 0.4rem 1rem;
+  grid-template-columns: minmax(120px, 1fr) auto;
+
+  margin: 1rem 0;
+
+  dt {
+    @include text-ellipsis();
+
+    color: #666;
+    font-weight: 500;
+  }
+
+  dd {
+    @include text-ellipsis();
+    text-align: right;
+  }
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+
+  margin: 2rem auto;
+  color: #87909f;
+
+  animation: spinner 700ms infinite linear;
+}
+
+@keyframes spinner {
+  from {
+    rotate: 0deg;
+  }
+
+  to {
+    rotate: 360deg;
+  }
+}

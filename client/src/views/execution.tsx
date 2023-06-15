@@ -255,9 +255,11 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                           label: panel.label,
                           shortcut: (panel.shortcut ?? null),
                           contents: () => (
-                            <panel.Component
-                              context={createPluginContext(this.props.app, this.props.host, namespace)}
-                              experiment={this.props.experiment} />
+                            <ErrorBoundary>
+                              <panel.Component
+                                context={createPluginContext(this.props.app, this.props.host, namespace)}
+                                experiment={this.props.experiment} />
+                            </ErrorBoundary>
                           )
                         }))
                     ]} />

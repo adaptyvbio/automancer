@@ -1,24 +1,28 @@
 import { List } from 'immutable';
-import { Experiment, ExperimentId, PluginName, ProtocolBlockPath } from 'pr1-shared';
+import { Experiment, OrdinaryId, ProtocolBlockPath } from 'pr1-shared';
 import { Component, createRef } from 'react';
+import seqOrd from 'seq-ord';
+import hash from 'object-hash';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
 import { BlockInspector } from '../components/block-inspector';
+import { Button } from '../components/button';
+import { ErrorBoundary } from '../components/error-boundary';
+import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { ExecutionInspector } from '../components/execution-inspector';
 import { GraphEditor } from '../components/graph-editor';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
-import { Pool } from '../util';
-import * as util from '../util';
-import { ViewProps } from '../interfaces/view';
-import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
-import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
 import { GlobalContext } from '../interfaces/plugin';
-import { ErrorBoundary } from '../components/error-boundary';
-import { Button } from '../components/button';
+import { ViewProps } from '../interfaces/view';
+import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
+import * as util from '../util';
+import { Pool } from '../util';
 import { ViewExperimentWrapperRoute } from './experiment-wrapper';
+import { createPluginContext } from '../plugin';
+import { ShortcutCode } from '../shortcuts';
 
 
 export type ViewExecutionProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
@@ -28,11 +32,12 @@ export interface ViewExecutionState {
     blockPath: ProtocolBlockPath;
     observed: boolean;
   } | null;
-  toolsTabId: 'inspector' | 'report' | null;
+  toolsTabId: OrdinaryId | null;
   toolsOpen: boolean;
 }
 
 export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionState> {
+  private controller = new AbortController();
   private pool = new Pool();
   private refTitleBar = createRef<TitleBar>();
 
@@ -49,18 +54,6 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
   get master() {
     return this.props.experiment.master!;
   }
-
-  // componentDidRender() {
-  //   if (!this.props.experiment) {
-  //     ViewExperiments.navigate();
-  //   } else if (!this.props.experiment.master) {
-  //     if (navigation.canGoBack) {
-  //       navigation.back();
-  //     } else {
-  //       ViewChip.navigate(this.props.experiment.id);
-  //     }
-  //   }
-  // }
 
   private get activeBlockPaths() {
     return getRefPaths(this.master.protocol.root, this.master.location, this.globalContext);
@@ -87,6 +80,38 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
         toolsOpen: true
       });
     }
+  }
+
+  override componentDidMount() {
+    let panels: {
+      id: OrdinaryId;
+      shortcut: ShortcutCode;
+    }[] = [
+      { id: 'inspector', shortcut: 'E' },
+      { id: 'report', shortcut: 'R' },
+      ...Object.values(this.props.host.plugins)
+        .flatMap((plugin) =>
+          (plugin.executionPanels ?? [])
+            .filter((executionPanel) => executionPanel.shortcut)
+            .map((executionPanel) => ({
+              id: hash([plugin.namespace, executionPanel.id]),
+              shortcut: executionPanel.shortcut!
+            }))
+        )
+    ];
+
+    for (let { id, shortcut } of panels) {
+      this.props.app.shortcutManager.attach(shortcut, () => {
+        this.setState({
+          toolsOpen: true,
+          toolsTabId: id
+        });
+      }, { signal: this.controller.signal });
+    }
+  }
+
+  override componentWillUnmount() {
+    this.controller.abort();
   }
 
   override render() {
@@ -138,7 +163,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                         ? [{
                           id: ('inspector' as const),
                           label: 'Execution',
-                          shortcut: 'E',
+                          shortcut: ('E' as const),
                           contents: () => (
                             <ErrorBoundary>
                               <ExecutionInspector
@@ -156,7 +181,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                         : [{
                           id: ('inspector' as const),
                           label: 'Inspector',
-                          shortcut: 'E',
+                          shortcut: ('E' as const),
                           contents: () => (
                             <BlockInspector
                               app={this.props.app}
@@ -210,11 +235,31 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                       {
                         id: 'report',
                         label: 'Report',
-                        shortcut: 'R',
+                        shortcut: ('R' as const),
                         contents: () => (
                           <ExecutionDiagnosticsReport master={this.master} />
                         )
-                      }
+                      },
+                      ...Object.values(this.props.host.plugins)
+                        .flatMap((plugin) =>
+                          (plugin.executionPanels ?? []).map((executionPanel) => ({
+                            namespace: plugin.namespace,
+                            panel: executionPanel,
+                          }))
+                        )
+                        .sort(seqOrd(function* (a, b, rules) {
+                          yield rules.text(a.panel.label, b.panel.label);
+                        }))
+                        .map(({ namespace, panel }) => ({
+                          id: hash([namespace, panel.id]),
+                          label: panel.label,
+                          shortcut: (panel.shortcut ?? null),
+                          contents: () => (
+                            <panel.Component
+                              context={createPluginContext(this.props.app, this.props.host, namespace)}
+                              experiment={this.props.experiment} />
+                          )
+                        }))
                     ]} />
                 )
               }

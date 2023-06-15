@@ -1,12 +1,12 @@
+import { OrdinaryId } from 'pr1-shared';
 import { Component, ReactNode } from 'react';
 
 import styles from '../../styles/components/tab-nav.module.scss';
 
-import { ExpandableText } from './expandable-text';
 import * as util from '../util';
-
+import { ExpandableText } from './expandable-text';
+import { ShortcutCode } from '../shortcuts';
 import { ShortcutGuide } from './shortcut-guide';
-import { OrdinaryId } from 'pr1-shared';
 
 
 export interface TabNavProps<T extends OrdinaryId> {
@@ -18,7 +18,7 @@ export interface TabNavProps<T extends OrdinaryId> {
     contents?(): ReactNode;
     disabled?: unknown;
     label: string;
-    shortcut?: string;
+    shortcut?: ShortcutCode | null;
   }[];
 }
 
@@ -61,9 +61,7 @@ export class TabNav<T extends OrdinaryId> extends Component<TabNavProps<T>, TabN
               onClick={() => void this.setActiveEntryId(entry.id)}
               key={entry.id}>
               <ExpandableText>
-                <ShortcutGuide
-                  onTrigger={() => void this.setActiveEntryId(entry.id)}
-                  shortcut={entry.shortcut ?? null}>
+                <ShortcutGuide shortcut={entry.shortcut ?? null}>
                   {entry.label}
                 </ShortcutGuide>
               </ExpandableText>

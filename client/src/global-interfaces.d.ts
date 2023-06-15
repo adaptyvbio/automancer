@@ -18,6 +18,18 @@ declare global {
     };
   }
 
+  interface Keyboard {
+    getLayoutMap(): Promise<KeyboardLayoutMap>;
+  }
+
+  interface KeyboardLayoutMap {
+    get(code: string): string | undefined;
+  }
+
+  interface Navigator {
+    keyboard: Keyboard;
+  }
+
   interface Window {
     MonacoEnvironment?: monaco.Environment | undefined;
   }

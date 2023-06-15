@@ -7,6 +7,7 @@ import type { ProtocolBlockGraphRenderer } from './graph';
 import type { FeatureDef } from '../components/features';
 import type { Pool } from '../util';
 import type { StoreConsumer, StoreEntries } from '../store/types';
+import type { ShortcutCode } from '../shortcuts';
 
 
 export interface PluginSettingsComponentProps<Context extends AnyPluginContext> {
@@ -22,7 +23,14 @@ export interface PluginViewEntry<Context extends AnyPluginContext> {
   Component: ComponentType<PluginViewComponentProps<Context>>;
 }
 
-export interface PluginRunnerComponentProps<Context extends AnyPluginContext> {
+export interface PluginExecutionPanel<Context extends AnyPluginContext> {
+  id: OrdinaryId;
+  label: string;
+  shortcut?: ShortcutCode;
+  Component: ComponentType<PluginExecutionPanelComponentProps<Context>>;
+}
+
+export interface PluginExecutionPanelComponentProps<Context extends AnyPluginContext> {
   context: Context;
   experiment: Experiment;
 }
@@ -39,9 +47,9 @@ export interface Plugin<PersistentStoreEntries extends StoreEntries = [], Sessio
   persistentStoreDefaults?: PersistentStoreEntries;
   sessionStoreDefaults?: SessionStoreEntries;
 
-  RunnerComponent?: ComponentType<PluginRunnerComponentProps<PluginContext<PersistentStoreEntries, SessionStoreEntries>>>;
   SettingsComponent?: ComponentType<PluginSettingsComponentProps<PluginContext<PersistentStoreEntries, SessionStoreEntries>>>;
 
+  executionPanels?: PluginExecutionPanel<PluginContext<PersistentStoreEntries, SessionStoreEntries>>[];
   views?: PluginViewEntry<PluginContext<PersistentStoreEntries, SessionStoreEntries>>[];
 }
 

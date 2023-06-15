@@ -85,7 +85,6 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                     {
                       id: 'inspector',
                       label: 'Inspector',
-                      shortcut: 'I',
                       contents: () => (
                         <ErrorBoundary>
                           <ReportInspector
@@ -103,7 +102,6 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                     {
                       id: 'report',
                       label: 'Report',
-                      shortcut: 'R',
                       contents: () => (
                         <ErrorBoundary>
                           <ExecutionDiagnosticsReport master={this.state.reportInfo!} />

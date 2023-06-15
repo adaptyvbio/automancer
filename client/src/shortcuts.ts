@@ -5,7 +5,16 @@ import { OrderedSet } from 'immutable';
 export const IS_MAC = (navigator.userAgentData.platform === 'macOS');
 
 export const KEY_CODE_MAP: Record<string, string> = {
-  ' ': 'Space'
+  'Digit0': '0',
+  'Digit1': '1',
+  'Digit2': '2',
+  'Digit3': '3',
+  'Digit4': '4',
+  'Digit5': '5',
+  'Digit6': '6',
+  'Digit7': '7',
+  'Digit8': '8',
+  'Digit9': '9',
 };
 
 
@@ -22,17 +31,33 @@ export interface ShortcutItem extends ShortcutProperties {
 }
 
 
+export type ShortcutCodeKeyDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+export type ShortcutCodeKeyLetter = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z';
+export type ShortcutCodeKeySpecial = 'ArrowDown' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'Backspace' | 'Delete' | 'Enter' | 'Escape' | 'Home' | 'PageDown' | 'PageUp' | 'Tab';
+export type ShortcutCodeKey = ShortcutCodeKeyDigit | ShortcutCodeKeyLetter | ShortcutCodeKeySpecial;
+
+export type ShortcutCode = `${'Alt+' | ''}${'Meta+' | ''}${'Shift+' | ''}${ShortcutCodeKey}`;
+
+
 export class ShortcutManager {
   private shortcutItems = OrderedSet<ShortcutItem>();
 
-  listen(target: HTMLElement = document.body, options: { signal: AbortSignal; }) {
+  async listen(target: HTMLElement = document.body, options: { signal: AbortSignal; }) {
+    let layoutMap = await navigator.keyboard.getLayoutMap();
+
     target.addEventListener('keydown', (event) => {
       if (event.composedPath().some((element) => (element instanceof HTMLDialogElement))) {
         return;
       }
 
-      let key = KEY_CODE_MAP[event.key] ?? event.key;
-      key = (key.length === 1) ? key.toUpperCase() : key;
+      let key: string;
+      let keySymbol = layoutMap.get(event.code);
+
+      if (keySymbol && /^[a-z]$/.test(keySymbol)) {
+        key = keySymbol.toUpperCase();
+      } else {
+        key = KEY_CODE_MAP[event.code] ?? event.code;
+      }
 
       let properties: ShortcutProperties = {
         altKey: event.altKey,
@@ -63,7 +88,7 @@ export class ShortcutManager {
     }, { signal: options.signal });
   }
 
-  attach(codes: string[] | string, listener: ShortcutItem['listener'], options: { signal: AbortSignal; }) {
+  attach(codes: ShortcutCode[] | ShortcutCode, listener: ShortcutItem['listener'], options: { signal: AbortSignal; }) {
     let items = (Array.isArray(codes) ? codes : [codes]).map((code) => {
       let segments = code.split('+');
 

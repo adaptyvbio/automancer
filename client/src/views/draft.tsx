@@ -82,6 +82,18 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       this.setState({ startModalOpen: true });
     }, { signal: this.controller.signal });
 
+    for (let { id, shortcut } of [
+      { id: 'inspector', shortcut: ('E' as const) },
+      { id: 'report', shortcut: ('R' as const) }
+    ]) {
+      this.props.app.shortcutManager.attach(shortcut, () => {
+        this.setState({
+          inspectorEntryId: id,
+          inspectorOpen: true
+        });
+      }, { signal: this.controller.signal });
+    }
+
     this.pool.add(async () => {
       // This immediately updates item.readable, item.writable and item.lastModified
       // and calls setState() to update the analoguous properties on draft.
@@ -396,7 +408,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       entries={[
                         { id: 'inspector',
                           label: 'Inspector',
-                          shortcut: 'I',
+                          shortcut: 'E',
                           contents: () => (
                             this.state.compilation?.protocol
                               ? (

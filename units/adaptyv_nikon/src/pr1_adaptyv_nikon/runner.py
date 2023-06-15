@@ -1,14 +1,13 @@
 from typing import Optional
 
+import automancer as am
 import numpy as np
-
-from pr1.units.base import BaseMasterRunner
 
 from . import namespace
 from .executor import Executor
 
 
-class Runner(BaseMasterRunner):
+class Runner(am.BaseRunner):
   def __init__(self, master):
     self._executor: Executor = master.host.executors[namespace]
     self._master = master

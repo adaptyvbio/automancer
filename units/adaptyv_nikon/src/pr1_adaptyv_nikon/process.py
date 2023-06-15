@@ -1,11 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
-from types import EllipsisType
-from typing import Protocol, final
+from typing import Protocol, cast, final
 
-import pr1 as am
-from pr1.master.analysis import MasterAnalysis, MasterError
-from pr1.util.misc import Exportable
+import automancer as am
 from quantops import Quantity
 
 from . import namespace
@@ -26,7 +23,7 @@ class ProcessPoint(am.BaseProcessPoint):
   pass
 
 @dataclass
-class ProcessLocation(Exportable):
+class ProcessLocation(am.Exportable):
   def export(self):
     return {}
 
@@ -38,13 +35,13 @@ class Process(am.BaseProcess[ProcessData, ProcessPoint]):
   def __init__(self, data: ProcessData, /, master):
     self._data = data
     self._executor: Executor = master.host.executors[namespace]
-    self._runner: Runner = master.runners[namespace]
+    self._runner = cast(Runner, master.runners[namespace])
 
   async def run(self, point, stack):
     if self._runner._points is None:
       yield am.ProcessFailureEvent(
-        analysis=MasterAnalysis(
-          errors=[MasterError("Missing points")]
+        analysis=am.RuntimeAnalysis(
+          errors=[am.Diagnostic("Missing points")]
         )
       )
 

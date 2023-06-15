@@ -1,4 +1,4 @@
-import pr1 as am
+import automancer as am
 
 from . import namespace
 from .executor import Executor

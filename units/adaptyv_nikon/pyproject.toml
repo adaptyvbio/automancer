@@ -11,7 +11,7 @@ dependencies=[
   "pywin32>=306"
 ]
 
-[project.entry-points."pr1.units"]
+[project.entry-points."automancer.plugins"]
 adaptyv_nikon = "pr1_adaptyv_nikon"
 
 [tool.setuptools.packages.find]

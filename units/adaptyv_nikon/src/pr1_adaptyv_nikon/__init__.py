@@ -1,20 +1,20 @@
 from importlib.resources import files
 
-from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
+import automancer as am
 
 
-namespace = "adaptyv_nikon"
+namespace = am.PluginName("adaptyv_nikon")
 version = 0
 
-metadata = Metadata(
+metadata = am.Metadata(
   description="This unit provides imaging functionality using NIS Elements macros.",
-  icon=MetadataIcon(kind='icon', value="biotech"),
+  icon=am.MetadataIcon(kind='icon', value="biotech"),
   title="Adaptyv Nikon",
-  version="1.0"
+  version="2.0"
 )
 
 client_path = files(__name__ + '.client')
-logger = parent_logger.getChild(namespace)
+logger = am.plugin_logger.getChild(namespace)
 
 from .executor import Executor
 from .parser import Parser

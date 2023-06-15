@@ -1,12 +1,11 @@
 import asyncio
+import os
 from pathlib import Path
-import subprocess
 from tempfile import NamedTemporaryFile
-from typing import Optional, TypedDict
+from typing import Optional, Protocol
 
+import automancer as am
 import numpy as np
-from pr1.input import Attribute, RecordType, StrType
-from pr1.units.base import BaseExecutor
 
 from . import logger
 
@@ -17,18 +16,20 @@ macro_inspect = (macros_dir / "inspect.mac").open().read()
 macro_query = (macros_dir / "query.mac").open().read()
 
 
-class Conf(TypedDict):
+class Conf(Protocol):
   nis_path: str
 
 
-class Executor(BaseExecutor):
-  options_type = RecordType({
-    'nis_path': Attribute(StrType(), optional=True)
+class Executor(am.BaseExecutor):
+  options_type = am.RecordType({
+    'nis_path': am.Attribute(am.StrType(), default=r"C:\Program Files\NIS-Elements\nis_ar.exe")
   })
 
-  def __init__(self, conf: Conf, *, host):
+  def __init__(self, conf, *, host):
+    executor_conf: Conf = conf.dislocate()
+
     self._host = host
-    self._elements_path = conf.get('nis_path', r"C:\Program Files\NIS-Elements\nis_ar.exe")
+    self._elements_path = executor_conf.nis_path
     self._stage_bounds: None = None
 
     self._last_capture_points: Optional[np.ndarray] = None
@@ -36,6 +37,9 @@ class Executor(BaseExecutor):
     self._optconfs: Optional[list[str]] = None
 
   async def start(self):
+    if os.name != "nt":
+      raise Exception("NIS-Elements is only available on Windows")
+
     self._objectives, self._optconfs = await self.inspect()
     logger.debug(f"Found {len(self._objectives)} objectives and {len(self._optconfs)} optical configurations")
 

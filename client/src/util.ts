@@ -337,8 +337,11 @@ export interface Deferred<T> {
 export class Pool {
   #promises = new Set<Promise<unknown>>();
 
-  add<T>(func: (() => Promise<T>)): Promise<T> {
-    let promise = func();
+  add<T>(func: (() => Promise<T>) | Promise<T>): Promise<T> {
+    let promise = typeof func === 'function'
+      ? func()
+      : func;
+
     this.#promises.add(promise);
 
     promise
@@ -352,6 +355,12 @@ export class Pool {
 
     return promise;
   }
+
+  async wait() {
+    while (this.#promises.size > 0) {
+      await Promise.all(this.#promises);
+    }
+  }
 }
 
 export function usePool() {
@@ -361,6 +370,43 @@ export function usePool() {
 }
 
 
-function joinReactNodes(nodes: ReactNode[], glue: ReactNode) {
+export class Lock {
+  #candidates: Deferred<void>[] = [];
+  #locked = false;
+
+  constructor(options?: { signal?: AbortSignal; }) {
+    options?.signal?.addEventListener('abort', () => {
+      for (let deferred of this.#candidates) {
+        deferred.reject(new Error('Aborted'));
+      }
+    });
+  }
+
+  async acquire(options?: { signal?: AbortSignal; }) {
+    if (this.#locked) {
+      let deferred = defer<void>();
+      this.#candidates.push(deferred);
+
+      options?.signal?.addEventListener('abort', () => {
+        this.#candidates.splice(this.#candidates.indexOf(deferred), 1);
+      });
+
+      await deferred.promise;
+    }
+
+    return () => {
+      let deferred = this.#candidates.shift()!;
+
+      if (deferred) {
+        deferred.resolve();
+      } else {
+        this.#locked = false;
+      }
+    };
+  }
+}
+
+
+export function joinReactNodes(nodes: ReactNode[], glue: ReactNode) {
   return nodes.flatMap((node, index) => (index === 0) ? [node] : [glue, node]);
 }

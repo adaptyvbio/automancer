@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import { Application } from '../application';
-import { Host } from '../host';
+import type { Application } from '../application';
+import type { Host } from '../host';
 
 
 // Returns true => we can continue navigation

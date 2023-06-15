@@ -15,13 +15,13 @@ export type LanguageService =
   & monaco.languages.SelectionRangeProvider;
 
 
-let currentLanguageService: LanguageService | null = null;
+let languageServices = new Map<monaco.editor.ITextModel, LanguageService>();
 
-export function setLanguageService(languageService: LanguageService | null, options?: { signal?: AbortSignal; }) {
-  currentLanguageService = languageService;
+export function setLanguageService(model: monaco.editor.ITextModel, languageService: LanguageService, options: { signal: AbortSignal; }) {
+  languageServices.set(model, languageService);
 
-  options?.signal?.addEventListener('abort', () => {
-    currentLanguageService = null;
+  options.signal.addEventListener('abort', () => {
+    languageServices.delete(model);
   });
 }
 
@@ -29,12 +29,12 @@ monaco.languages.register({ id: LanguageName });
 
 monaco.languages.registerCompletionItemProvider(LanguageName, {
   provideCompletionItems: async (model, position, context, token) =>
-    (await currentLanguageService?.provideCompletionItems(model, position, context, token)) ?? null
+    (await languageServices.get(model)?.provideCompletionItems(model, position, context, token)) ?? null
 });
 
 monaco.languages.registerDefinitionProvider(LanguageName, {
   provideDefinition: async (model, position, token) =>
-    (await currentLanguageService?.provideDefinition(model, position, token)) ?? null
+    (await languageServices.get(model)?.provideDefinition(model, position, token)) ?? null
 });
 
 monaco.languages.registerDocumentSemanticTokensProvider(LanguageName, {
@@ -50,29 +50,29 @@ monaco.languages.registerDocumentSemanticTokensProvider(LanguageName, {
 
 monaco.languages.registerFoldingRangeProvider(LanguageName, {
   provideFoldingRanges: async (model, context, token) =>
-    (await currentLanguageService?.provideFoldingRanges(model, context, token)) ?? null
+    (await languageServices.get(model)?.provideFoldingRanges(model, context, token)) ?? null
 });
 
 monaco.languages.registerHoverProvider(LanguageName, {
   provideHover: async (model, position, token) =>
-    (await currentLanguageService?.provideHover(model, position, token)) ?? null
+    (await languageServices.get(model)?.provideHover(model, position, token)) ?? null
 });
 
 monaco.languages.registerReferenceProvider(LanguageName, {
   provideReferences: async (model, position, context, token) =>
-    (await currentLanguageService?.provideReferences(model, position, context, token)) ?? null
+    (await languageServices.get(model)?.provideReferences(model, position, context, token)) ?? null
 });
 
 monaco.languages.registerRenameProvider(LanguageName, {
   provideRenameEdits: async (model, position, newName, token) =>
-    (await currentLanguageService?.provideRenameEdits(model, position, newName, token)) ?? null,
+    (await languageServices.get(model)?.provideRenameEdits(model, position, newName, token)) ?? null,
   resolveRenameLocation: async (model, position, token) =>
-    (await currentLanguageService?.resolveRenameLocation?.(model, position, token)) ?? null
+    (await languageServices.get(model)?.resolveRenameLocation?.(model, position, token)) ?? null
 });
 
 monaco.languages.registerSelectionRangeProvider(LanguageName, {
   provideSelectionRanges: async (model, positions, token) =>
-    (await currentLanguageService?.provideSelectionRanges(model, positions, token)) ?? null
+    (await languageServices.get(model)?.provideSelectionRanges(model, positions, token)) ?? null
 });
 
 monaco.languages.setLanguageConfiguration(LanguageName, {

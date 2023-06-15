@@ -1,5 +1,10 @@
 import * as idb from 'idb-keyval';
 
+import { HostSettings, HostSettingsData, HostSettingsId } from '../interfaces/host';
+import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
+import * as util from '../util';
+import { Pool } from '../util';
+import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftDocumentWatcher, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 import { DraftId, DraftPrimitive } from '../draft';
 import { AppBackend, DraftItem } from './base';
 import * as util from '../util';
@@ -7,39 +12,382 @@ import { BrowserStorageStore } from '../store/browser-storage';
 import { Store } from '../store/base';
 
 
-interface MainEntry {
-  draftIds: DraftId[];
+interface BrowserStoreMainEntry {
   version: number;
 }
 
-interface DraftEntry {
-  id: DraftId;
+export type BrowserStoreDraftsEntry = Record<DraftInstanceId, {
+  entryDocumentHandle: FileSystemFileHandle;
+  name: string | null;
+  rootHandle: FileSystemDirectoryHandle | null;
+}>;
+
+export type BrowserStoreHostSettingsEntry = HostSettingsData;
+
+
+export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot> implements DraftDocument {
+  id: DraftDocumentId = crypto.randomUUID();
+  lastModified: number | null = null;
+  readonly = false;
+  source: {
+    contents: string;
+    lastModified: number;
+  } | null = null;
+
+  readable: boolean = false;
+  writable: boolean = false;
+
+  _attachedDraftInstances = new Set<BrowserDraftInstance>();
+  _handle: FileSystemFileHandle;
+  _loadingPromise: Promise<void> | null = null;
+  _writing = false;
+
+  constructor(handle: FileSystemFileHandle) {
+    super();
+    this._handle = handle;
+  }
+
+  protected _createSnapshot(): DraftDocumentSnapshot {
+    return {
+      model: this,
+
+      id: this.id,
+      deleted: false,
+      lastModified: this.lastModified,
+      path: [this._handle.name],
+      possiblyWritable: true,
+      readable: this.readable,
+      source: this.source,
+      writable: this.writable
+    };
+  }
+
+  async _initialize() {
+    this.readable = ((await this._handle.queryPermission({ mode: 'read' })) === 'granted');
+    this.writable = ((await this._handle.queryPermission({ mode: 'readwrite' })) === 'granted');
+  }
+
+  async _load() {
+    if (!this._loadingPromise) {
+      this._loadingPromise = (async () => {
+        let file = await this._handle.getFile();
+
+        if (file.lastModified !== this.lastModified) {
+          this.lastModified = file.lastModified;
+          this.source = {
+            contents: await file.text(),
+            lastModified: file.lastModified
+          };
+
+          this._update();
+        }
+
+        this._loadingPromise = null;
+      })();
+    }
+
+    await this._loadingPromise;
+  }
+
+  async request() {
+    try {
+      if (this.readonly) {
+        this.readable = ((await this._handle.requestPermission({ mode: 'read' })) === 'granted');
+      } else {
+        this.writable = ((await this._handle.requestPermission({ mode: 'readwrite' })) === 'granted');
+        this.readable = this.writable;
+      }
+    } catch (err) {
+      if ((err as { name: string; }).name === 'SecurityError') {
+        return;
+      }
+
+      throw err;
+    }
+
+    this._update();
+
+    if (this.readable) {
+      await this._load();
+    }
+  }
+
+  async write(contents: string) {
+    if (this._writing) {
+      throw new Error('Already writing');
+    }
+
+    this._writing = true;
+
+    let writable = await this._handle.createWritable();
+    await writable.write(contents);
+    await writable.close();
+
+    let file = await this._handle.getFile();
+
+    this.lastModified = file.lastModified;
+    this._update();
+    this._writing = false;
+
+    return {
+      lastModified: file.lastModified
+    };
+  }
+}
+
+export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot> implements DraftInstance<BrowserDraftDocument> {
+  id: DraftInstanceId;
+  entryDocument: BrowserDraftDocument;
   name: string | null;
 
-  location: {
-    type: 'app';
-    lastModified: number;
-    source: string;
-  } | {
-    type: 'private-filesystem';
-    handle: FileSystemDirectoryHandle;
-  } | {
-    type: 'user-filesystem';
-    handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-    mainFilePath: string;
-  };
+  _attachedDocuments = new Set<BrowserDraftDocument>();
+  _rootHandle: FileSystemDirectoryHandle | null;
+
+  #appBackend: BrowserAppBackend;
+
+  constructor(
+    options: {
+      id?: DraftInstanceId;
+      entryDocument: BrowserDraftDocument;
+      name?: string | null;
+      rootHandle: FileSystemDirectoryHandle | null;
+    },
+    appBackend: BrowserAppBackend
+  ) {
+    super();
+
+    this.#appBackend = appBackend;
+
+    this.entryDocument = options.entryDocument;
+    this.id = options.id ?? crypto.randomUUID();
+    this.name = options.name ?? null;
+
+    this._rootHandle = options.rootHandle;
+  }
+
+  protected _createSnapshot(): DraftInstanceSnapshot {
+    return {
+      model: this,
+
+      id: this.id,
+      entryDocumentId: this.entryDocument.id,
+      name: this.name
+    };
+  }
+
+  async detachDocument(document: BrowserDraftDocument) {
+    this._attachedDocuments.delete(document);
+  }
+
+  async getDocument(path: DraftDocumentPath) {
+    if (!this._rootHandle) {
+      return null;
+    }
+
+    let documentHandle = await findFile(this._rootHandle, path);
+
+    if (!documentHandle) {
+      return null;
+    }
+
+    let document = await this.#appBackend._createDocument(documentHandle);
+    this._attachedDocuments.add(document);
+
+    return document;
+  }
+
+  async remove() {
+    await idb.update<BrowserStoreDraftsEntry>('drafts', (entry) => {
+      let { [this.id]: _, ...rest } = (entry ?? {});
+      return rest;
+    }, this.#appBackend._store);
+
+    delete this.#appBackend.draftInstances[this.id];
+    this.#appBackend._update();
+  }
+
+  async _save() {
+    await idb.update<BrowserStoreDraftsEntry>('drafts', (entry) => ({
+      ...entry,
+      [this.id]: {
+        id: this.id,
+        entryDocumentHandle: this.entryDocument._handle,
+        name: this.name,
+        rootHandle: this._rootHandle
+      }
+    }), this.#appBackend._store);
+  }
 }
 
 
-export class BrowserAppBackend implements AppBackend {
+export class BrowserDraftDocumentWatcher implements DraftDocumentWatcher {
+  closed: Promise<void>;
+
+  private _appBackend: BrowserAppBackend;
+  private _callback: ((changedDocumentIds: Set<DraftDocumentId>) => void);
+  private _documents = new Set<BrowserDraftDocument>();
+  private _pool = new Pool();
+  private _signal: AbortSignal;
+  private _timeoutId!: number | null;
+
+  constructor(callback: ((changedDocumentIds: Set<DraftDocumentId>) => void), options: { signal: AbortSignal; }, appBackend: BrowserAppBackend) {
+    this._appBackend = appBackend;
+    this._callback = callback;
+    this._signal = options.signal;
+
+    this._planPoll();
+
+    this.closed = new Promise<void>((resolve) => {
+      this._signal.addEventListener('abort', () => void resolve());
+    }).then(async () => {
+      if (this._timeoutId !== null) {
+        clearTimeout(this._timeoutId);
+        this._timeoutId = null;
+      }
+
+      await this._pool.wait();
+    });
+  }
+
+  async _poll() {
+    for (let document of this._documents) {
+      if (document.readable && !document._writing) {
+        await document._load();
+      }
+    }
+  }
+
+  // async _old_poll() {
+  //   let changedDocumentIds = new Set<DraftDocumentId>();
+
+  //   for (let document of this._documents) {
+  //     if (document.readable && !document._writing) {
+  //       let file = await document._handle.getFile();
+
+  //       if (file.lastModified !== document.lastModified) {
+  //         changedDocumentIds.add(document.id);
+
+  //         document.lastModified = file.lastModified;
+  //         document.source = await file.text();
+  //         document._update();
+  //       }
+  //     }
+  //   }
+
+  //   if (this._signal.aborted) {
+  //     return;
+  //   }
+
+  //   // Make sure that changed documents have not been removed from the watcher.
+  //   for (let changedDocumentId of changedDocumentIds) {
+  //     let document = this._appBackend._documents[changedDocumentId];
+
+  //     if (!document || !this._documents.has(document)) {
+  //       changedDocumentIds.delete(changedDocumentId);
+  //     }
+  //   }
+
+  //   if (changedDocumentIds.size > 0) {
+  //     this._callback(changedDocumentIds);
+  //   }
+
+  //   this._planPoll();
+  // }
+
+  _planPoll() {
+    this._timeoutId = setTimeout(() => {
+      this._pool.add(this._poll());
+    }, 1000);
+  }
+
+  async add(documentIds: Iterable<string>) {
+    let documents = Array.from(documentIds).map((id) => this._appBackend._documents[id]);
+
+    for (let document of documents) {
+      document.watchSnapshot(() => {
+        this._callback(new Set([document.id]));
+      });
+    }
+
+    for (let document of documents) {
+      if (document.readable) {
+        await document._load();
+      }
+    }
+
+    for (let document of documents) {
+      this._documents.add(document);
+    }
+  }
+
+  remove(documentIds: Iterable<string>) {
+    for (let documentId of documentIds) {
+      this._documents.delete(this._appBackend._documents[documentId]);
+    }
+  }
+}
+
+
+export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> implements AppBackend {
   static version = 1;
 
-  #draftIds!: Set<DraftId>;
-  #store = idb.createStore('pr1', 'data');
-  #storage!: FileSystemDirectoryHandle;
+  draftInstances!: Record<DraftInstanceId, BrowserDraftInstance>;
+
+  _documents: Record<DraftDocumentId, BrowserDraftDocument> = {};
+  _store = idb.createStore('pr1', 'data');
+
+  protected _createSnapshot() {
+    return {
+      documents: getRecordSnapshot(this._documents),
+      drafts: getRecordSnapshot(this.draftInstances)
+    };
+  }
+
+  async initialize() {
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+
+
+    let mainEntry = await idb.get<BrowserStoreMainEntry>('main', this._store);
+
+    if (!mainEntry || (mainEntry.version !== BrowserAppBackend.version)) {
+      mainEntry = {
+        version: BrowserAppBackend.version
+      };
+
+      await idb.set('main', mainEntry, this._store);
+    }
+
+
+    let draftsEntry = await idb.get<BrowserStoreDraftsEntry>('drafts', this._store);
+
+    this.draftInstances = Object.fromEntries(
+      await Promise.all(
+        Object.entries(draftsEntry ?? {}).map(async ([id, item]) => ([id, new BrowserDraftInstance({
+          id,
+          entryDocument: await this._createDocument(item.entryDocumentHandle),
+          name: item.name,
+          rootHandle: item.rootHandle
+        }, this)]))
+      )
+    );
+  }
+
 
   createStore(name: string, options: { type: 'persistent' | 'session'; }) {
     return new BrowserStorageStore(options.type === 'persistent' ? localStorage : sessionStorage, name);
+  }
+
+  async deleteHostSettings(hostSettingsId: HostSettingsId) {
+    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => {
+      let { [hostSettingsId]: _, ...hosts } = hostSettingsEntry!.hosts;
+
+      return {
+        ...hostSettingsEntry!,
+        hosts
+      };
+    }, this._store);
   }
 
   async initialize() {
@@ -47,430 +395,134 @@ export class BrowserAppBackend implements AppBackend {
     //   await Notification.requestPermission();
     // }
 
-    this.#storage = await navigator.storage.getDirectory();
-
-
-    let mainEntry = await idb.get<MainEntry>('main', this.#store);
-
-    if (!mainEntry || (mainEntry.version !== BrowserAppBackend.version)) {
-      mainEntry = {
-        draftIds: [],
-        version: BrowserAppBackend.version
-      };
-
-      await idb.set('main', mainEntry, this.#store);
-    }
-
-    this.#draftIds = new Set(mainEntry.draftIds);
+    // return hostSettingsEntry;
   }
 
-  async notify(message: string) {
-    if (Notification.permission === 'granted') {
-      new Notification(message);
-    }
+  async setDefaultHostSettings(hostSettingsId: HostSettingsId | null) {
+    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => ({
+      ...hostSettingsEntry!,
+      defaultHostSettingsId: hostSettingsId
+    }), this._store);
   }
 
-  async createDraft(options: { directory: boolean; source: string; }) {
-    let fileNameInDirectory = 'main.yml';
-
-    let handle = await util.wrapAbortable<FileSystemDirectoryHandle | FileSystemFileHandle>(
-      options.directory
-        ? window.showDirectoryPicker()
-        : window.showSaveFilePicker({
-          suggestedName: 'main.yml'
-        })
-    );
-
-    if (!handle) {
-      return null;
-    }
-
-    let draftEntry: DraftEntry = {
-      id: (crypto.randomUUID() as DraftId),
-      name: null,
-
-      location: {
-        type: 'user-filesystem',
-        handle,
-        mainFilePath: (handle.kind === 'directory') ? fileNameInDirectory : handle.name
+  async setHostSettings(settings: HostSettings) {
+    await idb.update<BrowserStoreHostSettingsEntry>('hosts', (hostSettingsEntry) => ({
+      ...hostSettingsEntry!,
+      hosts: {
+        ...hostSettingsEntry!.hosts,
+        [settings.id]: settings
       }
-    };
-
-    let fileHandle = (handle.kind === 'directory')
-      ? await handle.getFileHandle(fileNameInDirectory, { create: true })
-      : handle;
-    let writable = await fileHandle.createWritable();
-
-    await writable.write(options.source);
-    await writable.close();
-
-    this.#draftIds.add(draftEntry.id);
-
-    await idb.update<MainEntry>('main', (mainEntry) => ({
-      ...mainEntry!,
-      draftIds: [...this.#draftIds]
-    }), this.#store);
-
-    await idb.set(draftEntry.id, draftEntry, this.#store);
-
-    let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
-    await draftItem._initialize();
-
-    return draftItem;
+    }), this._store);
   }
 
-  async deleteDraft(draftId: DraftId): Promise<void> {
-    let draftEntry = (await idb.get<DraftEntry>(draftId, this.#store))!;
 
-    // if (draftEntry.location.type === 'private-filesystem') {
-    //   // TODO: Replace once stable
-    //   // await draftEntry.location.handle.remove();
 
-    //   await this.#storage.removeEntry(draftEntry.location.handle.name);
-    // }
-
-    this.#draftIds.delete(draftId);
-
-    await idb.update<MainEntry>('main', (mainEntry) => ({
-      ...mainEntry!,
-      draftIds: [...this.#draftIds]
-    }), this.#store);
-
-    await idb.del(draftId, this.#store);
-  }
-
-  /**
-   * Returns an array of draft items.
-   */
-  async listDrafts() {
-    let mainEntry = (await idb.get<MainEntry>('main', this.#store))!;
-    let draftEntries = await idb.getMany<DraftEntry>(mainEntry.draftIds, this.#store);
-
-    return await Promise.all(
-      draftEntries.map(async (draftEntry) => {
-        let draftItem = new BrowserAppBackendDraftItem(draftEntry, this);
-        await draftItem._initialize();
-
-        return draftItem;
-      })
-    );
-  }
-
-  async loadDraft(options: { directory: boolean; }): Promise<DraftItem | null> {
-    let handle = options.directory
+  async queryDraftCandidates(options: { directory: boolean; }) {
+    let selectedHandle = options.directory
       ? await util.wrapAbortable(window.showDirectoryPicker())
       : (await util.wrapAbortable(window.showOpenFilePicker()))?.[0];
 
-    if (!handle) {
-      return null;
+    if (!selectedHandle) {
+      return [];
     }
 
 
-    let mainFilePath: string | null = null;
+    let candidates: DraftCandidate[] = [];
 
-    switch (handle.kind) {
-      case 'directory': {
-        for await (let childHandle of handle.values()) {
-          if ((childHandle.kind === 'file') && childHandle.name.endsWith('.yml')) {
-            mainFilePath = childHandle.name;
-            break;
-          }
-        }
-      }
+    for await (let { handle, path } of walkFilesystemHandle(selectedHandle)) {
+      let rootHandle = (selectedHandle.kind === 'directory') ? selectedHandle : null;
 
-      case 'file': {
-        mainFilePath = handle.name;
+      if (handle.name.endsWith(DraftDocumentExtension)) {
+        candidates.push({
+          id: crypto.randomUUID(),
+          path,
+
+          createInstance: async () => await this._createInstanceFromCandidate(handle, rootHandle)
+        });
       }
     }
 
-    if (!mainFilePath) {
-      return null;
-    }
-
-    let newDraftEntry: DraftEntry = {
-      id: (crypto.randomUUID() as DraftId),
-      name: null,
-
-      location: {
-        type: 'user-filesystem',
-        handle,
-        mainFilePath
-      }
-    };
-
-    this.#draftIds.add(newDraftEntry.id);
-
-    await idb.update<MainEntry>('main', (mainEntry) => ({
-      ...mainEntry!,
-      draftIds: Array.from(this.#draftIds)
-    }), this.#store);
-
-    await idb.set(newDraftEntry.id, newDraftEntry, this.#store);
-
-    let draftItem = new BrowserAppBackendDraftItem(newDraftEntry, this);
-    await draftItem._initialize();
-
-    return draftItem;
+    return candidates;
   }
 
-  async setDraft(draftEntry: DraftEntry, primitive: DraftPrimitive) {
-    let draftEntryUpdate: Partial<DraftEntry> | null = null;
-    let revision: number | null = null;
+  watchDocuments(callback: (changedDocumentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }) {
+    return new BrowserDraftDocumentWatcher(callback, options, this);
+  }
 
-    if (primitive.name !== void 0) {
-      draftEntryUpdate = { ...(draftEntryUpdate ?? {}), name: primitive.name };
-    }
-
-    if (primitive.source !== void 0) {
-      switch (draftEntry.location.type) {
-        case 'app': {
-          revision = Date.now();
-
-          draftEntryUpdate = {
-            ...(draftEntryUpdate ?? {}),
-            location: {
-              ...draftEntry.location,
-              lastModified: revision,
-              source: primitive.source
-            }
-          }
-
-          break;
-        }
-
-        case 'user-filesystem': {
-          let location = draftEntry.location;
-
-          let handle = await (() => {
-            switch (location.handle.kind) {
-              case 'directory': return location.handle.getFileHandle(location.mainFilePath);
-              case 'file': return location.handle;
-            }
-          })();
-
-          let writable = await handle.createWritable();
-
-          await writable.write(primitive.source);
-          await writable.close();
-
-          let file = await handle.getFile();
-          revision = file.lastModified;
-
-          break;
-        }
+  async _createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
+    for (let draftInstance of Object.values(this.draftInstances)) {
+      if (await draftInstance.entryDocument._handle.isSameEntry(entryDocumentHandle)) {
+        return draftInstance;
       }
     }
 
-    if (draftEntryUpdate) {
-      await idb.update<DraftEntry>(draftEntry.id, (draftEntry) => ({ ...draftEntry!, ...draftEntryUpdate! }), this.#store);
+    let draftInstance = new BrowserDraftInstance({
+      entryDocument: await this._createDocument(entryDocumentHandle),
+      rootHandle
+    }, this);
+
+    await draftInstance._save();
+
+    this.draftInstances[draftInstance.id] = draftInstance;
+    this._update();
+
+    return draftInstance;
+  }
+
+  async _createDocument(handle: FileSystemFileHandle) {
+    for (let document of Object.values(this._documents)) {
+      if (await document._handle.isSameEntry(handle)) {
+        return document;
+      }
     }
 
-    return revision;
+    let document = new BrowserDraftDocument(handle);
+    await document._initialize();
+
+    this._documents[document.id] = document;
+    this._update();
+
+    return document;
   }
 }
 
 
-export class BrowserAppBackendDraftItem implements DraftItem {
-  lastModified!: number | null;
-  pool = new util.Pool();
-  readable!: boolean;
-  readonly = false;
-  revision = 0;
-  source!: string | null;
-  volumeInfo = null;
-  writable!: boolean;
+export interface FileSystemFileHandleInfo {
+  handle: FileSystemFileHandle;
+  path: string[];
+}
 
-  _backend: BrowserAppBackend;
-  _entry: DraftEntry; // Not kept up to date
-  _watchHandler: (() => Promise<void>) | null = null;
-  _writingCounter = 0;
+async function* walkFilesystemHandle(handle: FileSystemHandleUnion, parentPath: string[] = []): AsyncGenerator<FileSystemFileHandleInfo> {
+  let handlePath = [...parentPath, handle.name];
 
-  constructor(draftEntry: DraftEntry, backend: BrowserAppBackend) {
-    this._backend = backend;
-    this._entry = draftEntry;
-  }
-
-  /**
-   * Initializes the draft item without triggering any user action. Called by the app backend.
-   *
-   * 1. Query for the permission status, set this.readable and this.writable.
-   * 2. If the item is readable, set this.lastModified.
-   */
-  async _initialize() {
-    let location = this._entry.location;
-
-    this.readable = (location.type !== 'user-filesystem')
-      || ((await location.handle.queryPermission({ mode: 'read' })) === 'granted');
-    this.writable = (location.type !== 'user-filesystem')
-      || ((await location.handle.queryPermission({ mode: 'readwrite' })) === 'granted');
-
-    this.source = null;
-
-    if (this.readable) {
-      this.lastModified = await (async () => {
-        switch (location.type) {
-          case 'app': return location.lastModified;
-          case 'private-filesystem': return (await (await location.handle.getFileHandle('/index')).getFile()).lastModified;
-          case 'user-filesystem': {
-            let handle: FileSystemFileHandle;
-
-            switch (location.handle.kind) {
-              case 'directory':
-                handle = await location.handle.getFileHandle(location.mainFilePath);
-                break;
-              case 'file':
-                handle = location.handle;
-                break;
-            }
-
-            return (await handle.getFile()).lastModified;
-          }
-        }
-      })();
-    } else {
-      this.lastModified = null;
-    }
-  }
-
-  get id() {
-    return this._entry.id;
-  }
-
-  get kind() {
-    return (this._entry.location.type === 'user-filesystem')
-      ? 'ref'
-      : 'own';
-  }
-
-  get locationInfo() {
-    let location = this._entry.location;
-
-    switch (location.type) {
-      case 'app': return null;
-      case 'private-filesystem': return {
-        type: ('directory' as 'directory'),
-        name: location.handle.name + ' (internal)'
-      };
-      case 'user-filesystem': return {
-        type: location.handle.kind,
-        name: location.handle.name
-      };
-    }
-  }
-
-  get mainFilePath() {
-    switch (this._entry.location.type) {
-      case 'app': return '/';
-      case 'private-filesystem': return '/index';
-      case 'user-filesystem': return this._entry.location.mainFilePath;
-    }
-  }
-
-  get name() {
-    return this._entry.name; // Not kept up to date
-  }
-
-  /**
-   * Requests read and possibly write permission by triggering user action. If the
-   * user grants permission, this.readable and this.writable are updated. Furthermore,
-   * if the draft is being watched, this.lastModified, this.revision and this.source
-   * are set.
-   */
-  async request() {
-    if (this._entry.location.type === 'user-filesystem') {
-      try {
-        if (this.readonly) {
-          this.readable = ((await this._entry.location.handle.requestPermission({ mode: 'read' })) === 'granted');
-        } else {
-          this.writable = ((await this._entry.location.handle.requestPermission({ mode: 'readwrite' })) === 'granted');
-          this.readable = this.writable;
-        }
-      } catch (err) {
-        if ((err as { name: string; }).name === 'SecurityError') {
-          return;
-        }
-
-        throw err;
+  switch (handle.kind) {
+    case 'directory':
+      for await (let childHandle of handle.values()) {
+        yield* walkFilesystemHandle(childHandle, handlePath);
       }
 
-      await this._watchHandler?.();
+      break;
+    case 'file':
+      yield { handle, path: handlePath };
+      break;
+  }
+}
+
+
+export async function findFile(handle: FileSystemDirectoryHandle, path: string[]): Promise<FileSystemFileHandle | null> {
+  for await (let childHandle of handle.values()) {
+    if (childHandle.name === path[0]) {
+      if ((childHandle.kind === 'file') && (path.length === 1)) {
+        return childHandle;
+      }
+
+      if ((childHandle.kind === 'directory') && (path.length > 1)) {
+        return findFile(childHandle, path.slice(1));
+      }
+
+      break;
     }
   }
 
-  /**
-   * Starts watching the draft. The handler is called in the following situations.
-   *
-   * 1. When calling watch() provided that the draft is already readable,
-   *    before the function returns.
-   * 2. When the draft's source changes.
-   * 3. When the draft's readability or writability changes, before request()
-   *    returns if it is it that caused the change.
-   *
-   * The properties this.lastModified, this.revision and this.source are updated
-   * prior to calling the handler. Only one handler can exist at a time.
-   */
-  async watch(handler: () => void, options: { signal: AbortSignal; }) {
-    let intervalId: number | null = null;
-    let updateWatchListener = async () => {
-      let location = this._entry.location;
-
-      if ((location.type === 'user-filesystem') && (location.handle.kind === 'file')) {
-        let handle = location.handle;
-
-        if (this.readable && (intervalId === null)) {
-          let file = await handle.getFile();
-
-          this.lastModified = file.lastModified;
-          this.revision = file.lastModified;
-          this.source = await file.text();
-
-          if (!options.signal.aborted) {
-            intervalId = setInterval(() => {
-              if (this._writingCounter < 1) {
-                this.pool.add(async () => {
-                  let file = await handle.getFile();
-
-                  if (file.lastModified !== this.lastModified) {
-                    this.lastModified = file.lastModified;
-                    this.revision = file.lastModified;
-                    this.source = await file.text();
-
-                    handler();
-                  }
-                });
-              }
-            }, 1000);
-          }
-        }
-      }
-    };
-
-    this._watchHandler = async () => {
-      await updateWatchListener();
-      handler();
-    };
-
-    options?.signal.addEventListener('abort', () => {
-      this._watchHandler = null;
-
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-      }
-    });
-
-    await updateWatchListener();
-    handler();
-  }
-
-  async write(primitive: DraftPrimitive) {
-    this._writingCounter += 1;
-
-    let revision = await this._backend.setDraft(this._entry, primitive);
-    this._writingCounter -= 1;
-
-    if (revision !== null) {
-      this.lastModified = revision;
-      this.source = primitive.source!;
-    }
-  }
+  return null;
 }

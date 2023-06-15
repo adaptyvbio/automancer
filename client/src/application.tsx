@@ -4,12 +4,18 @@ import { Component } from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
+import type { AppBackend, DraftDocumentId, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
+import type { Chip, ChipId } from './backends/common';
+import type { UnsavedDataCallback, ViewRouteMatch, ViewType } from './interfaces/view';
+import styles from '../styles/components/application.module.scss';
+
 import type { AppBackend } from './app-backends/base';
 import { ErrorBoundary } from './components/error-boundary';
 import { Sidebar } from './components/sidebar';
 import { BaseUrl, BaseUrlPathname } from './constants';
 import { ApplicationStoreContext } from './contexts';
 import { Draft, DraftCompilation, DraftId, DraftsRecord, createDraftFromItem } from './draft';
+import { createDraftFromItem, Draft, DraftCompilation, DraftId } from './draft';
 import type { Host } from './host';
 import { HostInfo } from './interfaces/host';
 import { Plugins, UnknownPlugin } from './interfaces/plugin';
@@ -25,6 +31,7 @@ import { ViewPluginView } from './views/plugin-view';
 import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
 import { ViewExperimentWrapper } from './views/experiment-wrapper';
+import { BaseUrl, BaseUrlPathname } from './constants';
 
 
 const Views: ViewType[] = [ViewExperimentWrapper, ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewPluginView];
@@ -75,12 +82,10 @@ export interface ApplicationProps {
 }
 
 export interface ApplicationState {
-  host: Host | null;
-
-  drafts: DraftsRecord;
-  openDraftIds: ImSet<DraftId>;
-
+  drafts: Record<DraftInstanceId, DraftInstanceSnapshot>;
+  documents: Record<DraftDocumentId, DraftDocumentSnapshot>;
   currentRouteData: RouteData | null;
+  host: Host | null;
 }
 
 export class Application extends Component<ApplicationProps, ApplicationState> {
@@ -102,12 +107,19 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     super(props);
 
     this.state = {
-      host: null,
-
+      currentRouteData: null,
+      documents: {},
       drafts: {},
-      openDraftIds: ImSet(),
+      host: null
+    };
 
-      currentRouteData: null
+
+    this.persistentStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'persistent' }));
+    this.sessionStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'session' }));
+
+    this.store = {
+      usePersistent: this.persistentStoreManager.useEntry,
+      useSession: this.sessionStoreManager.useEntry
     };
 
 
@@ -366,20 +378,7 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
 
       // List and compile known drafts if available
 
-      let draftItems = await this.appBackend.listDrafts();
-      let drafts = Object.fromEntries(
-        draftItems.map((draftItem) => {
-          return [draftItem.id, createDraftFromItem(draftItem)];
-        })
-      );
-
-      this.setState({ drafts });
-
-      // for (let draft of Object.values(drafts)) {
-      //   if (draft.item.readable) {
-      //     this.setDraft(draft, { skipAnalysis: true, skipWrite: true });
-      //   }
-      // }
+      this.setState(() => this.appBackend.getSnapshot());
 
 
       // Initialize the route
@@ -414,29 +413,28 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
   }
 
   async deleteDraft(draftId: DraftId) {
-    this.setOpenDraftIds((openDraftIds) => openDraftIds.delete(draftId));
+    let instance = this.state.drafts[draftId].model;
+    await instance.remove();
 
-    this.setState((state) => {
-      let { [draftId]: _, ...drafts } = state.drafts;
-      return { drafts };
-    });
-
-    await this.appBackend.deleteDraft(draftId);
+    this.setState((state) => ({
+      ...state,
+      ...this.appBackend.getSnapshot()
+    }));
   }
 
-  async loadDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-    let draftItem = await this.appBackend.loadDraft(options);
+  async queryDraft(options: { directory: boolean; }): Promise<DraftInstanceId | null> {
+    let candidates = await this.appBackend.queryDraftCandidates({ directory: options.directory });
+    let candidate = candidates[0];
 
-    if (draftItem) {
-      this.setState((state) => ({
-        drafts: {
-          ...state.drafts,
-          [draftItem!.id]: createDraftFromItem(draftItem!)
-        }
-      }));
+    if (!candidate) {
+      return null;
     }
 
-    return (draftItem?.id ?? null);
+    let instance = await candidate.createInstance();
+    this.setState(() => this.appBackend.getSnapshot());
+
+    return instance.id;
+
   }
 
   async saveDraftSource(draft: Draft, source: string) {
@@ -505,11 +503,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
         };
       });
     }, { signal: options.signal });
-  }
-
-
-  setOpenDraftIds(func: (value: ImSet<DraftId>) => ImSet<DraftId>) {
-    this.setState((state) => ({ openDraftIds: func(state.openDraftIds) }));
   }
 
 

@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 
 import type { Point, RectSurface, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
+import type { Host } from '../host';
+import type { UnitContext } from './unit';
 import type { GlobalContext } from './plugin';
 
 

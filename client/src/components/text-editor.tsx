@@ -7,8 +7,10 @@ import * as ReactDOM from 'react-dom';
 import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
 import { Draft, DraftCompilation, DraftRange } from '../draft';
+import { HostDraftCompilerResult } from '../interfaces/draft';
 import { LanguageName, setLanguageService } from '../language-service';
 import * as util from '../util';
+import { DocumentItem } from '../views/draft';
 
 
 window.MonacoEnvironment = {
@@ -27,15 +29,19 @@ export const SEMANTIC_TOKEN_TYPES = ['lead'];
 
 export interface TextEditorProps {
   autoSave: boolean;
-  compilation: DraftCompilation | null;
-  draft: Draft;
-  getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
-  save(compilation: DraftCompilation, source: string): void;
-  summary: React.ReactNode;
+  documentItem: DocumentItem;
+  getCompilation(): Promise<HostDraftCompilerResult>;
+
+  // autoSave: boolean;
+  // compilation: DraftCompilation | null;
+  // draft: Draft;
+  // getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
+  // save(compilation: DraftCompilation, source: string): void;
+  // summary: React.ReactNode;
 }
 
 export interface TextEditorState {
-  changeTime: number | null;
+
 }
 
 export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
@@ -43,7 +49,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
   editor!: monaco.editor.IStandaloneCodeEditor;
   isModelContentChangeExternal = false;
   markerManager!: MarkerManager;
-  model!: monaco.editor.IModel;
   modelChanged = false;
   outdatedCompilation = false;
   pool = new util.Pool();
@@ -71,15 +76,19 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     super(props);
 
     this.state = {
-      changeTime: null
+
     };
+  }
+
+  get model() {
+    return this.props.documentItem.model!;
   }
 
   override componentDidMount() {
     // Initialize the editor
 
     this.editor = monaco.editor.create(this.ref.current!, {
-      value: this.props.draft.item.source!,
+      model: this.model,
       automaticLayout: true,
       // contextmenu: false,
       language: LanguageName,
@@ -119,12 +128,12 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
       }
     };
 
-    this.model = this.editor.getModel()!;
-
     this.controller.signal.addEventListener('abort', () => {
       this.editor.dispose();
     });
 
+
+    return;
 
     this.model.onDidChangeContent(() => {
       if (!this.isModelContentChangeExternal) {
@@ -207,7 +216,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
     // Create the language service
 
-    setLanguageService({
+    setLanguageService(this.model, {
       provideCompletionItems: async (model, position, context, token) => {
         let compilation = await this.getCompilation();
 
@@ -462,17 +471,17 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.abort();
   }
 
-  async getCompilation(): Promise<DraftCompilation> {
-    let promise = this.props.getCompilation(
-      this.modelChanged
-        ? { source: this.model.getValue() }
-        : {}
-    );
+  // async getCompilation(): Promise<DraftCompilation> {
+  //   let promise = this.props.getCompilation(
+  //     this.modelChanged
+  //       ? { source: this.model.getValue() }
+  //       : {}
+  //   );
 
-    this.modelChanged = false;
+  //   this.modelChanged = false;
 
-    return await promise;
-  }
+  //   return await promise;
+  // }
 
   undo() {
     this.editor.trigger(undefined, 'undo', undefined);
@@ -496,20 +505,22 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
                   await this.markerManager.update();
                 }
 
-                let source = this.model.getValue();
-                let compilation = await this.getCompilation();
+                // let source = this.model.getValue();
+                // let compilation = await this.getCompilation();
+                // this.props.save(compilation, source);
 
-                this.props.save(compilation, source);
+                let contents = this.model.getValue();
+                await this.props.documentItem.snapshot.model.write(contents);
               });
             }
           })
           : undefined} />
         {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
-        {this.props.summary && (
+        {/* {this.props.summary && (
           <div className={textEditorStyles.summary}>
             {this.props.summary}
           </div>
-        )}
+        )} */}
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import * as monaco from 'monaco-editor';
-import { ExperimentId, ProtocolBlockPath } from 'pr1-shared';
+import { Deferred, ExperimentId, ProtocolBlockPath, defer } from 'pr1-shared';
 import { Component, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
@@ -31,6 +31,7 @@ import { analyzeBlockPath } from '../protocol';
 import { Pool, formatClass } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
+import { UnsavedDocumentModal } from '../components/modals/unsaved-document';
 
 
 export interface DocumentItem {
@@ -46,10 +47,8 @@ export interface DocumentItem {
 }
 
 
-export interface ViewDraftProps {
-  app: Application;
+export type ViewDraftProps = Omit<ViewProps, 'route'> & {
   draft: DraftInstanceSnapshot;
-  host: Host;
 }
 
 export interface ViewDraftState {
@@ -61,6 +60,7 @@ export interface ViewDraftState {
   selectedBlockPath: ProtocolBlockPath | null;
   selectedDocumentId: DocumentId;
   startModalOpen: boolean;
+  unsavedDocumentDeferred: Deferred<boolean> | null;
 
   graphOpen: boolean;
   inspectorEntryId: string | null;
@@ -149,6 +149,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       selectedBlockPath: null,
       selectedDocumentId: entrySlot.id,
       startModalOpen: false,
+      unsavedDocumentDeferred: null,
 
       graphOpen: true,
       inspectorEntryId: 'inspector',
@@ -218,6 +219,19 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         });
       }
     }, { signal: this.controller.signal });
+
+    this.props.setUnsavedDataCallback(async () => {
+      for (let documentItem of this.state.documentItems.values()) {
+        if (documentItem.unsaved) {
+          let deferred = defer<boolean>();
+          this.setState({ unsavedDocumentDeferred: deferred });
+
+          return await deferred.promise;
+        }
+      }
+
+      return true;
+    });
   }
 
   override componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
@@ -597,6 +611,13 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
             </div>
           </div>
         </div>
+        {this.state.unsavedDocumentDeferred && (
+          <UnsavedDocumentModal
+            onFinish={(result) => {
+              this.state.unsavedDocumentDeferred!.resolve(result === 'ignore');
+              this.setState({ unsavedDocumentDeferred: null });
+            }} />
+        )}
       </main>
     );
   }
@@ -635,9 +656,8 @@ export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
 
     return (
       <ViewDraft
-        app={this.props.app}
-        draft={this.draftInstanceSnapshot}
-        host={this.props.host} />
+        {...this.props}
+        draft={this.draftInstanceSnapshot} />
     );
   }
 

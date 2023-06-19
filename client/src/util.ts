@@ -404,6 +404,22 @@ export class Lock {
       }
     };
   }
+
+  async acquireWith(fn: (() => Promise<void> | void)) {
+    let controller = new AbortController();
+
+    await this.acquire();
+
+    try {
+      await fn();
+    } finally {
+      controller.abort();
+    }
+  }
+
+  get locked() {
+    return this.#locked;
+  }
 }
 
 

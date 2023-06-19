@@ -3,7 +3,7 @@ import hash from 'object-hash';
 
 import { getRecordSnapshot, SnapshotProvider, SnapshotWatchCallback } from '../snapshot';
 import { BrowserStorageStore } from '../store/browser-storage';
-import { Pool, wrapAbortable } from '../util';
+import { Lock, Pool, wrapAbortable } from '../util';
 import { AppBackend, AppBackendSnapshot, DraftCandidate, DocumentInstance, DraftDocumentExtension, DocumentId, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentInstanceSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 
 
@@ -39,12 +39,15 @@ export class BrowserDocument extends SnapshotProvider<DocumentInstanceSnapshot> 
   private _polling = false;
   private _pollTimeoutId: number | null = null;
   private _pool = new Pool();
+  private _slot: BrowserDocumentSlot;
   private _watcherCount = 0;
   private _writing = false;
 
-  constructor(handle: FileSystemFileHandle) {
+  constructor(handle: FileSystemFileHandle, slot: BrowserDocumentSlot) {
     super();
+
     this._handle = handle;
+    this._slot = slot;
   }
 
   protected _createSnapshot(): DocumentInstanceSnapshot {
@@ -82,12 +85,17 @@ export class BrowserDocument extends SnapshotProvider<DocumentInstanceSnapshot> 
           try {
             file = await this._handle.getFile();
           } catch (err: any) {
-            if (err.name === 'NotAllowedError') {
-              await this._readPermissions();
-              return;
+            switch (err.name) {
+              case 'NotAllowedError':
+                await this._readPermissions();
+                return;
+              case 'NotFoundError':
+                // TODO: Improve
+                this._slot.document = null;
+                return;
+              default:
+                throw err;
             }
-
-            throw err;
           }
 
           if (!file) {
@@ -204,11 +212,16 @@ export class BrowserDocument extends SnapshotProvider<DocumentInstanceSnapshot> 
   }
 }
 
+
 export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> implements DocumentSlot {
   document: BrowserDocument | null = null;
   id: DocumentId;
 
-  private _watchSignal: AbortSignal | null = null;
+  private _documentController: AbortController | null = null;
+  private _lock = new Lock();
+  private _pollTimeoutId: number | null = null;
+  private _watching = false;
+  private _watcherCount = 0;
 
   constructor(
     private _draftInstance: BrowserDraftInstance,
@@ -218,40 +231,103 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
     super();
 
     if (handle) {
-      this._initialize(handle);
+      this._pool.add(async () => {
+        this._lock.acquireWith(async () => {
+          await this._initializeHandle(handle);
+        });
+      });
     }
 
     this.id = hash([this._draftInstance.id, this._path]) as DocumentId;
   }
 
-  async _initialize(handle: FileSystemFileHandle) {
-    let document = new BrowserDocument(handle);
+  get _pool() {
+    return this._draftInstance._pool;
+  }
 
-    document._readPermissions().then(() => {
-      this.document = document;
-      this._update();
+  private async _initializeHandle(handle: FileSystemFileHandle) {
+    let document = new BrowserDocument(handle, this);
 
-      document.watchSnapshot(() => void this._update());
+    await document._readPermissions();
 
-      if (this._watchSignal) {
-        document._watchContents({ signal: this._watchSignal });
-      }
-    });
+    this.document = document;
+    this._update();
+
+    document.watchSnapshot(() => void this._update());
+
+    if (this._watching) {
+      this._documentController = new AbortController();
+      document._watchContents({ signal: this._documentController.signal });
+    }
+  }
+
+  private async _queryHandle() {
+    return await findFile(this._draftInstance._container!.rootHandle, this._path);
+  }
+
+  private _poll() {
+    this._pollTimeoutId = setTimeout(() => {
+      this._pollTimeoutId = null;
+
+      this._pool.add(async () => {
+        await this._lock.acquireWith(async () => {
+          if (this._watching) {
+            let handle = await this._queryHandle();
+
+            if (handle) {
+              await this._initializeHandle(handle);
+            } else {
+              this._poll();
+            }
+          }
+        });
+      });
+    }, 1000);
   }
 
   watch(options: { signal: AbortSignal; }) {
-    (async () => {
-      // if (!this.document) {
-      //   let handle = await findFile(this._draftInstance._container!.rootHandle, this._path);
+    this._watcherCount += 1;
 
-      //   if (handle) {
-      //     await this._initialize(handle);
-      //   }
-      // }
+    if (this._watcherCount === 1) {
+      if (this.document) {
+        this._documentController = new AbortController();
+        this.document._watchContents({ signal: this._documentController.signal });
+      } else {
+        this._pool.add(async () => {
+          await this._lock.acquireWith(async () => {
+            if (!this._watching) {
+              this._watching = true;
 
-      this.document?._watchContents(options);
-      this._watchSignal = options.signal;
-    })();
+              let handle = await this._queryHandle();
+
+              if (handle) {
+                await this._initializeHandle(handle);
+              } else {
+                this._poll();
+              }
+            }
+          });
+        });
+      }
+    }
+
+    options.signal.addEventListener('abort', () => {
+      this._watcherCount -= 1;
+
+      if (this._watcherCount < 1) {
+        this._watching = false;
+
+        if (this._pollTimeoutId !== null) {
+          clearTimeout(this._pollTimeoutId);
+          this._pollTimeoutId = null;
+        }
+
+        if (this._documentController) {
+          this._documentController.abort();
+          this._documentController = null;
+        }
+      }
+    });
   }
 
   protected override _createSnapshot() {
@@ -299,6 +375,10 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
     this._entryHandle = options.entryHandle;
 
     this._entryDocumentSlot = new BrowserDocumentSlot(this, this._container?.entryPath ?? [this._entryHandle.name], this._entryHandle);
+  }
+
+  get _pool() {
+    return this._appBackend._pool;
   }
 
   protected _createSnapshot(): DraftInstanceSnapshot {
@@ -375,6 +455,8 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
   _documents: Record<DocumentId, BrowserDocument> = {};
   _store = idb.createStore('pr1', 'data');
+
+  _pool = new Pool();
 
   protected _createSnapshot(): AppBackendSnapshot {
     return {

@@ -3,7 +3,7 @@ import { Component } from 'react';
 
 import styles from '../styles/components/application.module.scss';
 
-import type { AppBackend, DraftDocumentId, DraftDocumentSnapshot, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
+import type { AppBackend, DraftInstanceId, DraftInstanceSnapshot } from './app-backends/base';
 import { ErrorBoundary } from './components/error-boundary';
 import { Sidebar } from './components/sidebar';
 import { BaseUrl, BaseUrlPathname } from './constants';
@@ -75,7 +75,6 @@ export interface ApplicationProps {
 
 export interface ApplicationState {
   drafts: Record<DraftInstanceId, DraftInstanceSnapshot>;
-  documents: Record<DraftDocumentId, DraftDocumentSnapshot>;
   currentRouteData: RouteData | null;
   host: Host | null;
 }
@@ -100,7 +99,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
 
     this.state = {
       currentRouteData: null,
-      documents: {},
       drafts: {},
       host: null
     };
@@ -421,74 +419,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
     return instance.id;
   }
 
-  async saveDraftSource(draft: Draft, source: string) {
-    let compilationTime = Date.now();
-    draft.meta.compilationTime = compilationTime;
-
-    await draft.item.write({ source });
-
-    this.setState((state) => {
-      return {
-        drafts: {
-          ...state.drafts,
-          [draft.id]: {
-            ...state.drafts[draft.id],
-            lastModified: draft.item.lastModified
-          }
-        }
-      }
-    });
-  }
-
-  // async saveDraftCompilation(draft: Draft, compilation: DraftCompilation) {
-  //   this.setState((state) => {
-  //     let stateDraft = state.drafts[draft.id];
-
-  //     if (!stateDraft) {
-  //       return null;
-  //     }
-
-  //     return {
-  //       drafts: {
-  //         ...state.drafts,
-  //         [draft.id]: {
-  //           ...stateDraft,
-  //           compilation,
-  //           name: compilation!.protocol?.name ?? stateDraft.name // ?? draft.item.name
-  //         }
-  //       }
-  //     }
-  //   });
-
-  //   if (compilation.protocol?.name) {
-  //     await draft.item.write({
-  //       name: compilation.protocol.name
-  //     });
-  //   }
-  // }
-
-  // async watchDraft(draftId: DraftId, options: { signal: AbortSignal; }) {
-  //   await this.state.drafts[draftId].item.watch(() => {
-  //     this.setState((state) => {
-  //       let draft = state.drafts[draftId];
-  //       let draftItem = draft.item;
-
-  //       return {
-  //         drafts: {
-  //           ...state.drafts,
-  //           [draftId]: {
-  //             ...draft,
-  //             lastModified: draftItem.lastModified,
-  //             revision: draftItem.revision,
-  //             readable: draftItem.readable,
-  //             writable: draftItem.writable
-  //           }
-  //         }
-  //       };
-  //     });
-  //   }, { signal: options.signal });
-  // }
-
 
   override render() {
     let contents = null;
@@ -526,7 +456,7 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
           host={this.state.host}
           hostInfo={this.props.hostInfo}
 
-          setStartup={this.props.setStartup} />
+          setStartup={this.props.setStartup ?? null} />
         {contents}
       </div>
     );

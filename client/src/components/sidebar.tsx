@@ -17,7 +17,7 @@ export interface SidebarProps {
   host: Host | null;
   hostInfo: HostInfo;
 
-  setStartup?(): void;
+  setStartup?: (() => void) | null;
 }
 
 export interface SidebarState {

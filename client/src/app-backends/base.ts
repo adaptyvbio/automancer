@@ -7,22 +7,28 @@ import type { SnapshotTarget } from '../snapshot';
 export const DraftDocumentExtension = '.yml';
 
 
-export type DraftDocumentPath = string[];
+export type DocumentPath = string[];
 
 export type DraftInstanceId = Brand<string, 'DraftInstanceId'>;
-export type DraftDocumentId = Brand<string, 'DraftDocumentId'>;
+export type DocumentId = Brand<string, 'DocumentId'>;
 
-export interface DraftInstance<T extends DraftDocument = DraftDocument> extends SnapshotTarget<DraftInstanceSnapshot> {
+export interface DraftInstance extends SnapshotTarget<DraftInstanceSnapshot> {
   id: DraftInstanceId;
-  entryDocument: T;
 
   /**
-   * Return a {@link DraftDocument} object required by this instance.
+   * Return a {@link DocumentInstance} object required by this instance.
    *
    * @param path A path relative to the instance's parent directory.
-   * @returns A promise that resolves to a {@link DraftDocument} object or `null` if the document does not exist.
+   * @returns A promise that resolves to a {@link DocumentInstance} object or `null` if the document does not exist.
    */
-  getDocument(path: DraftDocumentPath): Promise<T | null>;
+  // getDocumentSlot(path: DocumentPath): Promise<DocumentSlot | null>;
+
+  /**
+   * Return a slot for the entry document of the draft.
+   *
+   * @returns A {@link DocumentSlot} instance.
+   */
+  getEntryDocumentSlot(): DocumentSlot;
 
   /**
    * Remove the instance.
@@ -47,13 +53,12 @@ export interface DraftInstanceSnapshot {
   model: DraftInstance;
 
   id: DraftInstanceId;
-  entryDocumentId: DraftDocumentId;
   name: string | null;
 }
 
 
-export interface DraftDocument extends SnapshotTarget<DraftDocumentSnapshot> {
-  id: DraftDocumentId;
+export interface DocumentInstance extends SnapshotTarget<DocumentInstanceSnapshot> {
+  id: DocumentId;
 
   /**
    * Open the document in an external application. Optional.
@@ -71,37 +76,44 @@ export interface DraftDocument extends SnapshotTarget<DraftDocumentSnapshot> {
   reveal?(): Promise<void>;
 
   /**
-   * Watch the document for content changes.
-   *
-   * @param options.signal An `AbortSignal` used to cancel stop watching the document.
-   */
-  watchContents(options: { signal: AbortSignal; }): void;
-
-  /**
    * Write to the document.
    *
    * @param contents The contents to write to the document, encoded as UTF-8.
    * @returns A promise that resolves to an object which indicates the date on which the document was written.
    */
   write(contents: string): Promise<{ lastModified: number; }>;
-};
+}
 
-export interface DraftDocumentSnapshot {
-  model: DraftDocument;
+export interface DocumentInstanceSnapshot {
+  model: DocumentInstance;
 
-  id: DraftDocumentId;
+  id: DocumentId;
   contents: string | null;
-  deleted: boolean;
   lastModificationDate: number | null;
   lastExternalModificationDate: number | null;
-  path: DraftDocumentPath;
   possiblyWritable: boolean;
   readable: boolean;
-  // source: {
-  //   contents: string;
-  //   lastModified: number;
-  // } | null;
   writable: boolean;
+}
+
+export interface DocumentSlot extends SnapshotTarget<DocumentSlotSnapshot> {
+  document: DocumentInstance | null;
+  id: DocumentId;
+
+  /**
+   * Watch the slot for changes.
+   *
+   * @param options.signal An `AbortSignal` used to cancel stop watching the document.
+   */
+  watch(options: { signal: AbortSignal; }): void;
+}
+
+export interface DocumentSlotSnapshot {
+  // model: DraftDocumentSlot;
+
+  id: DocumentId;
+  document: DocumentInstanceSnapshot | null;
+  path: DocumentPath;
 }
 
 
@@ -109,7 +121,7 @@ export type DraftCandidateId = string;
 
 export interface DraftCandidate {
   id: DraftCandidateId;
-  path: DraftDocumentPath;
+  path: DocumentPath;
 
   /**
    * Create a {@link DraftInstance} from this candidate.
@@ -144,7 +156,7 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
 }
 
 export interface AppBackendSnapshot {
-  documents: Record<DraftDocumentId, DraftDocumentSnapshot>;
+  // documents: Record<DraftDocumentId, DocumentInstanceSnapshot>;
   drafts: Record<DraftInstanceId, DraftInstanceSnapshot>;
 }
 

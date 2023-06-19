@@ -26,27 +26,42 @@ export class DocumentEditor extends React.Component<DocumentEditorProps, Documen
   }
 
   override render() {
-    return (
-      <>
-        {!this.props.documentItem.snapshot.readable && (
-          <div className={util.formatClass(viewStyles.blankOuter)}>
-            <div className={viewStyles.blankInner}>
-              <p>Please grant read and write permissions on this file to continue.</p>
+    if (this.props.documentItem.textModel) {
+      return (
+        <TextEditor {...this.props} />
+      );
+    }
 
-              <div className={viewStyles.blankActions}>
-                <Button onClick={() => {
-                  this.pool.add(async () => {
-                    await this.props.documentItem.snapshot.model.request!();
-                  });
-                }}>Open protocol</Button>
-              </div>
+    let slotSnapshot = this.props.documentItem.slotSnapshot;
+
+    if (!slotSnapshot.document) {
+      return (
+        <div className={util.formatClass(viewStyles.blankOuter)}>
+          <div className={viewStyles.blankInner}>
+            <p>This file is missing.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!slotSnapshot.document.readable) {
+      return (
+        <div className={util.formatClass(viewStyles.blankOuter)}>
+          <div className={viewStyles.blankInner}>
+            <p>Please grant read and write permissions on this file to continue.</p>
+
+            <div className={viewStyles.blankActions}>
+              <Button onClick={() => {
+                this.pool.add(async () => {
+                  await slotSnapshot.document!.model.request!();
+                });
+              }}>Open protocol</Button>
             </div>
           </div>
-        )}
-        {this.props.documentItem.textModel && (
-          <TextEditor {...this.props} />
-        )}
-      </>
-    );
+        </div>
+      );
+    }
+
+    return null;
   }
 }

@@ -22,7 +22,6 @@ export class ViewDrafts extends Component<ViewProps, {}> {
   pool = new Pool();
 
   override render() {
-    let documents = this.props.app.state.documents;
     let drafts = Object.values(this.props.app.state.drafts);
 
     return (
@@ -70,14 +69,13 @@ export class ViewDrafts extends Component<ViewProps, {}> {
             <div className="lproto-list">
               {drafts.map((draft) => {
                 // let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
-                let entryDocument = documents[draft.entryDocumentId];
 
                 return (
                   <DraftEntry
                     href={`${BaseUrl}/draft/${draft.id}`}
                     name={draft.name ?? '[Untitled]'}
                     properties={[
-                      { id: 'location', label: entryDocument.path.join('/'), icon: 'description' }
+                      { id: 'location', label: 'Protocol', icon: 'description' }
                       // ...(draft.item.locationInfo
                       //   ? [{ id: 'location', label: draft.item.locationInfo.name, icon: { directory: 'folder', file: 'description' }[draft.item.locationInfo.type] }]
                       //   : []),

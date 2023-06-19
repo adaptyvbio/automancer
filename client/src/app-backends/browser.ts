@@ -1,25 +1,31 @@
 import * as idb from 'idb-keyval';
+import hash from 'object-hash';
 
-import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
+import { getRecordSnapshot, SnapshotProvider, SnapshotWatchCallback } from '../snapshot';
 import { BrowserStorageStore } from '../store/browser-storage';
-import * as util from '../util';
-import { Pool } from '../util';
-import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocument, DraftDocumentExtension, DraftDocumentId, DraftDocumentPath, DraftDocumentSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
+import { Pool, wrapAbortable } from '../util';
+import { AppBackend, AppBackendSnapshot, DraftCandidate, DocumentInstance, DraftDocumentExtension, DocumentId, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentInstanceSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 
 
 interface BrowserStoreMainEntry {
   version: number;
 }
 
-export type BrowserStoreDraftsEntry = Record<DraftInstanceId, {
-  entryDocumentHandle: FileSystemFileHandle;
+export type BrowserStoreDraftsEntry = Record<DraftInstanceId, BrowserStoreDraftsItem>;
+
+export interface BrowserStoreDraftsItem {
+  id: DraftInstanceId;
+  container: {
+    entryPath: DocumentPath;
+    rootHandle: FileSystemDirectoryHandle;
+  };
+  entryHandle: FileSystemFileHandle;
   name: string | null;
-  rootHandle: FileSystemDirectoryHandle | null;
-}>;
+}
 
 
-export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot> implements DraftDocument {
-  id = crypto.randomUUID() as DraftDocumentId;
+export class BrowserDocument extends SnapshotProvider<DocumentInstanceSnapshot> implements DocumentInstance {
+  id = crypto.randomUUID() as DocumentId;
   contents: string | null = null;
   lastExternalModificationDate: number | null = null;
   lastModificationDate: number | null = null;
@@ -41,41 +47,63 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     this._handle = handle;
   }
 
-  protected _createSnapshot(): DraftDocumentSnapshot {
+  protected _createSnapshot(): DocumentInstanceSnapshot {
     return {
       model: this,
 
       id: this.id,
       contents: this.contents,
-      deleted: false,
       lastExternalModificationDate: this.lastExternalModificationDate,
       lastModificationDate: this.lastModificationDate,
-      path: [this._handle.name],
       possiblyWritable: true,
       readable: this.readable,
       writable: this.writable
     };
   }
 
-  async _initialize() {
+  async _readPermissions() {
     this.readable = ((await this._handle.queryPermission({ mode: 'read' })) === 'granted');
     this.writable = ((await this._handle.queryPermission({ mode: 'readwrite' })) === 'granted');
+
+    this._update();
+    this._updatePolling();
+
+    if (this.readable) {
+      await this._load();
+    }
   }
 
   private async _load() {
     if (!this._loadingPromise) {
       this._loadingPromise = (async () => {
-        let file = await this._handle.getFile();
+        try {
+          let file: File | null = null;
 
-        if (file.lastModified !== this.lastModificationDate) {
-          this.contents = await file.text();
-          this.lastExternalModificationDate = file.lastModified;
-          this.lastModificationDate = file.lastModified;
+          try {
+            file = await this._handle.getFile();
+          } catch (err: any) {
+            if (err.name === 'NotAllowedError') {
+              await this._readPermissions();
+              return;
+            }
 
-          this._update();
+            throw err;
+          }
+
+          if (!file) {
+            return;
+          }
+
+          if (file.lastModified !== this.lastModificationDate) {
+            this.contents = await file.text();
+            this.lastExternalModificationDate = file.lastModified;
+            this.lastModificationDate = file.lastModified;
+
+            this._update();
+          }
+        } finally {
+          this._loadingPromise = null;
         }
-
-        this._loadingPromise = null;
       })();
     }
 
@@ -143,7 +171,7 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
     }
   }
 
-  async watchContents(options: { signal: AbortSignal; }) {
+  async _watchContents(options: { signal: AbortSignal; }) {
     this._watcherCount += 1;
     this._updatePolling();
 
@@ -176,21 +204,87 @@ export class BrowserDraftDocument extends SnapshotProvider<DraftDocumentSnapshot
   }
 }
 
-export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot> implements DraftInstance<BrowserDraftDocument> {
+export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> implements DocumentSlot {
+  document: BrowserDocument | null = null;
+  id: DocumentId;
+
+  private _watchSignal: AbortSignal | null = null;
+
+  constructor(
+    private _draftInstance: BrowserDraftInstance,
+    private _path: DocumentPath,
+    handle: FileSystemFileHandle | null
+  ) {
+    super();
+
+    if (handle) {
+      this._initialize(handle);
+    }
+
+    this.id = hash([this._draftInstance.id, this._path]) as DocumentId;
+  }
+
+  async _initialize(handle: FileSystemFileHandle) {
+    let document = new BrowserDocument(handle);
+
+    document._readPermissions().then(() => {
+      this.document = document;
+      this._update();
+
+      document.watchSnapshot(() => void this._update());
+
+      if (this._watchSignal) {
+        document._watchContents({ signal: this._watchSignal });
+      }
+    });
+  }
+
+  watch(options: { signal: AbortSignal; }) {
+    (async () => {
+      // if (!this.document) {
+      //   let handle = await findFile(this._draftInstance._container!.rootHandle, this._path);
+
+      //   if (handle) {
+      //     await this._initialize(handle);
+      //   }
+      // }
+
+      this.document?._watchContents(options);
+      this._watchSignal = options.signal;
+    })();
+  }
+
+  protected override _createSnapshot() {
+    return {
+      id: this.id,
+      document: this.document?.getSnapshot() ?? null,
+      path: this._path
+    };
+  }
+}
+
+export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot> implements DraftInstance {
   id: DraftInstanceId;
-  entryDocument: BrowserDraftDocument;
   name: string | null;
 
-  _appBackend: BrowserAppBackend;
-  _attachedDocuments = new Set<BrowserDraftDocument>();
-  _rootHandle: FileSystemDirectoryHandle | null;
+  private _appBackend: BrowserAppBackend;
+  // _attachedDocuments = new Set<DraftDocument>();
+  _container: {
+    entryPath: DocumentPath;
+    rootHandle: FileSystemDirectoryHandle;
+  } | null;
+  private _entryDocumentSlot: BrowserDocumentSlot;
+  _entryHandle: FileSystemFileHandle;
 
   constructor(
     options: {
       id?: DraftInstanceId;
-      entryDocument: BrowserDraftDocument;
+      container: {
+        entryPath: DocumentPath;
+        rootHandle: FileSystemDirectoryHandle;
+      } | null;
       name?: string | null;
-      rootHandle: FileSystemDirectoryHandle | null;
+      entryHandle: FileSystemFileHandle;
     },
     appBackend: BrowserAppBackend
   ) {
@@ -198,11 +292,13 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
 
     this._appBackend = appBackend;
 
-    this.entryDocument = options.entryDocument;
     this.id = options.id ?? (crypto.randomUUID() as DraftInstanceId);
     this.name = options.name ?? null;
 
-    this._rootHandle = options.rootHandle;
+    this._container = options.container;
+    this._entryHandle = options.entryHandle;
+
+    this._entryDocumentSlot = new BrowserDocumentSlot(this, this._container?.entryPath ?? [this._entryHandle.name], this._entryHandle);
   }
 
   protected _createSnapshot(): DraftInstanceSnapshot {
@@ -210,30 +306,33 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
       model: this,
 
       id: this.id,
-      entryDocumentId: this.entryDocument.id,
       name: this.name
     };
   }
 
-  async detachDocument(document: BrowserDraftDocument) {
-    this._attachedDocuments.delete(document);
-  }
+  // async detachDocument(document: BrowserDocument) {
+  //   this._attachedDocuments.delete(document);
+  // }
 
-  async getDocument(path: DraftDocumentPath) {
-    if (!this._rootHandle) {
-      return null;
-    }
+  // async getDocument(path: DocumentPath) {
+  //   if (!this._container) {
+  //     return null;
+  //   }
 
-    let documentHandle = await findFile(this._rootHandle, path);
+  //   let documentHandle = await findFile(this._container.rootHandle, path);
 
-    if (!documentHandle) {
-      return null;
-    }
+  //   if (!documentHandle) {
+  //     return null;
+  //   }
 
-    let document = await this._appBackend._createDocument(documentHandle);
-    this._attachedDocuments.add(document);
+  //   let document = await this._appBackend._createDocument(documentHandle);
+  //   // this._attachedDocuments.add(document);
 
-    return document;
+  //   return document;
+  // }
+
+  getEntryDocumentSlot() {
+    return this._entryDocumentSlot;
   }
 
   async remove() {
@@ -251,11 +350,20 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
       ...entry,
       [this.id]: {
         id: this.id,
-        entryDocumentHandle: this.entryDocument._handle,
+        container: this._container,
+        entryHandle: this._entryHandle,
         name: this.name,
-        rootHandle: this._rootHandle
       }
     }), this._appBackend._store);
+  }
+
+  static _loadFromStoreEntry(item: BrowserStoreDraftsItem, appBackend: BrowserAppBackend) {
+    return new BrowserDraftInstance({
+      id: item.id,
+      container: item.container,
+      entryHandle: item.entryHandle,
+      name: item.name
+    }, appBackend);
   }
 }
 
@@ -265,12 +373,11 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
   draftInstances: Record<DraftInstanceId, BrowserDraftInstance> | null = null;
 
-  _documents: Record<DraftDocumentId, BrowserDraftDocument> = {};
+  _documents: Record<DocumentId, BrowserDocument> = {};
   _store = idb.createStore('pr1', 'data');
 
-  protected _createSnapshot() {
+  protected _createSnapshot(): AppBackendSnapshot {
     return {
-      documents: getRecordSnapshot(this._documents),
       drafts: getRecordSnapshot(this.draftInstances!)
     };
   }
@@ -298,14 +405,7 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     let draftsEntry = await idb.get<BrowserStoreDraftsEntry>('drafts', this._store);
 
     this.draftInstances = Object.fromEntries(
-      await Promise.all(
-        Object.entries(draftsEntry ?? {}).map(async ([id, item]) => ([id, new BrowserDraftInstance({
-          id: (id as DraftInstanceId),
-          entryDocument: await this._createDocument(item.entryDocumentHandle),
-          name: item.name,
-          rootHandle: item.rootHandle
-        }, this)]))
-      )
+      Object.entries(draftsEntry ?? {}).map(([id, item]) => ([id, BrowserDraftInstance._loadFromStoreEntry(item, this)]))
     );
 
     this._update();
@@ -313,8 +413,8 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
   async queryDraftCandidates(options: { directory: boolean; }) {
     let selectedHandle = options.directory
-      ? await util.wrapAbortable(window.showDirectoryPicker())
-      : (await util.wrapAbortable(window.showOpenFilePicker()))?.[0];
+      ? await wrapAbortable(window.showDirectoryPicker())
+      : (await wrapAbortable(window.showOpenFilePicker()))?.[0];
 
     if (!selectedHandle) {
       return [];
@@ -339,16 +439,19 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     return candidates;
   }
 
-  async _createInstanceFromCandidate(entryDocumentHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
+  async _createInstanceFromCandidate(entryHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {
     for (let draftInstance of Object.values(this.draftInstances!)) {
-      if (await draftInstance.entryDocument._handle.isSameEntry(entryDocumentHandle)) {
+      if (await draftInstance._entryHandle.isSameEntry(entryHandle)) {
         return draftInstance;
       }
     }
 
     let draftInstance = new BrowserDraftInstance({
-      entryDocument: await this._createDocument(entryDocumentHandle),
-      rootHandle
+      container: rootHandle && {
+        entryPath: (await rootHandle.resolve(entryHandle))!,
+        rootHandle
+      },
+      entryHandle
     }, this);
 
     await draftInstance._save();
@@ -359,25 +462,25 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     return draftInstance;
   }
 
-  async _createDocument(handle: FileSystemFileHandle) {
-    for (let document of Object.values(this._documents)) {
-      if (await document._handle.isSameEntry(handle)) {
-        return document;
-      }
-    }
+  // async _createDocument(handle: FileSystemFileHandle) {
+  //   for (let document of Object.values(this._documents)) {
+  //     if (await document._handle.isSameEntry(handle)) {
+  //       return document;
+  //     }
+  //   }
 
-    let document = new BrowserDraftDocument(handle);
-    await document._initialize();
+  //   let document = new DraftDocument(handle);
+  //   await document._initialize();
 
-    this._documents[document.id] = document;
+  //   this._documents[document.id] = document;
 
-    // If the app backend is not being initialized
-    if (this.draftInstances) {
-      this._update();
-    }
+  //   // If the app backend is not being initialized
+  //   if (this.draftInstances) {
+  //     this._update();
+  //   }
 
-    return document;
-  }
+  //   return document;
+  // }
 }
 
 

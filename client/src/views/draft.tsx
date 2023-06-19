@@ -6,7 +6,7 @@ import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 import { OrderedMap } from 'immutable';
-import { DraftDocumentId, DraftDocumentSnapshot, DraftInstanceId, DraftInstanceSnapshot } from '../app-backends/base';
+import { DocumentId, DocumentSlotSnapshot, DraftInstanceId, DraftInstanceSnapshot } from '../app-backends/base';
 import { Application } from '../application';
 import { BlockInspector } from '../components/block-inspector';
 import { DiagnosticsReport } from '../components/diagnostics-report';
@@ -15,12 +15,13 @@ import { DraftSummary } from '../components/draft-summary';
 import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
 import { GraphEditor } from '../components/graph-editor';
+import { StartProtocolModal } from '../components/modals/start-protocol';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
-import { DraftCompilation, DraftId } from '../draft';
+import { DraftCompilation } from '../draft';
 import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { Host } from '../host';
 import { HostDraftCompilerResult } from '../interfaces/draft';
@@ -30,12 +31,11 @@ import { analyzeBlockPath } from '../protocol';
 import { Pool, formatClass } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
-import { StartProtocolModal } from '../components/modals/start-protocol';
 
 
 export interface DocumentItem {
   controller: AbortController;
-  snapshot: DraftDocumentSnapshot;
+  slotSnapshot: DocumentSlotSnapshot;
   textModel: monaco.editor.ITextModel | null;
   unsaved: boolean;
 
@@ -56,10 +56,10 @@ export interface ViewDraftState {
   compilation: HostDraftCompilerResult | null;
   compiling: boolean;
   cursorPosition: monaco.Position | null;
-  documentItems: OrderedMap<DraftDocumentId, DocumentItem>;
+  documentItems: OrderedMap<DocumentId, DocumentItem>;
   requesting: boolean;
   selectedBlockPath: ProtocolBlockPath | null;
-  selectedDocumentId: DraftDocumentId;
+  selectedDocumentId: DocumentId;
   startModalOpen: boolean;
 
   graphOpen: boolean;
@@ -78,11 +78,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   constructor(props: ViewDraftProps) {
     super(props);
 
-    let entryDocument = this.props.app.state.documents[this.props.draft.entryDocumentId].model;
+    let entrySlot = this.props.draft.model.getEntryDocumentSlot();
 
     let entryDocumentItem: DocumentItem = {
       controller: new AbortController(),
-      snapshot: entryDocument.getSnapshot(),
+      slotSnapshot: entrySlot.getSnapshot(),
       textModel: null,
       unsaved: false,
 
@@ -92,44 +92,52 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       }
     };
 
-    let getModelOfDocumentItem = (documentItem: DocumentItem, snapshot: DraftDocumentSnapshot = documentItem.snapshot) => {
-      if (documentItem.textModel && (snapshot.lastExternalModificationDate === snapshot.lastModificationDate)) {
+    let getModelOfDocumentItem = (documentItem: DocumentItem, snapshot: DocumentSlotSnapshot = documentItem.slotSnapshot) => {
+      // If the document has received an external modification
+      // Then update the text model
+      if (documentItem.textModel && snapshot.document && (snapshot.document.lastExternalModificationDate === snapshot.document.lastModificationDate)) {
         documentItem.meta.currentVersionId = documentItem.textModel.getVersionId() + 1;
         documentItem.meta.updated = true;
 
-        documentItem.textModel.setValue(snapshot.contents!);
+        documentItem.textModel.setValue(snapshot.document.contents!);
 
         this.setDocumentItem(snapshot.id, {
           unsaved: false
         });
       }
 
-      if (documentItem.textModel || (snapshot.contents === null)) {
+      // If the text model already exists
+      if (documentItem.textModel) {
         return documentItem.textModel;
       }
 
-      let model = monaco.editor.createModel(snapshot.contents, 'prl');
+      // If the document exists and its content is known
+      if (snapshot.document && (snapshot.document.contents !== null)) {
+        let model = monaco.editor.createModel(snapshot.document.contents, 'prl');
 
-      documentItem.meta.updated = true;
+        documentItem.meta.updated = true;
 
-      model.onDidChangeContent((event) => {
-        if (documentItem.meta.currentVersionId !== event.versionId) {
-          documentItem.meta.currentVersionId = null;
-          documentItem.meta.updated = true;
+        model.onDidChangeContent((event) => {
+          if (documentItem.meta.currentVersionId !== event.versionId) {
+            documentItem.meta.currentVersionId = null;
+            documentItem.meta.updated = true;
 
-          this.setDocumentItem(documentItem.snapshot.id, {
-            unsaved: true
-          });
-        }
-      });
+            this.setDocumentItem(documentItem.slotSnapshot.id, {
+              unsaved: true
+            });
+          }
+        });
 
-      return model;
+        return model;
+      }
+
+      return null;
     };
 
-    let documentItems = OrderedMap([[entryDocument.id, entryDocumentItem]]).map((documentItem) => ({
+    let documentItems = OrderedMap([[entrySlot.id, entryDocumentItem]]).map((documentItem) => ({
       ...documentItem,
-      model: getModelOfDocumentItem(documentItem)
-    }));
+      textModel: getModelOfDocumentItem(documentItem)
+    } satisfies DocumentItem));
 
     this.state = {
       documentItems,
@@ -139,7 +147,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       cursorPosition: null,
       requesting: false,
       selectedBlockPath: null,
-      selectedDocumentId: entryDocument.id,
+      selectedDocumentId: entrySlot.id,
       startModalOpen: false,
 
       graphOpen: true,
@@ -147,26 +155,28 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       inspectorOpen: true
     };
 
-    entryDocument.watchSnapshot((snapshot) => {
+    entrySlot.watchSnapshot((snapshot) => {
+      console.log('Update', snapshot);
+
       let documentItem = this.state.documentItems.get(snapshot.id)!;
       let textModel = getModelOfDocumentItem(documentItem, snapshot);
 
       // console.log('ℹ️ Snapshot', snapshot.lastModificationDate, snapshot.lastExternalModificationDate);
 
       this.setDocumentItem(snapshot.id, {
-        snapshot,
+        slotSnapshot: snapshot,
         textModel
       });
     });
 
-    entryDocument.watchContents({ signal: entryDocumentItem.controller.signal });
+    entrySlot.watch({ signal: entryDocumentItem.controller.signal });
   }
 
   get selectedDocumentItem() {
-    return this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
+    return this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
   }
 
-  private setDocumentItem(documentId: DraftDocumentId, patch: Partial<DocumentItem>) {
+  private setDocumentItem(documentId: DocumentId, patch: Partial<DocumentItem>) {
     this.setState((state) => ({
       documentItems: state.documentItems.set(documentId, {
         ...state.documentItems.get(documentId)!,
@@ -195,13 +205,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     this.props.app.shortcutManager.attach('Meta+S', () => {
       let documentItem = this.selectedDocumentItem;
 
-      if (documentItem.textModel && documentItem.snapshot.writable) {
+      if (documentItem.textModel && documentItem.slotSnapshot.document?.writable) {
+        let document = documentItem.slotSnapshot.document.model;
         let contents = documentItem.textModel.getValue();
 
         this.pool.add(async () => {
-          await documentItem.snapshot.model.write(contents);
+          await document.write(contents);
 
-          this.setDocumentItem(documentItem.snapshot.id, {
+          this.setDocumentItem(documentItem.slotSnapshot.id, {
             unsaved: false
           });
         });
@@ -210,14 +221,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   }
 
   override componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
-    let selectedDocumentItem = this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
-    let prevSelectedDocumentItem = prevState.documentItems.find((item) => item.snapshot.id === selectedDocumentItem.snapshot.id);
+    let selectedDocumentItem = this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
+    let prevSelectedDocumentItem = prevState.documentItems.find((item) => item.slotSnapshot.id === selectedDocumentItem.slotSnapshot.id);
 
     if (prevSelectedDocumentItem) {
-      let prevLastModified = prevSelectedDocumentItem.snapshot.lastModificationDate;
-      let lastModified = selectedDocumentItem.snapshot.lastModificationDate;
+      let prevModificationDate = prevSelectedDocumentItem.slotSnapshot.document?.lastModificationDate ?? null;
+      let modificationDate = selectedDocumentItem.slotSnapshot.document?.lastModificationDate ?? null;
 
-      if ((prevLastModified !== null) && (lastModified !== prevLastModified)) {
+      if ((prevModificationDate !== null) && (modificationDate !== prevModificationDate)) {
         this.refTitleBar.current!.notify();
       }
     }
@@ -275,11 +286,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         draft: {
           id: this.props.draft.id,
           documents: documentItems.valueSeq().map((documentItem) => ({
-            id: documentItem.snapshot.id,
+            id: documentItem.slotSnapshot.id,
             contents: documentItem.textModel!.getValue(),
-            path: documentItem.snapshot.path
+            path: documentItem.slotSnapshot.path
           })).toArray(),
-          entryDocumentId: this.props.draft.entryDocumentId
+          entryDocumentId: this.props.draft.model.getEntryDocumentSlot().id
         },
         options: {
           trusted: true
@@ -359,7 +370,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
 
   override render() {
-    let selectedDocumentItem = this.state.documentItems.find((item) => item.snapshot.id === this.state.selectedDocumentId)!;
+    let selectedDocumentItem = this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
+    let selectedDocumentSnapshot = selectedDocumentItem.slotSnapshot.document;
 
     let subtitle = null;
     let subtitleVisible = false;
@@ -370,16 +382,19 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       pool: this.pool
     };
 
-    if (!selectedDocumentItem.snapshot.readable) {
+    if (!selectedDocumentSnapshot) {
+      subtitle = 'Missing file';
+      subtitleVisible = true;
+    } else if (!selectedDocumentSnapshot.readable) {
       subtitle = 'Permission required';
       subtitleVisible = true;
-    } else if (selectedDocumentItem.snapshot.lastModificationDate !== null) {
-      let lastModified = selectedDocumentItem.snapshot.lastModificationDate;
+    } else if (selectedDocumentSnapshot.lastModificationDate !== null) {
+      let modificationDate = selectedDocumentSnapshot.lastModificationDate;
 
       subtitle = (
         <TimeSensitive
           contents={() => {
-            let delta = Date.now() - lastModified;
+            let delta = Date.now() - modificationDate;
 
             return (delta < 5e3)
               ? 'Just saved'
@@ -436,11 +451,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       draft: {
                         id: this.props.draft.id,
                         documents: this.state.documentItems.valueSeq().map((documentItem) => ({
-                          id: documentItem.snapshot.id,
+                          id: documentItem.slotSnapshot.id,
                           contents: documentItem.textModel!.getValue(),
-                          path: documentItem.snapshot.path
+                          path: documentItem.slotSnapshot.path
                         })).toArray(),
-                        entryDocumentId: this.props.draft.entryDocumentId
+                        entryDocumentId: this.props.draft.model.getEntryDocumentSlot().id
                       },
                       options: {
                         trusted: true
@@ -459,13 +474,11 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
               { component: (
                 <div className={editorStyles.editorPanel}>
                   <FileTabNav entries={this.state.documentItems.valueSeq().toArray().map((documentItem, index) => {
-                    let document = documentItem.snapshot.model;
-
                     return {
-                      id: documentItem.snapshot.id,
-                      label: documentItem.snapshot.path.at(-1)!,
+                      id: documentItem.slotSnapshot.id,
+                      label: documentItem.slotSnapshot.path.at(-1)!,
                       unsaved: documentItem.unsaved,
-                      selected: (documentItem.snapshot.id === this.state.selectedDocumentId),
+                      selected: (documentItem.slotSnapshot.id === this.state.selectedDocumentId),
                       // createMenu: () => [
                       //   { id: 'close', name: 'Close', disabled: (index === 0) },
                       //   { id: '_divider', type: 'divider' },
@@ -497,7 +510,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                   })} />
                   <DocumentEditor
                     autoSave={false}
-                    documentItem={this.state.documentItems.find((documentItem) => documentItem.snapshot.id === this.state.selectedDocumentId)!}
+                    documentItem={this.state.documentItems.find((documentItem) => documentItem.slotSnapshot.id === this.state.selectedDocumentId)!}
                     getCompilation={this.getCompilation.bind(this)}
                     onCursorChange={(position) => {
                       this.setState({ cursorPosition: position });
@@ -580,7 +593,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
               )}
             </div>
             <div className={editorStyles.infobarRight}>
-              <div>Last saved: {this.selectedDocumentItem.snapshot.lastModificationDate ? new Date(this.selectedDocumentItem.snapshot.lastModificationDate).toLocaleTimeString() : '–'}</div>
+              <div>Last saved: {this.selectedDocumentItem.slotSnapshot.document?.lastModificationDate ? new Date(this.selectedDocumentItem.slotSnapshot.document.lastModificationDate).toLocaleTimeString() : '–'}</div>
             </div>
           </div>
         </div>
@@ -589,7 +602,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  static navigate(draftId: DraftId) {
+  static navigate(draftId: DraftInstanceId) {
     return navigation.navigate(`${BaseUrl}/draft/${draftId}`);
   }
 }

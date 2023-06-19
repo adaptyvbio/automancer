@@ -1,6 +1,6 @@
 import type { Diagnostic, Protocol } from 'pr1-shared';
 import type { DraftCompletion, DraftFold, DraftHover, DraftMarker, DraftRelation, DraftRename, DraftSelection, DraftToken } from '../draft';
-import type { DraftDocumentPath } from '../app-backends/base';
+import type { DocumentPath } from '../app-backends/base';
 
 
 export type HostDraftId = string;
@@ -25,7 +25,7 @@ export interface HostDraftCompilerOptions {
 
 export interface HostDraftCompilerResult {
   analysis: DraftLanguageAnalysis;
-  missingDocumentPaths: DraftDocumentPath[];
+  missingDocumentPaths: DocumentPath[];
   protocol: Protocol | null;
   valid: boolean;
 }

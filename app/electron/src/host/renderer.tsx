@@ -1,119 +1,22 @@
-import { AppBackend, Application, DraftId, HostInfoId, Pool, React, ReactDOM } from 'pr1';
-import { DraftEntry, HostSettings, HostSettingsId } from 'pr1-library';
-import { Client, defer, Deferred, ServerProtocol } from 'pr1-shared';
+import { Application, HostInfoId, Pool } from 'pr1';
+import { HostSettings, HostSettingsId } from 'pr1-library';
+import { Client, Deferred, ServerProtocol, defer } from 'pr1-shared';
+import { createRoot } from 'react-dom/client';
+import { Component } from 'react';
 
 import { NativeContextMenuProvider } from '../shared/context-menu';
+import { ElectronAppBackend } from './app-backend';
 
 
-class ElectronAppBackend implements AppBackend {
-  async initialize() {
-
-  }
-
-  async createDraft(options: { directory: boolean; source: string; }) {
-    let draftEntry = await window.api.drafts.create(options.source);
-
-    if (!draftEntry) {
-      return null;
-    }
-
-    return new DraftItem(draftEntry);
-  }
-
-  async deleteDraft(draftId: DraftId) {
-    await window.api.drafts.delete(draftId);
-  }
-
-  async listDrafts() {
-    return (await window.api.drafts.list()).map((draftEntry) => new DraftItem(draftEntry));
-  }
-
-  async loadDraft(options: { directory: boolean; }) {
-    let draftEntry = await window.api.drafts.load();
-
-    if (!draftEntry) {
-      return null;
-    }
-
-    return new DraftItem(draftEntry);
-  }
-}
-
-
-class DraftItem {
-  kind = 'own' as const;
-  lastModified: number;
-  readable = true;
-  readonly = false;
-  revision = 0;
-  source: string | null = null;
-  volumeInfo = null;
-  writable = true;
-
-  constructor(private _entry: DraftEntry) {
-    this.lastModified = this._entry.lastModified;
-  }
-
-  get id() {
-    return this._entry.id;
-  }
-
-  get locationInfo() {
-    return {
-      type: 'file' as const,
-      name: this.mainFilePath
-    };
-  }
-
-  get mainFilePath() {
-    return this._entry.path;
-  }
-
-  get name() {
-    return this._entry.name;
-  }
-
-
-  async openFile(filePath: string) {
-    await window.api.drafts.openFile(this._entry.id, filePath);
-  }
-
-  async revealFile(filePath: string) {
-    await window.api.drafts.revealFile(this._entry.id, filePath);
-  }
-
-  async watch(handler: () => void, options: { signal: AbortSignal; }) {
-    await window.api.drafts.watch(this._entry.id, (change) => {
-      this.lastModified = change.lastModified;
-      this.revision = change.lastModified;
-      this.source = change.source;
-
-      handler();
-    }, (listener) => {
-      options.signal.addEventListener('abort', listener);
-    });
-  }
-
-  async write(primitive) {
-    let lastModified = await window.api.drafts.write(this._entry.id, primitive);
-
-    if (lastModified !== null) {
-      this.lastModified = lastModified;
-      this.source = primitive.source;
-    }
-  }
-}
-
-
-interface AppProps {
+export interface AppProps {
 
 }
 
-interface AppState {
+export interface AppState {
   hostSettings: HostSettings | null;
 }
 
-class App extends React.Component<AppProps, AppState> {
+export class App extends Component<AppProps, AppState> {
   private appBackend = new ElectronAppBackend();
   private client: Client | null = null;
   private hostSettingsId = new URL(location.href).searchParams.get('hostSettingsId') as HostSettingsId;
@@ -165,7 +68,7 @@ class App extends React.Component<AppProps, AppState> {
 
 document.body.dataset['platform'] = window.api.platform;
 
-let root = ReactDOM.createRoot(document.getElementById('root')!);
+let root = createRoot(document.getElementById('root')!);
 root.render(<App />);
 
 

@@ -1,9 +1,11 @@
-import { HostInfo, HostInfoId, Pool, React, ReactDOM, Startup } from 'pr1';
+import { HostInfo, HostInfoId, Pool, Startup } from 'pr1';
 import { HostSettingsId, HostSettingsRecord } from 'pr1-library';
+import { Component } from 'react';
+import { createRoot } from 'react-dom/client';
 import seqOrd from 'seq-ord';
 
-import { HostCreator } from './host-creator';
 import { NativeContextMenuProvider } from '../shared/context-menu';
+import { HostCreator } from './host-creator';
 
 
 export interface AppProps {
@@ -15,7 +17,7 @@ export interface AppState {
   hostSettingsRecord: HostSettingsRecord | null;
 }
 
-export class App extends React.Component<AppProps, AppState> {
+export class App extends Component<AppProps, AppState> {
   pool = new Pool();
 
   constructor(props: AppProps) {
@@ -107,5 +109,5 @@ export class App extends React.Component<AppProps, AppState> {
 
 document.body.dataset['platform'] = window.api.platform;
 
-let root = ReactDOM.createRoot(document.getElementById('root')!);
+let root = createRoot(document.getElementById('root')!);
 root.render(<App />);

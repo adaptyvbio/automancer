@@ -351,8 +351,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
         let pluginInfo = state.info.units[plugin.namespace];
 
         if (plugin.persistentStoreDefaults || plugin.sessionStoreDefaults) {
-          let persistentStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}:${pluginInfo.version}`, { type: 'persistent' }));
-          let sessionStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}:${pluginInfo.version}`, { type: 'session' }));
+          let persistentStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}__${pluginInfo.version}`, { type: 'persistent' }));
+          let sessionStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}__${pluginInfo.version}`, { type: 'session' }));
 
           this.pluginStores[plugin.namespace] = {
             persistent: persistentStore,
@@ -407,16 +407,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
   }
 
   async queryDraft(options: { directory: boolean; }) {
-    let candidates = await this.appBackend.queryDraftCandidates({ directory: options.directory });
-    let candidate = candidates[0];
-
-    if (!candidate) {
-      return null;
-    }
-
-    let instance = await candidate.createInstance();
-
-    return instance.id;
+    let draftInstance = await this.appBackend.queryDraft({ directory: options.directory });
+    return draftInstance?.id ?? null;
   }
 
 

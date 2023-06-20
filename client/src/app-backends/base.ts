@@ -89,9 +89,8 @@ export interface DocumentSlot extends SnapshotTarget<DocumentSlotSnapshot> {
    * Write to the document.
    *
    * @param contents The contents to write to the document, encoded as UTF-8.
-   * @returns A promise that resolves to an object which indicates the date on which the document was written.
    */
-  write(contents: string): Promise<{ modificationDate: number; }>;
+  write(contents: string): Promise<void>;
 }
 
 export type DocumentSlotStatus = 'error' | 'loading' | 'ok' | 'missing' | 'prompt' | 'unreadable' | 'unwatched';
@@ -135,13 +134,9 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
   createStore(name: string, options: { type: 'persistent' | 'session'; }): Store;
 
   /**
-   * Trigger a file or directory open dialog and return an array of corresponding {@link DraftCandidate} objects.
-
-   * Returns an empty array if the operation is aborted.
-
-   * @param options.directory Whether to open a directory dialog rather than a file dialog. Used in browser frontends only.
+   * Trigger a file or directory open dialog and return a corresponding {@link DraftInstance} object.
    */
-  queryDraftCandidates(options: { directory: boolean; }): Promise<DraftCandidate[]>;
+  queryDraft(options: { directory: boolean; }): Promise<DraftInstance | null>;
 }
 
 export interface AppBackendSnapshot {

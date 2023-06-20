@@ -35,6 +35,8 @@ export class Pool {
       });
 
     this.#promises.add(promise);
+
+    return Promise.allSettled([promise]);
   }
 
   get empty() {

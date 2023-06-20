@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DraftId, DraftPrimitive, MenuDef, MenuEntryPathLike } from 'pr1';
-import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, DraftEntry, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
-import type { HostIdentifier, ClientProtocol, ServerProtocol } from 'pr1-shared';
+import type { MenuDef, MenuEntryPathLike } from 'pr1';
+import type { AdvertisedHostInfo, BridgeTcp, CertificateFingerprint, DraftEntryId, HostSettingsId, HostSettingsRecord, LocalHostOptions, PythonInstallation, TcpHostOptions, TcpHostOptionsCandidate } from 'pr1-library';
+import type { ClientProtocol, HostIdentifier, ServerProtocol } from 'pr1-shared';
 
-import type { HostCreatorContext } from '../interfaces';
+import type { DocumentChange, DraftSkeleton, HostCreatorContext } from '../interfaces';
 
 
 export type IPCEndpoint = {
@@ -84,15 +84,23 @@ export type IPCEndpoint = {
   };
 
   drafts: {
-    create(source: string): Promise<DraftEntry>;
-    delete(draftId: DraftId): Promise<void>;
-    list(): Promise<DraftEntry[]>;
-    load(): Promise<DraftEntry | null>;
-    openFile(draftId: DraftId, filePath: string): Promise<void>;
-    revealFile(draftId: DraftId, filePath: string): Promise<void>;
-    watch(draftId: DraftId, callback: ((change: { lastModified: number; source: string; }) => void), onSignalAbort: ((callback: (() => void)) => void)): Promise<{ lastModified: number; source: string; }>;
-    watchStop(draftId: DraftId): Promise<void>;
-    write(draftId: DraftId, primitive: DraftPrimitive): Promise<number | null>;
+    // create(source: string): Promise<DraftEntry>;
+    delete(draftEntryId: DraftEntryId): Promise<void>;
+    list(): Promise<DraftSkeleton[]>;
+    query(): Promise<DraftSkeleton | null>;
+    setName(draftEntryId: DraftEntryId, name: string): Promise<void>;
+    watch(filePath: string, callback: ((change: DocumentChange) => void), onSignalAbort: (callback: (() => void)) => void): void;
+    watchStop(filePath: string): Promise<void>;
+    write(filePath: string, contents: string): Promise<void>;
+    // load(): Promise<DraftEntry | null>;
+    // openFile(draftId: DraftId, filePath: string): Promise<void>;
+    // revealFile(draftId: DraftId, filePath: string): Promise<void>;
+  };
+
+  store: {
+    read(storeName: string, key: string): Promise<unknown | undefined>;
+    readAll(storeName: string): Promise<(readonly [string, unknown])[]>;
+    write(storeName: string, key: string, value: unknown): Promise<void>;
   };
 };
 
@@ -147,38 +155,52 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   drafts: {
-    create: async (source) =>
-      await ipcRenderer.invoke('drafts.create', source),
-    delete: async (draftId) =>
-      await ipcRenderer.invoke('drafts.delete', draftId),
+    query: async () =>
+      await ipcRenderer.invoke('drafts.query'),
+    write: async (filePath, contents) =>
+      await ipcRenderer.invoke('drafts.write', filePath, contents),
+
+    // create: async (source) =>
+    //   await ipcRenderer.invoke('drafts.create', source),
+    delete: async (draftEntryId) =>
+      await ipcRenderer.invoke('drafts.delete', draftEntryId),
     list: async () =>
       await ipcRenderer.invoke('drafts.list'),
-    load: async () =>
-      await ipcRenderer.invoke('drafts.load'),
-    openFile: async (draftId, filePath) =>
-      await ipcRenderer.invoke('drafts.openFile', draftId, filePath),
-    revealFile: async (draftId, filePath) =>
-      await ipcRenderer.invoke('drafts.revealFile', draftId, filePath),
+    setName: async (draftEntryId, name) =>
+      await ipcRenderer.invoke('drafts.setName', draftEntryId, name),
+    // load: async () =>
+    //   await ipcRenderer.invoke('drafts.load'),
+    // openFile: async (draftId, filePath) =>
+    //   await ipcRenderer.invoke('drafts.openFile', draftId, filePath),
+    // revealFile: async (draftId, filePath) =>
+    //   await ipcRenderer.invoke('drafts.revealFile', draftId, filePath),
 
-    // @ts-expect-error
-    watch: async (draftId, callback, onSignalAbort) => {
-      let changeListener = (event: any, { change, draftId: changeDraftId }: any) => {
-        if (changeDraftId === draftId) {
+    watch: async (filePath, callback, onSignalAbort) => {
+      let changeListener = (event: any, changeFilePath: string, change: DocumentChange) => {
+        if (changeFilePath === filePath) {
           callback(change);
         }
       };
 
       ipcRenderer.on('drafts.change', changeListener);
 
-      let change = await ipcRenderer.invoke('drafts.watch', draftId);
+      let change = await ipcRenderer.invoke('drafts.watch', filePath);
       callback(change);
 
       onSignalAbort(() => {
-        ipcRenderer.invoke('drafts.watchStop', draftId);
+        ipcRenderer.invoke('drafts.watchStop', filePath);
         ipcRenderer.off('drafts.change', changeListener);
       });
     },
-    write: async (draftId, primitive) =>
-      await ipcRenderer.invoke('drafts.write', draftId, primitive)
+    watchStop: (null as never)
   },
+
+  store: {
+    read: async (storeName, key) =>
+      await ipcRenderer.invoke('store.read', storeName, key),
+    readAll: async (storeName) =>
+      await ipcRenderer.invoke('store.readAll', storeName),
+    write: async (storeName, key, value) =>
+      await ipcRenderer.invoke('store.write', storeName, key, value)
+  }
 } satisfies IPCEndpoint);

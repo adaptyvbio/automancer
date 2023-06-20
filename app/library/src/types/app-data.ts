@@ -1,13 +1,12 @@
 import { Brand, HostIdentifier } from 'pr1-shared';
 
 
-export type DraftEntryId = string;
+export type DraftEntryId = Brand<string, 'DraftEntryId'>;
 
 export interface DraftEntry {
   id: DraftEntryId;
-  lastOpened: number;
-  name: string;
-  path: string;
+  entryPath: string;
+  name: string | null;
 }
 
 export type PythonVersion = [number, number, number];
@@ -43,7 +42,6 @@ export interface AppData {
   drafts: Record<DraftEntryId, DraftEntry>;
   embeddedPythonInstallation: null;
   hostSettingsRecord: HostSettingsRecord;
-  preferences: {};
   version: number;
 }
 

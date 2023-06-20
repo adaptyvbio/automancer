@@ -220,10 +220,6 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
       this._instance.lastModificationDate = file.lastModified;
 
       this._update();
-
-      return {
-        modificationDate: file.lastModified
-      };
     });
   }
 
@@ -402,32 +398,25 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     this._update();
   }
 
-  async queryDraftCandidates(options: { directory: boolean; }) {
+  async queryDraft(options: { directory: boolean; }) {
     let selectedHandle = options.directory
       ? await wrapAbortable(window.showDirectoryPicker())
       : (await wrapAbortable(window.showOpenFilePicker()))?.[0];
 
     if (!selectedHandle) {
-      return [];
+      return null;
     }
 
-
-    let candidates: DraftCandidate[] = [];
 
     for await (let { handle, path } of walkFilesystemHandle(selectedHandle)) {
       let rootHandle = (selectedHandle.kind === 'directory') ? selectedHandle : null;
 
       if (handle.name.endsWith(DraftDocumentExtension)) {
-        candidates.push({
-          id: crypto.randomUUID(),
-          path,
-
-          createInstance: async () => await this._createInstanceFromCandidate(handle, rootHandle)
-        });
+        return await this._createInstanceFromCandidate(handle, rootHandle);
       }
     }
 
-    return candidates;
+    return null;
   }
 
   async _createInstanceFromCandidate(entryHandle: FileSystemFileHandle, rootHandle: FileSystemDirectoryHandle | null) {

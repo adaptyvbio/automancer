@@ -1,18 +1,18 @@
 import 'source-map-support/register';
 
-import { ok as assert } from 'node:assert';
 import chokidar from 'chokidar';
+import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, session, shell } from 'electron';
+import { ok as assert } from 'node:assert';
 import crypto from 'node:crypto';
-import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AppData, BridgeTcp, CertificateFingerprint, DraftEntry, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend, UnixSocketDirPath } from 'pr1-library';
+import { MenuDef, MenuEntryId } from 'pr1';
+import { AppData, BridgeTcp, CertificateFingerprint, DraftEntryId, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend } from 'pr1-library';
+import { defer } from 'pr1-shared';
 import * as uol from 'uol';
 
-import { MenuDef, MenuEntryId } from 'pr1';
-import { defer } from 'pr1-shared';
 import { HostWindow } from './host';
-import { DraftEntryState, IPC2d as IPCServer2d } from './interfaces';
+import { DocumentChange, DraftSkeleton, IPC2d as IPCServer2d } from './interfaces';
 import { rootLogger } from './logger';
 import type { IPCEndpoint } from './shared/preload';
 import { StartupWindow } from './startup';
@@ -35,10 +35,12 @@ export class CoreApplication {
 
   private data!: AppData;
   private pythonInstallations!: PythonInstallationRecord;
+  private stores!: Map<string, Map<string, unknown>>;
 
   private dataDirPath: string;
   private dataPath: string;
   private hostsDirPath: string;
+  private storesDirPath: string;
   logsDirPath: string;
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
@@ -52,6 +54,7 @@ export class CoreApplication {
 
     this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
+    this.storesDirPath = path.join(this.dataDirPath, 'stores');
 
     this.hostsDirPath = path.join(userData, 'App Hosts');
     this.logsDirPath = this.electronApp.getPath('logs');
@@ -86,7 +89,7 @@ export class CoreApplication {
 
     this.electronApp.on('certificate-error', (event, webContents, url, error, certificate, callback, isMainFrame) => {
       let browserWindow = BrowserWindow.fromWebContents(webContents)!;
-      let hostWindow = Object.values(this.hostWindows).find((hostWindow) => (hostWindow.window === browserWindow))!;
+      let hostWindow = Object.values(this.hostWindows).find((hostWindow) => (hostWindow.browserWindow === browserWindow))!;
 
       let hostSettings = hostWindow.hostSettings;
 
@@ -197,6 +200,31 @@ export class CoreApplication {
     this.pythonInstallations = await util.findPythonInstallations();
 
     await this.electronApp.whenReady();
+
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      if (details.webContents) {
+        let browserWindow = BrowserWindow.fromWebContents(details.webContents)!;
+        let hostWindow = Object.values(this.hostWindows).find((hostWindow) => (hostWindow.browserWindow === browserWindow)) ?? null;
+        let staticUrl = hostWindow?.client?.info?.staticUrl ?? null;
+
+        if (staticUrl !== null) {
+          let origin = new URL(staticUrl).origin;
+
+          callback({
+            responseHeaders: {
+              ...details.responseHeaders,
+              'Content-Security-Policy': [`script-src 'self' ${origin} 'nonce-71e54eb8'`]
+            }
+          });
+        } else {
+          callback({});
+        }
+      } else {
+        callback({});
+      }
+    });
+
+    this.logger.info(`Loading data from ${this.dataDirPath}`);
     await this.loadData();
 
     if (!this.data) {
@@ -537,103 +565,125 @@ export class CoreApplication {
 
     // Draft management
 
-    let createDraftEntryState = (): DraftEntryState => ({
-      lastModified: null,
-      waiting: false,
-      watcher: null,
-      writePromise: Promise.resolve()
+    interface FileState {
+      lastExternalModificationDate: number;
+      lastModificationDate: number;
+      watchers: Set<BrowserWindow>;
+      writing: boolean;
+    }
+
+    let fileStates = new Map<string, FileState>();
+
+    let watcher = chokidar.watch([], {
+      awaitWriteFinish: {
+        stabilityThreshold: 500
+      }
     });
 
-    let draftEntryStates = Object.fromEntries(
-      Object.values(this.data.drafts).map((draftEntry) => [draftEntry.id, createDraftEntryState()])
-    );
+    let createChange = async (filePath: string): Promise<DocumentChange | null> => {
+      let fileState = fileStates.get(filePath)!;
 
-    let createClientDraftEntry = async (draftEntry: DraftEntry) => {
-      let stats;
+      let stats = await fs.stat(filePath);
 
-      try {
-        stats = await fs.stat(draftEntry.path);
-      } catch (err: any) {
-        if (err.code === 'ENOENT') {
-          return null;
-        }
+      // External modification
+      if (stats.mtimeMs !== fileState.lastModificationDate) {
+        fileState.lastModificationDate = stats.mtimeMs;
+        fileState.lastExternalModificationDate = stats.mtimeMs;
 
-        throw err;
+        return {
+          instance: {
+            contents: (await fs.readFile(filePath)).toString(),
+            lastExternalModificationDate: stats.mtimeMs,
+            lastModificationDate: stats.mtimeMs
+          },
+          status: 'ok'
+        };
       }
 
-      return {
-        id: draftEntry.id,
-        lastOpened: draftEntry.lastOpened,
-        lastModified: stats.mtimeMs,
-        name: draftEntry.name,
-        path: path.basename(draftEntry.path)
-      };
+      return null;
     };
 
-    ipcMain.handle('drafts.create', async (event, source) => {
-      let result = await dialog.showSaveDialog(
-        BrowserWindow.fromWebContents(event.sender)!,
-        { filters: ProtocolFileFilters,
-          buttonLabel: 'Create' }
-      );
+    watcher.on('add', (filePath) => {
+      this.pool.add(async () => {
+        let fileState = fileStates.get(filePath)!;
+        let change = (await createChange(filePath))!;
 
-      if (result.canceled) {
-        return null;
-      }
-
-      let draftEntry: DraftEntry = {
-        id: crypto.randomUUID(),
-        lastOpened: Date.now(),
-        name: path.basename(result.filePath!),
-        path: result.filePath!
-      };
-
-      await fs.writeFile(draftEntry.path!, source);
-
-      await this.setData({
-        drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+        for (let watcher of fileState.watchers) {
+          watcher.webContents.send('drafts.change', filePath, change);
+        }
       });
-
-      draftEntryStates[draftEntry.id] = createDraftEntryState();
-
-      return createClientDraftEntry(draftEntry);
     });
 
-    ipcMain.handle('drafts.delete', async (_event, draftId) => {
-      let { [draftId]: _, ...drafts } = this.data.drafts;
-      await this.setData({ drafts });
+    watcher.on('change', (filePath) => {
+      this.pool.add(async () => {
+        let fileState = fileStates.get(filePath)!;
+        let change = await createChange(filePath);
 
-      delete draftEntryStates[draftId];
+        if (!fileState.writing && change) {
+          for (let watcher of fileState.watchers) {
+            watcher.webContents.send('drafts.change', filePath, change);
+          }
+        }
+      });
+    });
+
+    watcher.on('unlink', (filePath) => {
+      let fileState = fileStates.get(filePath)!;
+
+      for (let watcher of fileState.watchers) {
+        watcher.webContents.send('drafts.change', filePath, {
+          instance: null,
+          status: 'missing'
+        } satisfies DocumentChange);
+      }
+
+      fileState.lastExternalModificationDate = 0;
+      fileState.lastModificationDate = 0;
+    });
+
+    // ipcMain.handle('drafts.create', async (event, source) => {
+    //   let result = await dialog.showSaveDialog(
+    //     BrowserWindow.fromWebContents(event.sender)!,
+    //     { filters: ProtocolFileFilters,
+    //       buttonLabel: 'Create' }
+    //   );
+
+    //   if (result.canceled) {
+    //     return null;
+    //   }
+
+    //   let draftEntry: DraftEntry = {
+    //     id: crypto.randomUUID(),
+    //     lastOpened: Date.now(),
+    //     name: path.basename(result.filePath!),
+    //     path: result.filePath!
+    //   };
+
+    //   await fs.writeFile(draftEntry.path!, source);
+
+    //   await this.setData({
+    //     drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+    //   });
+
+    //   draftEntryStates[draftEntry.id] = createDraftEntryState();
+
+    //   return createClientDraftEntry(draftEntry);
+    // });
+
+    ipcMain.handle('drafts.delete', async (_event, draftEntryId) => {
+      let { [draftEntryId]: _, ...drafts } = this.data.drafts;
+      await this.setData({ drafts });
     });
 
     ipcMain.handle('drafts.list', async () => {
-      let missingDraftIds = new Set();
-
-      let clientDraftEntries = (await Promise.all(
-        Object.values(this.data.drafts).map(async (draftEntry) => {
-          let clientDraftEntry = await createClientDraftEntry(draftEntry);
-
-          if (!clientDraftEntry) {
-            missingDraftIds.add(draftEntry.id);
-            return [];
-          }
-
-          return clientDraftEntry;
-        })
-      )).flat();
-
-      if (missingDraftIds.size > 0) {
-        this.setData({
-          drafts: Object.fromEntries(
-            Object.entries(this.data.drafts).filter(([_draftId, draftEntry]) => !missingDraftIds.has(draftEntry.id))
-          )
-        });
-      }
-
-      return clientDraftEntries;
+      return Object.values(this.data.drafts).map<DraftSkeleton>((draftEntry) => ({
+        id: draftEntry.id,
+        entryPath: draftEntry.entryPath,
+        name: draftEntry.name
+      }));
     });
 
-    ipcMain.handle('drafts.load', async (event) => {
+    ipcMain.handle('drafts.query', async (event) => {
       let result = await dialog.showOpenDialog(
         BrowserWindow.fromWebContents(event.sender)!,
         { filters: ProtocolFileFilters,
@@ -644,113 +694,136 @@ export class CoreApplication {
         return null;
       }
 
-      let id = crypto.randomUUID();
-      let draftEntry = {
-        id,
-        lastOpened: Date.now(),
-        name: null,
-        path: result.filePaths[0]
+      let entryPath = result.filePaths[0];
+      let draftEntry = Object.values(this.data.drafts).find((draftEntry) => (draftEntry.entryPath === entryPath));
+
+      if (!draftEntry) {
+        draftEntry = {
+          id: crypto.randomUUID() as DraftEntryId,
+          name: null,
+          entryPath
+        };
+
+        await this.setData({
+          drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+        });
+      }
+
+      return {
+        id: draftEntry.id,
+        entryPath: draftEntry.entryPath,
+        name: draftEntry.name
       };
+    });
+
+    ipcMain.handle('drafts.setName', async (event, draftEntryId, name) => {
+      let draftEntry = this.data.drafts[draftEntryId];
 
       await this.setData({
-        drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
-      });
-
-      draftEntryStates[draftEntry.id] = createDraftEntryState();
-
-      return createClientDraftEntry(draftEntry);
-    });
-
-    ipcMain.handle('drafts.openFile', async (_event, draftId, filePath) => {
-      let draftEntry = this.data.drafts[draftId];
-      shell.openPath(draftEntry.path);
-    });
-
-    ipcMain.handle('drafts.revealFile', async (_event, draftId, filePath) => {
-      let draftEntry = this.data.drafts[draftId];
-      shell.showItemInFolder(draftEntry.path);
-    });
-
-    ipcMain.handle('drafts.watch', async (event, draftId) => {
-      let draftEntry = this.data.drafts[draftId];
-      let draftEntryState = draftEntryStates[draftId];
-
-      let getChange = async () => {
-        let stats = await fs.stat(draftEntry.path);
-        let source = (await fs.readFile(draftEntry.path)).toString();
-
-        return {
-          lastModified: stats.mtimeMs,
-          source
-        };
-      };
-
-      let watcher = chokidar.watch(draftEntry.path, {
-        awaitWriteFinish: {
-          stabilityThreshold: 500
+        drafts: {
+          ...this.data.drafts,
+          [draftEntry.id]: {
+            ...draftEntry,
+            name
+          }
         }
       });
+    });
 
-      watcher.on('change', () => {
-        this.pool.add(async () => {
-          if (draftEntryState.waiting) {
-            return;
-          }
+    // ipcMain.handle('drafts.openFile', async (_event, draftId, filePath) => {
+    //   let draftEntry = this.data.drafts[draftId];
+    //   shell.openPath(draftEntry.path);
+    // });
 
-          draftEntryState.waiting = true;
-          await draftEntryState.writePromise;
+    // ipcMain.handle('drafts.revealFile', async (_event, draftId, filePath) => {
+    //   let draftEntry = this.data.drafts[draftId];
+    //   shell.showItemInFolder(draftEntry.path);
+    // });
 
-          draftEntryState.waiting = false;
+    // @ts-expect-error
+    ipcMain.handle('drafts.watch', async (event, filePath: string) => {
+      let browserWindow = BrowserWindow.fromWebContents(event.sender)!;
+      let fileState = fileStates.get(filePath);
 
-          let change = await getChange();
+      if (!fileState) {
+        fileState = {
+          lastExternalModificationDate: 0,
+          lastModificationDate: 0,
+          watchers: new Set(),
+          writing: false
+        };
 
-          if (draftEntryState.lastModified && (change.lastModified > draftEntryState.lastModified)) {
-            draftEntryState.lastModified = change.lastModified;
-            event.sender.send('drafts.change', { change, draftId });
-          }
+        fileStates.set(filePath, fileState);
+      }
+
+      fileState.watchers.add(browserWindow);
+      watcher.add(filePath);
+
+      return (await createChange(filePath))!;
+    });
+
+    ipcMain.handle('drafts.watchStop', async (event, filePath) => {
+      let browserWindow = BrowserWindow.fromWebContents(event.sender)!;
+      let fileState = fileStates.get(filePath)!;
+
+      fileState.watchers.delete(browserWindow);
+
+      if (fileState.watchers.size < 1) {
+        watcher.unwatch(filePath);
+        fileStates.delete(filePath);
+      }
+    });
+
+    ipcMain.handle('drafts.write', async (event, filePath, contents) => {
+      let fileState = fileStates.get(filePath)!;
+      fileState.writing = true;
+
+      await fs.writeFile(filePath, contents);
+      let stats = await fs.stat(filePath);
+
+      fileState.lastModificationDate = stats.mtimeMs;
+      fileState.writing = false;
+
+      for (let watcher of fileState.watchers) {
+        watcher.webContents.send('drafts.change', filePath, {
+          instance: {
+            contents: null,
+            lastExternalModificationDate: fileState.lastExternalModificationDate,
+            lastModificationDate: fileState.lastModificationDate
+          },
+          status: 'ok'
         });
+      }
+    });
+
+
+    // Stores
+
+    ipcMain.handle('store.read', async (event, storeName, key) => {
+      return this.stores.get(storeName)?.get(key);
+    });
+
+    ipcMain.handle('store.readAll', async (event, storeName) => {
+      let store = this.stores.get(storeName);
+
+      return store
+        ? Array.from(store.entries())
+        : [];
+    });
+
+    ipcMain.handle('store.write', async (event, storeName, key, value) => {
+      let store = this.stores.get(storeName);
+
+      if (!store) {
+        store = new Map();
+        this.stores.set(storeName, store);
+      }
+
+      store.set(key, value);
+
+      await this.pool.add(async () => {
+        await fs.writeFile(path.join(this.storesDirPath, storeName), JSON.stringify(Object.fromEntries(store!)));
       });
-
-      draftEntryState.watcher = watcher;
-
-      let change = await getChange();
-      draftEntryState.lastModified = change.lastModified;
-
-      return change;
-    });
-
-    ipcMain.handle('drafts.watchStop', async (_event, draftId) => {
-      let draftEntryState = draftEntryStates[draftId];
-
-      await draftEntryState.watcher!.close();
-      draftEntryState.watcher = null;
-    });
-
-    ipcMain.handle('drafts.write', async (_event, draftId, primitive) => {
-      let draftEntry = this.data.drafts[draftId];
-      let draftEntryState = draftEntryStates[draftId];
-
-      if (primitive.name) {
-        await this.setData({
-          drafts: { ...this.data.drafts, [draftEntry.id]: { ...draftEntry, name: primitive.name } }
-        });
-      }
-
-      if (primitive.source) {
-        let promise = draftEntryState.writePromise.then(async () => {
-          await fs.writeFile(draftEntry.path, primitive.source!);
-
-          let stats = await fs.stat(draftEntry.path);
-
-          draftEntryState.lastModified = stats.mtimeMs;
-          return stats.mtimeMs;
-        });
-
-        draftEntryState.writePromise = promise;
-        return await promise;
-      }
-
-      return null;
     });
 
 
@@ -819,9 +892,19 @@ export class CoreApplication {
         defaultHostSettingsId: null,
         drafts: {},
         hostSettingsRecord: {},
-        preferences: {},
         version: CoreApplication.version
       });
+    }
+
+    await fs.mkdir(this.storesDirPath, { recursive: true });
+
+    this.stores = new Map();
+
+    for (let storeName of await fs.readdir(this.storesDirPath)) {
+      let storeBuffer = await fs.readFile(path.join(this.storesDirPath, storeName));
+      let store = new Map(Object.entries(JSON.parse(storeBuffer.toString())));
+
+      this.stores.set(storeName, store);
     }
   }
 

@@ -1,19 +1,18 @@
-import { BrowserWindow, dialog } from 'electron';
+import { BrowserWindow, dialog, session } from 'electron';
 import * as path from 'path';
-import assert from 'assert';
+import { HostSettings, createClient } from 'pr1-library';
+import { Client, ClientProtocol, ServerProtocol } from 'pr1-shared';
 
 import { CoreApplication } from '..';
-import { Pool } from '../util';
 import { rootLogger } from '../logger';
-import { Client, ClientProtocol, ServerProtocol } from 'pr1-shared';
-import { createClient, HostSettings } from 'pr1-library';
+import { Pool } from '../util';
 
 
 export class HostWindow {
+  browserWindow: BrowserWindow | null = null;
   client: Client | null = null;
   closed: Promise<void>;
   closing = false;
-  window: BrowserWindow | null = null;
 
   private logger = rootLogger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
@@ -42,7 +41,7 @@ export class HostWindow {
 
     this.client = result.client as Client;
     this.client.onMessage((message) => {
-      this.window?.webContents.send('host.message', message);
+      this.browserWindow?.webContents.send('host.message', message);
     });
 
     this.pool.add(this.client!.start());
@@ -64,14 +63,14 @@ export class HostWindow {
       this.closing = true;
 
       if (!this.app.debug) {
-        this.window?.close();
+        this.browserWindow?.close();
       }
     });
 
 
     this.logger.debug('Creating the Electron window');
 
-    this.window = new BrowserWindow({
+    this.browserWindow = new BrowserWindow({
       show: this.app.debug,
       ...((process.platform === 'darwin')
         ? {
@@ -86,16 +85,16 @@ export class HostWindow {
       }
     });
 
-    this.window.maximize();
+    this.browserWindow.maximize();
 
     if (!this.app.debug) {
-      this.window.hide();
+      this.browserWindow.hide();
     }
 
-    this.window.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
+    this.browserWindow.loadFile(path.join(__dirname, '../static/host/index.html'), { query: { hostSettingsId: this.hostSettings.id } });
 
-    this.window.on('close', () => {
-      this.window = null;
+    this.browserWindow.on('close', () => {
+      this.browserWindow = null;
 
       if (!this.closing) {
         this.closing = true;
@@ -108,24 +107,24 @@ export class HostWindow {
 
   focus() {
     // TODO: Investigate
-    if (this.window) {
-      if (this.window.isMinimized()) {
-        this.window.restore();
+    if (this.browserWindow) {
+      if (this.browserWindow.isMinimized()) {
+        this.browserWindow.restore();
       }
 
-      this.window.focus();
+      this.browserWindow.focus();
     }
   }
 
   ready() {
     this.logger.debug('Sending initialization and initial state messages');
 
-    this.window!.webContents.send('host.message', {
+    this.browserWindow!.webContents.send('host.message', {
       type: 'initialize',
       ...this.client!.initializationData!
     } satisfies ServerProtocol.InitializationMessage);
 
-    this.window!.webContents.send('host.message', {
+    this.browserWindow!.webContents.send('host.message', {
       type: 'state',
       data: this.client!.state!
     } satisfies ServerProtocol.StateMessage);

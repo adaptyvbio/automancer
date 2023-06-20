@@ -1,15 +1,15 @@
-import * as React from 'react';
+import { Component, ReactNode, createRef } from 'react';
+
+import styles from '../../styles/components/title-bar.module.scss';
 
 import { Icon } from '../components/icon';
 import * as util from '../util';
 
-import styles from '../../styles/components/title-bar.module.scss';
-
 
 export interface TitleBarProps {
-  subtitle?: React.ReactNode | null;
+  subtitle?: ReactNode | null;
   subtitleVisible?: unknown;
-  title: React.ReactNode;
+  title: ReactNode;
 
   tools?: {
     id: string;
@@ -24,10 +24,10 @@ export interface TitleBarState {
   notifying: boolean;
 }
 
-export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
-  private lastSubtitle: React.ReactNode | null = null;
+export class TitleBar extends Component<TitleBarProps, TitleBarState> {
+  private lastSubtitle: ReactNode | null = null;
   private notificationHideTimeout: number | null = null;
-  private refTitle = React.createRef<HTMLDivElement>();
+  private refTitle = createRef<HTMLDivElement>();
 
   constructor(props: TitleBarProps) {
     super(props);
@@ -37,7 +37,7 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
     };
   }
 
-  componentWillUnmount() {
+  override componentWillUnmount() {
     if (this.notificationHideTimeout !== null) {
       clearTimeout(this.notificationHideTimeout);
     }
@@ -57,7 +57,7 @@ export class TitleBar extends React.Component<TitleBarProps, TitleBarState> {
     }
   }
 
-  render() {
+  override render() {
     this.lastSubtitle = this.props.subtitle ?? this.lastSubtitle;
 
     return (

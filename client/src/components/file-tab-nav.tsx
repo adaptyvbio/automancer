@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import styles from '../../styles/components/file-tab-nav.module.scss';
 
 import * as util from '../util';
@@ -13,7 +11,7 @@ export function FileTabNav(props: {
   entries: FileTabNavEntryDef[];
 }) {
   return (
-    <ShadowScrollable>
+    <ShadowScrollable direction="horizontal">
       <div className={styles.root}>
         <div className={styles.list}>
           {props.entries.map((entry) => (
@@ -32,6 +30,7 @@ export interface FileTabNavEntryDef {
   detail?: string | null;
   id: string;
   label: string;
+  missing?: unknown;
   onClose?(): void;
   onSelect?(): void;
   onSelectMenu?(path: MenuEntryPath): void;
@@ -44,6 +43,7 @@ export function FileTabNavEntry(props: { entry: FileTabNavEntryDef}) {
 
   return (
     <div className={util.formatClass(styles.entryRoot, {
+      '_missing': entry.missing,
       '_selected': entry.selected,
       '_unsaved': entry.unsaved
     })}>

@@ -1,8 +1,8 @@
 import { Range } from 'immutable';
 import * as monaco from 'monaco-editor';
-import { concatenateDiagnostics, DiagnosticDocumentReference } from 'pr1-shared';
-import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { DiagnosticDocumentReference, concatenateDiagnostics } from 'pr1-shared';
+import { Component, createRef } from 'react';
+import { createPortal } from 'react-dom';
 
 import textEditorStyles from '../../styles/components/text-editor.module.scss';
 
@@ -42,13 +42,13 @@ export interface TextEditorState {
 
 }
 
-export class TextEditor extends React.Component<TextEditorProps, TextEditorState> {
+export class TextEditor extends Component<TextEditorProps, TextEditorState> {
   controller = new AbortController();
   editor!: monaco.editor.IStandaloneCodeEditor;
   markerManager!: MarkerManager;
   pool = new util.Pool();
-  ref = React.createRef<HTMLDivElement>();
-  refWidgetContainer = React.createRef<HTMLDivElement>();
+  ref = createRef<HTMLDivElement>();
+  refWidgetContainer = createRef<HTMLDivElement>();
   startMarkerUpdateTimeout = util.debounce(300, () => {
     this.pool.add(async () => {
       await this.markerManager.update();
@@ -77,6 +77,10 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
 
   get model() {
     return this.props.documentItem.textModel!;
+  }
+
+  async getCompilation() {
+    return await this.props.getCompilation();
   }
 
   override componentDidMount() {
@@ -437,14 +441,6 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
     this.controller.abort();
   }
 
-  async getCompilation() {
-    return await this.props.getCompilation();
-  }
-
-  undo() {
-    this.editor.trigger(undefined, 'undo', undefined);
-  }
-
   override render() {
     return (
       <div className={textEditorStyles.root} onKeyDown={(event) => {
@@ -453,7 +449,7 @@ export class TextEditor extends React.Component<TextEditorProps, TextEditorState
         }
       }}>
         <div ref={this.ref} />
-        {ReactDOM.createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
+        {createPortal((<div className="monaco-editor" ref={this.refWidgetContainer} />), document.body)}
         {/* {this.props.summary && (
           <div className={textEditorStyles.summary}>
             {this.props.summary}

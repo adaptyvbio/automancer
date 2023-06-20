@@ -32,6 +32,7 @@ import { Pool, formatClass } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
 import { UnsavedDocumentModal } from '../components/modals/unsaved-document';
+import { TextEditor } from '../components/text-editor';
 
 
 export interface DocumentItem {
@@ -39,6 +40,7 @@ export interface DocumentItem {
   slotSnapshot: DocumentSlotSnapshot;
   textModel: monaco.editor.ITextModel | null;
   unsaved: boolean;
+  writing: boolean;
 
   meta: {
     currentVersionId: number | null;
@@ -73,6 +75,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   private compilationPromise: Promise<HostDraftCompilerResult> | null = null;
   private controller = new AbortController();
   private pool = new Pool();
+  private refTextEditor = createRef<TextEditor>();
   private refTitleBar = createRef<TitleBar>();
 
   constructor(props: ViewDraftProps) {
@@ -85,6 +88,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       slotSnapshot: entrySlot.getSnapshot(),
       textModel: null,
       unsaved: false,
+      writing: false,
 
       meta: {
         currentVersionId: null,
@@ -95,25 +99,27 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     let getModelOfDocumentItem = (documentItem: DocumentItem, snapshot: DocumentSlotSnapshot = documentItem.slotSnapshot) => {
       // If the document has received an external modification
       // Then update the text model
-      if (documentItem.textModel && snapshot.document && (snapshot.document.lastExternalModificationDate === snapshot.document.lastModificationDate)) {
+      if (documentItem.textModel && snapshot.instance && (snapshot.instance.lastExternalModificationDate === snapshot.instance.lastModificationDate)) {
         documentItem.meta.currentVersionId = documentItem.textModel.getVersionId() + 1;
         documentItem.meta.updated = true;
 
-        documentItem.textModel.setValue(snapshot.document.contents!);
+        let textEditor = this.refTextEditor.current!.editor;
+        let position = textEditor.getPosition();
+
+        documentItem.textModel.setValue(snapshot.instance.contents);
+
+        if (position) {
+          textEditor.setPosition(position);
+        }
 
         this.setDocumentItem(snapshot.id, {
           unsaved: false
         });
       }
 
-      // If the text model already exists
-      if (documentItem.textModel) {
-        return documentItem.textModel;
-      }
-
-      // If the document exists and its content is known
-      if (snapshot.document && (snapshot.document.contents !== null)) {
-        let model = monaco.editor.createModel(snapshot.document.contents, 'prl');
+      // If the document exists but the text model doesn't
+      if (!documentItem.textModel && snapshot.instance) {
+        let model = monaco.editor.createModel(snapshot.instance.contents, 'prl');
 
         documentItem.meta.updated = true;
 
@@ -131,7 +137,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         return model;
       }
 
-      return null;
+      // If the text model already exists but the document was removed
+      // And there are no unsaved changes
+      if (documentItem.textModel && !snapshot.instance && !documentItem.unsaved) {
+        documentItem.textModel.dispose();
+        documentItem.textModel = null;
+      }
+
+      return documentItem.textModel;
     };
 
     let documentItems = OrderedMap([[entrySlot.id, entryDocumentItem]]).map((documentItem) => ({
@@ -157,7 +170,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     };
 
     entrySlot.watchSnapshot((snapshot) => {
-      console.log('Update', snapshot);
+      console.log('Update >>', snapshot);
 
       let documentItem = this.state.documentItems.get(snapshot.id)!;
       let textModel = getModelOfDocumentItem(documentItem, snapshot);
@@ -206,12 +219,31 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     this.props.app.shortcutManager.attach('Meta+S', () => {
       let documentItem = this.selectedDocumentItem;
 
-      if (documentItem.textModel && documentItem.slotSnapshot.document?.writable) {
-        let document = documentItem.slotSnapshot.document.model;
+      if (documentItem.textModel && documentItem.slotSnapshot.instance?.writable) {
+        let slot = documentItem.slotSnapshot.model;
         let contents = documentItem.textModel.getValue();
 
+        this.setDocumentItem(documentItem.slotSnapshot.id, {
+          writing: true
+        });
+
         this.pool.add(async () => {
-          await document.write(contents);
+          if (true /* is entry item */) {
+            let compilation = await this.getCompilation();
+            let name = compilation.protocol?.name ?? null;
+
+            if ((name !== null) && (name !== this.props.draft.name)) {
+              await this.props.draft.model.setName(name);
+            }
+          }
+
+          try {
+            await slot.write(contents);
+          } finally {
+            this.setDocumentItem(documentItem.slotSnapshot.id, {
+              writing: false
+            });
+          }
 
           this.setDocumentItem(documentItem.slotSnapshot.id, {
             unsaved: false
@@ -239,8 +271,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     let prevSelectedDocumentItem = prevState.documentItems.find((item) => item.slotSnapshot.id === selectedDocumentItem.slotSnapshot.id);
 
     if (prevSelectedDocumentItem) {
-      let prevModificationDate = prevSelectedDocumentItem.slotSnapshot.document?.lastModificationDate ?? null;
-      let modificationDate = selectedDocumentItem.slotSnapshot.document?.lastModificationDate ?? null;
+      let prevModificationDate = prevSelectedDocumentItem.slotSnapshot.instance?.lastModificationDate ?? null;
+      let modificationDate = selectedDocumentItem.slotSnapshot.instance?.lastModificationDate ?? null;
 
       if ((prevModificationDate !== null) && (modificationDate !== prevModificationDate)) {
         this.refTitleBar.current!.notify();
@@ -262,6 +294,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     for (let documentItem of this.state.documentItems.values()) {
       documentItem.controller.abort();
       documentItem.textModel?.dispose();
+      documentItem.textModel = null;
     }
   }
 
@@ -339,12 +372,12 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
     if (!compilationController.signal.aborted) {
       this.compilationController = null;
-    }
 
-    this.setState({
-      compilation: result,
-      compiling: false
-    });
+      this.setState({
+        compilation: result,
+        compiling: false
+      });
+    }
 
     // return result;
 
@@ -385,7 +418,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
   override render() {
     let selectedDocumentItem = this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
-    let selectedDocumentSnapshot = selectedDocumentItem.slotSnapshot.document;
+    let selectedDocumentSnapshot = selectedDocumentItem.slotSnapshot;
 
     let subtitle = null;
     let subtitleVisible = false;
@@ -396,14 +429,19 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       pool: this.pool
     };
 
-    if (!selectedDocumentSnapshot) {
-      subtitle = 'Missing file';
+    if (!selectedDocumentSnapshot.instance) {
+      subtitle = {
+        'error': 'Unknown error',
+        'loading': null,
+        'ok': null,
+        'missing': 'Missing file',
+        'prompt': 'Permission required',
+        'unreadable': 'Permission required',
+        'unwatched': null
+      }[selectedDocumentSnapshot.status];
       subtitleVisible = true;
-    } else if (!selectedDocumentSnapshot.readable) {
-      subtitle = 'Permission required';
-      subtitleVisible = true;
-    } else if (selectedDocumentSnapshot.lastModificationDate !== null) {
-      let modificationDate = selectedDocumentSnapshot.lastModificationDate;
+    } else if (selectedDocumentSnapshot.instance.lastModificationDate !== null) {
+      let modificationDate = selectedDocumentSnapshot.instance.lastModificationDate;
 
       subtitle = (
         <TimeSensitive
@@ -431,7 +469,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     return (
       <main className={viewStyles.root}>
         <TitleBar
-          title={this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}
+          // title={this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}
+          title={this.props.draft.name ?? '[Untitled]'}
           subtitle={subtitle}
           subtitleVisible={subtitleVisible}
           tools={[{
@@ -491,8 +530,12 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     return {
                       id: documentItem.slotSnapshot.id,
                       label: documentItem.slotSnapshot.path.at(-1)!,
+                      missing: (documentItem.slotSnapshot.status === 'missing'),
                       unsaved: documentItem.unsaved,
                       selected: (documentItem.slotSnapshot.id === this.state.selectedDocumentId),
+                      onClose() {
+                        ViewDrafts.navigate();
+                      },
                       // createMenu: () => [
                       //   { id: 'close', name: 'Close', disabled: (index === 0) },
                       //   { id: '_divider', type: 'divider' },
@@ -528,7 +571,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     getCompilation={this.getCompilation.bind(this)}
                     onCursorChange={(position) => {
                       this.setState({ cursorPosition: position });
-                    }} />
+                    }}
+                    refTextEditor={this.refTextEditor} />
                   {/* <TextEditor
                     autoSave={false}
                     documentItem={this.state.documentItems.find((documentItem) => documentItem.snapshot.id === this.state.selectedDocumentId)!}
@@ -602,12 +646,27 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
             ]} />
           <div className={editorStyles.infobarRoot}>
             <div className={editorStyles.infobarLeft}>
-              {this.state.cursorPosition && (
-                <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
-              )}
+              {(() => {
+                let writingCount = this.state.documentItems.valueSeq().reduce((count, documentItem) => count + (documentItem.writing ? 1 : 0), 0);
+
+                if (writingCount > 1) {
+                  return <>Writing {writingCount} files&hellip;</>
+                } else if (writingCount > 0) {
+                  return <>Writing file&hellip;</>
+                }
+
+                if (this.state.cursorPosition) {
+                  return (
+                    <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
             <div className={editorStyles.infobarRight}>
-              <div>Last saved: {this.selectedDocumentItem.slotSnapshot.document?.lastModificationDate ? new Date(this.selectedDocumentItem.slotSnapshot.document.lastModificationDate).toLocaleTimeString() : '–'}</div>
+              {/* <div>Status: {this.selectedDocumentItem.slotSnapshot.status}</div> */}
+              <div>Last saved: {this.selectedDocumentItem.slotSnapshot.instance?.lastModificationDate ? new Date(this.selectedDocumentItem.slotSnapshot.instance.lastModificationDate).toLocaleTimeString() : '–'}</div>
             </div>
           </div>
         </div>

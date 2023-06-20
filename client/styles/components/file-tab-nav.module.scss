@@ -65,8 +65,8 @@
     background-color: #fff;
   }
 
-  &Label {
-
+  &Root:global(._missing) &Label {
+    text-decoration: line-through;
   }
 
   &Detail {

@@ -38,15 +38,9 @@ export interface DraftInstance extends SnapshotTarget<DraftInstanceSnapshot> {
   remove(): Promise<void>;
 
   /**
-   * Watch all documents of the instance for changes.
-
-   * The callback is not called immediately after calling `watch()` nor after writing to a document with {@link DraftDocument.write}.
-   *
-   * @param callback A function called every time a change occurs.
-   * @param options.signal A signal used to stop watching.
-   * @returns A promise that resolves once the watch operation has started.
+   * Rename the draft.
    */
-  // watch(callback: (documentIds: Set<DraftDocumentId>) => void, options: { signal: AbortSignal; }): Promise<void>;
+  setName(name: string): Promise<void>;
 }
 
 export interface DraftInstanceSnapshot {
@@ -57,7 +51,16 @@ export interface DraftInstanceSnapshot {
 }
 
 
-export interface DocumentInstance extends SnapshotTarget<DocumentInstanceSnapshot> {
+export interface DocumentInstanceSnapshot {
+  // id: DocumentId;
+  contents: string;
+  lastModificationDate: number | null;
+  lastExternalModificationDate: number | null;
+  possiblyWritable: boolean;
+  writable: boolean;
+}
+
+export interface DocumentSlot extends SnapshotTarget<DocumentSlotSnapshot> {
   id: DocumentId;
 
   /**
@@ -76,44 +79,30 @@ export interface DocumentInstance extends SnapshotTarget<DocumentInstanceSnapsho
   reveal?(): Promise<void>;
 
   /**
-   * Write to the document.
-   *
-   * @param contents The contents to write to the document, encoded as UTF-8.
-   * @returns A promise that resolves to an object which indicates the date on which the document was written.
-   */
-  write(contents: string): Promise<{ lastModified: number; }>;
-}
-
-export interface DocumentInstanceSnapshot {
-  model: DocumentInstance;
-
-  id: DocumentId;
-  contents: string | null;
-  lastModificationDate: number | null;
-  lastExternalModificationDate: number | null;
-  possiblyWritable: boolean;
-  readable: boolean;
-  writable: boolean;
-}
-
-export interface DocumentSlot extends SnapshotTarget<DocumentSlotSnapshot> {
-  document: DocumentInstance | null;
-  id: DocumentId;
-
-  /**
    * Watch the slot for changes.
    *
    * @param options.signal An `AbortSignal` used to cancel stop watching the document.
    */
   watch(options: { signal: AbortSignal; }): void;
+
+  /**
+   * Write to the document.
+   *
+   * @param contents The contents to write to the document, encoded as UTF-8.
+   * @returns A promise that resolves to an object which indicates the date on which the document was written.
+   */
+  write(contents: string): Promise<{ modificationDate: number; }>;
 }
 
+export type DocumentSlotStatus = 'error' | 'loading' | 'ok' | 'missing' | 'prompt' | 'unreadable' | 'unwatched';
+
 export interface DocumentSlotSnapshot {
-  // model: DraftDocumentSlot;
+  model: DocumentSlot;
 
   id: DocumentId;
-  document: DocumentInstanceSnapshot | null;
+  instance: DocumentInstanceSnapshot | null;
   path: DocumentPath;
+  status: DocumentSlotStatus;
 }
 
 

@@ -1,22 +1,22 @@
-import * as React from 'react';
+import { Component, RefObject } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
-import { DocumentItem } from '../views/draft';
 import * as util from '../util';
-import { Button } from './button';
 import { Pool } from '../util';
+import { Button } from './button';
 import { TextEditor, TextEditorProps } from './text-editor';
-import { HostDraftCompilerResult } from '../interfaces/draft';
 
 
-export type DocumentEditorProps = TextEditorProps;
+export type DocumentEditorProps = TextEditorProps & {
+  refTextEditor: RefObject<TextEditor>;
+};
 
 export interface DocumentEditorState {
 
 }
 
-export class DocumentEditor extends React.Component<DocumentEditorProps, DocumentEditorState> {
+export class DocumentEditor extends Component<DocumentEditorProps, DocumentEditorState> {
   pool = new Pool();
 
   constructor(props: DocumentEditorProps) {
@@ -28,40 +28,55 @@ export class DocumentEditor extends React.Component<DocumentEditorProps, Documen
   override render() {
     if (this.props.documentItem.textModel) {
       return (
-        <TextEditor {...this.props} />
+        <TextEditor {...this.props} ref={this.props.refTextEditor} />
       );
     }
 
     let slotSnapshot = this.props.documentItem.slotSnapshot;
 
-    if (!slotSnapshot.document) {
-      return (
-        <div className={util.formatClass(viewStyles.blankOuter)}>
-          <div className={viewStyles.blankInner}>
-            <p>This file is missing.</p>
-          </div>
-        </div>
-      );
+    if (slotSnapshot.status === 'loading') {
+      return null;
     }
 
-    if (!slotSnapshot.document.readable) {
-      return (
-        <div className={util.formatClass(viewStyles.blankOuter)}>
-          <div className={viewStyles.blankInner}>
-            <p>Please grant read and write permissions on this file to continue.</p>
+    return (
+      <div className={util.formatClass(viewStyles.blankOuter)}>
+        <div className={viewStyles.blankInner}>
+          {(() => {
+            switch (slotSnapshot.status) {
+              case 'prompt':
+                return (
+                  <>
+                    <p>Please grant read and write permissions on this file to continue.</p>
 
-            <div className={viewStyles.blankActions}>
-              <Button onClick={() => {
-                this.pool.add(async () => {
-                  await slotSnapshot.document!.model.request!();
-                });
-              }}>Open protocol</Button>
-            </div>
-          </div>
+                    <div className={viewStyles.blankActions}>
+                      <Button onClick={() => {
+                        this.pool.add(async () => {
+                          await slotSnapshot.model.request!();
+                        });
+                      }}>Open protocol</Button>
+                    </div>
+                  </>
+                );
+              case 'missing':
+                return (
+                  <>
+                    <p>This file is missing.</p>
+
+                    <div className={viewStyles.blankActions}>
+                      <Button onClick={() => {
+                        this.pool.add(async () => {
+                          // ...
+                        });
+                      }}>Create</Button>
+                    </div>
+                  </>
+                );
+              default:
+                return <p>Status: {slotSnapshot.status}</p>
+            }
+          })()}
         </div>
-      );
-    }
-
-    return null;
+      </div>
+    );
   }
 }

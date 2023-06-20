@@ -3,8 +3,8 @@ import hash from 'object-hash';
 
 import { getRecordSnapshot, SnapshotProvider, SnapshotWatchCallback } from '../snapshot';
 import { BrowserStorageStore } from '../store/browser-storage';
-import { Lock, Pool, wrapAbortable } from '../util';
-import { AppBackend, AppBackendSnapshot, DraftCandidate, DocumentInstance, DraftDocumentExtension, DocumentId, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentInstanceSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
+import { assert, Lock, Pool, wrapAbortable } from '../util';
+import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocumentExtension, DocumentId, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentInstanceSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, DocumentSlotStatus } from './base';
 
 
 interface BrowserStoreMainEntry {
@@ -24,204 +24,18 @@ export interface BrowserStoreDraftsItem {
 }
 
 
-export class BrowserDocument extends SnapshotProvider<DocumentInstanceSnapshot> implements DocumentInstance {
-  id = crypto.randomUUID() as DocumentId;
-  contents: string | null = null;
-  lastExternalModificationDate: number | null = null;
-  lastModificationDate: number | null = null;
-  readonly = false;
-
-  readable: boolean = false;
-  writable: boolean = false;
-
-  _handle: FileSystemFileHandle;
-  private _loadingPromise: Promise<void> | null = null;
-  private _polling = false;
-  private _pollTimeoutId: number | null = null;
-  private _pool = new Pool();
-  private _slot: BrowserDocumentSlot;
-  private _watcherCount = 0;
-  private _writing = false;
-
-  constructor(handle: FileSystemFileHandle, slot: BrowserDocumentSlot) {
-    super();
-
-    this._handle = handle;
-    this._slot = slot;
-  }
-
-  protected _createSnapshot(): DocumentInstanceSnapshot {
-    return {
-      model: this,
-
-      id: this.id,
-      contents: this.contents,
-      lastExternalModificationDate: this.lastExternalModificationDate,
-      lastModificationDate: this.lastModificationDate,
-      possiblyWritable: true,
-      readable: this.readable,
-      writable: this.writable
-    };
-  }
-
-  async _readPermissions() {
-    this.readable = ((await this._handle.queryPermission({ mode: 'read' })) === 'granted');
-    this.writable = ((await this._handle.queryPermission({ mode: 'readwrite' })) === 'granted');
-
-    this._update();
-    this._updatePolling();
-
-    if (this.readable) {
-      await this._load();
-    }
-  }
-
-  private async _load() {
-    if (!this._loadingPromise) {
-      this._loadingPromise = (async () => {
-        try {
-          let file: File | null = null;
-
-          try {
-            file = await this._handle.getFile();
-          } catch (err: any) {
-            switch (err.name) {
-              case 'NotAllowedError':
-                await this._readPermissions();
-                return;
-              case 'NotFoundError':
-                // TODO: Improve
-                this._slot.document = null;
-                return;
-              default:
-                throw err;
-            }
-          }
-
-          if (!file) {
-            return;
-          }
-
-          if (file.lastModified !== this.lastModificationDate) {
-            this.contents = await file.text();
-            this.lastExternalModificationDate = file.lastModified;
-            this.lastModificationDate = file.lastModified;
-
-            this._update();
-          }
-        } finally {
-          this._loadingPromise = null;
-        }
-      })();
-    }
-
-    await this._loadingPromise;
-  }
-
-  private _poll() {
-    this._pollTimeoutId = setTimeout(() => {
-      this._pollTimeoutId = null;
-
-      this._pool.add(async () => {
-        await this._load();
-
-        if (this._polling) {
-          this._poll();
-        }
-      });
-    }, 1000);
-  }
-
-  private _shouldPoll() {
-    return (this._watcherCount > 0) && this.readable;
-  }
-
-  private _updatePolling() {
-    if (this._polling && !this._shouldPoll()) {
-      this._polling = false;
-
-      if (this._pollTimeoutId !== null) {
-        clearTimeout(this._pollTimeoutId);
-        this._pollTimeoutId = null;
-      }
-    }
-
-    if (!this._polling && this._shouldPoll()) {
-      this._polling = true;
-
-      this._pool.add(async () => {
-        await this._load();
-        this._poll();
-      });
-    }
-  }
-
-  async request() {
-    try {
-      if (this.readonly) {
-        this.readable = ((await this._handle.requestPermission({ mode: 'read' })) === 'granted');
-      } else {
-        this.writable = ((await this._handle.requestPermission({ mode: 'readwrite' })) === 'granted');
-        this.readable = this.writable;
-      }
-    } catch (err) {
-      if ((err as { name: string; }).name === 'SecurityError') {
-        return;
-      }
-
-      throw err;
-    }
-
-    this._update();
-
-    if (this.readable) {
-      await this._load();
-    }
-  }
-
-  async _watchContents(options: { signal: AbortSignal; }) {
-    this._watcherCount += 1;
-    this._updatePolling();
-
-    options.signal.addEventListener('abort', () => {
-      this._watcherCount -= 1;
-      this._updatePolling();
-    });
-  }
-
-  async write(contents: string) {
-    if (this._writing) {
-      throw new Error('Already writing');
-    }
-
-    this._writing = true;
-
-    let writable = await this._handle.createWritable();
-    await writable.write(contents);
-    await writable.close();
-
-    let file = await this._handle.getFile();
-
-    this.lastModificationDate = file.lastModified;
-    this._update();
-    this._writing = false;
-
-    return {
-      lastModified: file.lastModified
-    };
-  }
-}
-
-
 export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> implements DocumentSlot {
-  document: BrowserDocument | null = null;
   id: DocumentId;
 
   private _documentController: AbortController | null = null;
+  private _handle: FileSystemFileHandle | null = null;
+  private _instance: DocumentInstanceSnapshot & { } | null = null;
   private _lock = new Lock();
+  private _polling = false;
   private _pollTimeoutId: number | null = null;
+  private _status: DocumentSlotStatus;
   private _watching = false;
-  private _watcherCount = 0;
+  private _watchSignal: AbortSignal | null = null;
 
   constructor(
     private _draftInstance: BrowserDraftInstance,
@@ -231,11 +45,16 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
     super();
 
     if (handle) {
+      this._handle = handle;
+      this._status = 'loading';
+
       this._pool.add(async () => {
         this._lock.acquireWith(async () => {
-          await this._initializeHandle(handle);
+          await this._initializeHandle();
         });
       });
+    } else {
+      this._status = 'unwatched';
     }
 
     this.id = hash([this._draftInstance.id, this._path]) as DocumentId;
@@ -245,96 +64,173 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
     return this._draftInstance._pool;
   }
 
-  private async _initializeHandle(handle: FileSystemFileHandle) {
-    let document = new BrowserDocument(handle, this);
+  private async _initializeHandle() {
+    assert(this._handle);
 
-    await document._readPermissions();
+    this._status = 'loading';
 
-    this.document = document;
-    this._update();
+    let readPermissionState = await this._handle.queryPermission({ mode: 'read' });
 
-    document.watchSnapshot(() => void this._update());
+    await new Promise((r) => void setTimeout(r, 600));
 
-    if (this._watching) {
-      this._documentController = new AbortController();
-      document._watchContents({ signal: this._documentController.signal });
+    if (readPermissionState === 'granted') {
+      await this._load();
+    } else {
+
+      this._instance = null;
+      this._status = (readPermissionState === 'denied') ? 'unreadable' as const : 'prompt' as const;
+      this._update();
     }
   }
 
-  private async _queryHandle() {
-    return await findFile(this._draftInstance._container!.rootHandle, this._path);
+  async _load() {
+    assert(this._handle);
+
+    let file: File | null = null;
+
+    try {
+      file = await this._handle.getFile();
+    } catch (err: any) {
+      switch (err.name) {
+        case 'NotAllowedError':
+          await this._initializeHandle();
+          return;
+
+        case 'NotFoundError': {
+          let oldStatus = this._status;
+          this._instance = null;
+          this._status = 'missing';
+
+          if (this._status !== oldStatus) {
+            this._update();
+          }
+
+          break;
+        }
+
+        default:
+          throw err;
+      }
+    }
+
+    if (file) {
+      if (!this._instance) {
+        this._instance = {
+          contents: await file.text(),
+          lastExternalModificationDate: file.lastModified,
+          lastModificationDate: file.lastModified,
+          possiblyWritable: true,
+          writable: true
+        };
+
+        this._status = 'ok';
+        this._update();
+      } else if (file.lastModified !== this._instance.lastModificationDate) {
+        this._instance.contents = await file.text();
+        this._instance.lastExternalModificationDate = file.lastModified;
+        this._instance.lastModificationDate = file.lastModified;
+
+        this._status = 'ok';
+        this._update();
+      } else {
+        this._status = 'ok';
+      }
+    }
+
+    if (this._shouldPoll()) {
+      this._poll();
+    }
   }
+
+  // private async _queryHandle() {
+  //   return await findFile(this._draftInstance._container!.rootHandle, this._path);
+  // }
 
   private _poll() {
     this._pollTimeoutId = setTimeout(() => {
       this._pollTimeoutId = null;
 
       this._pool.add(async () => {
-        await this._lock.acquireWith(async () => {
-          if (this._watching) {
-            let handle = await this._queryHandle();
-
-            if (handle) {
-              await this._initializeHandle(handle);
-            } else {
-              this._poll();
-            }
-          }
-        });
+        await this._load();
       });
     }, 1000);
   }
 
-  watch(options: { signal: AbortSignal; }) {
-    this._watcherCount += 1;
+  private _shouldPoll() {
+    return this._handle && ['ok', 'missing'].includes(this._status);
+  }
 
-    if (this._watcherCount === 1) {
-      if (this.document) {
-        this._documentController = new AbortController();
-        this.document._watchContents({ signal: this._documentController.signal });
-      } else {
-        this._pool.add(async () => {
-          await this._lock.acquireWith(async () => {
-            if (!this._watching) {
-              this._watching = true;
+  async request() {
+    assert(this._handle);
 
-              let handle = await this._queryHandle();
-
-              if (handle) {
-                await this._initializeHandle(handle);
-              } else {
-                this._poll();
-              }
-            }
-          });
-        });
+    try {
+      let readonly = false;
+      await this._handle.requestPermission({ mode: (readonly ? 'read' : 'readwrite') });
+    } catch (err: any) {
+      switch (err.name) {
+        case 'SecurityError':
+          return;
+        default:
+          throw err;
       }
     }
 
-    options.signal.addEventListener('abort', () => {
-      this._watcherCount -= 1;
+    await this._initializeHandle();
+  }
 
-      if (this._watcherCount < 1) {
-        this._watching = false;
+  watch(options: { signal: AbortSignal; }) {
+    if (this._watchSignal) {
+      throw new Error('Already watching');
+    }
 
-        if (this._pollTimeoutId !== null) {
-          clearTimeout(this._pollTimeoutId);
-          this._pollTimeoutId = null;
-        }
+    if (this._shouldPoll()) {
+      this._poll();
+    }
 
-        if (this._documentController) {
-          this._documentController.abort();
-          this._documentController = null;
-        }
+    this._watchSignal = options.signal;
+    this._watchSignal.addEventListener('abort', () => {
+      this._watchSignal = null;
+
+      if (this._pollTimeoutId !== null) {
+        clearTimeout(this._pollTimeoutId);
+        this._pollTimeoutId = null;
       }
     });
   }
 
-  protected override _createSnapshot() {
+  async write(contents: string) {
+    if (!this._instance) {
+      throw new TypeError('Missing instance');
+    }
+
+    // (this._instance !== null) => (this._handle !== null)
+    assert(this._handle);
+
+    let writable = await this._handle.createWritable();
+
+    await writable.write(contents);
+    await writable.close();
+
+    let file = await this._handle.getFile();
+
+    this._instance.contents = contents;
+    this._instance.lastModificationDate = file.lastModified;
+
+    this._update();
+
     return {
+      modificationDate: file.lastModified
+    };
+  }
+
+  protected override _createSnapshot(): DocumentSlotSnapshot {
+    return {
+      model: this,
+
       id: this.id,
-      document: this.document?.getSnapshot() ?? null,
-      path: this._path
+      instance: this._instance,
+      path: this._path,
+      status: this._status
     };
   }
 }
@@ -425,6 +321,15 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
     this._appBackend._update();
   }
 
+  async setName(name: string) {
+    this.name = name;
+
+    this._update();
+    this._appBackend._update();
+
+    await this._save();
+  }
+
   async _save() {
     await idb.update<BrowserStoreDraftsEntry>('drafts', (entry) => ({
       ...entry,
@@ -432,7 +337,7 @@ export class BrowserDraftInstance extends SnapshotProvider<DraftInstanceSnapshot
         id: this.id,
         container: this._container,
         entryHandle: this._entryHandle,
-        name: this.name,
+        name: this.name
       }
     }), this._appBackend._store);
   }
@@ -453,10 +358,8 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
   draftInstances: Record<DraftInstanceId, BrowserDraftInstance> | null = null;
 
-  _documents: Record<DocumentId, BrowserDocument> = {};
-  _store = idb.createStore('pr1', 'data');
-
   _pool = new Pool();
+  _store = idb.createStore('pr1', 'data');
 
   protected _createSnapshot(): AppBackendSnapshot {
     return {
@@ -543,26 +446,6 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
 
     return draftInstance;
   }
-
-  // async _createDocument(handle: FileSystemFileHandle) {
-  //   for (let document of Object.values(this._documents)) {
-  //     if (await document._handle.isSameEntry(handle)) {
-  //       return document;
-  //     }
-  //   }
-
-  //   let document = new DraftDocument(handle);
-  //   await document._initialize();
-
-  //   this._documents[document.id] = document;
-
-  //   // If the app backend is not being initialized
-  //   if (this.draftInstances) {
-  //     this._update();
-  //   }
-
-  //   return document;
-  // }
 }
 
 

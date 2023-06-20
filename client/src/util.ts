@@ -405,13 +405,13 @@ export class Lock {
     };
   }
 
-  async acquireWith(fn: (() => Promise<void> | void)) {
+  async acquireWith<T = void>(fn: (() => Promise<T> | T)) {
     let controller = new AbortController();
 
     await this.acquire();
 
     try {
-      await fn();
+      return await fn();
     } finally {
       controller.abort();
     }

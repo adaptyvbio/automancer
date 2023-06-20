@@ -15,7 +15,7 @@ export function UnsavedDocumentModal(props: {
     <Modal onCancel={onCancel}>
       <form className={descriptionStyles.root} onSubmit={(event) => {
         event.preventDefault();
-        props.onFinish('ignore');
+        props.onFinish('save');
       }}>
         <h2>Unsaved changes</h2>
 
@@ -23,7 +23,8 @@ export function UnsavedDocumentModal(props: {
 
         <Form.Actions mode="modal">
           <Form.Action label="Cancel" shortcut="Escape" onClick={onCancel} />
-          <Form.Action label="Ignore changes" type="submit" />
+          <Form.Action label="Ignore changes" onClick={() => void props.onFinish('ignore')} />
+          <Form.Action label="Save changes" type="submit" />
         </Form.Actions>
       </form>
     </Modal>

@@ -27,15 +27,13 @@ export interface BrowserStoreDraftsItem {
 export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> implements DocumentSlot {
   id: DocumentId;
 
-  private _documentController: AbortController | null = null;
   private _handle: FileSystemFileHandle | null = null;
-  private _instance: DocumentInstanceSnapshot & { } | null = null;
-  private _lock = new Lock();
-  private _polling = false;
+  private _instance: DocumentInstanceSnapshot | null = null;
   private _pollTimeoutId: number | null = null;
   private _status: DocumentSlotStatus;
-  private _watching = false;
   private _watchSignal: AbortSignal | null = null;
+  private _writeLock = new Lock();
+  private _writing = false;
 
   constructor(
     private _draftInstance: BrowserDraftInstance,
@@ -49,9 +47,7 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
       this._status = 'loading';
 
       this._pool.add(async () => {
-        this._lock.acquireWith(async () => {
-          await this._initializeHandle();
-        });
+        await this._initializeHandle();
       });
     } else {
       this._status = 'unwatched';
@@ -71,7 +67,7 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
 
     let readPermissionState = await this._handle.queryPermission({ mode: 'read' });
 
-    await new Promise((r) => void setTimeout(r, 600));
+    // await new Promise((r) => void setTimeout(r, 600));
 
     if (readPermissionState === 'granted') {
       await this._load();
@@ -88,28 +84,30 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
 
     let file: File | null = null;
 
-    try {
-      file = await this._handle.getFile();
-    } catch (err: any) {
-      switch (err.name) {
-        case 'NotAllowedError':
-          await this._initializeHandle();
-          return;
+    if (!this._writing) {
+      try {
+        file = await this._handle.getFile();
+      } catch (err: any) {
+        switch (err.name) {
+          case 'NotAllowedError':
+            await this._initializeHandle();
+            return;
 
-        case 'NotFoundError': {
-          let oldStatus = this._status;
-          this._instance = null;
-          this._status = 'missing';
+          case 'NotFoundError': {
+            let oldStatus = this._status;
+            this._instance = null;
+            this._status = 'missing';
 
-          if (this._status !== oldStatus) {
-            this._update();
+            if (this._status !== oldStatus) {
+              this._update();
+            }
+
+            break;
           }
 
-          break;
+          default:
+            throw err;
         }
-
-        default:
-          throw err;
       }
     }
 
@@ -199,28 +197,34 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
   }
 
   async write(contents: string) {
-    if (!this._instance) {
-      throw new TypeError('Missing instance');
-    }
+    return this._writeLock.acquireWith(async () => {
+      if (!this._instance) {
+        throw new TypeError('Missing instance');
+      }
 
-    // (this._instance !== null) => (this._handle !== null)
-    assert(this._handle);
+      // (this._instance !== null) => (this._handle !== null)
+      assert(this._handle);
 
-    let writable = await this._handle.createWritable();
+      let writable = await this._handle.createWritable();
 
-    await writable.write(contents);
-    await writable.close();
+      this._writing = true;
 
-    let file = await this._handle.getFile();
+      await writable.write(contents);
+      await writable.close();
 
-    this._instance.contents = contents;
-    this._instance.lastModificationDate = file.lastModified;
+      let file = await this._handle.getFile();
 
-    this._update();
+      this._writing = false;
 
-    return {
-      modificationDate: file.lastModified
-    };
+      this._instance.contents = contents;
+      this._instance.lastModificationDate = file.lastModified;
+
+      this._update();
+
+      return {
+        modificationDate: file.lastModified
+      };
+    });
   }
 
   protected override _createSnapshot(): DocumentSlotSnapshot {
@@ -228,7 +232,9 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
       model: this,
 
       id: this.id,
-      instance: this._instance,
+      instance: this._instance && {
+        ...this._instance
+      },
       path: this._path,
       status: this._status
     };

@@ -36,7 +36,7 @@ import { TextEditor } from '../components/text-editor';
 
 
 export interface DocumentItem {
-  controller: AbortController;
+  controller: AbortController; // TODO: Move to meta
   slotSnapshot: DocumentSlotSnapshot;
   textModel: monaco.editor.ITextModel | null;
   unsaved: boolean;
@@ -115,6 +115,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         this.setDocumentItem(snapshot.id, {
           unsaved: false
         });
+
+        this.pool.add(this.saveDraftName(documentItem));
       }
 
       // If the document exists but the text model doesn't
@@ -170,7 +172,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     };
 
     entrySlot.watchSnapshot((snapshot) => {
-      console.log('Update >>', snapshot);
+      // console.log('Update >>', snapshot);
 
       let documentItem = this.state.documentItems.get(snapshot.id)!;
       let textModel = getModelOfDocumentItem(documentItem, snapshot);
@@ -181,13 +183,50 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         slotSnapshot: snapshot,
         textModel
       });
-    });
+    }, { signal: entryDocumentItem.controller.signal });
 
     entrySlot.watch({ signal: entryDocumentItem.controller.signal });
   }
 
   get selectedDocumentItem() {
     return this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
+  }
+
+  private async saveDocuments(singleDocumentItem: DocumentItem | null = null) {
+    for (let documentItem of singleDocumentItem ? [singleDocumentItem] : this.state.documentItems.values()) {
+      if (documentItem.textModel && documentItem.slotSnapshot.instance?.writable) {
+        let slot = documentItem.slotSnapshot.model;
+        let contents = documentItem.textModel.getValue();
+
+        this.setDocumentItem(documentItem.slotSnapshot.id, {
+          writing: true
+        });
+
+        try {
+          await this.saveDraftName(documentItem);
+          await slot.write(contents);
+        } finally {
+          this.setDocumentItem(documentItem.slotSnapshot.id, {
+            writing: false
+          });
+        }
+
+        this.setDocumentItem(documentItem.slotSnapshot.id, {
+          unsaved: false
+        });
+      }
+    }
+  }
+
+  private async saveDraftName(documentItem: DocumentItem) {
+    if (true /* is entry item */) {
+      let compilation = await this.getCompilation();
+      let name = compilation.protocol?.name ?? null;
+
+      if ((name !== null) && (name !== this.props.draft.name)) {
+        await this.props.draft.model.setName(name);
+      }
+    }
   }
 
   private setDocumentItem(documentId: DocumentId, patch: Partial<DocumentItem>) {
@@ -217,39 +256,9 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     }
 
     this.props.app.shortcutManager.attach('Meta+S', () => {
-      let documentItem = this.selectedDocumentItem;
-
-      if (documentItem.textModel && documentItem.slotSnapshot.instance?.writable) {
-        let slot = documentItem.slotSnapshot.model;
-        let contents = documentItem.textModel.getValue();
-
-        this.setDocumentItem(documentItem.slotSnapshot.id, {
-          writing: true
-        });
-
-        this.pool.add(async () => {
-          if (true /* is entry item */) {
-            let compilation = await this.getCompilation();
-            let name = compilation.protocol?.name ?? null;
-
-            if ((name !== null) && (name !== this.props.draft.name)) {
-              await this.props.draft.model.setName(name);
-            }
-          }
-
-          try {
-            await slot.write(contents);
-          } finally {
-            this.setDocumentItem(documentItem.slotSnapshot.id, {
-              writing: false
-            });
-          }
-
-          this.setDocumentItem(documentItem.slotSnapshot.id, {
-            unsaved: false
-          });
-        });
-      }
+      this.pool.add(async () => {
+        this.saveDocuments(this.selectedDocumentItem);
+      });
     }, { signal: this.controller.signal });
 
     this.props.setUnsavedDataCallback(async () => {
@@ -267,14 +276,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   }
 
   override componentDidUpdate(prevProps: ViewDraftProps, prevState: ViewDraftState) {
-    let selectedDocumentItem = this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
+    let selectedDocumentItem = this.selectedDocumentItem;
     let prevSelectedDocumentItem = prevState.documentItems.find((item) => item.slotSnapshot.id === selectedDocumentItem.slotSnapshot.id);
 
     if (prevSelectedDocumentItem) {
       let prevModificationDate = prevSelectedDocumentItem.slotSnapshot.instance?.lastModificationDate ?? null;
       let modificationDate = selectedDocumentItem.slotSnapshot.instance?.lastModificationDate ?? null;
 
-      if ((prevModificationDate !== null) && (modificationDate !== prevModificationDate)) {
+      if ((prevModificationDate !== null) && (modificationDate !== null) && (modificationDate !== prevModificationDate)) {
         this.refTitleBar.current!.notify();
       }
     }
@@ -324,7 +333,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     this.setState((state) => !state.compiling ? { compiling: true } : null);
 
 
-    let documentItems = this.state.documentItems;
     let result: HostDraftCompilerResult;
 
     while (true) {
@@ -332,7 +340,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         type: 'compileDraft',
         draft: {
           id: this.props.draft.id,
-          documents: documentItems.valueSeq().map((documentItem) => ({
+          documents: this.state.documentItems.valueSeq().map((documentItem) => ({
             id: documentItem.slotSnapshot.id,
             contents: documentItem.textModel!.getValue(),
             path: documentItem.slotSnapshot.path
@@ -363,11 +371,13 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       //   }
       // }
 
-      if (documentItems !== this.state.documentItems) {
-        this.setState({ documentItems });
-      } else {
-        break;
-      }
+      break;
+
+      // if (documentItems !== this.state.documentItems) {
+      //   this.setState({ documentItems });
+      // } else {
+      //   break;
+      // }
     }
 
     if (!compilationController.signal.aborted) {
@@ -417,8 +427,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
 
   override render() {
-    let selectedDocumentItem = this.state.documentItems.find((item) => item.slotSnapshot.id === this.state.selectedDocumentId)!;
-    let selectedDocumentSnapshot = selectedDocumentItem.slotSnapshot;
+    let selectedDocumentSnapshot = this.selectedDocumentItem.slotSnapshot;
 
     let subtitle = null;
     let subtitleVisible = false;
@@ -439,7 +448,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         'unreadable': 'Permission required',
         'unwatched': null
       }[selectedDocumentSnapshot.status];
-      subtitleVisible = true;
+      subtitleVisible = (subtitle !== null);
     } else if (selectedDocumentSnapshot.instance.lastModificationDate !== null) {
       let modificationDate = selectedDocumentSnapshot.instance.lastModificationDate;
 
@@ -673,8 +682,17 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         {this.state.unsavedDocumentDeferred && (
           <UnsavedDocumentModal
             onFinish={(result) => {
-              this.state.unsavedDocumentDeferred!.resolve(result === 'ignore');
+              let deferred = this.state.unsavedDocumentDeferred!;
               this.setState({ unsavedDocumentDeferred: null });
+
+              if (result === 'save') {
+                this.pool.add(async () => {
+                  await this.saveDocuments();
+                  deferred.resolve(true);
+                });
+              } else {
+                deferred.resolve(result === 'ignore');
+              }
             }} />
         )}
       </main>

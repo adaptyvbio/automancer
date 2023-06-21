@@ -24,15 +24,12 @@ $report-icon-size: 32px;
 }
 
 .icon {
+  @include icon($fill: true, $size: 24px);
+
   grid-row: 1 / span 2;
 
   color: $icon-grey;
   font-size: $report-icon-size;
-  font-variation-settings:
-    'FILL' 1,
-    'wght' 200,
-    'GRAD' 200,
-    'opsz' 24;
 }
 
 .rootSuccess .icon { color: $app-green; }
@@ -70,9 +67,13 @@ $report-icon-size: 32px;
     padding: 0.2rem 0.8rem 0.2rem 0.6rem;
     border-radius: 4px;
 
-  &:hover {
+    &:hover {
       background-color: #f6f6f6;
     }
+  }
+
+  &Icon {
+    @include icon($size: 24px);
   }
 
   &Label {

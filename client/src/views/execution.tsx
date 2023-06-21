@@ -194,6 +194,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                               app={this.props.app}
                               blockPath={selectedBlockPath}
                               location={this.master.location}
+                              mark={null}
                               footer={selectedBlockPath && !isSelectedBlockActive
                                 ? [(
                                   <>
@@ -203,7 +204,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                                         .map((blockPath): ProtocolBlockPath => blockPath.slice(0, getCommonBlockPathLength(blockPath, targetBlockPath)))
                                         .maxBy((commonBlockPath) => commonBlockPath.length)!;
 
-                                      let blockAnalysis = analyzeBlockPath(this.master.protocol, this.master.location, targetBlockPath, this.globalContext);
+                                      let blockAnalysis = analyzeBlockPath(this.master.protocol, this.master.location, null, targetBlockPath, this.globalContext);
                                       let currentPoint: unknown | null = null;
 
                                       for (let blockIndex = (targetBlockPath.length - 1); blockIndex >= commonBlockPath.length; blockIndex -= 1) {

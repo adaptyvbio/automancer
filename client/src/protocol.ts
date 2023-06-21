@@ -1,6 +1,7 @@
-import { AnyDurationTerm, DatetimeTerm, DurationTerm, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
+import { DatetimeTerm, DurationTerm, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
 
 import { BlockContext, GlobalContext } from './interfaces/plugin';
+import { HostDraftMark } from './interfaces/draft';
 
 
 export interface BlockGroup {
@@ -90,12 +91,14 @@ export function getRefPaths(block: ProtocolBlock, location: unknown, context: Gl
 export function analyzeBlockPath(
   protocol: Protocol,
   rootLocation: MasterBlockLocation | null,
+  rootMark: HostDraftMark | null,
   blockPath: ProtocolBlockPath,
   context: GlobalContext
 ) {
   let currentBlock = protocol.root;
   let currentLocation = rootLocation;
-  let currentSimulated = !rootLocation;
+  let currentMark = rootMark;
+  let currentSimulated = !rootLocation && !rootMark;
   let currentStartTerm: Term | null = currentLocation
     ? {
       type: 'datetime',
@@ -113,7 +116,7 @@ export function analyzeBlockPath(
     location: currentLocation,
 
     terms: {
-      end: (currentLocation?.term ?? currentBlock.duration),
+      end: (currentMark?.term ?? currentLocation?.term ?? currentBlock.duration),
       start: currentStartTerm
     }
   }];
@@ -131,12 +134,18 @@ export function analyzeBlockPath(
     let childInfo = currentBlockImpl.getChildren!(currentBlock, context)[key];
     let childLocation = (currentLocation?.children[key] ?? null);
 
-    if (childLocation) {
+    let childMark = (currentMark?.childrenMarks[key] ?? null);
+    let isLocationValid = !rootMark || childMark;
+
+    if (childLocation && isLocationValid) {
       currentStartTerm = {
         type: 'datetime',
         resolution: 0,
         value: childLocation.startDate
       } satisfies DatetimeTerm;
+    } else if (currentMark?.childrenOffsets[key]) {
+      currentStartTerm = currentMark.childrenOffsets[key];
+      currentSimulated = true;
     } else if (currentLocation?.childrenTerms[key]) {
       currentStartTerm = currentLocation.childrenTerms[key];
       currentSimulated = true;
@@ -148,13 +157,14 @@ export function analyzeBlockPath(
 
     currentBlock = childInfo.block;
     currentLocation = childLocation;
+    currentMark = childMark;
 
     pairs.push({
       block: currentBlock,
       location: currentLocation,
 
       terms: currentStartTerm && {
-        end: (currentLocation?.term ?? addTerms(currentStartTerm, currentBlock.duration)),
+        end: (currentMark?.term ?? (isLocationValid ? currentLocation?.term : null) ?? addTerms(currentStartTerm, currentBlock.duration)),
         start: currentStartTerm
       }
     });

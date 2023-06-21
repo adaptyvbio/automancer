@@ -60,7 +60,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
       pool: this.pool
     };
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, this.props.blockPath, context);
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, null, this.props.blockPath, context);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1)!;

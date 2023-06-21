@@ -1,4 +1,4 @@
-import type { Diagnostic, Protocol } from 'pr1-shared';
+import type { Diagnostic, Protocol, Term } from 'pr1-shared';
 import type { DraftCompletion, DraftFold, DraftHover, DraftMarker, DraftRelation, DraftRename, DraftSelection, DraftToken } from '../draft';
 import type { DocumentPath } from '../app-backends/base';
 
@@ -28,6 +28,17 @@ export interface HostDraftCompilerResult {
   missingDocumentPaths: DocumentPath[];
   protocol: Protocol | null;
   valid: boolean;
+
+  study: {
+    mark: HostDraftMark;
+    point: unknown;
+  } | null;
+}
+
+export interface HostDraftMark {
+  childrenMarks: Record<number, HostDraftMark>;
+  childrenOffsets: Record<number, Term>;
+  term: Term;
 }
 
 

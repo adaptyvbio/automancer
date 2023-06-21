@@ -1,7 +1,4 @@
-import type { Brand, Diagnostic, DiagnosticDocumentReference } from 'pr1-shared';
-
-import { DraftItem } from './app-backends/base';
-import { Protocol } from './interfaces/protocol';
+import type { Brand, Diagnostic, DiagnosticDocumentReference, Protocol } from 'pr1-shared';
 
 
 export type DraftId = Brand<string, 'DraftId'>;
@@ -113,26 +110,4 @@ export interface Draft {
 export interface DraftPrimitive {
   name?: string | null;
   source?: string;
-}
-
-/** @deprecated */
-export type DraftsRecord = Record<DraftId, Draft>;
-
-
-/** @deprecated */
-export function createDraftFromItem(draftItem: DraftItem): Draft {
-  return {
-    id: draftItem.id,
-    compilation: null,
-    item: draftItem,
-    lastModified: draftItem.lastModified,
-    name: draftItem.name,
-    readable: draftItem.readable,
-    revision: draftItem.revision,
-    writable: draftItem.writable,
-
-    meta: {
-      compilationTime: null
-    }
-  };
 }

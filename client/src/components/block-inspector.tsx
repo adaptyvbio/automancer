@@ -4,16 +4,17 @@ import { Fragment, ReactNode } from 'react';
 import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
+import { Application } from '../application';
+import { formatDateOrTimePair, formatDurationTerm } from '../format';
 import { Host } from '../host';
+import { HostDraftMark } from '../interfaces/draft';
 import { GlobalContext } from '../interfaces/plugin';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
+import { getDateFromTerm } from '../term';
 import { usePool } from '../util';
 import { FeatureEntry, FeatureList } from './features';
 import { Icon } from './icon';
-import { Application } from '../application';
-import { formatDateOrTimePair, formatDurationTerm } from '../format';
 import { TimeSensitive } from './time-sensitive';
-import { getDateFromTerm } from '../term';
 
 
 export function BlockInspector(props: {
@@ -22,6 +23,7 @@ export function BlockInspector(props: {
   footer?: [ReactNode, ReactNode] | null;
   host: Host;
   location: MasterBlockLocation | null;
+  mark: HostDraftMark | null;
   protocol: Protocol;
   selectBlock(path: ProtocolBlockPath | null): void;
 }) {
@@ -41,7 +43,10 @@ export function BlockInspector(props: {
     pool
   };
 
-  let blockAnalysis = analyzeBlockPath(props.protocol, props.location, props.blockPath, globalContext);
+  let blockAnalysis = analyzeBlockPath(props.protocol, props.location, props.mark, props.blockPath, globalContext);
+
+  console.log(props.mark);
+  console.log(blockAnalysis);
 
   let ancestorGroups = blockAnalysis.groups.slice(0, -1);
   let leafGroup = blockAnalysis.groups.at(-1)!;

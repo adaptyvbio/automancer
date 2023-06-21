@@ -155,8 +155,8 @@ class Master:
 
     current_handle._program.receive(message)
 
-  def study(self, block: BaseBlock):
-    return self._owner.study(block)
+  def study_block(self, block: BaseBlock):
+    return self._owner.study_block(block)
 
 
   def export(self):
@@ -313,7 +313,7 @@ class Master:
 
 @dataclass(kw_only=True)
 class ProgramHandleEntry(HierarchyNode):
-  children_terms: dict[int, DurationTerm] = field(default_factory=dict)
+  children_terms: dict[int, Term] = field(default_factory=dict)
   children: dict[int, Self] = field(default_factory=dict)
   index: int
   location: Exportable
@@ -338,6 +338,19 @@ class ProgramHandleEntry(HierarchyNode):
     }
 
 
+@dataclass
+class Mark:
+  term: Term
+  children_marks: dict[int, Optional[Self]] # None = Child will be reset
+  children_offsets: dict[int, Optional[Term]] # None = Use existing location
+
+  def export(self):
+    return {
+      "term": self.term.export(),
+      "childrenMarks": { child_id: (child_mark and child_mark.export()) for child_id, child_mark in self.children_marks.items() },
+      "childrenOffsets": { child_id: (child_offset and child_offset.export()) for child_id, child_offset in self.children_offsets.items() }
+    }
+
 class ProgramHandle:
   def __init__(self, parent: 'Master | ProgramHandle', id: int):
     self._children = dict[int, ProgramHandle]()
@@ -347,7 +360,7 @@ class ProgramHandle:
 
     self._analysis = RuntimeAnalysis()
     self._location: Optional[Exportable] = None
-    self._term_info: Optional[tuple[Term, dict[int, DurationTerm]]] = None
+    self._term_info: Optional[tuple[Term, dict[int, Term]]] = None
 
     self._consumed = False
     self._failed = False
@@ -518,5 +531,13 @@ class ProgramOwner:
 
     return True
 
-  def study(self, block: BaseBlock):
-    return self._program.study(block)
+  def study_block(self, block: BaseBlock):
+    return self._program.study_block(block)
+
+
+__all__ = [
+  'Mark',
+  'Master',
+  'ProgramHandle',
+  'ProgramOwner'
+]

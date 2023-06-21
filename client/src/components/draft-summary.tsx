@@ -3,18 +3,19 @@ import { ReactNode } from 'react';
 import styles from '../../styles/components/diagnostics-summary.module.scss';
 
 import { Icon } from '../components/icon';
-import * as util from '../util';
+import { formatClass } from '../util';
 import { ShortcutGuide } from './shortcut-guide';
 
 
 export function DraftSummary(props: {
   description?: ReactNode | null;
-  onStart?: (() => void) | null;
+  message: ReactNode | null;
+  onTrigger?: (() => void) | null;
   status: 'default' | 'error' | 'success' | 'warning';
   title: ReactNode;
 }) {
   return (
-    <div className={util.formatClass(styles.root, {
+    <div className={formatClass(styles.root, {
       default: {},
       error: styles.rootError,
       success: styles.rootSuccess,
@@ -28,11 +29,11 @@ export function DraftSummary(props: {
       }[props.status]} className={styles.icon} />
       <div className={styles.title}>{props.title}</div>
       {props.description && <p className={styles.description}>{props.description}</p>}
-      {props.onStart && (
-        <button type="button" className={styles.actionRoot} onClick={props.onStart}>
+      {props.onTrigger && (
+        <button type="button" className={styles.actionRoot} onClick={props.onTrigger}>
           <Icon name="play_circle" className={styles.actionIcon} />
           <div className={styles.actionLabel}>
-            <ShortcutGuide shortcut="Meta+Shift+S">Start</ShortcutGuide>
+            <ShortcutGuide shortcut="Meta+Shift+S">{props.message}</ShortcutGuide>
           </div>
         </button>
       )}

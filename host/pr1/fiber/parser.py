@@ -25,7 +25,7 @@ from .expr import Evaluable
 if TYPE_CHECKING:
   from ..host import Host
   from ..units.base import BaseRunner
-  from .master2 import ProgramHandle
+  from .master2 import Mark, ProgramHandle
   from .process import BaseProcess
 
 
@@ -165,13 +165,13 @@ class BaseProgram(ABC):
       case _:
         raise ValueError(f"Unknown message type '{message['type']}'")
 
-  def study(self, block: 'BaseBlock') -> 'Optional[BaseProgramPoint]':
+  def study_block(self, block: 'BaseBlock') -> 'Optional[tuple[BaseProgramPoint, Mark]]':
     return None
 
   def swap(self, block: 'BaseBlock'):
     pass
 
-  def term_info(self, children_terms: dict[int, Term]) -> tuple[Term, dict[int, DurationTerm]]:
+  def term_info(self, children_terms: dict[int, Term]) -> tuple[Term, dict[int, Term]]:
     return DurationTerm.unknown(), dict()
 
   @abstractmethod

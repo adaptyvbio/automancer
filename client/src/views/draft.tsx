@@ -1,5 +1,5 @@
 import * as monaco from 'monaco-editor';
-import { Deferred, Experiment, ExperimentId, ProtocolBlockPath, defer } from 'pr1-shared';
+import { AnyDurationTerm, Deferred, Experiment, ExperimentId, ProtocolBlockPath, defer } from 'pr1-shared';
 import { Component, Fragment, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
@@ -467,8 +467,13 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         compiling={this.state.compiling}
         compilation={this.state.compilation}
         context={globalContext}
-        onStart={() => {
-          this.setState({ startModalOpen: true });
+        editMode={this.props.experiment}
+        onTrigger={() => {
+          if (this.props.experiment) {
+
+          } else {
+            this.setState({ startModalOpen: true });
+          }
         }} />
     );
 
@@ -631,7 +636,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                                     app={this.props.app}
                                     blockPath={this.state.selectedBlockPath}
                                     host={this.props.host}
-                                    location={null}
+                                    location={this.props.experiment?.master!.location ?? null}
+                                    mark={this.state.compilation!.study?.mark ?? null}
                                     protocol={this.state.compilation!.protocol}
                                     selectBlock={this.selectBlock.bind(this)} />
                                 </ErrorBoundary>
@@ -772,10 +778,11 @@ export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
 
 
 export function FilledDraftSummary(props: {
-  compilation: DraftCompilation | null;
+  compilation: HostDraftCompilerResult | null;
   compiling: boolean;
   context: GlobalContext;
-  onStart(): void;
+  editMode: unknown;
+  onTrigger(): void;
 }) {
   if (props.compiling) {
     return <DraftSummary status="default" title="Compiling" />;
@@ -785,8 +792,8 @@ export function FilledDraftSummary(props: {
   let errorCount = compilation.analysis.errors.length;
   let warningCount = compilation.analysis.warnings.length;
 
-  let onStart = compilation.valid
-    ? props.onStart
+  let onTrigger = compilation.valid
+    ? props.onTrigger
     : null;
 
   let warningText = (warningCount > 0)
@@ -797,11 +804,11 @@ export function FilledDraftSummary(props: {
   let etaText: ReactNode | null = null;
 
   if (compilation.protocol) {
-    let analysis = analyzeBlockPath(compilation.protocol, null, [], props.context);
+    let analysis = analyzeBlockPath(compilation.protocol, null, (compilation.study?.mark ?? null), [], props.context);
     let pair = analysis.pairs[0];
     let terms = pair.terms!;
 
-    let formattedDuration = formatDurationTerm(pair.block.duration);
+    let formattedDuration = formatDurationTerm(terms.end as AnyDurationTerm);
 
     if (formattedDuration !== null) {
       etaText = [formattedDuration];
@@ -831,20 +838,23 @@ export function FilledDraftSummary(props: {
     etaText = null;
   }
 
+  let message = props.editMode ? 'Update' : 'Start';
 
   if (errorCount > 0) {
     return (
       <DraftSummary
         description={warningText}
-        onStart={onStart}
+        message={message}
+        onTrigger={onTrigger}
         status="error"
         title={`${errorCount} error${errorCount > 1 ? 's' : ''}`} />
     );
   } else if (warningText) {
     return (
       <DraftSummary
-      description={etaText}
-        onStart={onStart}
+        description={etaText}
+        message={message}
+        onTrigger={onTrigger}
         status="warning"
         title={warningText} />
     );
@@ -852,7 +862,8 @@ export function FilledDraftSummary(props: {
     return (
       <DraftSummary
         description={etaText}
-        onStart={onStart}
+        message={message}
+        onTrigger={onTrigger}
         status="success"
         title="Ready" />
     );

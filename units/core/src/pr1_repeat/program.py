@@ -1,10 +1,11 @@
 from asyncio import Event
 from dataclasses import KW_ONLY, dataclass, field
+from genericpath import isfile
 import math
 from types import EllipsisType
 from typing import Optional
 
-import pr1 as am
+import automancer as am
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import BaseProgram, BaseProgramPoint
@@ -62,6 +63,15 @@ class ProgramPoint(BaseProgramPoint):
       "iteration": self.iteration
     }
 
+# @dataclass(kw_only=True)
+# class ProgramMark():
+#   point: ProgramPoint
+#   term: am.Term
+
+#   def export(self):
+#     return {
+#       "term": self.term.export()
+#     }
 
 class Program(BaseProgram):
   def __init__(self, block: Block, handle):
@@ -92,7 +102,7 @@ class Program(BaseProgram):
   #   elif point.child:
   #     self._child_program.jump(point.child)
 
-  def study(self, block):
+  def study_block(self, block):
     if not isinstance(block, Block) or not self._child_owner:
       return None
 
@@ -106,9 +116,26 @@ class Program(BaseProgram):
     if (new_count - 1) < self._iteration:
       return None
 
+    child_result = self._child_owner.study_block(block.block)
+    child_point, child_mark = child_result or (None, None)
+
+    if math.isfinite(new_count):
+      child_duration = block.block.duration()
+
+      if child_mark:
+        term = child_mark.term + child_duration * (new_count - self._iteration - 1)
+      else:
+        term = child_duration * (new_count - self._iteration)
+    else:
+      term = am.DurationTerm.forever()
+
     return ProgramPoint(
-      child=self._child_owner.study(block.block),
+      child=child_point,
       iteration=self._iteration
+    ), am.Mark(
+      term,
+      ({ 0: child_mark } if child_mark else {}),
+      ({} if child_mark else { 0: am.DurationTerm.zero() })
     )
 
   def swap(self, block: Block):
@@ -127,7 +154,7 @@ class Program(BaseProgram):
     if self._iteration_count is None:
       return am.DurationTerm.forever()
 
-    return (children_terms[0] + self._block.block.duration() * (self._iteration_count - self._iteration - 1), {})
+    return (children_terms[0] + self._block.block.duration() * (self._iteration_count - self._iteration - 1)), {}
 
   async def run(self, point: Optional[ProgramPoint], stack):
     self._child_owner = None

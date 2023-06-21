@@ -297,13 +297,16 @@ class Host:
           experiment = self.experiments[experiment_id]
           assert experiment.master
 
-          study_point = experiment.master.study(compilation.protocol.root)
+          study = experiment.master.study_block(compilation.protocol.root)
         else:
-          study_point = None
+          study = None
 
         return {
           **compilation.export(),
-          "studyPoint": study_point.export() if study_point else None
+          "study": study and {
+            "mark": study[1].export(),
+            "point": study[0].export()
+          }
         }
 
       case "createExperiment":

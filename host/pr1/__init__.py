@@ -31,5 +31,6 @@ from .util.misc import *
 from .util.pool import *
 
 from .fiber.expr import *
+from .fiber.master2 import *
 from .fiber.parser import BaseParser, ProcessTransformer
 from .fiber.process import *

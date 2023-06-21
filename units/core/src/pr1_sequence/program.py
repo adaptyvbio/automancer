@@ -3,12 +3,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
-import pr1 as am
-from pr1.fiber.master2 import ProgramOwner
+import automancer as am
 from pr1.fiber.parser import BaseProgramPoint, BaseProgram
-from pr1.fiber.process import ProgramExecEvent
-from pr1.util.decorators import debug
-from pr1.util.misc import Exportable
 
 from .parser import Block
 
@@ -20,7 +16,7 @@ class ProgramMode(IntEnum):
 
 @comserde.serializable
 @dataclass(kw_only=True)
-class ProgramLocation(Exportable):
+class ProgramLocation(am.Exportable):
   index: int
 
   def export(self):
@@ -39,7 +35,7 @@ class ProgramPoint(BaseProgramPoint):
       "index": self.index
     }
 
-@debug
+@am.debug
 class Program(BaseProgram):
   def __init__(self, block: Block, handle):
     super().__init__(block, handle)
@@ -48,7 +44,7 @@ class Program(BaseProgram):
     self._handle = handle
 
     self._child_index: int
-    self._child_program: ProgramOwner
+    self._child_program: am.ProgramOwner
     self._halting = False
     self._point: Optional[ProgramPoint]
 
@@ -65,7 +61,7 @@ class Program(BaseProgram):
     elif point.child:
       self._child_program.jump(point.child)
 
-  def study(self, block):
+  def study_block(self, block):
     if not isinstance(block, Block):
       return None
 
@@ -74,9 +70,20 @@ class Program(BaseProgram):
     if (child_count - 1) < self._child_index:
       return None
 
+    child_result = self._child_program.study_block(block.children[self._child_index])
+    child_point, child_mark = child_result or (None, None)
+
+    current_child_term = child_mark.term if child_mark else block.children[self._child_index].duration()
+    remaining_children_durations = [child_block.duration() for child_block in block.children[(self._child_index + 1):]]
+    remaining_children_terms = [(current_child_term + duration) for duration in [am.DurationTerm.zero(), *am.cumsum(remaining_children_durations)]]
+
     return ProgramPoint(
-      child=self._child_program.study(block.children[self._child_index]),
+      child=child_point,
       index=self._child_index
+    ), am.Mark(
+      remaining_children_terms[-1],
+      ({ self._child_index: child_mark } if child_mark else {}),
+      { (self._child_index + relative_child_index + 1): child_term for relative_child_index, child_term in enumerate(remaining_children_terms[:-1]) } | ({} if child_mark else { self._child_index: current_child_term })
     )
 
   def term_info(self, children_terms):

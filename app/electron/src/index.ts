@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { MenuDef, MenuEntryId } from 'pr1';
 import { AppData, BridgeTcp, CertificateFingerprint, DraftEntryId, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend } from 'pr1-library';
-import { defer } from 'pr1-shared';
+import { Lock, defer } from 'pr1-shared';
 import * as uol from 'uol';
 
 import { HostWindow } from './host';
@@ -35,12 +35,11 @@ export class CoreApplication {
 
   private data!: AppData;
   private pythonInstallations!: PythonInstallationRecord;
-  private stores!: Map<string, Map<string, unknown>>;
 
   private dataDirPath: string;
+  private dataLock = new Lock();
   private dataPath: string;
   private hostsDirPath: string;
-  private storesDirPath: string;
   logsDirPath: string;
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
@@ -54,7 +53,6 @@ export class CoreApplication {
 
     this.dataDirPath = path.join(userData, 'App Data');
     this.dataPath = path.join(this.dataDirPath, 'app.json');
-    this.storesDirPath = path.join(this.dataDirPath, 'stores');
 
     this.hostsDirPath = path.join(userData, 'App Hosts');
     this.logsDirPath = this.electronApp.getPath('logs');
@@ -800,29 +798,22 @@ export class CoreApplication {
     // Stores
 
     ipcMain.handle('store.read', async (event, storeName, key) => {
-      return this.stores.get(storeName)?.get(key);
+      return this.data.stores[storeName]?.[key];
     });
 
     ipcMain.handle('store.readAll', async (event, storeName) => {
-      let store = this.stores.get(storeName);
-
-      return store
-        ? Array.from(store.entries())
-        : [];
+      return Object.entries(this.data.stores[storeName] ?? {});
     });
 
     ipcMain.handle('store.write', async (event, storeName, key, value) => {
-      let store = this.stores.get(storeName);
-
-      if (!store) {
-        store = new Map();
-        this.stores.set(storeName, store);
-      }
-
-      store.set(key, value);
-
-      await this.pool.add(async () => {
-        await fs.writeFile(path.join(this.storesDirPath, storeName), JSON.stringify(Object.fromEntries(store!)));
+      await this.setData({
+        stores: {
+          ...this.data.stores,
+          [storeName]: {
+            ...this.data.stores[storeName],
+            [key]: value
+          }
+        }
       });
     });
 
@@ -895,22 +886,14 @@ export class CoreApplication {
         version: CoreApplication.version
       });
     }
-
-    await fs.mkdir(this.storesDirPath, { recursive: true });
-
-    this.stores = new Map();
-
-    for (let storeName of await fs.readdir(this.storesDirPath)) {
-      let storeBuffer = await fs.readFile(path.join(this.storesDirPath, storeName));
-      let store = new Map(Object.entries(JSON.parse(storeBuffer.toString())));
-
-      this.stores.set(storeName, store);
-    }
   }
 
   async setData(data: Partial<AppData>) {
     this.data = { ...this.data, ...data };
-    await fs.writeFile(this.dataPath, JSON.stringify(this.data));
+
+    await this.dataLock.acquireWith(async () => {
+      await fs.writeFile(this.dataPath, JSON.stringify(this.data));
+    });
   }
 }
 

@@ -353,8 +353,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
         let pluginInfo = state.info.units[plugin.namespace];
 
         if (plugin.persistentStoreDefaults || plugin.sessionStoreDefaults) {
-          let persistentStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}__${pluginInfo.version}`, { type: 'persistent' }));
-          let sessionStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}__${pluginInfo.version}`, { type: 'session' }));
+          let persistentStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}/${pluginInfo.version}`, { type: 'persistent' }));
+          let sessionStore = new StoreManager(this.appBackend.createStore(`${pluginInfo.namespace}/${pluginInfo.version}`, { type: 'session' }));
 
           this.pluginStores[plugin.namespace] = {
             persistent: persistentStore,

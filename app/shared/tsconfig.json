@@ -4,7 +4,7 @@
   "compilerOptions": {
     "composite": true,
     "declarationDir": "types",
-    "lib": ["es2022"],
+    "lib": ["dom", "es2022"],
     "outDir": "lib",
     "rootDir": "src"
   },

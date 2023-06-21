@@ -1,10 +1,10 @@
 import * as idb from 'idb-keyval';
 import hash from 'object-hash';
 
-import { getRecordSnapshot, SnapshotProvider, SnapshotWatchCallback } from '../snapshot';
+import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
 import { BrowserStorageStore } from '../store/browser-storage';
-import { assert, Lock, Pool, wrapAbortable } from '../util';
-import { AppBackend, AppBackendSnapshot, DraftCandidate, DraftDocumentExtension, DocumentId, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentInstanceSnapshot, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, DocumentSlotStatus } from './base';
+import { assert, Pool, wrapAbortable } from '../util';
+import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentSlotStatus, DraftDocumentExtension, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, Lock } from './base';
 
 
 interface BrowserStoreMainEntry {

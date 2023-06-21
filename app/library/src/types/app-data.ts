@@ -42,6 +42,7 @@ export interface AppData {
   drafts: Record<DraftEntryId, DraftEntry>;
   embeddedPythonInstallation: null;
   hostSettingsRecord: HostSettingsRecord;
+  stores: Record<string, Record<string, unknown>>;
   version: number;
 }
 

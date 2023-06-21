@@ -2,6 +2,7 @@ export * from './client-utils';
 export * from './client';
 export * from './defer';
 export * from './error';
+export * from './lock';
 export * from './misc';
 export * from './term';
 export * from './types/communication';

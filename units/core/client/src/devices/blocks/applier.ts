@@ -1,13 +1,13 @@
 import { PluginBlockImpl } from 'pr1';
-import { ProtocolBlock, createZeroTerm } from 'pr1-shared';
+import { MasterBlockLocation, ProtocolBlock, createZeroTerm } from 'pr1-shared';
 
 
 export interface ApplierBlock extends ProtocolBlock {
   child: ProtocolBlock;
 }
 
-export interface ApplierLocation {
-  children: { 0: unknown };
+export interface ApplierLocation extends MasterBlockLocation {
+  children: { 0: MasterBlockLocation };
   mode: ApplierLocationMode;
 }
 

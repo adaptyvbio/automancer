@@ -1,5 +1,5 @@
 import { DynamicValue, PluginBlockImpl, formatDynamicValue, util } from 'pr1';
-import { ProtocolBlock } from 'pr1-shared';
+import { MasterBlockLocation, ProtocolBlock, createZeroTerm } from 'pr1-shared';
 
 import { ExecutorState, NodePath, ValueNode, namespace } from '../types';
 import { findNode } from '../util';
@@ -10,8 +10,8 @@ export interface PublisherBlock extends ProtocolBlock {
   child: ProtocolBlock;
 }
 
-export interface PublisherLocation {
-  children: { 0: unknown; };
+export interface PublisherLocation extends MasterBlockLocation {
+  children: { 0: MasterBlockLocation; };
   assignments: [NodePath, DynamicValue | null][];
   mode: {
     type: 'failed';
@@ -26,7 +26,10 @@ export interface PublisherLocation {
 
 export default {
   getChildren(block, context) {
-    return [block.child];
+    return [{
+      block: block.child,
+      delay: createZeroTerm()
+    }];
   },
   getChildrenExecution(block, location, context) {
     return (location.mode.type === 'normal')

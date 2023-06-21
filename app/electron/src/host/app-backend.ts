@@ -1,4 +1,4 @@
-import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, DocumentSlot, DocumentSlotSnapshot, DocumentSlotStatus, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, MemoryStore, SnapshotProvider, Store } from 'pr1';
+import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, DocumentSlot, DocumentSlotSnapshot, DocumentSlotStatus, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, MemoryStore, SnapshotProvider, Store, deserialize, serialize } from 'pr1';
 import { DraftEntryId } from 'pr1-library';
 
 import { DraftSkeleton } from '../interfaces';
@@ -156,14 +156,20 @@ export class ElectronAppStore implements Store {
   }
 
   async read(key: string) {
-    return await window.api.store.read(this._name, key);
+    let value = await window.api.store.read(this._name, key);
+
+    return (value !== undefined)
+      ? deserialize(value)
+      : undefined;
   }
 
   async * readAll() {
-    yield* await window.api.store.readAll(this._name);
+    for (let [key, value] of await window.api.store.readAll(this._name)) {
+      yield [key, deserialize(value)] as const;
+    }
   }
 
   async write(key: string, value: unknown) {
-    await window.api.store.write(this._name, key, value);
+    await window.api.store.write(this._name, key, serialize(value));
   }
 }

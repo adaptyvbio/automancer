@@ -54,6 +54,7 @@ export * from './components/title-bar';
 export * from './dynamic-value';
 export * from './geometry';
 export * from './libraries/panel';
+export * from './serialize-immutable';
 export * from './snapshot';
 export * from './store/application';
 export * from './store/base';

@@ -38,6 +38,7 @@ export interface ConfPage {
 export type ViewConfProps = ViewProps<{
   id: 'main',
   params: {};
+  state: void;
 } | {
   id: 'page';
   params: {
@@ -45,6 +46,7 @@ export type ViewConfProps = ViewProps<{
     groupId: string;
     pageId: string;
   };
+  state: void;
 }>;
 
 export interface ViewConfState {

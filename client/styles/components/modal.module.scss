@@ -23,9 +23,8 @@
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 3px 3px 6px #0001;
-}
 
-.actions {
-  justify-content: end;
-  margin-top: 1rem;
+  > * > :last-child {
+    margin-top: 2rem;
+  }
 }

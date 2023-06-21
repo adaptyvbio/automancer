@@ -27,7 +27,7 @@ from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, HierarchyNode, IndexCounter
 from ..master.analysis import MasterAnalysis, RuntimeAnalysis, RuntimeMasterAnalysisItem
 from .process import ProgramExecEvent
-from .eval import EvalStack
+from .eval import EvalContext, EvalStack
 from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
 from ..experiment import Experiment
 from ..ureg import ureg
@@ -154,6 +154,9 @@ class Master:
       current_handle = current_handle._children[exec_key]
 
     current_handle._program.receive(message)
+
+  def study(self, block: BaseBlock):
+    return self._owner.study(block)
 
 
   def export(self):
@@ -352,6 +355,8 @@ class ProgramHandle:
     self._updated_location = False
     self._updated_term = True
 
+    self.context: EvalContext
+
   @property
   def master(self) -> Master:
     return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
@@ -494,9 +499,24 @@ class ProgramOwner:
     self._program.jump(point)
 
   async def run(self, point: Optional[BaseProgramPoint], stack: EvalStack):
+    self._handle.context = EvalContext(stack, cwd_path=self._handle.master.experiment.path)
+
     await self._program.run(point, stack)
 
     for child_handle in self._handle._children.values():
       assert child_handle._consumed
 
     self._handle._consumed = True
+
+    del self._handle.context
+
+  def swap(self, block: BaseBlock):
+    if not self._program.study(block):
+      return False
+
+    self._program.swap(block)
+
+    return True
+
+  def study(self, block: BaseBlock):
+    return self._program.study(block)

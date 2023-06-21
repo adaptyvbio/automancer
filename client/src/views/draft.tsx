@@ -1,13 +1,12 @@
 import * as monaco from 'monaco-editor';
-import { Deferred, ExperimentId, ProtocolBlockPath, defer } from 'pr1-shared';
-import { Component, ReactNode, createRef } from 'react';
+import { Deferred, Experiment, ExperimentId, ProtocolBlockPath, defer } from 'pr1-shared';
+import { Component, Fragment, ReactNode, createRef } from 'react';
 
 import editorStyles from '../../styles/components/editor.module.scss';
 import viewStyles from '../../styles/components/view.module.scss';
 
 import { OrderedMap } from 'immutable';
 import { DocumentId, DocumentSlotSnapshot, DraftInstanceId, DraftInstanceSnapshot } from '../app-backends/base';
-import { Application } from '../application';
 import { BlockInspector } from '../components/block-inspector';
 import { DiagnosticsReport } from '../components/diagnostics-report';
 import { DocumentEditor } from '../components/document-editor';
@@ -16,14 +15,15 @@ import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
 import { GraphEditor } from '../components/graph-editor';
 import { StartProtocolModal } from '../components/modals/start-protocol';
+import { UnsavedDocumentModal } from '../components/modals/unsaved-document';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
+import { TextEditor } from '../components/text-editor';
 import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
 import { DraftCompilation } from '../draft';
 import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
-import { Host } from '../host';
 import { HostDraftCompilerResult } from '../interfaces/draft';
 import { GlobalContext } from '../interfaces/plugin';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
@@ -31,8 +31,8 @@ import { analyzeBlockPath } from '../protocol';
 import { Pool, formatClass } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
-import { UnsavedDocumentModal } from '../components/modals/unsaved-document';
-import { TextEditor } from '../components/text-editor';
+import { InfoBar } from '../components/info-bar';
+import { ViewExperiment } from './experiment';
 
 
 export interface DocumentItem {
@@ -51,6 +51,7 @@ export interface DocumentItem {
 
 export type ViewDraftProps = Omit<ViewProps, 'route'> & {
   draft: DraftInstanceSnapshot;
+  experiment: Experiment | null;
 }
 
 export interface ViewDraftState {
@@ -58,15 +59,13 @@ export interface ViewDraftState {
   compiling: boolean;
   cursorPosition: monaco.Position | null;
   documentItems: OrderedMap<DocumentId, DocumentItem>;
-  requesting: boolean;
+  graphOpen: boolean;
+  inspectorEntryId: string | null;
+  inspectorOpen: boolean;
   selectedBlockPath: ProtocolBlockPath | null;
   selectedDocumentId: DocumentId;
   startModalOpen: boolean;
   unsavedDocumentDeferred: Deferred<boolean> | null;
-
-  graphOpen: boolean;
-  inspectorEntryId: string | null;
-  inspectorOpen: boolean;
 }
 
 export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
@@ -155,20 +154,17 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     } satisfies DocumentItem));
 
     this.state = {
-      documentItems,
-
       compilation: null,
       compiling: true, // The draft will soon be compiling if it's readable.
       cursorPosition: null,
-      requesting: false,
+      documentItems,
+      graphOpen: true,
+      inspectorEntryId: 'inspector',
+      inspectorOpen: true,
       selectedBlockPath: null,
       selectedDocumentId: entrySlot.id,
       startModalOpen: false,
-      unsavedDocumentDeferred: null,
-
-      graphOpen: true,
-      inspectorEntryId: 'inspector',
-      inspectorOpen: true
+      unsavedDocumentDeferred: null
     };
 
     entrySlot.watchSnapshot((snapshot) => {
@@ -349,7 +345,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         },
         options: {
           trusted: true
-        }
+        },
+        studyExperimentId: (this.props.experiment?.id ?? null)
       });
 
       // for (let documentPath of result.missingDocumentPaths) {
@@ -479,7 +476,10 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
       <main className={viewStyles.root}>
         <TitleBar
           // title={this.state.compilation?.protocol?.name ?? this.props.draft.name ?? '[Untitled]'}
-          title={this.props.draft.name ?? '[Untitled]'}
+          title={[
+            this.props.draft.name ?? '[Untitled]',
+            this.props.experiment && <Fragment key={0}> &mdash; Editing running protocol</Fragment>
+          ]}
           subtitle={subtitle}
           subtitleVisible={subtitleVisible}
           tools={[{
@@ -491,46 +491,42 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
             }
           }]}
           ref={this.refTitleBar} />
-        <div className={formatClass(viewStyles.contents, editorStyles.root)}>
-          {this.state.startModalOpen && (
-            <StartProtocolModal
-              host={this.props.host}
-              onCancel={() => void this.setState({ startModalOpen: false })}
-              onSubmit={(data) => {
-                this.pool.add(async () => {
-                  let client = this.props.host.client;
-                  let experimentId = data.experimentId ?? (await client.request({
-                    type: 'createExperiment',
-                    title: data.newExperimentTitle!
-                  })).experimentId;
+        <InfoBar
+          className={viewStyles.contents}
+          mode={this.props.experiment ? 'edit' : 'default'}
+          left={(() => {
+            let writingCount = this.state.documentItems.valueSeq().reduce((count, documentItem) => count + (documentItem.writing ? 1 : 0), 0);
 
-                  this.experimentIdAwaitingRedirection = experimentId;
+            if (writingCount > 1) {
+              return <>Writing {writingCount} files&hellip;</>
+            } else if (writingCount > 0) {
+              return <>Writing file&hellip;</>
+            }
 
-                  try {
-                    await client.request({
-                      type: 'startDraft',
-                      experimentId,
-                      draft: {
-                        id: this.props.draft.id,
-                        documents: this.state.documentItems.valueSeq().map((documentItem) => ({
-                          id: documentItem.slotSnapshot.id,
-                          contents: documentItem.textModel!.getValue(),
-                          path: documentItem.slotSnapshot.path
-                        })).toArray(),
-                        entryDocumentId: this.props.draft.model.getEntryDocumentSlot().id
-                      },
-                      options: {
-                        trusted: true
-                      }
-                    });
-                  } catch (err) {
-                    this.experimentIdAwaitingRedirection = null;
-                    throw err;
-                  }
-                });
-              }} />
-          )}
+            if (this.state.cursorPosition) {
+              return (
+                <span>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
+              );
+            }
 
+            return null;
+          })()}
+          right={(() => (
+            <>
+              {this.props.experiment && (
+                <>
+                  <button type="button" onClick={() => {
+                    ViewExperimentWrapper.navigate(this.props.experiment!.id);
+                  }}>Abort edit</button>
+                  <button type="button" onClick={() => {
+                    ViewDraft.navigate(this.props.draft.id);
+                  }}>Detach</button>
+                </>
+              )}
+              {/* <div>Status: {this.selectedDocumentItem.slotSnapshot.status}</div> */}
+              <div>Last saved: {this.selectedDocumentItem.slotSnapshot.instance?.lastModificationDate ? new Date(this.selectedDocumentItem.slotSnapshot.instance.lastModificationDate).toLocaleTimeString() : '–'}</div>
+            </>
+          ))()}>
           <SplitPanels
             panels={[
               { component: (
@@ -653,32 +649,45 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                   </div>
                 ) }
             ]} />
-          <div className={editorStyles.infobarRoot}>
-            <div className={editorStyles.infobarLeft}>
-              {(() => {
-                let writingCount = this.state.documentItems.valueSeq().reduce((count, documentItem) => count + (documentItem.writing ? 1 : 0), 0);
+        </InfoBar>
+        {this.state.startModalOpen && (
+          <StartProtocolModal
+            host={this.props.host}
+            onCancel={() => void this.setState({ startModalOpen: false })}
+            onSubmit={(data) => {
+              this.pool.add(async () => {
+                let client = this.props.host.client;
+                let experimentId = data.experimentId ?? (await client.request({
+                  type: 'createExperiment',
+                  title: data.newExperimentTitle!
+                })).experimentId;
 
-                if (writingCount > 1) {
-                  return <>Writing {writingCount} files&hellip;</>
-                } else if (writingCount > 0) {
-                  return <>Writing file&hellip;</>
+                this.experimentIdAwaitingRedirection = experimentId;
+
+                try {
+                  await client.request({
+                    type: 'startDraft',
+                    experimentId,
+                    draft: {
+                      id: this.props.draft.id,
+                      documents: this.state.documentItems.valueSeq().map((documentItem) => ({
+                        id: documentItem.slotSnapshot.id,
+                        contents: documentItem.textModel!.getValue(),
+                        path: documentItem.slotSnapshot.path
+                      })).toArray(),
+                      entryDocumentId: this.props.draft.model.getEntryDocumentSlot().id
+                    },
+                    options: {
+                      trusted: true
+                    }
+                  });
+                } catch (err) {
+                  this.experimentIdAwaitingRedirection = null;
+                  throw err;
                 }
-
-                if (this.state.cursorPosition) {
-                  return (
-                    <span className={editorStyles.infobarItem}>Ln {this.state.cursorPosition.lineNumber}, Col {this.state.cursorPosition.column}</span>
-                  );
-                }
-
-                return null;
-              })()}
-            </div>
-            <div className={editorStyles.infobarRight}>
-              {/* <div>Status: {this.selectedDocumentItem.slotSnapshot.status}</div> */}
-              <div>Last saved: {this.selectedDocumentItem.slotSnapshot.instance?.lastModificationDate ? new Date(this.selectedDocumentItem.slotSnapshot.instance.lastModificationDate).toLocaleTimeString() : '–'}</div>
-            </div>
-          </div>
-        </div>
+              });
+            }} />
+        )}
         {this.state.unsavedDocumentDeferred && (
           <UnsavedDocumentModal
             onFinish={(result) => {
@@ -700,8 +709,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   }
 
 
-  static navigate(draftId: DraftInstanceId) {
-    return navigation.navigate(`${BaseUrl}/draft/${draftId}`);
+  static navigate(draftId: DraftInstanceId, options?: {
+    experimentId?: ExperimentId;
+  }) {
+    return navigation.navigate(`${BaseUrl}/draft/${draftId}`, {
+      state: {
+        experimentId: (options?.experimentId ?? null)
+      } satisfies ViewDraftWrapperRoute['state']
+    });
   }
 }
 
@@ -711,6 +726,9 @@ export interface ViewDraftWrapperRoute {
   params: {
     draftId: DraftInstanceId;
   };
+  state: {
+    experimentId: ExperimentId | null;
+  } | undefined;
 }
 
 export type ViewDraftWrapperProps = ViewProps<ViewDraftWrapperRoute>;
@@ -731,10 +749,14 @@ export class ViewDraftWrapper extends Component<ViewDraftWrapperProps, {}> {
       return null;
     }
 
+    let experimentId = this.props.route.state?.experimentId ?? null;
+    let experiment = experimentId && this.props.host.state.experiments[experimentId];
+
     return (
       <ViewDraft
         {...this.props}
-        draft={this.draftInstanceSnapshot} />
+        draft={this.draftInstanceSnapshot}
+        experiment={experiment} />
     );
   }
 
@@ -786,13 +808,15 @@ export function FilledDraftSummary(props: {
 
       if (terms.end.type === 'duration') {
         let endTerm = terms.end;
-        let now = Date.now();
 
         etaText = [
           formattedDuration,
           ' (ETA ',
           <TimeSensitive
-            contents={() => formatDigitalDate(now + endTerm.value, now, { format: 'react' })}
+            contents={() => {
+              let now = Date.now();
+              return formatDigitalDate(now + endTerm.value, now, { format: 'react' })
+            }}
             interval={30e3}
             key={0} />,
           ')'

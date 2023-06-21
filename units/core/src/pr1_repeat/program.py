@@ -52,9 +52,15 @@ class ProgramLocation:
     }
 
 @dataclass(kw_only=True)
-class ProgramPoint:
+class ProgramPoint(BaseProgramPoint):
   child: Optional[BaseProgramPoint]
   iteration: int
+
+  def export(self):
+    return {
+      "child": self.child and self.child.export(),
+      "iteration": self.iteration
+    }
 
 
 class Program(BaseProgram):
@@ -64,6 +70,7 @@ class Program(BaseProgram):
     self._block = block
     self._handle = handle
 
+    self._child_owner: Optional[ProgramOwner]
     self._iteration_count: Optional[int]
     self._iteration: int
     self._mode: ProgramMode.Any
@@ -85,25 +92,46 @@ class Program(BaseProgram):
   #   elif point.child:
   #     self._child_program.jump(point.child)
 
+  def study(self, block):
+    if not isinstance(block, Block) or not self._child_owner:
+      return None
+
+    _, count_result = block.count.evaluate_constant(self._handle.context)
+
+    if isinstance(count_result, EllipsisType):
+      return None
+
+    new_count = count_result.value if (count_result.value != 'forever') else math.inf
+
+    if (new_count - 1) < self._iteration:
+      return None
+
+    return ProgramPoint(
+      child=self._child_owner.study(block.block),
+      iteration=self._iteration
+    )
+
+  def swap(self, block: Block):
+    assert self._child_owner
+
+    self.block = block
+
+    if not self._child_owner.swap(block.block):
+      self._child_owner.halt()
+      self._point = ProgramPoint(
+        child=None,
+        iteration=self._iteration
+      )
+
   def term_info(self, children_terms):
     if self._iteration_count is None:
       return am.DurationTerm.forever()
 
     return (children_terms[0] + self._block.block.duration() * (self._iteration_count - self._iteration - 1), {})
 
-  # def swap(self, block):
-  #   if not isinstance(block, Block):
-  #     return False
-
-  #   self.block = block
-
-  #   if not self._child_owner.swap(block.child):
-  #     self._child_owner.halt()
-  #     self._point = (...)
-
-  #   return True
-
   async def run(self, point: Optional[ProgramPoint], stack):
+    self._child_owner = None
+
     while True:
       analysis, result = self._block.count.evaluate_final(EvalContext(stack))
       self._handle.set_analysis(analysis)
@@ -120,7 +148,6 @@ class Program(BaseProgram):
         return
 
     self._iteration_count = result.value if (result.value != 'forever') else None
-
     self._point = point or ProgramPoint(child=None, iteration=0)
 
     while True:
@@ -132,8 +159,8 @@ class Program(BaseProgram):
       if (self._iteration_count is not None) and (self._iteration >= self._iteration_count):
         break
 
-      owner = self._handle.create_child(self._block.block)
-      self._mode = ProgramMode.Normal(owner)
+      self._child_owner = self._handle.create_child(self._block.block)
+      self._mode = ProgramMode.Normal(self._child_owner)
 
       self._handle.set_location(ProgramLocation(
         self._mode.export(),
@@ -145,7 +172,7 @@ class Program(BaseProgram):
         self._block.symbol: { 'index': self._iteration }
       }
 
-      await owner.run(current_point.child, child_stack)
+      await self._child_owner.run(current_point.child, child_stack)
 
       if self._point:
         pass
@@ -154,3 +181,5 @@ class Program(BaseProgram):
 
       self._point = ProgramPoint(child=None, iteration=(self._iteration + 1))
       self._handle.collect_children()
+
+    del self._child_owner

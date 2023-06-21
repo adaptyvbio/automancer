@@ -23,7 +23,6 @@ import { ViewExperiments } from './views/experiments';
 import { ViewPluginView } from './views/plugin-view';
 import { ViewDrafts } from './views/protocols';
 import { ViewDesign } from './views/test/design';
-import { Draft } from './draft';
 
 
 const Views: ViewType[] = [ViewExperimentWrapper, ViewExperiments, ViewConf, ViewDesign, ViewDraftWrapper, ViewDrafts, ViewPluginView];
@@ -59,7 +58,8 @@ export interface RouteData {
 function createViewRouteMatchFromRouteData(routeData: RouteData): ViewRouteMatch {
   return {
     id: routeData.route.id,
-    params: routeData.params
+    params: routeData.params,
+    state: navigation.currentEntry.getState()
   };
 }
 
@@ -287,6 +287,8 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
       if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
         let url = event.destination.url;
         let routeData = this.resolveNavigation(url);
+
+        // TODO: Avoid calling callback if hash() doesn't change
 
         if (this.unsavedDataCallback) {
           let viewRouteMatch = (routeData?.route.component === this.state.currentRouteData!.route.component)

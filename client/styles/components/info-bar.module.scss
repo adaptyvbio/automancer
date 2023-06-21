@@ -1,0 +1,57 @@
+@use "../constants" as *;
+
+
+$border-color: #ddd;
+
+.container {
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.root {
+  display: flex;
+  justify-content: space-between;
+  height: 24px;
+
+  padding: 0 0.4rem;
+  border-top: 1px solid $border-color;
+
+  font-size: 0.9rem;
+
+  &[data-mode="default"] {
+    --hover-color: #f0f0f0;
+  }
+
+  &[data-mode="edit"] {
+    background-color: #3d9970;
+    --hover-color: #{lighten(#3d9970, 4%)};
+
+    color: #fff;
+  }
+
+  > * {
+    display: flex;
+    align-items: center;
+
+    > * {
+      padding: 0 0.6rem;
+    }
+
+    > button {
+      width: auto;
+      align-self: stretch;
+
+      &:hover {
+        background-color: var(--hover-color);
+      }
+
+      &::before {
+        content: "[";
+      }
+
+      &::after {
+        content: "]";
+      }
+    }
+  }
+}

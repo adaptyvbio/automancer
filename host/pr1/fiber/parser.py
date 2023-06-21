@@ -18,7 +18,7 @@ from ..langservice import LanguageServiceAnalysis, LanguageServiceToken
 from ..reader import LocatedString, LocatedValue, LocationArea
 from ..ureg import ureg
 from ..util.decorators import debug
-from ..util.misc import Exportable, HierarchyNode
+from ..util.misc import Exportable, ExportableABC, HierarchyNode
 from .eval import EvalContext, EvalEnv, EvalEnvs, EvalEnvValue, EvalStack, EvalSymbol, EvalVariables
 from .expr import Evaluable
 
@@ -165,6 +165,12 @@ class BaseProgram(ABC):
       case _:
         raise ValueError(f"Unknown message type '{message['type']}'")
 
+  def study(self, block: 'BaseBlock') -> 'Optional[BaseProgramPoint]':
+    return None
+
+  def swap(self, block: 'BaseBlock'):
+    pass
+
   def term_info(self, children_terms: dict[int, Term]) -> tuple[Term, dict[int, DurationTerm]]:
     return DurationTerm.unknown(), dict()
 
@@ -184,7 +190,7 @@ class HeadProgram(BaseProgram):
   def stable(self):
     return False
 
-class BaseProgramPoint(ABC):
+class BaseProgramPoint(ExportableABC):
   pass
 
 class BaseBlock(ABC, HierarchyNode):

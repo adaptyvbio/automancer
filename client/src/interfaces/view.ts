@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { ComponentType } from 'react';
 
 import type { Application } from '../application';
 import type { Host } from '../host';
@@ -21,12 +21,12 @@ export interface ViewHashOptions<T extends ViewRouteMatch = ViewRouteMatchDefaul
   route: T;
 }
 
-export type ViewType = React.ComponentType<ViewProps> & {
+export type ViewType = ComponentType<ViewProps> & {
   hash?(options: ViewHashOptions): string;
-  routes: ViewRoute[];
+  routes: ViewRouteDef[];
 }
 
-export interface ViewRoute {
+export interface ViewRouteDef {
   id: string;
   pattern: string;
 }
@@ -34,9 +34,11 @@ export interface ViewRoute {
 export interface ViewRouteMatch {
   id: string;
   params: {};
+  state: unknown;
 }
 
-export interface ViewRouteMatchDefault extends ViewRouteMatch {
+export interface ViewRouteMatchDefault {
   id: any;
   params: any;
+  state: any;
 }

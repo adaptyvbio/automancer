@@ -15,18 +15,12 @@ $height: 2rem;
 $field-hgap: 0.8rem;
 
 
-.main {
-  width: 800px;
+// .main {
+//   width: 800px;
 
-  margin: 0 auto;
-  padding: 30px;
-}
-
-.main2 {
-  height: 100%;
-  padding: 1rem 1.4rem;
-  overflow-y: auto;
-}
+//   margin: 0 auto;
+//   padding: 30px;
+// }
 
 
 .field {
@@ -247,7 +241,20 @@ $field-hgap: 0.8rem;
 
 .actions {
   display: flex;
-  column-gap: 0.4rem;
+  column-gap: 1rem;
+
+  > * {
+    display: flex;
+    column-gap: 0.4rem;
+  }
+
+  &[data-mode="both"] {
+    justify-content: space-between;
+  }
+
+  &[data-mode="right"] {
+    justify-content: end;
+  }
 }
 
 

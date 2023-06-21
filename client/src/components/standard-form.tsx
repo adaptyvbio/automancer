@@ -1,32 +1,43 @@
 import { OrdinaryId } from 'pr1-shared';
 
 import formStyles from '../../styles/components/form.module.scss';
-import modalStyles from '../../styles/components/modal.module.scss';
 
 import { Icon } from './icon';
-import * as util from '../util';
 
 import { ShortcutGuide } from './shortcut-guide';
+import { useEffect, useRef } from 'react';
 
 
 export function Actions(props: React.PropsWithChildren<{
-  mode?: 'default' | 'modal';
+  mode?: 'both' | 'left' | 'right';
 }>) {
   return (
-    <div className={util.formatClass(formStyles.actions, { [modalStyles.actions]: (props.mode === 'modal') })}>
-      {props.children}
+    <div className={formStyles.actions} data-mode={props.mode}>
+      {(props.mode !== 'both')
+        ? <div>{props.children}</div>
+        : props.children}
     </div>
   );
 }
 
 export function Action(props: {
+  autoFocus?: unknown;
+  disabled?: unknown;
   label: string;
   onClick?(): void;
   shortcut?: string;
   type?: 'button' | 'submit';
 }) {
+  let ref = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (props.autoFocus) {
+      ref.current!.focus();
+    }
+  }, []);
+
   return (
-    <button type={props.type ?? 'button'} onClick={props.onClick} className={formStyles.btn}>
+    <button type={props.type ?? 'button'} disabled={!!props.disabled} className={formStyles.btn} onClick={props.onClick} ref={ref}>
       <ShortcutGuide shortcut={props.shortcut ?? ((props.type === 'submit') ? 'Enter' : null)}>{props.label}</ShortcutGuide>
     </button>
   );

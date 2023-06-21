@@ -18,7 +18,10 @@ export type RequestFunc = UnionToIntersection<
     (options: {
       type: 'compileDraft';
       draft: any;
-      options: any;
+      options: {
+        trusted: boolean;
+      };
+      studyExperimentId: ExperimentId | null;
     }) => Promise<any>
   ) | (
     (options: {

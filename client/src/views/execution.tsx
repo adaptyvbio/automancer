@@ -24,6 +24,7 @@ import { ViewExperimentWrapperRoute } from './experiment-wrapper';
 import { createPluginContext } from '../plugin';
 import { ShortcutCode } from '../shortcuts';
 import { EditProtocolModal } from '../components/modals/edit-protocol';
+import { ViewDraft } from './draft';
 
 
 export type ViewExecutionProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
@@ -276,11 +277,16 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
 
         {this.state.editModalOpen && (
           <EditProtocolModal
+            originalAvailable={this.master.protocol.draft.id in this.props.app.state.drafts}
             onCancel={() => {
               this.setState({ editModalOpen: false });
             }}
             onSubmit={(mode) => {
-
+              if (mode === 'original') {
+                ViewDraft.navigate(this.master.protocol.draft.id, {
+                  experimentId: this.props.experiment.id
+                });
+              }
             }} />
         )}
       </main>

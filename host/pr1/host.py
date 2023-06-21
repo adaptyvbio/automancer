@@ -293,7 +293,18 @@ class Host:
             protocol=None
           )
 
-        return compilation.export()
+        if compilation.protocol and (experiment_id := request["studyExperimentId"]):
+          experiment = self.experiments[experiment_id]
+          assert experiment.master
+
+          study_point = experiment.master.study(compilation.protocol.root)
+        else:
+          study_point = None
+
+        return {
+          **compilation.export(),
+          "studyPoint": study_point.export() if study_point else None
+        }
 
       case "createExperiment":
         experiment_id = ExperimentId(str(uuid.uuid4()))

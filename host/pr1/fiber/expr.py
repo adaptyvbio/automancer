@@ -183,6 +183,15 @@ class Evaluable(Exportable, ABC, Generic[T]):
   def evaluate(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | EllipsisType]':
     ...
 
+  def evaluate_constant(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
+    analysis, result = self.evaluate(context)
+
+    match result:
+      case EvaluableConstantValue(value):
+        return analysis, value
+      case _:
+        return analysis, Ellipsis
+
   def evaluate_final(self, context: EvalContext) -> 'tuple[LanguageServiceAnalysis, T | EllipsisType]':
     analysis, result = self.evaluate(context)
 
@@ -340,3 +349,11 @@ class EvaluableConstantValue(Evaluable[S], Generic[S]):
 
   def __repr__(self):
     return f"{self.__class__.__name__}({self.inner_value!r})"
+
+
+__all__ = [
+  'Evaluable',
+  'EvaluableConstantValue',
+  'EvaluablePythonExpr',
+  'PythonExprObject'
+]

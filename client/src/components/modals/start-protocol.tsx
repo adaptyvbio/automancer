@@ -78,9 +78,13 @@ export function StartProtocolModal(props: {
             targetRef={refNewExperimentTitleInput} />
         )}
 
-        <Form.Actions mode="modal">
-          <Form.Action label="Cancel" shortcut="Escape" onClick={props.onCancel} />
-          <Form.Action label="Start" type="submit" />
+        <Form.Actions mode="both">
+          <div>
+            <Form.Action label="Cancel" shortcut="Escape" onClick={props.onCancel} />
+          </div>
+          <div>
+            <Form.Action label="Start" type="submit" />
+          </div>
         </Form.Actions>
       </form>
     </Modal>

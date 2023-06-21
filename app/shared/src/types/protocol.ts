@@ -1,8 +1,16 @@
+import type { DocumentId, DraftId } from './draft';
 import type { PluginName } from './plugin';
 import type { Brand } from './util';
 
 
 export interface Protocol {
+  draft: {
+    id: DraftId;
+    documents: {
+      id: DocumentId;
+    }[];
+    entryDocumentId: DocumentId;
+  };
   name: string | null;
   root: ProtocolBlock;
 }

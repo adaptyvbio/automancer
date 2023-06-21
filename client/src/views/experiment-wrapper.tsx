@@ -12,6 +12,7 @@ export interface ViewExperimentWrapperRoute {
   params: {
     experimentId: ExperimentId;
   };
+  state: void;
 }
 
 

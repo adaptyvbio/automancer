@@ -29,9 +29,15 @@ class ProgramLocation(Exportable):
     }
 
 @dataclass(kw_only=True)
-class ProgramPoint:
+class ProgramPoint(BaseProgramPoint):
   child: Optional[BaseProgramPoint]
   index: int
+
+  def export(self):
+    return {
+      "child": self.child and self.child.export(),
+      "index": self.index
+    }
 
 @debug
 class Program(BaseProgram):
@@ -58,6 +64,20 @@ class Program(BaseProgram):
       self._child_program.halt()
     elif point.child:
       self._child_program.jump(point.child)
+
+  def study(self, block):
+    if not isinstance(block, Block):
+      return None
+
+    child_count = len(block.children)
+
+    if (child_count - 1) < self._child_index:
+      return None
+
+    return ProgramPoint(
+      child=self._child_program.study(block.children[self._child_index]),
+      index=self._child_index
+    )
 
   def term_info(self, children_terms):
     current_child_term = children_terms[self._child_index]

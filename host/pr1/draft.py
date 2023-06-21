@@ -41,9 +41,9 @@ class Draft:
 
   def export(self):
     return {
+      "id": self.id,
       "documents": [document.export() for document in self.documents],
-      "entryDocumentId": self.entry_document_id,
-      "id": self.id
+      "entryDocumentId": self.entry_document_id
     }
 
   @classmethod

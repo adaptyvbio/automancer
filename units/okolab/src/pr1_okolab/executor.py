@@ -34,10 +34,11 @@ worker_type = am.RecordType({
 
 class Executor(am.BaseExecutor):
   options_type = am.RecordType({
-    'devices': am.Attribute(am.ListType(am.DictType({
+    'devices': am.Attribute(am.ListType(am.RecordType({
       'address': am.Attribute(am.StrType(), default=None),
       'device1': am.Attribute(worker_type, default=None),
       'device2': am.Attribute(worker_type, default=None),
+      'label': am.Attribute(am.StrType(), default=None),
       'id': am.IdentifierType(),
       'serial': am.Attribute(am.StrType(), default=None)
     })), default=list())

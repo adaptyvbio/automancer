@@ -44,7 +44,7 @@ class StaticServer:
       return res
 
     self._application = aiohttp.web.Application(middlewares=[middleware])
-    self._application.add_routes([aiohttp.web.static(f"/{namespace}/{unit.version}", unit.client_path) for namespace, unit in self._app.host.units.items() if hasattr(unit, 'client_path')])
+    self._application.add_routes([aiohttp.web.static(f"/{namespace}/{unit.version}", unit.client_path) for namespace, unit in self._app.host.plugins.items() if hasattr(unit, 'client_path')])
 
     runner = aiohttp.web.AppRunner(self._application, access_log_class=AccessLogger)
     await runner.setup()

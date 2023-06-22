@@ -16,9 +16,10 @@ from pr1.fiber.eval import EvalContext
 from pr1.fiber.expr import export_value
 from pr1.fiber.master2 import Master
 from pr1.host import Host
-from pr1.units.base import BaseMasterRunner
+from pr1.units.base import BaseRunner
 from pr1.util.asyncio import race, run_anonymous, wait_all
 from pr1.util.decorators import provide_logger
+from .parser import ValueNodeValueDependency
 
 from . import logger
 from .program import PublisherProgram
@@ -48,7 +49,7 @@ class NodeInfo:
 
 
 @provide_logger(logger)
-class Runner(BaseMasterRunner):
+class Runner(BaseRunner):
   def __init__(self, master):
     self._master = master
 
@@ -64,6 +65,10 @@ class Runner(BaseMasterRunner):
         node_info.worker_task = None
 
     self._node_infos.clear()
+
+  # async def watch_dependency(self, dependency: ValueNodeValueDependency):
+  #   node =
+  #   x = dependency.path
 
 
   def add(self, trace: PublisherTrace, assignments: dict[ValueNode, Any]):

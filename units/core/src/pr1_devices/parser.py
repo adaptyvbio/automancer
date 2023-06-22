@@ -1,9 +1,8 @@
-from ast import Expr
 import ast
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, Literal, final
+from typing import TYPE_CHECKING, Any, final
 
 import pr1 as am
 from pr1.devices.nodes.collection import CollectionNode
@@ -13,17 +12,14 @@ from pr1.devices.nodes.primitive import BooleanNode, EnumNode
 from pr1.devices.nodes.value import ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
 from pr1.fiber.expr import Evaluable, export_value
-from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, EnumType,
-                                   PotentialExprType, PrimitiveType,
-                                   QuantityType)
-from pr1.fiber.master2 import ProgramHandle
 from pr1.fiber.parser import (BaseBlock, BaseParser,
                               BasePartialPassiveTransformer,
-                              BasePassiveTransformer, BaseProgram, BlockUnitState,
+                              BasePassiveTransformer, BlockUnitState,
                               FiberParser, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
+from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType,
+                       EnumType, PrimitiveType, QuantityType)
 from pr1.reader import LocatedValue
-from pr1.staticanalysis.expr import BaseExprEval, BaseExprWatch
 from pr1.util.decorators import debug
 
 from . import namespace
@@ -345,24 +341,20 @@ class ValueNodeValueExprWatch(am.BaseExprWatch):
 
   @property
   def dependencies(self):
-    return {ValueNodeValueDependency(self.path)}
+    return {ValueNodeValueDependency(self.node, self.path)}
 
   def evaluate(self, changed_dependencies):
-    return self.node.value and self.node.value[0]
+    return self.node.value and self.node.value[1]
 
 @dataclass(frozen=True)
 class ValueNodeValueDependency(am.Dependency):
+  node: am.ValueNode
   path: am.NodePath
 
+  async def init(self):
+    async for _ in self.watch():
+      break
 
-@debug
-class DevicesState(BlockUnitState):
-  def __init__(self, values: dict[NodePath, Evaluable]):
-    self.values = values
-
-  def export(self) -> object:
-    return {
-      "values": [
-        [path, value.export()] for path, value in self.values.items()
-      ]
-    }
+  async def watch(self):
+    async for _ in am.Watcher([self.node], modes={'value'}):
+      yield

@@ -422,7 +422,7 @@ function NumericValueEditor(props: {
     let variant = ureg.findVariant(ureg.getContext(context), { system: 'SI' });
     let currentOption = ureg.findBestVariantOption(currentTargetValue, variant);
 
-    currentMagnitude = ureg.formatMagnitude(currentTargetValue / currentOption.value, (props.spec.resolution ?? 0) / currentOption.value);
+    currentMagnitude = ureg.formatMagnitude(currentTargetValue, (props.spec.resolution ?? 0), currentOption);
     currentOptionIndex = unitOptions.findIndex((option) => (option.value.value === currentOption.value));
   } else {
     currentMagnitude = '\u2013';
@@ -437,7 +437,7 @@ function NumericValueEditor(props: {
     let strValue = rawValue.input.replaceAll(MINUS_CLUSTER, '-');
 
     if (/^-?\d+(?:\.\d+)?$/.test(strValue)) {
-      floatValue = parseFloat(strValue) * unitOptions[rawValue.optionIndex].value.value;
+      floatValue = ureg.applyOption(parseFloat(strValue), unitOptions[rawValue.optionIndex].value);
       floatValueInRange = (floatValue >= range[0]) && (floatValue <= range[1]);
     }
   }

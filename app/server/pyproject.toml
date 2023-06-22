@@ -18,5 +18,8 @@ dependencies=[
 [project.entry-points.console_scripts]
 automancer = "pr1_server:main"
 
+[tool.setuptools.packages.find]
+include = ["pr1_server"]
+
 [tool.setuptools_scm]
 root = "../.."

@@ -8,12 +8,10 @@ dynamic = ["version"]
 requires-python = ">3.11"
 
 [project.entry-points."pr1.units"]
-amf = "pr1_amf"
 devices = "pr1_devices"
 do = "pr1_do"
 name = "pr1_name"
 repeat = "pr1_repeat"
-segment = "pr1_segment"
 sequence = "pr1_sequence"
 shorthands = "pr1_shorthands"
 timer = "pr1_timer"
@@ -25,10 +23,8 @@ where = ["src"]
 "pr1_devices.client" = ["*"]
 "pr1_name.client" = ["*"]
 "pr1_repeat.client" = ["*"]
-"pr1_segment.client" = ["*"]
 "pr1_sequence.client" = ["*"]
 "pr1_shorthands.client" = ["*"]
-"pr1_state.client" = ["*"]
 "pr1_timer.client" = ["*"]
 
 [tool.setuptools_scm]

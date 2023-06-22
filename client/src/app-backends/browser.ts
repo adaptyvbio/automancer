@@ -1,10 +1,12 @@
 import * as idb from 'idb-keyval';
 import hash from 'object-hash';
 
+import { Lock } from 'pr1-shared';
+
 import { getRecordSnapshot, SnapshotProvider } from '../snapshot';
 import { BrowserStorageStore } from '../store/browser-storage';
 import { assert, Pool, wrapAbortable } from '../util';
-import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentSlotStatus, DraftDocumentExtension, DraftInstance, DraftInstanceId, DraftInstanceSnapshot, Lock } from './base';
+import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, DocumentPath, DocumentSlot, DocumentSlotSnapshot, DocumentSlotStatus, DraftDocumentExtension, DraftInstance, DraftInstanceId, DraftInstanceSnapshot } from './base';
 
 
 interface BrowserStoreMainEntry {

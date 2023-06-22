@@ -15,8 +15,8 @@ class Parser(am.BaseParser):
     objectives = executor._objectives
     optconfs = executor._optconfs
 
-    assert objectives
-    assert optconfs
+    assert objectives is not None
+    assert optconfs is not None
 
     self.transformers = [am.ProcessTransformer(Process, {
       'capture': am.Attribute(

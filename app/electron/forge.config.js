@@ -15,7 +15,7 @@ module.exports = {
       /^\/node_modules(\/|$)/,
       /^\/scripts(\/|$)/,
       /^\/src(\/|$)/,
-      /^\/tsconfig.json$/,
+      /^\/tsconfig(?:\.[^\/]*)?\.json$/,
       /^\/tmp(\/|$)/
     ],
     afterCopy: [

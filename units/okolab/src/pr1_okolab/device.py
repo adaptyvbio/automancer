@@ -16,7 +16,8 @@ class BoardTemperatureNode(am.NumericNode, am.PollableReadableNode):
     super().__init__(
       context="temperature",
       readable=True,
-      poll_interval=1.0
+      poll_interval=1.0,
+      resolution=(0.1 * am.ureg.K)
     )
 
     self.icon = "thermostat"
@@ -42,7 +43,8 @@ class TemperatureReadoutNode(am.NumericNode, am.PollableReadableNode):
     super().__init__(
       context="temperature",
       poll_interval=0.2,
-      readable=True
+      readable=True,
+      resolution=(0.1 * am.ureg.K)
     )
 
     self.icon = "thermostat"
@@ -53,7 +55,13 @@ class TemperatureReadoutNode(am.NumericNode, am.PollableReadableNode):
 
   async def _read(self):
     async def read():
-      return (await self._worker._get_temperature_readout()) * am.ureg.degC
+      value = await self._worker._get_temperature_readout()
+
+      if value is None:
+        self.connected = False
+        raise am.NodeUnavailableError
+
+      return value * am.ureg.degC
 
     try:
       await self._set_value_at_half_time(read())
@@ -70,6 +78,7 @@ class TemperatureSetpointNode(am.NumericNode, am.PollableReadableNode):
         25.0 * am.ureg.degC,
         60.0 * am.ureg.degC
       ),
+      resolution=(0.1 * am.ureg.K),
       readable=True,
       writable=True
     )
@@ -91,7 +100,7 @@ class TemperatureSetpointNode(am.NumericNode, am.PollableReadableNode):
 
   async def _write(self, value: Quantity | am.NullType, /):
     try:
-      await self._worker._set_temperature_setpoint((value / am.ureg.degC).magnitude if not isinstance(value, am.NullType) else None)
+      await self._worker._set_temperature_setpoint(value.magnitude_as(am.ureg.degC) if not isinstance(value, am.NullType) else None)
     except OkolabDeviceConnectionError as e:
       raise am.NodeUnavailableError from e
 
@@ -260,8 +269,6 @@ class WorkerDevice(am.DeviceNode):
 
     self._node_readout = TemperatureReadoutNode(worker=self)
     self._node_setpoint = TemperatureSetpointNode(worker=self)
-    self._status = None
-    self._status_check_task = None
 
     self.nodes = { node.id: node for node in {self._node_readout, self._node_setpoint} }
 

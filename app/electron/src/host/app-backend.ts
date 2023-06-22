@@ -119,7 +119,7 @@ export class ElectronAppDocumentSlot extends SnapshotProvider<DocumentSlotSnapsh
       instance: this._instance && {
         ...this._instance
       },
-      path: this._path.split('/'),
+      path: this._path.split((window.api.platform === 'win32') ? '\\' : '/'),
       status: this._status
     };
   }

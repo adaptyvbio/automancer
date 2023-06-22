@@ -283,8 +283,22 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                       magnitude = '[disabled]';
                     } else {
                       switch (spec.type) {
-                        case 'numeric':
+                        case 'boolean': {
+                          magnitude = (lastValueEvent.value.innerValue as boolean) ? 'true' : 'false';
+                          break;
+                        }
+
+                        case 'enum': {
+                          let caseId = lastValueEvent.value.innerValue as (number | string);
+                          let specCase = spec.cases.find((specCase) => (specCase.id === caseId))!;
+
+                          magnitude = specCase.label;
+                          break;
+                        }
+
+                        case 'numeric': {
                           let joint;
+
                           [magnitude, joint, unit] = ureg.formatQuantityAsReact((lastValueEvent.value.innerValue as NumericValue).magnitude, spec.resolution ?? 0, ureg.deserializeContext(spec.context), {
                             createElement,
                             sign: (spec.range && spec.range[0] < 0),
@@ -292,9 +306,12 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                           });
 
                           break;
-                        default:
+                        }
+
+                        default: {
                           magnitude = '[unknown]';
                           break;
+                        }
                       }
                     }
 

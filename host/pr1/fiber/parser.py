@@ -496,11 +496,12 @@ class FiberProtocol(Exportable):
 
 class FiberParser:
   def __init__(self, draft: Draft, *, Parsers: Sequence[type[BaseParser]], host: 'Host'):
-    self._next_eval_symbol = 0
-    self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
-
+    # Must be before self._parsers is initialized
     self.draft = draft
     self.host = host
+
+    self._next_eval_symbol = 0
+    self._parsers: list[BaseParser] = [Parser(self) for Parser in Parsers]
 
     self.analysis, protocol = self._parse()
     self.protocol = protocol if not isinstance(protocol, EllipsisType) else None

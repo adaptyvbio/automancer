@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 import uuid
-from types import EllipsisType
+from types import EllipsisType, NoneType
 from typing import Any, Optional, Protocol, cast
 
 from . import logger, reader
@@ -17,7 +17,7 @@ from .experiment import Experiment, ExperimentId
 from .fiber.master2 import Master
 from .fiber.parser import AnalysisContext
 from .input import (Attribute, BoolType, KVDictType, PrimitiveType, RecordType,
-                    StrType)
+                    StrType, UnionType)
 from .langservice import LanguageServiceAnalysis
 from .plugin.manager import PluginManager
 from .util.misc import create_datainstance
@@ -90,13 +90,16 @@ class Host:
     conf_type = RecordType({
       'id': StrType(),
       'name': StrType(),
-      'plugins': KVDictType(
-        StrType(),
-        RecordType({
-          'development': Attribute(BoolType(), default=False),
-          'enabled': Attribute(BoolType(), default=True),
-          'options': Attribute(PrimitiveType(dict), default={})
-        })
+      'plugins': UnionType(
+        PrimitiveType(NoneType),
+        KVDictType(
+          StrType(),
+          RecordType({
+            'development': Attribute(BoolType(), default=False),
+            'enabled': Attribute(BoolType(), default=True),
+            'options': Attribute(PrimitiveType(dict), default={})
+          })
+        )
       ),
       'version': PrimitiveType(int)
     })
@@ -104,16 +107,16 @@ class Host:
     conf_path = (self.data_dir / "setup.yml")
 
     if not conf_path.exists():
-      conf: HostConf = create_datainstance({
-        'id': hex(uuid.getnode())[2:],
-        'name': platform.node(),
-        'plugins': {},
-        'version': 1
-      })
+      with conf_path.open("w") as file:
+        file.write(reader.dumps({
+          'id': hex(uuid.getnode())[2:],
+          'name': platform.node(),
+          'plugins': {},
+          'version': 1
+        }))
 
-      conf_path.open("w").write(reader.dumps(conf))
-
-    document = Document.text((self.data_dir / "setup.yml").open().read())
+    with (self.data_dir / "setup.yml").open() as file:
+      document = Document.text(file.read())
 
     analysis = LanguageServiceAnalysis()
     conf_data = analysis.add(reader.loads2(document.source))
@@ -130,7 +133,7 @@ class Host:
       namespace.value: create_datainstance({
         **conf.plugins[namespace]._asdict(), # type: ignore
         'options': raw_plugin_conf.value.options
-      }) for namespace, raw_plugin_conf in (raw_conf.value.plugins or dict()).items()
+      }) for namespace, raw_plugin_conf in (raw_conf.value.plugins.value or dict()).items()
     }
 
     self.id = conf.id
@@ -141,7 +144,7 @@ class Host:
     # -- Load units ---------------------------------------
 
     self.executors = dict()
-    self.manager = PluginManager(reader.LocatedValue(plugins_conf, raw_conf))
+    self.manager = PluginManager(reader.LocatedValue(plugins_conf, raw_conf.area))
 
     logger.info(f"Loaded {len(self.manager.plugins)} plugins")
 

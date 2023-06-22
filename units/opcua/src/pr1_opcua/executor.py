@@ -53,7 +53,7 @@ class OPCUAConfigurationError(Diagnostic):
 
 class Executor(BaseExecutor):
   options_type = am.RecordType({
-    'devices': am.ListType(am.RecordType({
+    'devices': am.Attribute(am.ListType(am.RecordType({
       'address': am.StrType(),
       'id': am.IdentifierType(),
       'label': am.Attribute(am.StrType(), default=None),
@@ -71,7 +71,7 @@ class Executor(BaseExecutor):
         'unit': am.Attribute(am.ArbitraryQuantityType(allow_unit=True), default=(1.0 * ureg.dimensionless)),
         'writable': am.Attribute(am.BoolType(), default=False)
       }))
-    }))
+    })), default=list())
   })
 
   def __init__(self, conf: Any, *, host: Host):

@@ -1,84 +1,96 @@
-from typing import Any
+from typing import Any, Literal, Optional, Protocol
 
-from pr1.input import Attribute, DictType, EnumType, IdentifierType, ListType, PrimitiveType, StrType
-from pr1.host import Host
-from pr1.units.base import BaseExecutor
-from pr1.util.asyncio import try_all
-from pr1.util.pool import Pool
+import automancer as am
 
 from .device import MasterDevice, WorkerDevice
 
 
-worker_type = DictType({
-  'id': IdentifierType(),
-  'description': Attribute(StrType(), optional=True),
-  'label': Attribute(StrType(), optional=True),
-  'side': Attribute(EnumType('glass', 'metal'), optional=True),
-  'type': PrimitiveType(int)
+class WorkerConf(Protocol):
+  id: str
+  description: Optional[str]
+  label: Optional[str]
+  side: Optional[Literal['glass', 'metal']]
+  type: int
+
+class DeviceConf(Protocol):
+  id: str
+  address: Optional[str]
+  device1: Optional[WorkerConf]
+  device2: Optional[WorkerConf]
+  label: Optional[str]
+  serial: Optional[str]
+
+class Conf(Protocol):
+  devices: list[DeviceConf]
+
+
+worker_type = am.RecordType({
+  'id': am.IdentifierType(),
+  'description': am.Attribute(am.StrType(), default=None),
+  'label': am.Attribute(am.StrType(), default=None),
+  'side': am.Attribute(am.EnumType('glass', 'metal'), default=None),
+  'type': am.IntType(mode='positive')
 })
 
-class Executor(BaseExecutor):
-  options_type = DictType({
-    'devices': Attribute(ListType(DictType({
-      'address': Attribute(StrType(), optional=True),
-      'device1': Attribute(worker_type, optional=True),
-      'device2': Attribute(worker_type, optional=True),
-      'id': IdentifierType(),
-      'serial': Attribute(StrType(), optional=True)
-    })), optional=True)
+class Executor(am.BaseExecutor):
+  options_type = am.RecordType({
+    'devices': am.Attribute(am.ListType(am.DictType({
+      'address': am.Attribute(am.StrType(), default=None),
+      'device1': am.Attribute(worker_type, default=None),
+      'device2': am.Attribute(worker_type, default=None),
+      'id': am.IdentifierType(),
+      'serial': am.Attribute(am.StrType(), default=None)
+    })), default=list())
   })
 
-  def __init__(self, conf: Any, *, host: Host):
+  def __init__(self, conf: Any, *, host: am.Host):
     self._devices = dict[str, MasterDevice]()
     self._host = host
 
-    if conf:
-      for device_conf in conf.get('devices', list()):
-        master_id = device_conf['id']
+    executor_conf: Conf = conf.dislocate()
 
-        if master_id in self._host.devices:
-          raise master_id.error(f"Duplicate master device id '{master_id}'")
+    for device_conf in executor_conf.devices:
+      if device_conf.id in self._host.devices:
+        raise Exception(f"Duplicate master device id '{device_conf.id}'")
 
-        master_device = MasterDevice(
-          id=master_id.value,
-          address=(device_conf['address'].value if 'address' in device_conf else None),
-          label=(device_conf['label'].value if 'label' in device_conf else None),
-          serial_number=(device_conf['serial'].value if 'serial' in device_conf else None)
+      master_device = MasterDevice(
+        id=device_conf.id,
+        address=device_conf.address,
+        label=device_conf.label,
+        serial_number=device_conf.serial
+      )
+
+      self._devices[master_device.id] = master_device
+      self._host.devices[master_device.id] = master_device
+
+      def create_worker(worker_conf: WorkerConf, *, index: int):
+        if worker_conf.id in self._host.devices:
+          raise Exception(f"Duplicate worker device id '{worker_conf.id}'")
+
+        worker_device = WorkerDevice(
+          description=worker_conf.description,
+          id=worker_conf.id,
+          index=index,
+          label=worker_conf.label,
+          master=master_device,
+          side=(worker_conf.side and { 'glass': 1, 'metal': 2 }.get(worker_conf.side)),
+          type=worker_conf.type
         )
 
-        self._devices[master_id.value] = master_device
-        self._host.devices[master_id.value] = master_device
+        match index:
+          case 1: master_device._worker1 = worker_device
+          case 2: master_device._worker2 = worker_device
 
-        def create_worker(worker_conf, *, index: int):
-          worker_id = worker_conf['id']
+        self._host.devices[worker_device.id] = worker_device
 
-          if worker_id in self._host.devices:
-            raise worker_id.error(f"Duplicate worker device id '{worker_id}'")
-
-          worker_device = WorkerDevice(
-            description=(worker_conf['description'].value if 'description' in worker_conf else None),
-            id=worker_id.value,
-            index=index,
-            label=(worker_conf['label'].value if 'label' in worker_conf else None),
-            master=master_device,
-            side=({ 'glass': 1, 'metal': 2 }.get(worker_conf.get('side'))),
-            type=worker_conf['type'].value
-          )
-
-          match index:
-            case 1: master_device._worker1 = worker_device
-            case 2: master_device._worker2 = worker_device
-
-          self._host.devices[worker_id.value] = worker_device
-
-        if 'device1' in device_conf:
-          create_worker(device_conf['device1'], index=1)
-        if 'device2' in device_conf:
-          create_worker(device_conf['device2'], index=2)
+      if device_conf.device1:
+        create_worker(device_conf.device1, index=1)
+      if device_conf.device2:
+        create_worker(device_conf.device2, index=2)
 
   async def start(self):
-    async with Pool.open() as pool:
-      await try_all([
+    async with am.Pool.open() as pool:
+      await am.try_all([
         pool.wait_until_ready(device.start()) for device in self._devices.values()
       ])
 

@@ -2,6 +2,7 @@ import { AppBackend, AppBackendSnapshot, DocumentId, DocumentInstanceSnapshot, D
 import { DraftEntryId } from 'pr1-library';
 
 import { DraftSkeleton } from '../interfaces';
+import './navigation';
 
 
 export class ElectronAppBackend extends SnapshotProvider<AppBackendSnapshot> implements AppBackend {

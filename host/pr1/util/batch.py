@@ -1,108 +1,123 @@
 # Batch workers
 
-from asyncio import Task
 import asyncio
+from asyncio import Event, Future
 from logging import Logger
-from typing import Awaitable, Callable, Generic, Optional, TypeVar
+from typing import Awaitable, Callable, Generic, TypeVar
 
-from .decorators import provide_logger
 from ..host import logger as parent_logger
+from .asyncio import race
+from .decorators import provide_logger
 
 
 K = TypeVar('K')
 R = TypeVar('R')
 
+
 @provide_logger(parent_logger)
 class BatchWorker(Generic[K, R]):
+  """
+  A utility class to batch an operation.
+
+  Batched items are pushed to the batch queue. using `write()`. If there is no batch currently being committed, all items in the batch queue are committed by providing a list to the committer function. If all writes are cancelled, the committer function is not called, or cancelled if is already running. The committer function returns a list of results, which are returned to the corresponding `write()` calls.
+  """
+
   def __init__(self, commit: Callable[[list[K]], Awaitable[list[R]]]):
     self._commit = commit
-    self._items = list[K]()
-    self._items_count = 0
-    self._task: Optional[Task[list[R]]] = None
-    self._task_items_count: Optional[int] = None
+
+    self._futures = dict[int, Future[R]]()
+    self._items = dict[int, K]()
+    self._next_item_index = 0
+    self._write_event = Event()
 
     self._logger: Logger
 
-  async def _run_commit(self):
-    self._logger.debug(f"Committing {len(self._items)} items")
+  async def start(self):
+    while True:
+      await self._write_event.wait()
+      self._write_event.clear()
 
-    items = self._items.copy()
-    self._items.clear()
-    self._task_items_count = len(items)
+      indices = list(self._items.keys())
+      items = list(self._items.values())
+      self._items.clear()
 
-    try:
-      result = await self._commit(items)
-    finally:
-      self._task = None
-      self._task_items_count = None
+      self._logger.debug(f"Committing {items} items")
 
-      if self._items:
-        self._task = asyncio.create_task(self._run_commit())
+      futures = [self._futures[index] for index in indices]
 
-    self._logger.debug('Committed')
-    return result
+      end_index, results = await race(
+        self._commit(items),
+        asyncio.wait(futures)
+      )
+
+      if end_index == 0:
+        self._logger.debug('Committed')
+
+        for index, result in zip(indices, results):
+          future = self._futures.get(index)
+
+          if future:
+            future.set_result(result)
 
   async def write(self, item: K, /):
     self._logger.debug(f"Write request: {item}")
 
-    index = len(self._items)
-    self._items.append(item)
+    item_index = self._next_item_index
+    self._next_item_index += 1
 
-    if not self._task:
-      self._task = asyncio.create_task(self._run_commit())
+    self._items[item_index] = item
+    self._write_event.set()
+
+    future = Future[R]()
+    self._futures[item_index] = future
 
     try:
-      results = await asyncio.shield(self._task)
+      return await future
     except asyncio.CancelledError:
-      if self._task_items_count is not None:
-        self._task_items_count -= 1
-
-        if self._task_items_count < 1:
-          self._task.cancel()
-          await self._task
+      # If not being written yet
+      if item_index in self._items:
+        del self._items[item_index]
 
       raise
-    else:
-      return results[index]
+    finally:
+      del self._futures[item_index]
 
 
 if __name__ == "__main__":
-  def add(a):
-    return asyncio.create_task(_add(a))
-
-  async def _add(a):
+  async def writer(items: list[int]):
     try:
-      x = await a
-    except BaseException as e:
-      print("Done with exception:", repr(e))
-    else:
-      print("Done with value:", x)
+      print("Write", items)
+      await asyncio.sleep(1)
 
-  async def commit(items):
-    print(items)
-    await asyncio.sleep(1)
-    return items
+      print("Done", [item * 2 for item in items])
+      return [item * 2 for item in items]
+    except asyncio.CancelledError:
+      print("Cancelled")
+      raise
 
-  async def par():
-    await asyncio.sleep(0.5)
-    # a.cancel()
-    b.cancel()
+  def run(item: int):
+    async def t():
+      result = await worker.write(item)
+      print("Result", item, "->", result)
 
-  cluster = BatchWorker(commit)
+    return asyncio.create_task(t())
+
+  worker = BatchWorker(writer)
 
   async def main():
-    global a, b, x
+    asyncio.create_task(worker.start())
 
-    asyncio.create_task(par())
+    # run(2)
+    t = run(3)
+    s = run(4)
+    t.cancel()
+    s.cancel()
+    await asyncio.sleep(0.001)
+    run(5)
+    run(6)
 
-    a = add(cluster.write('a'))
-    b = add(cluster.write('b'))
-
-    # x = await asyncio.gather(a, b)
-
-    await b
-
-    # print('->', x)
-    # print('->', await cluster.write('c', 6))
+    await asyncio.sleep(3)
+    print(worker._items)
+    print(worker._futures)
 
   asyncio.run(main())

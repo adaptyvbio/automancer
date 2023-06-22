@@ -290,6 +290,9 @@ class OPCUADevice(DeviceNode):
 
   async def start(self):
     async with Pool.open() as pool:
+      pool.start_soon(self._read_worker.start())
+      pool.start_soon(self._write_worker.start())
+
       for node in self.nodes.values():
         pool.start_soon(node.start(), priority=1)
 

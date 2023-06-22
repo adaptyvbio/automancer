@@ -883,8 +883,9 @@ export class CoreApplication {
         defaultHostSettingsId: null,
         drafts: {},
         hostSettingsRecord: {},
+        stores: {},
         version: CoreApplication.version
-      });
+      } satisfies AppData);
     }
   }
 

@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "main": "lib/app/index.js",
   "types": "lib/types/types.d.ts",
-  "productName": "PR–1",
+  "productName": "Automancer",
   "scripts": {
     "build": "npm run build:app && npm run build:client && npm run build:preload && npm run build:renderer && npm run build:static",
     "build:app": "esbuild src/index.ts --bundle --external:electron --platform=node --loader:.node=copy --outdir=lib/app --target=node18",

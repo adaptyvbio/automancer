@@ -368,7 +368,7 @@ class App:
 
 
 def main():
-  parser = argparse.ArgumentParser(description="PR–1 server")
+  parser = argparse.ArgumentParser(description="Automancer server")
 
   parser.add_argument("--conf")
   parser.add_argument("--data-dir", required=True)

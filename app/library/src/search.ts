@@ -10,7 +10,7 @@ import { AppData, HostSettings, TcpHostOptionsCandidate } from './types/app-data
 
 export function getDesktopAppDataLocation(): string | null {
   switch (process.platform) {
-    case 'darwin': return path.resolve(os.homedir(), 'Application Support/PR–1/App Data');
+    case 'darwin': return path.resolve(os.homedir(), 'Application Support/Automancer/App Data');
     case 'win32': return null; // TODO: Update
     default: return null;
   }

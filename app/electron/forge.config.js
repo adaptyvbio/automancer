@@ -6,7 +6,7 @@ console.log();
 
 module.exports = {
   packagerConfig: {
-    name: 'PR–1',
+    name: 'Automancer',
     icon: 'icon.icns',
     ignore: [
       /^\/forge\.config\.js$/,

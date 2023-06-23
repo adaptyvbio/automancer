@@ -231,6 +231,7 @@ class Evaluable(Exportable, ABC, Generic[T]):
   # def eval(self, context: EvalContext, *, final: Optional[bool] = None) -> 'tuple[LanguageServiceAnalysis, Evaluable[T] | T | EllipsisType]':
   #   ...
 
+  # @deprecated
   def eval(self, context: EvalContext, *, final: bool):
     return self.evaluate(context) # type: ignore
 

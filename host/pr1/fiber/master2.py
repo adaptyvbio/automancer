@@ -60,14 +60,15 @@ class Master:
     self._events = list[ProgramExecEvent]()
     self._file: IO[bytes]
     self._logger: Logger
+    self._next_analysis_item_id = 0
     self._owner: ProgramOwner
     self._pool: Pool
     self._root_entry: Optional[ProgramHandleEntry] = None
-    self._update_callback: Optional[SimpleCallbackFunction] = None
-    self._update_lock_depth = 0
-    self._update_handle: Optional[asyncio.Handle] = None
-    self._update_traces = list[StackSummary]()
     self._task: Optional[Task[None]] = None
+    self._update_callback: Optional[SimpleCallbackFunction] = None
+    self._update_handle: Optional[asyncio.Handle] = None
+    self._update_lock_depth = 0
+    self._update_traces = list[StackSummary]()
 
     for line in self.protocol.root.format_hierarchy().splitlines():
       self._logger.debug(line)
@@ -75,6 +76,10 @@ class Master:
   @property
   def pool(self):
     return self._pool
+
+  def allocate_analysis_item_id(self):
+    self._next_analysis_item_id += 1
+    return self._next_analysis_item_id
 
   def halt(self):
     self._handle._program.halt()
@@ -462,11 +467,11 @@ class ProgramHandle:
     else:
       self.master.update_soon()
 
-  def set_analysis(self, analysis: DiagnosticAnalysis):
+  def send_analysis(self, analysis: DiagnosticAnalysis, /):
     self._analysis += analysis
     self.master.update_soon()
 
-  def set_term(self):
+  def send_term(self):
     self._updated_term = True
     current_handle = self
 
@@ -484,7 +489,7 @@ class ProgramHandle:
 
     self._term_info = self._program.term_info(current_children_terms)
 
-  def set_location(self, location: Exportable, /):
+  def send_location(self, location: Exportable, /):
     self._location = location
     self._updated_location = True
 
@@ -523,13 +528,13 @@ class ProgramOwner:
 
     del self._handle.context
 
-  def swap(self, block: BaseBlock):
-    if not self._program.study(block):
-      return False
+  # def swap(self, block: BaseBlock):
+  #   if not self._program.study(block):
+  #     return False
 
-    self._program.swap(block)
+  #   self._program.swap(block)
 
-    return True
+  #   return True
 
   def study_block(self, block: BaseBlock):
     return self._program.study_block(block)

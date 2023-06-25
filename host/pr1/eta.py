@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Self
+from typing import Self, TypeAlias
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class DurationTerm:
     return cls(0.0)
 
 
-Term = DatetimeTerm | DurationTerm
+Term: TypeAlias = DatetimeTerm | DurationTerm
 
 
 __all__ = [

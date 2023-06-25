@@ -246,7 +246,7 @@ class ProcessProgram(HeadProgram):
 
         self._mode = ProcessProgramMode.Pausing(self._mode.term)
 
-        self._handle.set_location(
+        self._handle.send_location(
           ProcessProgramLocation(
             mode=self._mode.export(),
             pausable=self._process_pausable,
@@ -313,7 +313,7 @@ class ProcessProgram(HeadProgram):
     Mode = ProcessProgramMode
 
     self._mode = Mode.Starting()
-    self._handle.set_location(
+    self._handle.send_location(
       ProcessProgramLocation(
         mode=self._mode.export(),
         pausable=False,
@@ -324,11 +324,11 @@ class ProcessProgram(HeadProgram):
 
     analysis, data = await self._block._data.evaluate_final_async(EvalContext(stack, cwd_path=self._handle.master.experiment.path))
 
-    self._handle.set_analysis(RuntimeAnalysis.downcast(analysis))
+    self._handle.send_analysis(RuntimeAnalysis.downcast(analysis))
 
     if isinstance(data, EllipsisType):
       self._mode = Mode.Broken()
-      self._handle.set_location(
+      self._handle.send_location(
         ProcessProgramLocation(
           mode=self._mode.export(),
           pausable=False,
@@ -407,7 +407,7 @@ class ProcessProgram(HeadProgram):
                 ) if term else DurationTerm.unknown()
               )
 
-              self._handle.set_term()
+              self._handle.send_term()
 
             case (
               Mode.Halting() | Mode.Normal() | Mode.Paused() | Mode.Resuming() | Mode.Starting(),
@@ -430,11 +430,11 @@ class ProcessProgram(HeadProgram):
 
           if isinstance(self._mode, Mode.Normal) and isinstance(event, (ProcessExecEvent, ProcessPauseEvent)) and event.duration:
             self._mode.term = DatetimeTerm(event_time) + event.duration
-            self._handle.set_term()
+            self._handle.send_term()
 
           if isinstance(self._mode, Mode.Paused) and isinstance(event, (ProcessExecEvent, ProcessPauseEvent)) and event.duration:
             self._mode.term = event.duration
-            self._handle.set_term()
+            self._handle.send_term()
 
         except (ProcessInternalError, ProcessProtocolError) as e:
           logger.error(f"Process protocol error: {e}")

@@ -74,7 +74,7 @@ class Diagnostic(Exportable):
   message: str
   _: KW_ONLY
   description: list[str] = field(default_factory=list)
-  id: Optional[str] = None
+  id: Optional[int] = None
   name: str = 'unknown'
   references: list[DiagnosticReference] = field(default_factory=list)
   trace: Optional[Trace] = None

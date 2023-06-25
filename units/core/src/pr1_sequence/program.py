@@ -107,8 +107,8 @@ class Program(BaseProgram):
       child_block = self._block.children[self._child_index]
 
       self._child_program = self._handle.create_child(child_block, id=self._child_index)
-      self._handle.set_location(ProgramLocation(index=self._child_index))
-      self._handle.set_term()
+      self._handle.send_location(ProgramLocation(index=self._child_index))
+      self._handle.send_term()
 
       current_point = self._point
       self._point = None

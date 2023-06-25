@@ -161,13 +161,13 @@ class Program(BaseProgram):
 
     while True:
       analysis, result = self._block.count.evaluate_final(EvalContext(stack))
-      self._handle.set_analysis(analysis)
+      self._handle.send_analysis(analysis)
 
       if not isinstance(result, EllipsisType):
         break
 
       self._mode = ProgramMode.Failed()
-      self._handle.set_location(ProgramLocation(self._mode.export()))
+      self._handle.send_location(ProgramLocation(self._mode.export()))
 
       await self._mode.event.wait()
 
@@ -189,7 +189,7 @@ class Program(BaseProgram):
       self._child_owner = self._handle.create_child(self._block.block)
       self._mode = ProgramMode.Normal(self._child_owner)
 
-      self._handle.set_location(ProgramLocation(
+      self._handle.send_location(ProgramLocation(
         self._mode.export(),
         count=self._iteration_count,
         iteration=self._iteration

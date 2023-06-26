@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -61,22 +62,24 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, T_ProcessPoint]):
 class ProcessFailureError(Exception):
   message: Optional[str] = None
 
+
 class ProcessException(Exception):
   pass
 
-
 @dataclass(frozen=True, slots=True)
-class JumpRequest(Exception, Generic[T_ProcessPoint]):
+class ProcessJumpRequest(ProcessException, Generic[T_ProcessPoint]):
   point: T_ProcessPoint
 
-class PauseRequest(ProcessException):
+class ProcessPauseRequest(ProcessException):
   pass
 
-class SwapRequest(ProcessException):
+class ProcessSwapRequest(ProcessException):
   pass
 
 
 class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
+  _instance_number: ClassVar[int] = 0
+
   def __init__(self, program: 'ProcessProgram', data: T_ProcessData):
     self._data = data
     self._program = program
@@ -89,6 +92,13 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
   @property
   def data(self):
     return self._data
+
+  @functools.cached_property
+  def logger(self):
+    instance_number = self.__class__._instance_number
+    self.__class__._instance_number += 1
+
+    return logger.getChild(f"process{instance_number}")
 
   @property
   def pausable(self):
@@ -105,7 +115,7 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
   def point(self):
     return cast(Optional[T_ProcessPoint], self._program._point)
 
-  def cast(self, value: JumpRequest, /) -> JumpRequest[T_ProcessPoint]:
+  def cast(self, value: ProcessJumpRequest, /) -> ProcessJumpRequest[T_ProcessPoint]:
     return value
 
   async def checkpoint(self):
@@ -126,9 +136,9 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
       #   raise asyncio.CancelledError
       case ProcessProgramForm.Jumping(point):
         self._mode.form = ProcessProgramForm.Normal()
-        raise JumpRequest(point)
+        raise ProcessJumpRequest(point)
       case ProcessProgramForm.Pausing():
-        raise PauseRequest
+        raise ProcessPauseRequest
 
   async def wait(self, awaitable: Awaitable[T], /) -> T:
     end_index, result = await race(
@@ -268,17 +278,22 @@ class ProcessProgramMode:
 
   @dataclass(frozen=True, slots=True)
   class Failed:
-    diagnostic_id: int
+    error_id: int
     retry_future: Future[bool] = field(default_factory=Future, init=False, repr=False)
 
     def location(self):
-      return ProcessProgramMode.FailedLocation()
+      return ProcessProgramMode.FailedLocation(self.error_id)
 
   @comserde.serializable
   @dataclass(frozen=True, slots=True)
   class FailedLocation:
+    error_id: int
+
     def export(self):
-      return { "type": "failed" }
+      return {
+        "type": "failed",
+        "errorId": self.error_id
+      }
 
   @dataclass(frozen=True, slots=True)
   class Halting:
@@ -485,7 +500,7 @@ class ProcessProgram(BaseProgram):
         await self._mode.task
       except asyncio.CancelledError:
         break
-      except JumpRequest as e:
+      except ProcessJumpRequest as e:
         self._logger.warning("Failed to jump, restarting process")
         self._point = e.point
       except ProcessFailureError as e:
@@ -495,6 +510,7 @@ class ProcessProgram(BaseProgram):
         self._mode = ProcessProgramMode.Failed(error_id)
         self._handle.send_analysis(RuntimeAnalysis(errors=[error]))
         self._handle.send_term()
+        self._send_location()
 
         if not await self._mode.retry_future:
           break
@@ -502,11 +518,12 @@ class ProcessProgram(BaseProgram):
         log_exception(self._logger, level=logging.ERROR)
 
         error_id = self._handle.master.allocate_analysis_item_id()
-        error = Diagnostic("Process internal error: {e!r}", id=error_id)
+        error = Diagnostic(f"Process internal error: {e!r}", id=error_id)
 
         self._mode = ProcessProgramMode.Failed(error_id)
         self._handle.send_analysis(RuntimeAnalysis(errors=[error]))
         self._handle.send_term()
+        self._send_location()
 
         if not await self._mode.retry_future:
           break
@@ -515,14 +532,15 @@ class ProcessProgram(BaseProgram):
 
 
 __all__ = [
-  'BaseProcessPoint',
-  'JumpRequest',
-  'PauseRequest',
   'BaseClassProcess',
+  'BaseProcessPoint',
   'ProcessContext',
   'ProcessException',
+  'ProcessFailureError',
+  'ProcessJumpRequest',
+  'ProcessPauseRequest',
   'ProcessProgram',
   'ProcessProgramForm',
   'ProcessProgramMode',
-  'SwapRequest'
+  'ProcessSwapRequest'
 ]

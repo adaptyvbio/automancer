@@ -1,13 +1,14 @@
-import comserde
-import uuid
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
+
+import comserde
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticReference
-from ..util.misc import Exportable
+from ..rich_text import RichText
+from ..util.misc import Exportable, ExportableABC
 
 
 T_Exportable = TypeVar('T_Exportable', bound=Exportable)
@@ -15,10 +16,8 @@ T_Exportable = TypeVar('T_Exportable', bound=Exportable)
 
 @comserde.serializable
 @dataclass(kw_only=True)
-class Effect(ABC, Exportable):
-  author_path: list[int]
+class Effect(ExportableABC):
   references: list[DiagnosticReference] = field(default_factory=list)
-  time: float
 
   @abstractmethod
   def export(self) -> Any:
@@ -35,10 +34,17 @@ class FileCreatedEffect(Effect):
 @dataclass
 class GenericEffect(Effect):
   message: str
+  description: Optional[RichText] = None
+  _: KW_ONLY
+  icon: Optional[str] = None
 
   def export(self):
     return {
       **super().export(),
+
+      "type": "generic",
+      "description": self.description and self.description.export(),
+      "icon": self.icon,
       "message": self.message
     }
 

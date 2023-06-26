@@ -14,5 +14,6 @@ export * from './types/host';
 export * from './types/master';
 export * from './types/plugin';
 export * from './types/protocol';
+export * from './types/rich-text';
 export * from './types/unit';
 export * from './types/util';

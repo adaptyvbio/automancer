@@ -36,7 +36,7 @@ def cumsum(items: Iterable[T_SupportsAdd]) -> Generator[T_SupportsAdd, None, Non
 def fast_hash(data: bytes | str, /):
   return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
 
-def log_exception(logger, *, level = logging.DEBUG):
+def log_exception(logger: logging.Logger, *, level: int = logging.DEBUG):
   for line in traceback.format_exc().split("\n"):
     if line:
       logger.log(level, line)

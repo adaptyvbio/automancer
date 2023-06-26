@@ -27,7 +27,7 @@ export interface Master {
 }
 
 export interface MasterAnalysis {
-  effects: MasterEffect[];
+  effects: Effect[];
   errors: MasterDiagnostic[];
   warnings: MasterDiagnostic[];
 }
@@ -41,6 +41,3 @@ export type MasterItem<T> = Omit<T, 'runtimeInfo'> & {
 
 export type MasterDiagnostic = MasterItem<Diagnostic>;
 export type AnyDiagnostic = Diagnostic | MasterDiagnostic;
-
-export type MasterEffect = MasterItem<Effect>;
-export type AnyEffect = Effect | MasterEffect;

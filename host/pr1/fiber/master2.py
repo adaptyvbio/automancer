@@ -78,8 +78,10 @@ class Master:
     return self._pool
 
   def allocate_analysis_item_id(self):
+    analysis_item_id = self._next_analysis_item_id
     self._next_analysis_item_id += 1
-    return self._next_analysis_item_id
+
+    return analysis_item_id
 
   def halt(self):
     self._handle._program.halt()

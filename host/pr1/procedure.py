@@ -1,33 +1,60 @@
 import asyncio
-from logging import Logger
+import logging
+import time
+from abc import ABC, abstractmethod
 from asyncio import Event, Future, Task
 from dataclasses import dataclass, field
-import logging
+from enum import Enum, auto
+from logging import Logger
 from types import EllipsisType
-from typing import Any, Awaitable, Coroutine, Generator, Generic, Optional, Protocol, TypeVar, assert_never, cast, final
-from uuid import uuid4
+from typing import (Any, Awaitable, ClassVar, Generic, Optional, Protocol,
+                    TypeVar, assert_never, cast, final)
 
-from pr1.eta import Term
-
-from .eta import DurationTerm, Term
-
-from .master.analysis import Effect, RuntimeAnalysis
+import comserde
 
 from . import logger
-from .util.decorators import provide_logger
-from .analysis import DiagnosticAnalysis
 from .error import Diagnostic
-from .util.asyncio import cancel_task, race
-from .fiber.eval import EvalContext
+from .eta import DurationTerm, Term
+from .fiber.expr import Evaluable
+from .fiber.parser import BaseBlock, BaseProgram, BaseProgramPoint
+from .master.analysis import Effect, RuntimeAnalysis
+from .plugin.manager import PluginName
+from .reader import PossiblyLocatedValue
+from .util.asyncio import race
+from .util.decorators import provide_logger
 from .util.misc import Exportable, UnreachableError, log_exception
-from .fiber.process import BaseProcessPoint, ProcessBlock, ProgramExecEvent
-from .fiber.parser import BaseProgram, BaseProgramPoint
 
+
+class BaseProcessPoint(ABC):
+  pass
 
 T = TypeVar('T')
 T_ProcessData = TypeVar('T_ProcessData')
 T_ProcessLocation = TypeVar('T_ProcessLocation', bound=Exportable)
 T_ProcessPoint = TypeVar('T_ProcessPoint', bound=BaseProcessPoint)
+
+class ProcessBlock(BaseBlock, Generic[T_ProcessData, T_ProcessPoint]):
+  def __init__(self, data: Evaluable[PossiblyLocatedValue[T_ProcessData]], process: 'BaseClassProcess', /):
+    self._data = data
+    self._process = process
+
+  def duration(self):
+    return self._process.duration(self._data)
+
+  def create_program(self, handle):
+    return ProcessProgram(self, handle)
+
+  def import_point(self, data, /):
+    return self._process.import_point(data)
+
+  def export(self):
+    return {
+      "name": self._process.name,
+      "namespace": self._process.namespace,
+
+      "data": self._process.export_data(self._data),
+      "duration": self.duration().export()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +77,8 @@ class SwapRequest(ProcessException):
 
 
 class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
-  def __init__(self, program: 'ProcessProgram'):
+  def __init__(self, program: 'ProcessProgram', data: T_ProcessData):
+    self._data = data
     self._program = program
 
   @property
@@ -60,7 +88,7 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
 
   @property
   def data(self):
-    return cast(T_ProcessData, self._program._block._data)
+    return self._data
 
   @property
   def pausable(self):
@@ -77,19 +105,27 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
   def point(self):
     return cast(Optional[T_ProcessPoint], self._program._point)
 
+  def cast(self, value: JumpRequest, /) -> JumpRequest[T_ProcessPoint]:
+    return value
+
   async def checkpoint(self):
     match self._mode.form:
       # case ProcessProgramForm.Paused():
       #   raise RuntimeError("Invalid call, calling checkpoint() while paused is invalid")
       case ProcessProgramForm.Pausing():
         self._mode.form = ProcessProgramForm.Paused()
+        self._program._send_location()
+
         await self.wait(self._mode.form.event.wait())
       case _:
         self.test()
 
   def test(self):
     match self._mode.form:
+      # case ProcessProgramForm.Halting():
+      #   raise asyncio.CancelledError
       case ProcessProgramForm.Jumping(point):
+        self._mode.form = ProcessProgramForm.Normal()
         raise JumpRequest(point)
       case ProcessProgramForm.Pausing():
         raise PauseRequest
@@ -122,88 +158,183 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
     self._program._handle.send_analysis(RuntimeAnalysis(warnings=[warning]))
 
   def send_location(self, location: T_ProcessLocation, /):
-    self._mode.location = location
+    self._mode.process_location = location
     self._program._send_location()
 
 
-
-class ProcessProtocol(Protocol):
-  async def __call__(self, data, context: ProcessContext) -> None:
+class FunctionProcessProtocol(Protocol[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
+  async def __call__(self, context: ProcessContext[T_ProcessData, T_ProcessLocation, T_ProcessPoint]) -> None:
     ...
 
+class BaseClassProcess(ABC, Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
+  name: str
+  namespace: PluginName
 
+  def duration(self, data: T_ProcessData) -> DurationTerm:
+    raise NotImplementedError
+
+  def import_point(self, raw_point: Any, /) -> T_ProcessPoint:
+    raise NotImplementedError
+
+  def export_data(self, data: T_ProcessData) -> Any:
+    ...
+
+  @abstractmethod
+  async def __call__(self, context: ProcessContext[T_ProcessData, T_ProcessLocation, T_ProcessPoint]) -> None:
+    ...
+
+ProcessProtocol = FunctionProcessProtocol[T_ProcessData, T_ProcessLocation, T_ProcessPoint] | BaseClassProcess[T_ProcessData, T_ProcessLocation, T_ProcessPoint]
+
+
+@comserde.serializable
+class ProcessProgramFormLocation(Enum):
+  Halting = auto()
+  Jumping = auto()
+  Normal = auto()
+  Paused = auto()
+  Pausing = auto()
+
+  def export(self):
+    match self:
+      case ProcessProgramFormLocation.Halting:
+        return "halting"
+      case ProcessProgramFormLocation.Jumping:
+        return "jumping"
+      case ProcessProgramFormLocation.Normal:
+        return "normal"
+      case ProcessProgramFormLocation.Paused:
+        return "paused"
+      case ProcessProgramFormLocation.Pausing:
+        return "pausing"
 
 class ProcessProgramForm:
-  class Halting:
-    pass
-
-  @dataclass
-  class Jumping:
-    point: Any
-
-  class Normal:
-    pass
+  class Base:
+    location: ClassVar[ProcessProgramFormLocation]
 
   @dataclass(frozen=True, slots=True)
-  class Paused:
+  class Halting(Base):
+    location = ProcessProgramFormLocation.Halting
+
+  @dataclass(frozen=True, slots=True)
+  class Jumping(Base):
+    location = ProcessProgramFormLocation.Jumping
+    point: Any
+
+  @dataclass(frozen=True, slots=True)
+  class Normal(Base):
+    location = ProcessProgramFormLocation.Normal
+
+  @dataclass(frozen=True, slots=True)
+  class Paused(Base):
+    location = ProcessProgramFormLocation.Paused
     event: Event = field(default_factory=Event, init=False, repr=False)
 
-  class Pausing:
-    pass
+  @dataclass(frozen=True, slots=True)
+  class Pausing(Base):
+    location = ProcessProgramFormLocation.Pausing
 
-  class Starting:
-    pass
-
-  Any = __import__('typing').Any # Halting | Normal | Paused | Pausing | Starting
+  Any = Halting | Jumping | Normal | Paused | Pausing
 
 
 class ProcessProgramMode:
-  @dataclass
+  @dataclass(frozen=True, slots=True)
   class CollectionFailed:
     retry_future: Future[bool] = field(default_factory=Future, init=False, repr=False)
 
-  @dataclass
+    def location(self):
+      return ProcessProgramMode.CollectionFailedLocation()
+
+  @comserde.serializable
+  @dataclass(frozen=True, slots=True)
+  class CollectionFailedLocation:
+    def export(self):
+      return { "type": "collectionFailed" }
+
+  @dataclass(frozen=True, slots=True)
   class Collecting:
     task: Task[object] = field(repr=False)
 
-    def export(self):
-      return {
-        "type": "collecting"
-      }
+    def location(self):
+      return ProcessProgramMode.CollectingLocation()
 
-  @dataclass
+    def export(self):
+      return { "type": "collecting" }
+
+  @comserde.serializable
+  @dataclass(frozen=True, slots=True)
+  class CollectingLocation:
+    def export(self):
+      return { "type": "collecting" }
+
+  @dataclass(frozen=True, slots=True)
   class Failed:
     diagnostic_id: int
     retry_future: Future[bool] = field(default_factory=Future, init=False, repr=False)
 
-  @dataclass
-  class Halting:
-    pass
+    def location(self):
+      return ProcessProgramMode.FailedLocation()
 
-  @dataclass
+  @comserde.serializable
+  @dataclass(frozen=True, slots=True)
+  class FailedLocation:
+    def export(self):
+      return { "type": "failed" }
+
+  @dataclass(frozen=True, slots=True)
+  class Halting:
+    def location(self):
+      return ProcessProgramMode.HaltingLocation()
+
+  @comserde.serializable
+  @dataclass(frozen=True, slots=True)
+  class HaltingLocation:
+    def export(self):
+      return { "type": "halting" }
+
+  @dataclass(slots=True)
   class Running:
     form: ProcessProgramForm.Any
-    location: Optional[Exportable]
+    process_location: Optional[Exportable]
     pausable: bool
     task: Task[None] = field(repr=False)
     term: Term
 
+    def location(self):
+      return ProcessProgramMode.RunningLocation(
+        form=self.form.location,
+        process_location=self.process_location,
+        pausable=self.pausable
+      )
+
+  @comserde.serializable
+  @dataclass(frozen=True, slots=True)
+  class RunningLocation:
+    form: ProcessProgramFormLocation
+    process_location: Optional[Exportable]
+    pausable: bool
+
     def export(self):
       return {
         "type": "running",
-        "form": self.form,
+        "form": self.form.export(),
+        "processLocation": self.process_location and self.process_location.export(),
         "pausable": self.pausable
       }
 
   Any = CollectionFailed | Collecting | Failed | Halting | Running
+  AnyLocation = CollectionFailedLocation | CollectingLocation | FailedLocation | HaltingLocation | RunningLocation
 
 
+@comserde.serializable
 @dataclass
 class ProcessProgramLocation:
-  mode: ProcessProgramMode.Any
+  mode: ProcessProgramMode.AnyLocation
 
   def export(self):
-    return {}
+    return {
+      "date": time.time() * 1000,
+      "mode": self.mode.export()
+    }
 
 
 @dataclass
@@ -216,9 +347,8 @@ class ProcessProgram(BaseProgram):
   def __init__(self, block: ProcessBlock, handle):
     self._block = block
     self._handle = handle
-    self._process: ProcessProtocol
 
-    self._action_event: Event
+    self._action_event = Event()
     self._mode: ProcessProgramMode.Any
     self._point: Optional[BaseProcessPoint]
 
@@ -258,12 +388,12 @@ class ProcessProgram(BaseProgram):
       case _:
         assert_never(self._mode)
 
-  def pause(self):
+  def _pause(self):
     match self._mode:
       case ProcessProgramMode.Running(form=ProcessProgramForm.Normal(), pausable=True):
         self._mode.form = ProcessProgramForm.Pausing()
         self._send_location()
-        self._action_future.set_exception(PauseRequest)
+        self._action_event.set()
 
         return True
 
@@ -272,6 +402,30 @@ class ProcessProgram(BaseProgram):
 
       case _:
         return False
+
+  def _resume(self):
+    match self._mode:
+      case ProcessProgramMode.Running(form=ProcessProgramForm.Paused(event=event)):
+        event.set()
+
+        self._mode.form = ProcessProgramForm.Normal()
+        self._send_location()
+
+        return True
+
+      case _:
+        return False
+
+  def receive(self, message, /):
+    match message["type"]:
+      case "jump":
+        self.jump(self._block.import_point(message["value"]))
+      case "pause":
+        self._pause()
+      case "resume":
+        self._resume()
+      case _:
+        return super().receive(message)
 
   def term_info(self, children_terms):
     match self._mode:
@@ -287,12 +441,10 @@ class ProcessProgram(BaseProgram):
   #   self._action_future = Future()
 
   def _send_location(self):
-    self._handle.send_location(ProcessProgramLocation(
-      mode=self._mode
-    ))
+    self._handle.send_location(ProcessProgramLocation(self._mode.location()))
 
-  async def run(self, point: ProcessProgramPoint, stack):
-    self._point = point.process_point
+  async def run(self, point: Optional[ProcessProgramPoint], stack):
+    self._point = point and point.process_point
 
     while True:
       task = asyncio.create_task(self._block._data.evaluate_final_async(self._handle.context))
@@ -318,14 +470,13 @@ class ProcessProgram(BaseProgram):
 
 
     while True:
-      self._action_future = Future()
-      self._context = ProcessContext(self)
+      self._context = ProcessContext(self, data.dislocate())
 
       self._mode = ProcessProgramMode.Running(
         form=ProcessProgramForm.Normal(),
-        location=None,
+        process_location=None,
         pausable=False,
-        task=asyncio.create_task(self._process(data, self._context)),
+        task=asyncio.create_task(self._block._process(self._context)),
         term=DurationTerm.unknown()
       )
       self._send_location()
@@ -334,7 +485,7 @@ class ProcessProgram(BaseProgram):
         await self._mode.task
       except asyncio.CancelledError:
         break
-      except JumpRequest[T_ProcessPoint] as e:
+      except JumpRequest as e:
         self._logger.warning("Failed to jump, restarting process")
         self._point = e.point
       except ProcessFailureError as e:
@@ -364,13 +515,14 @@ class ProcessProgram(BaseProgram):
 
 
 __all__ = [
+  'BaseProcessPoint',
   'JumpRequest',
   'PauseRequest',
+  'BaseClassProcess',
   'ProcessContext',
   'ProcessException',
   'ProcessProgram',
   'ProcessProgramForm',
   'ProcessProgramMode',
-  'ProcessProtocol',
   'SwapRequest'
 ]

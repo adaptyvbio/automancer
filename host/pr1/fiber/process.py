@@ -6,8 +6,8 @@ import time
 from types import EllipsisType
 from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Generic, Optional, Self, TypeVar
 
+from ..procedure import BaseClassProcess, ProcessProtocol
 from ..eta import DatetimeTerm, DurationTerm
-
 from ..error import Diagnostic
 from ..reader import PossiblyLocatedValue
 from .expr import Evaluable
@@ -55,18 +55,14 @@ class ProcessTerminationEvent(BaseProcessEvent):
 ProcessEvent = ProcessExecEvent | ProcessFailureEvent | ProcessPauseEvent | ProcessTerminationEvent
 
 
-class BaseProcessPoint(ABC):
-  pass
-
-
 T_ProcessData = TypeVar('T_ProcessData')
-S_ProcessPoint = TypeVar('S_ProcessPoint', bound=BaseProcessPoint)
+S_ProcessPoint = TypeVar('S_ProcessPoint')
 
 class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
   name: ClassVar[str]
   namespace: ClassVar[str]
 
-  Point: ClassVar[Optional[type[BaseProcessPoint]]] = None
+  Point: ClassVar[Optional[type]] = None
 
   def __init__(self, data: T_ProcessData, /, master: 'Master'):
     ...
@@ -101,7 +97,7 @@ class BaseProcess(ABC, Generic[T_ProcessData, S_ProcessPoint]):
 
 
 class ProcessBlock(BaseBlock, Generic[T_ProcessData, S_ProcessPoint]):
-  def __init__(self, data: Evaluable[PossiblyLocatedValue[T_ProcessData]], ProcessType: type[BaseProcess[T_ProcessData, S_ProcessPoint]], /):
+  def __init__(self, data: Evaluable[PossiblyLocatedValue[T_ProcessData]], ProcessType: BaseClassProcess, /):
     self._data = data
     self._ProcessType = ProcessType
 
@@ -495,7 +491,6 @@ class ProcessProgram(HeadProgram):
 __all__ = [
   'BaseProcess',
   'BaseProcessEvent',
-  'BaseProcessPoint',
   'ProcessError',
   'ProcessExecEvent',
   'ProcessFailureEvent',

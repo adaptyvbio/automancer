@@ -27,6 +27,8 @@ if TYPE_CHECKING:
   from ..units.base import BaseRunner
   from .master2 import Mark, ProgramHandle
   from .process import BaseProcess
+  from ..procedure import BaseClassProcess
+
 
 
 class DuplicateLeadTransformInLayerError(Diagnostic):
@@ -325,7 +327,7 @@ BaseTransformers = list[BaseTransformer]
 
 @final
 class ProcessTransformer(BaseLeadTransformer):
-  def __init__(self, Process: 'type[BaseProcess]', attributes: dict[str, lang.Attribute], *, parser: 'FiberParser'):
+  def __init__(self, Process: 'BaseClassProcess', attributes: dict[str, lang.Attribute], *, parser: 'FiberParser'):
     assert attributes and (len(attributes) == 1)
 
     for attr in attributes.values():
@@ -345,7 +347,7 @@ class ProcessTransformer(BaseLeadTransformer):
       return LanguageServiceAnalysis(), list()
 
   def adopt(self, data: Evaluable, /, adoption_stack, trace):
-    from .process import ProcessBlock
+    from ..procedure import ProcessBlock
 
     analysis = LanguageServiceAnalysis()
     result = analysis.add(data.evaluate_provisional(EvalContext(adoption_stack)))

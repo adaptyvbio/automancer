@@ -52,7 +52,7 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<un
         element: (
           <GraphNode
             activity={location
-              ? [ProcessLocationMode.Broken, ProcessLocationMode.Paused].includes(location.mode)
+              ? (location.mode.type !== 'running')
                 ? 'paused'
                 : 'active'
               : 'default'}
@@ -92,21 +92,21 @@ export interface ProcessBlock<Data> extends ProtocolBlock {
 
 export interface ProcessLocation<Location> extends MasterBlockLocation {
   children: {};
-  mode: ProcessLocationMode;
-  pausable: boolean;
-  process: Location | null;
-  time: number;
-}
-
-export enum ProcessLocationMode {
-  Broken = 0,
-  Halting = 1,
-  Normal = 2,
-  Pausing = 3,
-  Paused = 4,
-  ResumingProcess = 5,
-  Starting = 6,
-  Terminated = 7
+  date: number;
+  mode: {
+    type: 'collecting';
+  } | {
+    type: 'collectionFailed';
+  } | {
+    type: 'failed';
+  } | {
+    type: 'halting';
+  } | {
+    type: 'running';
+    pausable: boolean;
+    processLocation: Location | null;
+    form: 'halting' | 'jumping' | 'normal' | 'paused' | 'pausing';
+  };
 }
 
 export function createProcessBlockImpl<Data, Location>(options: {
@@ -115,13 +115,18 @@ export function createProcessBlockImpl<Data, Location>(options: {
     data: Data;
     date: number;
     location: Location;
+    status: 'normal' | 'paused';
   }>;
   createFeatures?(data: Data, location: Location | null): FeatureDef[];
   getLabel?(data: Data): string | null;
 }): PluginBlockImpl<ProcessBlock<Data>, ProcessLocation<Location>> {
   return {
     Component(props) {
-      if (props.location.mode === ProcessLocationMode.Broken) {
+      let mode = props.location.mode;
+
+      // return <p>{JSON.stringify(mode)}</p>
+
+      if (mode.type === 'failed') {
         return (
           <p style={{ margin: '1rem 0' }}>An error occured.</p>
         );
@@ -129,13 +134,14 @@ export function createProcessBlockImpl<Data, Location>(options: {
 
       let Component = options.Component;
 
-      if (Component && props.location.process) {
+      if (Component && (mode.type === 'running') && mode.processLocation) {
         return (
           <Component
             data={props.block.data}
-            date={props.location.time}
+            date={props.location.date}
             context={props.context}
-            location={props.location.process} />
+            location={mode.processLocation}
+            status={(mode.form === 'paused') ? 'paused' : 'normal'} />
         );
       }
 
@@ -143,37 +149,43 @@ export function createProcessBlockImpl<Data, Location>(options: {
     },
     computeGraph,
     createCommands(block, location, context) {
-      if (location.mode === ProcessLocationMode.Paused) {
-        return [{
-          id: 'resume',
-          label: 'Resume',
-          shortcut: 'P',
-          onTrigger() {
-            context.pool.add(async () => {
-              await context.sendMessage({ type: 'resume' });
-            });
-          }
-        }];
-      }
+      if (location.mode.type === 'running') {
+        if (location.mode.form === 'paused') {
+          return [{
+            id: 'resume',
+            label: 'Resume',
+            shortcut: 'P',
+            onTrigger() {
+              context.pool.add(async () => {
+                await context.sendMessage({ type: 'resume' });
+              });
+            }
+          }];
+        }
 
-      if (location.pausable) {
-        return [{
-          id: 'pause',
-          disabled: (location.mode !== ProcessLocationMode.Normal),
-          label: 'Pause',
-          shortcut: 'P',
-          onTrigger() {
-            context.pool.add(async () => {
-              await context.sendMessage({ type: 'pause' });
-            });
-          }
-        }];
+        if (location.mode.pausable) {
+          return [{
+            id: 'pause',
+            disabled: (location.mode.form !== 'normal'),
+            label: 'Pause',
+            shortcut: 'P',
+            onTrigger() {
+              context.pool.add(async () => {
+                await context.sendMessage({ type: 'pause' });
+              });
+            }
+          }];
+        }
       }
 
       return [];
     },
     createFeatures(block, location) {
-      return options.createFeatures?.(block.data, location?.process ?? null) ?? [
+      let processLocation = (location?.mode.type === 'running')
+        ? location.mode.processLocation
+        : null;
+
+      return options.createFeatures?.(block.data, processLocation) ?? [
         { icon: 'not_listed_location',
           label: 'Process' }
       ];

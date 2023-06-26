@@ -8,6 +8,7 @@ export * from './term';
 export * from './types/communication';
 export * from './types/compilation';
 export * from './types/diagnostic';
+export * from './types/effect';
 export * from './types/experiment';
 export * from './types/host';
 export * from './types/master';

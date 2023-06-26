@@ -64,10 +64,11 @@ class RuntimeMasterAnalysisItem(Generic[T_Exportable]):
   event_index: int
 
   def export(self):
-    return {
-      "authorPath": self.author_path,
-      "eventIndex": self.event_index,
-      "value": self.value.export()
+    return self.value.export() | {
+      "runtimeInfo": {
+        "authorPath": self.author_path,
+        "eventIndex": self.event_index,
+      }
     }
 
 

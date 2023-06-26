@@ -1,12 +1,16 @@
-import { DocumentId } from './draft';
+import type { DocumentId } from './draft';
+import type { Brand } from './util';
 
+
+export type DiagnosticId = Brand<number, 'DiagnosticId'>;
 
 export type Diagnostic = {
-  id: string | null;
+  id: DiagnosticId | null;
   description: string[];
   message: string;
   name: string;
   references: DiagnosticReference[];
+  runtimeInfo: null;
   trace: DiagnosticReference[] | null;
 } & ({
   type: 'default';

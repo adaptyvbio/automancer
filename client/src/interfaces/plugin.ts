@@ -72,6 +72,7 @@ export interface PluginContext<PersistentStoreEntries extends StoreEntries = [],
 export type AnyPluginContext = PluginContext<any, any>;
 
 export interface BlockContext extends GlobalContext {
+  experiment: Experiment;
   sendMessage(message: unknown): Promise<void>;
 }
 

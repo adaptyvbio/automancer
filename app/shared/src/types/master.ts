@@ -1,5 +1,6 @@
 import type { CompilationAnalysis } from './compilation';
 import type { Diagnostic } from './diagnostic';
+import { Effect } from './effect';
 import type { Protocol, Term } from './protocol';
 import type { Brand } from './util';
 
@@ -26,12 +27,20 @@ export interface Master {
 }
 
 export interface MasterAnalysis {
-  errors: MasterDiagnosticItem<Diagnostic>[];
-  warnings: MasterDiagnosticItem<Diagnostic>[];
+  effects: MasterEffect[];
+  errors: MasterDiagnostic[];
+  warnings: MasterDiagnostic[];
 }
 
-export interface MasterDiagnosticItem<T> {
-  authorPath: number[];
-  eventIndex: number;
-  value: T;
+export type MasterItem<T> = Omit<T, 'runtimeInfo'> & {
+  runtimeInfo: {
+    authorPath: number[];
+    eventIndex: number;
+  };
 }
+
+export type MasterDiagnostic = MasterItem<Diagnostic>;
+export type AnyDiagnostic = Diagnostic | MasterDiagnostic;
+
+export type MasterEffect = MasterItem<Effect>;
+export type AnyEffect = Effect | MasterEffect;

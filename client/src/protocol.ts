@@ -1,4 +1,4 @@
-import { DatetimeTerm, DurationTerm, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
+import { DatetimeTerm, DurationTerm, Experiment, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
 
 import { BlockContext, GlobalContext } from './interfaces/plugin';
 import { HostDraftMark } from './interfaces/draft';
@@ -21,13 +21,14 @@ export interface BlockPair {
 }
 
 
-export function createBlockContext(blockPath: ProtocolBlockPath, experimentId: ExperimentId, context: GlobalContext): BlockContext {
+export function createBlockContext(blockPath: ProtocolBlockPath, experiment: Experiment, context: GlobalContext): BlockContext {
   return {
     ...context,
+    experiment,
     sendMessage: async (message) => {
       return await context.host.client.request({
         type: 'sendMessageToActiveBlock',
-        experimentId,
+        experimentId: experiment.id,
         path: blockPath,
         message
       });

@@ -37,7 +37,7 @@ export const ReactDOM = ReactDOM_;
 export * from './components/button';
 export * from './components/context-menu';
 export * from './components/description';
-export * from './components/diagnostics-report';
+export * from './components/report';
 export * from './components/error-boundary';
 export * from './components/expandable-text';
 export * from './components/features';

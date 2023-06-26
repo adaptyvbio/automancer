@@ -8,7 +8,6 @@ import viewStyles from '../../styles/components/view.module.scss';
 import { OrderedMap } from 'immutable';
 import { DocumentId, DocumentSlotSnapshot, DraftInstanceId, DraftInstanceSnapshot } from '../app-backends/base';
 import { BlockInspector } from '../components/block-inspector';
-import { DiagnosticsReport } from '../components/diagnostics-report';
 import { DocumentEditor } from '../components/document-editor';
 import { DraftSummary } from '../components/draft-summary';
 import { ErrorBoundary } from '../components/error-boundary';
@@ -33,6 +32,7 @@ import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
 import { InfoBar } from '../components/info-bar';
 import { ViewExperiment } from './experiment';
+import { ReportPanel } from '../components/report-panel';
 
 
 export interface DocumentItem {
@@ -648,8 +648,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                           label: 'Report',
                           shortcut: 'R',
                           contents: () => (
-                            <DiagnosticsReport
-                              analysis={this.state.compilation?.analysis ?? null} />
+                            <ReportPanel
+                              compilationAnalysis={this.state.compilation?.analysis ?? null} />
                           ) }
                       ]} />
                   </div>

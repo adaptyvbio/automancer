@@ -67,7 +67,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
 
     let leafPair = blockAnalysis.pairs.at(-1)!;
     let leafBlockImpl = getBlockImpl(leafPair.block, context);
-    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment.id, context);
+    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment, context);
 
     // console.log('*', blockAnalysis);
 
@@ -148,7 +148,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                 let blockPath = (pairIndex > 0)
                   ? group.path.slice(0, -pairIndex)
                   : group.path;
-                let blockContext = createBlockContext(blockPath, this.props.experiment.id, context);
+                let blockContext = createBlockContext(blockPath, this.props.experiment, context);
 
                 if (!blockImpl.createFeatures) {
                   return null;

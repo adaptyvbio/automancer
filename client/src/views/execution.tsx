@@ -1,30 +1,30 @@
 import { List } from 'immutable';
+import hash from 'object-hash';
 import { Experiment, OrdinaryId, ProtocolBlockPath } from 'pr1-shared';
 import { Component, createRef } from 'react';
 import seqOrd from 'seq-ord';
-import hash from 'object-hash';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
 import { BlockInspector } from '../components/block-inspector';
 import { Button } from '../components/button';
 import { ErrorBoundary } from '../components/error-boundary';
-import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { ExecutionInspector } from '../components/execution-inspector';
 import { GraphEditor } from '../components/graph-editor';
+import { EditProtocolModal } from '../components/modals/edit-protocol';
+import { ReportPanel } from '../components/report-panel';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TitleBar } from '../components/title-bar';
 import { GlobalContext } from '../interfaces/plugin';
 import { ViewProps } from '../interfaces/view';
+import { createPluginContext } from '../plugin';
 import { analyzeBlockPath, createBlockContext, getBlockImpl, getCommonBlockPathLength, getRefPaths } from '../protocol';
+import { ShortcutCode } from '../shortcuts';
 import * as util from '../util';
 import { Pool } from '../util';
-import { ViewExperimentWrapperRoute } from './experiment-wrapper';
-import { createPluginContext } from '../plugin';
-import { ShortcutCode } from '../shortcuts';
-import { EditProtocolModal } from '../components/modals/edit-protocol';
 import { ViewDraft } from './draft';
+import { ViewExperimentWrapperRoute } from './experiment-wrapper';
 
 
 export type ViewExecutionProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
@@ -219,7 +219,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                                         }
                                       }
 
-                                      let commonBlockContext = createBlockContext(commonBlockPath, this.props.experiment.id, this.globalContext);
+                                      let commonBlockContext = createBlockContext(commonBlockPath, this.props.experiment, this.globalContext);
 
                                       this.pool.add(async () => {
                                         await commonBlockContext.sendMessage({
@@ -245,7 +245,9 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
                         label: 'Report',
                         shortcut: ('R' as const),
                         contents: () => (
-                          <ExecutionDiagnosticsReport master={this.master} />
+                          <ReportPanel
+                            compilationAnalysis={this.master.initialAnalysis}
+                            masterAnalysis={this.master.masterAnalysis} />
                         )
                       },
                       ...Object.values(this.props.host.plugins)

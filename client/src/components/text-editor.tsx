@@ -1,6 +1,6 @@
 import { Range } from 'immutable';
 import * as monaco from 'monaco-editor';
-import { DiagnosticDocumentReference, concatenateDiagnostics } from 'pr1-shared';
+import { DiagnosticDocumentReference, createReport } from 'pr1-shared';
 import { Component, createRef } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -154,7 +154,7 @@ export class TextEditor extends Component<TextEditorProps, TextEditorState> {
         }
 
         return [
-          ...concatenateDiagnostics(compilation.analysis).flatMap(([diagnostic, kind]) => [
+          ...createReport(compilation.analysis).flatMap(([diagnostic, kind]) => [
             ...diagnostic.references.map((reference) => ({
               message: diagnostic.message,
               reference,

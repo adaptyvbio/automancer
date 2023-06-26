@@ -16,8 +16,8 @@ import { ErrorBoundary } from '../components/error-boundary';
 import { GraphEditor } from '../components/graph-editor';
 import { BlockInspector } from '../components/block-inspector';
 import { TabNav } from '../components/tab-nav';
-import { ExecutionDiagnosticsReport } from '../components/execution-diagnostics-report';
 import { ReportInspector } from '../components/report-inspector';
+import { ReportPanel } from '../components/report-panel';
 
 
 export type ViewExperimentProps = ViewProps<ViewExperimentWrapperRoute> & { experiment: Experiment; };
@@ -104,7 +104,9 @@ export class ViewExperiment extends Component<ViewExperimentProps, ViewExperimen
                       label: 'Report',
                       contents: () => (
                         <ErrorBoundary>
-                          <ExecutionDiagnosticsReport master={this.state.reportInfo!} />
+                          <ReportPanel
+                            compilationAnalysis={this.state.reportInfo!.initialAnalysis}
+                            masterAnalysis={this.state.reportInfo!.masterAnalysis} />
                         </ErrorBoundary>
                       )
                     }

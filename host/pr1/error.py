@@ -87,6 +87,7 @@ class Diagnostic(Exportable):
       "message": self.message,
       "name": self.name,
       "references": [ref.export() for ref in self.references],
+      "runtimeInfo": None,
       "trace": [ref.export() for ref in self.trace] if (self.trace is not None) else None
     }
 

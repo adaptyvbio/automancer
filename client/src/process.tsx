@@ -1,12 +1,13 @@
-import { MasterBlockLocation, ProtocolBlock } from 'pr1-shared';
+import { DiagnosticId, MasterBlockLocation, ProtocolBlock } from 'pr1-shared';
 
-import { GraphNode } from './components/graph-editor';
-import { ProtocolBlockGraphRenderer } from './interfaces/graph';
-import { PluginBlockImpl, BlockContext } from './interfaces/plugin';
 import { ComponentType } from 'react';
 import { FeatureDef } from './components/features';
-import { deepEqual } from './util';
+import { GraphNode } from './components/graph-editor';
+import { Report } from './components/report';
 import { RectSurface } from './geometry';
+import { ProtocolBlockGraphRenderer } from './interfaces/graph';
+import { BlockContext, PluginBlockImpl } from './interfaces/plugin';
+import { deepEqual } from './util';
 
 
 const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<unknown>> = (block, path, ancestors, location, options, context) => {
@@ -99,6 +100,7 @@ export interface ProcessLocation<Location> extends MasterBlockLocation {
     type: 'collectionFailed';
   } | {
     type: 'failed';
+    errorId: DiagnosticId;
   } | {
     type: 'halting';
   } | {
@@ -127,6 +129,19 @@ export function createProcessBlockImpl<Data, Location>(options: {
       // return <p>{JSON.stringify(mode)}</p>
 
       if (mode.type === 'failed') {
+        let errorId = mode.errorId;
+        let error = props.context.experiment.master!.masterAnalysis.errors.find((error) => (error.id === errorId)) ?? null;
+
+        if (error) {
+          return (
+            <Report analysis={{
+              effects: [],
+              errors: [error],
+              warnings: []
+            }} />
+          );
+        }
+
         return (
           <p style={{ margin: '1rem 0' }}>An error occured.</p>
         );

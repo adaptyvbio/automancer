@@ -58,12 +58,12 @@ def split_sequence(sequence: Sequence[T], func: SequenceSplitter[T], /):
 
 @typing.runtime_checkable
 class Exportable(Protocol):
-  def export(self) -> Any:
+  def export(self) -> object:
     ...
 
 class ExportableABC(ABC):
   @abstractmethod
-  def export(self) -> Any:
+  def export(self) -> object:
     ...
 
 class UnreachableError(Exception):

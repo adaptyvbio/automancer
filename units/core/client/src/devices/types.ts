@@ -104,13 +104,17 @@ export type NodeStates = ImMap<NodePath, NodeState>;
 
 export interface ValueEvent {
   time: number;
-  value: {
-    type: 'null';
-  } | {
-    type: 'default';
-    innerValue: unknown;
-  } | null;
+  value: NullableValue | null;
 }
+
+export type NullableValue<T = unknown> = {
+  type: 'null';
+} | {
+  type: 'default';
+  innerValue: T;
+};
+
+export type EnumValue = number | string;
 
 export interface NumericValue {
   magnitude: number;

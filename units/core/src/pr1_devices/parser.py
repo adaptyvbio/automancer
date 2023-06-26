@@ -2,14 +2,14 @@ import ast
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, final
+from typing import TYPE_CHECKING, Any, cast, final
 
-import pr1 as am
+import automancer as am
 from pr1.devices.nodes.collection import CollectionNode
 from pr1.devices.nodes.common import BaseNode, NodePath
 from pr1.devices.nodes.numeric import NumericNode
 from pr1.devices.nodes.primitive import BooleanNode, EnumNode
-from pr1.devices.nodes.value import ValueNode
+from pr1.devices.nodes.value import Null, ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
 from pr1.fiber.expr import Evaluable, export_value
 from pr1.fiber.parser import (BaseBlock, BaseParser,
@@ -17,8 +17,8 @@ from pr1.fiber.parser import (BaseBlock, BaseParser,
                               BasePassiveTransformer, BlockUnitState,
                               FiberParser, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
-from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType,
-                       EnumType, PrimitiveType, QuantityType)
+from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, ChainType,
+                       EnumType, PrimitiveType, QuantityType, Type)
 from pr1.reader import LocatedValue
 from pr1.util.decorators import debug
 
@@ -59,12 +59,12 @@ class ApplierBlock(BaseBlock):
   def import_point(self, data, /):
     return self.child.import_point(data)
 
-  def export(self):
+  def export(self, context):
     return {
       "namespace": namespace,
       "name": "applier",
 
-      "child": self.child.export(),
+      "child": self.child.export(context),
       "duration": self.duration().export()
     }
 
@@ -92,17 +92,22 @@ class PublisherBlock(BaseBlock):
   def import_point(self, data, /):
     return self.child.import_point(data)
 
-  def export(self):
+  def export(self, context) -> object:
     return {
       "namespace": namespace,
       "name": "publisher",
 
-      "assignments": [[path, export_value(value)] for path, value in self.assignments.items()],
+      "assignments": [[path, value.export_inner(cast(ValueNode, context.host.root_node.find(path)).export_value)] for path, value in self.assignments.items()],
       "duration": self.duration().export(),
-      "child": self.child.export(),
+      "child": self.child.export(context),
       "stable": self.stable
     }
 
+
+class NoneToNullType(Type):
+  def analyze(self, obj, /, context):
+    result = LocatedValue(am.Null, obj.area) if obj.value is None else obj
+    return am.DiagnosticAnalysis(), am.EvaluableConstantValue(result) if context.auto_expr else result
 
 class PublisherTransformer(BasePassiveTransformer):
   priority = 100
@@ -119,7 +124,10 @@ class PublisherTransformer(BasePassiveTransformer):
         case EnumNode():
           return EnumType(*[case.id for case in node.cases])
         case NumericNode():
-          return QuantityType(node.context.dimensionality, allow_nil=node.nullable, min=(node.range[0] if node.range else None), max=(node.range[1] if node.range else None))
+          return ChainType(
+            QuantityType(node.context.dimensionality, allow_nil=node.nullable, min=(node.range[0] if node.range else None), max=(node.range[1] if node.range else None)),
+            NoneToNullType()
+          )
         case _:
           return AnyType()
 

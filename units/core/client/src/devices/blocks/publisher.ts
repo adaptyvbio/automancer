@@ -1,12 +1,13 @@
-import { DynamicValue, PluginBlockImpl, formatDynamicValue, util } from 'pr1';
+import { DynamicValue, EvaluableValue, PluginBlockImpl, formatEvaluable, ureg } from 'pr1';
 import { MasterBlockLocation, ProtocolBlock, createZeroTerm } from 'pr1-shared';
 
-import { ExecutorState, NodePath, ValueNode, namespace } from '../types';
+import { ReactNode, createElement } from 'react';
+import { EnumValue, ExecutorState, NodePath, NullableValue, NumericValue, ValueNode, namespace } from '../types';
 import { findNode } from '../util';
 
 
 export interface PublisherBlock extends ProtocolBlock {
-  assignments: [NodePath, DynamicValue][];
+  assignments: [NodePath, EvaluableValue<NullableValue>][];
   child: ProtocolBlock;
 }
 
@@ -42,12 +43,36 @@ export default {
     return block.assignments.map(([path, value]) => {
       let parentNode = findNode(executor.root, path.slice(0, -1))!;
       let node = findNode(executor.root, path) as ValueNode;
-      let locationValue = location?.assignments.find(([otherPath, value]) => (util.deepEqual(otherPath, path)))?.[1];
+      // let locationValue = location?.assignments.find(([otherPath, value]) => (util.deepEqual(otherPath, path)))?.[1];
+
+      let label: ReactNode = formatEvaluable(value, (nullableValue) => {
+        if (nullableValue.type === 'null') {
+          return '[Disabled]';
+        }
+
+        switch (node.spec.type) {
+          case 'boolean': {
+            return nullableValue.innerValue ? 'On' : 'Off';
+          }
+
+          case 'enum': {
+            let enumValue = nullableValue.innerValue as EnumValue;
+            let enumCase = node.spec.cases.find((enumCase) => (enumCase.id === enumValue))!;
+
+            return enumCase.label ?? enumCase.id;
+          }
+
+          case 'numeric': {
+            let numericValue = nullableValue.innerValue as NumericValue;
+            return ureg.formatQuantityAsReact(numericValue.magnitude, (node.spec.resolution ?? 0), ureg.deserializeContext(node.spec.context), { createElement });
+          };
+        }
+      });
 
       return {
         description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
         icon: (node.icon ?? 'settings_input_hdmi'),
-        label: formatDynamicValue(locationValue ?? value)
+        label
       };
     });
   },

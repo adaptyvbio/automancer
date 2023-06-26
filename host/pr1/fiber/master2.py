@@ -1,5 +1,4 @@
 from asyncio import Task
-import math
 from random import random
 import time
 from uuid import uuid4
@@ -8,7 +7,6 @@ from logging import Logger
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from pprint import pprint
 from traceback import StackSummary
 from typing import IO, TYPE_CHECKING, Any, Optional, Self
 import asyncio
@@ -21,14 +19,14 @@ from ..draft import DraftCompilation
 from ..util.asyncio import wait_all
 from ..host import logger
 from ..util.decorators import provide_logger
-from ..history import TreeAdditionChange, BaseTreeChange, TreeChange, TreeRemovalChange, TreeUpdateChange
+from ..history import TreeAdditionChange, TreeChange, TreeRemovalChange, TreeUpdateChange
 from ..util.pool import Pool
 from ..util.types import SimpleCallbackFunction
 from ..util.misc import Exportable, HierarchyNode, IndexCounter
-from ..master.analysis import MasterAnalysis, RuntimeAnalysis, RuntimeMasterAnalysisItem
+from ..master.analysis import MasterAnalysis, RuntimeAnalysis
 from .process import ProgramExecEvent
 from .eval import EvalContext, EvalStack
-from .parser import BaseBlock, BaseProgramPoint, BaseProgram, FiberProtocol, HeadProgram
+from .parser import BaseBlock, BaseProgramPoint, BaseProgram, GlobalContext, HeadProgram
 from ..experiment import Experiment
 from ..ureg import ureg
 
@@ -59,6 +57,7 @@ class Master:
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._file: IO[bytes]
+    self._location: Any
     self._logger: Logger
     self._next_analysis_item_id = 0
     self._owner: ProgramOwner
@@ -155,6 +154,8 @@ class Master:
     self.experiment.save()
 
   def receive(self, exec_path: list[int], message: Any):
+    self._logger.critical(f"Received {message!r}")
+
     current_handle = self._handle
 
     for exec_key in exec_path:
@@ -166,16 +167,16 @@ class Master:
     return self._owner.study_block(block)
 
 
-  def export(self):
+  def export(self) -> object:
     if not self._root_entry:
       return None
 
     return {
       "id": self.id,
       "initialAnalysis": self._initial_analysis.export(),
-      "location": self._root_entry.export(),
+      "location": self._location,
       "masterAnalysis": self._master_analysis.export(),
-      "protocol": self.protocol.export(),
+      "protocol": self.protocol.export(GlobalContext(self.host)),
       "startDate": (self.start_time * 1000)
     }
 
@@ -268,7 +269,12 @@ class Master:
     update_handle(self._handle)
     self._master_analysis += analysis
 
+    self._logger.debug(f"Update: {user_significant}")
+
     if self._update_callback and user_significant:
+      assert self._root_entry
+      self._location = self._root_entry.export()
+
       self._update_callback()
 
     event = ExperimentReportEvent(

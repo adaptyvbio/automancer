@@ -781,7 +781,7 @@ class StackEntry:
 class DuplicateKeyError(ReaderError):
   def __init__(self, original: LocatedString, duplicate: LocatedString, /):
     super().__init__(
-      "Invalid value, expected expression",
+      "Duplicate key",
       references=[
         DiagnosticDocumentReference.from_value(original, id='origin'),
         DiagnosticDocumentReference.from_value(duplicate, id='duplicate')

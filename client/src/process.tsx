@@ -53,7 +53,7 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<un
         element: (
           <GraphNode
             activity={location
-              ? (location.mode.type !== 'running')
+              ? (location.mode.type !== 'running') || (location.mode.form === 'paused')
                 ? 'paused'
                 : 'active'
               : 'default'}
@@ -93,7 +93,6 @@ export interface ProcessBlock<Data> extends ProtocolBlock {
 
 export interface ProcessLocation<Location> extends MasterBlockLocation {
   children: {};
-  date: number;
   mode: {
     type: 'collecting';
   } | {
@@ -106,7 +105,10 @@ export interface ProcessLocation<Location> extends MasterBlockLocation {
   } | {
     type: 'running';
     pausable: boolean;
-    processLocation: Location | null;
+    processInfo: {
+      date: number;
+      location: Location;
+    } | null;
     form: 'halting' | 'jumping' | 'normal' | 'paused' | 'pausing';
   };
 }
@@ -149,13 +151,13 @@ export function createProcessBlockImpl<Data, Location>(options: {
 
       let Component = options.Component;
 
-      if (Component && (mode.type === 'running') && mode.processLocation) {
+      if (Component && (mode.type === 'running') && mode.processInfo) {
         return (
           <Component
             data={props.block.data}
-            date={props.location.date}
+            date={mode.processInfo.date}
             context={props.context}
-            location={mode.processLocation}
+            location={mode.processInfo.location}
             status={(mode.form === 'paused') ? 'paused' : 'normal'} />
         );
       }
@@ -197,7 +199,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
     },
     createFeatures(block, location) {
       let processLocation = (location?.mode.type === 'running')
-        ? location.mode.processLocation
+        ? location.mode.processInfo?.location ?? null
         : null;
 
       return options.createFeatures?.(block.data, processLocation) ?? [

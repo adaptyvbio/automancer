@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import KW_ONLY, dataclass
 from enum import Enum
 from types import EllipsisType, NoneType
-from typing import Any, Generic, Literal, TypeVar, cast, overload
+from typing import Any, Callable, Generic, Literal, TypeVar, cast, overload
 
 from quantops import Quantity
 
@@ -237,6 +237,24 @@ class Evaluable(Exportable, ABC, Generic[T]):
 
   def export(self):
     raise NotImplementedError
+
+  def export_inner(self, export_inner_value: Callable[[Any], Any], /):
+    from ..input import EvaluableChain
+    from ..input.dynamic import EvaluableDynamicValue
+
+    match self:
+      case EvaluableConstantValue(inner_value):
+        return {
+          "type": "constant",
+          "innerValue": export_inner_value(inner_value.value)
+        }
+      case EvaluablePythonExpr(contents) | EvaluableChain(EvaluablePythonExpr(contents)) | EvaluableDynamicValue(EvaluablePythonExpr(contents)):
+        return {
+          "type": "expression",
+          "contents": contents.value
+        }
+      case _:
+        raise ValueError
 
 
 @dataclass

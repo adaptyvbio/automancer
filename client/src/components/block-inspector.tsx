@@ -45,8 +45,8 @@ export function BlockInspector(props: {
 
   let blockAnalysis = analyzeBlockPath(props.protocol, props.location, props.mark, props.blockPath, globalContext);
 
-  console.log(props.mark);
-  console.log(blockAnalysis);
+  // console.log(props.mark);
+  // console.log(blockAnalysis);
 
   let ancestorGroups = blockAnalysis.groups.slice(0, -1);
   let leafGroup = blockAnalysis.groups.at(-1)!;

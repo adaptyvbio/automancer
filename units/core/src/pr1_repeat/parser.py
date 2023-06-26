@@ -96,11 +96,11 @@ class Block(BaseBlock):
       iteration=data["iteration"]
     )
 
-  def export(self):
+  def export(self, context) -> object:
     return {
       "name": "_",
       "namespace": namespace,
       "count": self.count.export(),
-      "child": self.block.export(),
+      "child": self.block.export(context),
       "duration": self.duration().export()
     }

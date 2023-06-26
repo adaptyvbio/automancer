@@ -15,7 +15,7 @@ from .document import Document
 from .draft import Draft, DraftCompilation
 from .experiment import Experiment, ExperimentId
 from .fiber.master2 import Master
-from .fiber.parser import AnalysisContext
+from .fiber.parser import AnalysisContext, GlobalContext
 from .input import (Attribute, BoolType, KVDictType, PrimitiveType, RecordType,
                     StrType, UnionType)
 from .langservice import LanguageServiceAnalysis
@@ -51,6 +51,14 @@ class HostRootNode(CollectionNode):
         return None
 
     return node
+
+  # def find_unchecked(self, path: NodePath) -> BaseNode:
+  #   node = self.find(path)
+
+  #   if not node:
+  #     raise ValueError(f"Node with path {path!r} not found")
+
+  #   return node
 
 
 class PluginConf(Protocol):
@@ -305,7 +313,7 @@ class Host:
           study = None
 
         return {
-          **compilation.export(),
+          **compilation.export(GlobalContext(self)),
           "study": study and {
             "mark": study[1].export(),
             "point": study[0].export()

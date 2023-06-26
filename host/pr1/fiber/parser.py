@@ -195,6 +195,10 @@ class HeadProgram(BaseProgram):
 class BaseProgramPoint(ExportableABC):
   pass
 
+@dataclass(frozen=True, slots=True)
+class GlobalContext:
+  host: 'Host'
+
 class BaseBlock(ABC, HierarchyNode):
   def duration(self):
     return DurationTerm.unknown()
@@ -208,7 +212,7 @@ class BaseBlock(ABC, HierarchyNode):
     ...
 
   @abstractmethod
-  def export(self):
+  def export(self, context: GlobalContext) -> object:
     ...
 
 # @deprecated
@@ -481,18 +485,18 @@ class AnalysisContext:
 
 
 @dataclass(kw_only=True)
-class FiberProtocol(Exportable):
+class FiberProtocol: # (Exportable):
   details: ProtocolDetails
   draft: Draft
   global_symbol: EvalSymbol
   name: Optional[str]
   root: BaseBlock
 
-  def export(self):
+  def export(self, context: GlobalContext) -> object:
     return {
       "draft": self.draft.export(),
       "name": self.name,
-      "root": self.root.export()
+      "root": self.root.export(context)
     }
 
 

@@ -94,11 +94,11 @@ class Block(BaseBlock):
       index=index
     )
 
-  def export(self):
+  def export(self, context):
     return {
       "name": "_",
       "namespace": namespace,
-      "children": [child.export() for child in self.children],
+      "children": [child.export(context) for child in self.children],
       "childrenDelays": [am.DurationTerm.zero().export(), *[delay.export() for delay in cumsum([child.duration() for child in self.children])]][:-1],
       "duration": self.duration().export()
     }

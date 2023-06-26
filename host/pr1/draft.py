@@ -7,7 +7,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from .document import Document
 
 if TYPE_CHECKING:
-  from .fiber.parser import FiberProtocol
+  from .fiber.parser import FiberProtocol, GlobalContext
   from .input import LanguageServiceAnalysis
   from .host import Host
 
@@ -64,7 +64,7 @@ class DraftCompilation:
   draft_id: str
   protocol: 'Optional[FiberProtocol]'
 
-  def export(self):
+  def export(self, context: 'GlobalContext'):
     return {
       "analysis": {
         "completions": [completion.export() for completion in self.analysis.completions],
@@ -79,6 +79,6 @@ class DraftCompilation:
         "warnings": [warning.export() for warning in self.analysis.warnings]
       },
       "missingDocumentPaths": [], # str(path).split("/") for path in self.document_paths],
-      "protocol": self.protocol and self.protocol.export(),
+      "protocol": self.protocol and self.protocol.export(context),
       "valid": (not self.analysis.errors)
     }

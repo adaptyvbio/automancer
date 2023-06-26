@@ -58,7 +58,7 @@ export function getCommonBlockPathLength(a: ProtocolBlockPath, b: ProtocolBlockP
   return index;
 }
 
-export function getRefPaths(block: ProtocolBlock, location: unknown, context: GlobalContext): ProtocolBlockPath[] {
+export function getRefPaths(block: ProtocolBlock, location: MasterBlockLocation, context: GlobalContext): ProtocolBlockPath[] {
   let blockImpl = getBlockImpl(block, context);
   let children = blockImpl.getChildren?.(block, context);
 

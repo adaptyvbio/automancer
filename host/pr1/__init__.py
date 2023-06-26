@@ -19,6 +19,8 @@ from .input.file import *
 from .langservice import *
 from .master.analysis import *
 from .plugin.manager import *
+from .procedure import *
+from .rich_text import *
 from .staticanalysis.expr import *
 from .staticanalysis.expression import *
 from .staticanalysis.support import *

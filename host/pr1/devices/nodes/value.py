@@ -181,7 +181,7 @@ class ValueNode(BaseNode, ABC, Generic[T]):
       "writable": self.writable
     }
 
-  def export_value(self, value: Optional[T | NullType], /):
+  def export_value(self, value: Optional[T | NullType], /) -> object:
     match value:
       case None:
         return None

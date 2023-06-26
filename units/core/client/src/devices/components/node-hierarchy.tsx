@@ -4,7 +4,7 @@ import { ReactNode, createElement, useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
-import { BaseNode, CollectionNode, Context, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
+import { BaseNode, CollectionNode, Context, EnumValue, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
 import { isCollectionNode, isValueNode, iterNodes } from '../util';
 
 
@@ -180,7 +180,7 @@ export function NodeHierarchyNode(props: {
         }
 
         case 'enum': {
-          let caseId = lastValue.innerValue as (number | string);
+          let caseId = lastValue.innerValue as EnumValue;
           let specCase = spec.cases.find((specCase) => (specCase.id === caseId))!;
 
           entryValue = (specCase.label ?? specCase.id);

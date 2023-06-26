@@ -48,7 +48,7 @@ class ProcessBlock(BaseBlock, Generic[T_ProcessData, T_ProcessPoint]):
   def import_point(self, data, /):
     return self._process.import_point(data)
 
-  def export(self):
+  def export(self, context):
     return {
       "name": self._process.name,
       "namespace": self._process.namespace,
@@ -168,7 +168,7 @@ class ProcessContext(Generic[T_ProcessData, T_ProcessLocation, T_ProcessPoint]):
     self._program._handle.send_analysis(RuntimeAnalysis(warnings=[warning]))
 
   def send_location(self, location: T_ProcessLocation, /):
-    self._mode.process_location = location
+    self._mode.process_info = (time.time(), location)
     self._program._send_location()
 
 
@@ -309,7 +309,7 @@ class ProcessProgramMode:
   @dataclass(slots=True)
   class Running:
     form: ProcessProgramForm.Any
-    process_location: Optional[Exportable]
+    process_info: Optional[tuple[float, Exportable]]
     pausable: bool
     task: Task[None] = field(repr=False)
     term: Term
@@ -317,7 +317,7 @@ class ProcessProgramMode:
     def location(self):
       return ProcessProgramMode.RunningLocation(
         form=self.form.location,
-        process_location=self.process_location,
+        process_info=self.process_info,
         pausable=self.pausable
       )
 
@@ -325,14 +325,17 @@ class ProcessProgramMode:
   @dataclass(frozen=True, slots=True)
   class RunningLocation:
     form: ProcessProgramFormLocation
-    process_location: Optional[Exportable]
+    process_info: Optional[tuple[float, Exportable]]
     pausable: bool
 
     def export(self):
       return {
         "type": "running",
         "form": self.form.export(),
-        "processLocation": self.process_location and self.process_location.export(),
+        "processInfo": self.process_info and {
+          "date": (self.process_info[0] * 1000),
+          "location": self.process_info[1].export()
+        },
         "pausable": self.pausable
       }
 
@@ -347,7 +350,6 @@ class ProcessProgramLocation:
 
   def export(self):
     return {
-      "date": time.time() * 1000,
       "mode": self.mode.export()
     }
 
@@ -489,7 +491,7 @@ class ProcessProgram(BaseProgram):
 
       self._mode = ProcessProgramMode.Running(
         form=ProcessProgramForm.Normal(),
-        process_location=None,
+        process_info=None,
         pausable=False,
         task=asyncio.create_task(self._block._process(self._context)),
         term=DurationTerm.unknown()

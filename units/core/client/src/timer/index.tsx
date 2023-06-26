@@ -1,4 +1,4 @@
-import { EvaluableValue, Form, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
+import { EvaluableValue, Form, PanelAction, PanelActions, PanelDataList, PanelLoader, PanelPlaceholder, PanelRoot, PanelSection, PanelSpinner, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
 import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
@@ -8,9 +8,7 @@ export interface ProcessData {
 
 export interface ProcessLocation {
   duration: number | null;
-  paused: boolean;
   progress: number;
-  startDate: number;
 }
 
 
@@ -33,7 +31,7 @@ export default {
           <TimedProgressBar
             date={props.date}
             duration={props.location.duration * 1000}
-            paused={props.location.paused}
+            paused={props.status === 'paused'}
             setValue={(progress) => {
               props.context.pool.add(async () => {
                 await props.context.sendMessage({
@@ -65,6 +63,75 @@ export default {
       }
     })
   },
+
+  executionPanels: [{
+    id: '_',
+    label: 'Timer',
+    shortcut: 'T',
+    Component(props) {
+      // return <PanelLoader />;
+
+      return (
+        // <PanelPlaceholder message="No timer currently active" />
+        <PanelRoot>
+          <PanelSection>
+            <h2>Metrics</h2>
+
+            <p>Most recent orders delivered to customers.</p>
+
+            <PanelDataList data={[
+              { label: 'Duration', value: 'Forever' },
+              { label: 'Time elapsed', value: 'Forever' },
+              { label: 'Time elapsed elapsed elapsed', value: `${new Date()}` }
+            ]} />
+          </PanelSection>
+          <PanelSection>
+            <h2>Actions</h2>
+
+            <PanelActions>
+              <PanelAction>Toggle</PanelAction>
+              <PanelAction>Toggle</PanelAction>
+            </PanelActions>
+          </PanelSection>
+          <PanelSection>
+            <h2>Results</h2>
+
+            <PanelSpinner />
+          </PanelSection>
+          <PanelSection>
+            <h2>Input</h2>
+
+            <Form.TextField label="Value 1" value="Foo" onInput={() => {}} />
+            <Form.TextField label="Value 2" value="Foo" onInput={() => {}} />
+          </PanelSection>
+          <PanelSection>
+            <PanelActions>
+              <PanelAction>Toggle</PanelAction>
+              <PanelAction>Toggle</PanelAction>
+            </PanelActions>
+          </PanelSection>
+          <PanelSection>
+            <PanelActions>
+              <PanelAction>Toggle</PanelAction>
+              <PanelAction>Toggle</PanelAction>
+            </PanelActions>
+          </PanelSection>
+          <PanelSection>
+            <PanelActions>
+              <PanelAction>Toggle</PanelAction>
+              <PanelAction>Toggle</PanelAction>
+            </PanelActions>
+          </PanelSection>
+          <PanelSection>
+            <PanelActions>
+              <PanelAction>Toggle</PanelAction>
+              <PanelAction>Toggle</PanelAction>
+            </PanelActions>
+          </PanelSection>
+        </PanelRoot>
+      );
+    }
+  }],
 
   SettingsComponent(props) {
     let [shortcutPref, setShortcutPref] = props.context.store.usePersistent('progressDisplayMode');

@@ -24,6 +24,10 @@ export interface HostCreatorContext {
   pythonInstallations: PythonInstallationRecord;
 }
 
+export interface Disposable {
+  dispose(): Promise<void> | void;
+}
+
 export interface DraftSkeleton {
   id: DraftEntryId;
   entryPath: string;

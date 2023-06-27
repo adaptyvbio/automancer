@@ -107,7 +107,6 @@ export class HostWindow {
   }
 
   focus() {
-    // TODO: Investigate
     if (this.browserWindow) {
       if (this.browserWindow.isMinimized()) {
         this.browserWindow.restore();

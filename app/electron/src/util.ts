@@ -26,6 +26,7 @@ export class Pool {
       .catch((err) => {
         if (this.#logger) {
           this.#logger.error(err.message);
+          logError(err, this.#logger);
         } else {
           console.error(err);
         }
@@ -36,7 +37,7 @@ export class Pool {
 
     this.#promises.add(promise);
 
-    return Promise.allSettled([promise]);
+    return Promise.allSettled([promise]) as Promise<never>;
   }
 
   get empty() {

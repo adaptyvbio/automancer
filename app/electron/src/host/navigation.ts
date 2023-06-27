@@ -8,8 +8,6 @@ let newNavigation = {
     oldNavigation.addEventListener('navigate', (event: any) => {
       event.preventDefault();
 
-      console.log('Navigate', event);
-
       let defaultPrevented = false;
 
       listener({

@@ -1,19 +1,20 @@
 import 'source-map-support/register';
 
-import chokidar from 'chokidar';
 import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, session, shell } from 'electron';
 import { ok as assert } from 'node:assert';
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { MenuDef, MenuEntryId } from 'pr1';
 import { AppData, BridgeTcp, CertificateFingerprint, DraftEntryId, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend } from 'pr1-library';
-import { Lock, defer } from 'pr1-shared';
+import { defer, Lock } from 'pr1-shared';
 import * as uol from 'uol';
 
+import { FileManager } from './file-manager';
 import { HostWindow } from './host';
-import { DocumentChange, DraftSkeleton, IPC2d as IPCServer2d } from './interfaces';
+import { Disposable, DocumentChange, DraftSkeleton, IPC2d as IPCServer2d } from './interfaces';
 import { rootLogger } from './logger';
 import type { IPCEndpoint } from './shared/preload';
 import { StartupWindow } from './startup';
@@ -28,6 +29,7 @@ const ProtocolFileFilters = [
 export class CoreApplication {
   static version = 2;
 
+  private disposables = new Set<Disposable>();
   private logger = rootLogger.getChild('application');
   private pool = new util.Pool(this.logger);
 
@@ -69,25 +71,43 @@ export class CoreApplication {
       this.quitting = true;
     });
 
+
+    let quit = false;
+
     this.electronApp.on('will-quit', (event) => {
-      this.logger.debug('Trying to quit');
-
-      if (!this.pool.empty) {
-        event.preventDefault();
-        this.logger.debug(`Waiting for ${this.pool.size} tasks to settle`);
-
-        this.pool.wait().then(() => {
-          this.electronApp.quit();
-        });
+      if (quit) {
+        return;
       }
 
-      this.logger.debug('Quitting');
+      event.preventDefault();
 
-      rootLogger.end();
+      this.logger.debug('Trying to quit');
 
-      this.logWritePromise?.finally(() => {
-        // ...
-      });
+      (async () => {
+        // The check for this.pool.empty is only for the first iteration
+        while (!this.pool.empty || (this.disposables.size > 0)) {
+          for (let disposable of this.disposables) {
+            this.pool.add(async () => void await disposable.dispose());
+          }
+
+          this.disposables.clear();
+
+          this.logger.debug(`Waiting for ${this.pool.size} tasks to settle`);
+          await this.pool.wait();
+        }
+
+        this.logger.debug('Quitting');
+
+        rootLogger.end();
+        await this.logWritePromise;
+      })()
+        .catch((err) => {
+          console.error(err);
+        })
+        .finally(() => {
+          quit = true;
+          this.electronApp.quit();
+        });
     });
 
     this.electronApp.on('window-all-closed', () => {
@@ -208,6 +228,12 @@ export class CoreApplication {
       return;
     }
 
+    this.logger.debug(`Running process with id ${process.pid}`);
+    this.logger.debug(`Running Node.js ${process.version}`);
+    this.logger.debug(`Running Electron ${process.versions.electron}`);
+    this.logger.debug(`Running Chrome ${process.versions.chrome}`);
+    this.logger.debug(`Running on platform ${os.platform()} ${os.release()} / ${os.arch()}`);
+
     await fs.mkdir(this.appLogsDirPath, { recursive: true });
     let appLogFilePath = path.join(this.appLogsDirPath, `${Date.now()}.log`);
 
@@ -280,6 +306,7 @@ export class CoreApplication {
 
     // Context menu creation
 
+    // @ts-expect-error
     ipcMain.handle('main.triggerContextMenu', async (event, menu, position) => {
       let deferred = defer<MenuEntryId[] | null>();
 
@@ -596,89 +623,6 @@ export class CoreApplication {
 
     // Draft management
 
-    interface FileState {
-      lastExternalModificationDate: number;
-      lastModificationDate: number;
-      watchers: Set<BrowserWindow>;
-      writing: boolean;
-    }
-
-    let fileStates = new Map<string, FileState>();
-
-    let watcher = chokidar.watch([], {
-      awaitWriteFinish: {
-        stabilityThreshold: 500
-      }
-    });
-
-    let createChange = async (filePath: string): Promise<DocumentChange | null> => {
-      let fileState = fileStates.get(filePath)!;
-      let stats = await fs.stat(filePath);
-
-      // External modification
-      if (stats.mtimeMs !== fileState.lastModificationDate) {
-        fileState.lastModificationDate = stats.mtimeMs;
-        fileState.lastExternalModificationDate = stats.mtimeMs;
-
-        return {
-          instance: {
-            contents: (await fs.readFile(filePath)).toString(),
-            lastExternalModificationDate: stats.mtimeMs,
-            lastModificationDate: stats.mtimeMs
-          },
-          status: 'ok'
-        };
-      }
-
-      return null;
-    };
-
-    watcher.on('add', (filePath) => {
-      this.logger.debug(`Detected new file: ${filePath}`);
-
-      this.pool.add(async () => {
-        let fileState = fileStates.get(filePath)!;
-        let change = await createChange(filePath);
-
-        if (change) {
-          for (let watcher of fileState.watchers) {
-            watcher.webContents.send('drafts.change', filePath, change);
-          }
-        }
-      });
-    });
-
-    watcher.on('change', (filePath) => {
-      this.logger.debug(`Detected changed file: ${filePath}`);
-
-      this.pool.add(async () => {
-        let fileState = fileStates.get(filePath)!;
-        let change = await createChange(filePath);
-
-        if (!fileState.writing && change) {
-          for (let watcher of fileState.watchers) {
-            watcher.webContents.send('drafts.change', filePath, change);
-          }
-        }
-      });
-    });
-
-    watcher.on('unlink', (filePath) => {
-      this.logger.debug(`Detected deleted file: ${filePath}`);
-
-      let fileState = fileStates.get(filePath)!;
-
-      for (let watcher of fileState.watchers) {
-        watcher.webContents.send('drafts.change', filePath, {
-          instance: null,
-          status: 'missing'
-        } satisfies DocumentChange);
-      }
-
-      fileState.lastExternalModificationDate = 0;
-      fileState.lastModificationDate = 0;
-    });
-
     // ipcMain.handle('drafts.create', async (event, source) => {
     //   let result = await dialog.showSaveDialog(
     //     BrowserWindow.fromWebContents(event.sender)!,
@@ -778,66 +722,20 @@ export class CoreApplication {
     //   shell.showItemInFolder(draftEntry.path);
     // });
 
+    let fileManager = new FileManager();
+    this.disposables.add(fileManager);
+
     // @ts-expect-error
     ipcMain.handle('drafts.watch', async (event, filePath: string) => {
-      let browserWindow = BrowserWindow.fromWebContents(event.sender)!;
-      let fileState = fileStates.get(filePath);
-
-      if (!fileState) {
-        fileState = {
-          lastExternalModificationDate: 0,
-          lastModificationDate: 0,
-          watchers: new Set(),
-          writing: false
-        };
-
-        fileStates.set(filePath, fileState);
-      }
-
-      fileState.watchers.add(browserWindow);
-      watcher.add(filePath);
-
-      return (await createChange(filePath)) ?? {
-        instance: {
-          contents: (await fs.readFile(filePath)).toString(),
-          lastExternalModificationDate: fileState.lastExternalModificationDate,
-          lastModificationDate: fileState.lastModificationDate
-        }
-      };
+      return await fileManager.watchFile(filePath, event.sender);
     });
 
     ipcMain.handle('drafts.watchStop', async (event, filePath) => {
-      let browserWindow = BrowserWindow.fromWebContents(event.sender)!;
-      let fileState = fileStates.get(filePath)!;
-
-      fileState.watchers.delete(browserWindow);
-
-      if (fileState.watchers.size < 1) {
-        watcher.unwatch(filePath);
-        fileStates.delete(filePath);
-      }
+      await fileManager.unwatchFile(filePath, event.sender);
     });
 
     ipcMain.handle('drafts.write', async (event, filePath, contents) => {
-      let fileState = fileStates.get(filePath)!;
-      fileState.writing = true;
-
-      await fs.writeFile(filePath, contents);
-      let stats = await fs.stat(filePath);
-
-      fileState.lastModificationDate = stats.mtimeMs;
-      fileState.writing = false;
-
-      for (let watcher of fileState.watchers) {
-        watcher.webContents.send('drafts.change', filePath, {
-          instance: {
-            contents: null,
-            lastExternalModificationDate: fileState.lastExternalModificationDate,
-            lastModificationDate: fileState.lastModificationDate
-          },
-          status: 'ok'
-        });
-      }
+      await fileManager.writeFile(filePath, contents);
     });
 
 

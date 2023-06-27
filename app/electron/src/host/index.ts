@@ -14,6 +14,7 @@ export class HostWindow {
   closed: Promise<void>;
   closing = false;
 
+  // @ts-expect-error
   private logger = rootLogger.getChild(['hostWindow', this.hostSettings.id.slice(0, 8)]);
   private pool = new Pool();
 
@@ -28,7 +29,7 @@ export class HostWindow {
     this.logger.debug('Creating client');
 
     let result = await createClient(this.hostSettings, this.logger.getChild('host'), {
-      logsDirPath: this.app.logsDirPath
+      logsDirPath: this.app.hostsLogsDirPath
     });
 
     if (!result.ok) {

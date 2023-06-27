@@ -5,6 +5,7 @@ import electron, { BrowserWindow, dialog, Menu, MenuItemConstructorOptions, sess
 import { ok as assert } from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { MenuDef, MenuEntryId } from 'pr1';
 import { AppData, BridgeTcp, CertificateFingerprint, DraftEntryId, fsExists, HostSettings, HostSettingsId, PythonInstallationRecord, runCommand, searchForAdvertistedHosts, ServerConfiguration, SocketClientBackend } from 'pr1-library';
@@ -36,11 +37,14 @@ export class CoreApplication {
   private data!: AppData;
   private pythonInstallations!: PythonInstallationRecord;
 
+  private appLogsDirPath: string;
   private dataDirPath: string;
   private dataLock = new Lock();
   private dataPath: string;
   private hostsDirPath: string;
-  logsDirPath: string;
+  public hostsLogsDirPath: string;
+  private logWritePromise: Promise<void> | null = null;
+  private logsDirPath: string;
 
   private hostWindows: Record<HostSettingsId, HostWindow> = {};
   private startupWindow: StartupWindow | null = null;
@@ -55,7 +59,10 @@ export class CoreApplication {
     this.dataPath = path.join(this.dataDirPath, 'app.json');
 
     this.hostsDirPath = path.join(userData, 'App Hosts');
+
     this.logsDirPath = this.electronApp.getPath('logs');
+    this.appLogsDirPath = path.join(this.logsDirPath, 'app');
+    this.hostsLogsDirPath = path.join(this.logsDirPath, 'hosts');
 
 
     this.electronApp.on('before-quit', () => {
@@ -75,6 +82,12 @@ export class CoreApplication {
       }
 
       this.logger.debug('Quitting');
+
+      rootLogger.end();
+
+      this.logWritePromise?.finally(() => {
+        // ...
+      });
     });
 
     this.electronApp.on('window-all-closed', () => {
@@ -194,6 +207,26 @@ export class CoreApplication {
       this.electronApp.quit();
       return;
     }
+
+    await fs.mkdir(this.appLogsDirPath, { recursive: true });
+    let appLogFilePath = path.join(this.appLogsDirPath, `${Date.now()}.log`);
+
+    let logWriteStream = rootLogger
+      .use(uol.format('%(LevelName) :: %(namespace) :: %(message)'))
+      .pipe(new uol.ConcatTransformer())
+      .pipe(fsSync.createWriteStream(appLogFilePath));
+
+    this.logWritePromise = new Promise<void>(async (resolve, reject) => {
+      logWriteStream.on('error', (err) => void reject(err));
+      logWriteStream.on('finish', () => void resolve());
+    }).catch((err) => {
+      if (!this.logger.closed) {
+        this.logger.error(err.message);
+      } else {
+        console.error(err.message);
+      }
+    });
+
 
     this.pythonInstallations = await util.findPythonInstallations();
 
@@ -488,7 +521,7 @@ export class CoreApplication {
     });
 
     ipcMain.handle('hostSettings.revealLogsDirectory', async (_event, { hostSettingsId }) => {
-      let logsDirPath = path.join(this.logsDirPath, hostSettingsId);
+      let logsDirPath = path.join(this.hostsLogsDirPath, hostSettingsId);
       await fs.mkdir(logsDirPath, { recursive: true });
 
       shell.showItemInFolder(logsDirPath);
@@ -580,7 +613,6 @@ export class CoreApplication {
 
     let createChange = async (filePath: string): Promise<DocumentChange | null> => {
       let fileState = fileStates.get(filePath)!;
-
       let stats = await fs.stat(filePath);
 
       // External modification
@@ -602,17 +634,23 @@ export class CoreApplication {
     };
 
     watcher.on('add', (filePath) => {
+      this.logger.debug(`Detected new file: ${filePath}`);
+
       this.pool.add(async () => {
         let fileState = fileStates.get(filePath)!;
-        let change = (await createChange(filePath))!;
+        let change = await createChange(filePath);
 
-        for (let watcher of fileState.watchers) {
-          watcher.webContents.send('drafts.change', filePath, change);
+        if (change) {
+          for (let watcher of fileState.watchers) {
+            watcher.webContents.send('drafts.change', filePath, change);
+          }
         }
       });
     });
 
     watcher.on('change', (filePath) => {
+      this.logger.debug(`Detected changed file: ${filePath}`);
+
       this.pool.add(async () => {
         let fileState = fileStates.get(filePath)!;
         let change = await createChange(filePath);
@@ -626,6 +664,8 @@ export class CoreApplication {
     });
 
     watcher.on('unlink', (filePath) => {
+      this.logger.debug(`Detected deleted file: ${filePath}`);
+
       let fileState = fileStates.get(filePath)!;
 
       for (let watcher of fileState.watchers) {
@@ -757,7 +797,13 @@ export class CoreApplication {
       fileState.watchers.add(browserWindow);
       watcher.add(filePath);
 
-      return (await createChange(filePath))!;
+      return (await createChange(filePath)) ?? {
+        instance: {
+          contents: (await fs.readFile(filePath)).toString(),
+          lastExternalModificationDate: fileState.lastExternalModificationDate,
+          lastModificationDate: fileState.lastModificationDate
+        }
+      };
     });
 
     ipcMain.handle('drafts.watchStop', async (event, filePath) => {

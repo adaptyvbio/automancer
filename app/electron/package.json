@@ -1,6 +1,6 @@
 {
-  "name": "pr1-app",
-  "version": "3.0.0",
+  "name": "automancer",
+  "version": "5.0.0",
   "main": "lib/app/index.js",
   "types": "lib/types/types.d.ts",
   "productName": "Automancer",

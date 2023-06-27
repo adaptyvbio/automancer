@@ -12,7 +12,8 @@ from .common import BaseNode, NodeListener, NodeUnavailableError
 
 @final
 class NullType:
-  pass
+  def __repr__(self):
+    return "Null"
 
 Null = NullType()
 

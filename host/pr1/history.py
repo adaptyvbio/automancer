@@ -2,7 +2,7 @@ from abc import ABC
 from dataclasses import dataclass
 from comserde import serializable
 
-from .util.misc import Exportable
+from .fiber.parser import BaseProgramLocation
 
 
 class BaseTreeChange(ABC):
@@ -12,7 +12,7 @@ class BaseTreeChange(ABC):
 @dataclass(kw_only=True)
 class TreeAdditionChange(BaseTreeChange):
   block_child_id: int
-  location: Exportable
+  location: BaseProgramLocation
   parent_index: int
 
 @serializable
@@ -24,7 +24,7 @@ class TreeRemovalChange(BaseTreeChange):
 @dataclass(kw_only=True)
 class TreeUpdateChange(BaseTreeChange):
   index: int
-  location: Exportable
+  location: BaseProgramLocation
 
 
 TreeChange = TreeAdditionChange | TreeRemovalChange | TreeUpdateChange

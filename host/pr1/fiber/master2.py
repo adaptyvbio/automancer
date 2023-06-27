@@ -26,7 +26,7 @@ from ..util.misc import Exportable, HierarchyNode, IndexCounter
 from ..master.analysis import MasterAnalysis, RuntimeAnalysis
 from .process import ProgramExecEvent
 from .eval import EvalContext, EvalStack
-from .parser import BaseBlock, BaseProgramPoint, BaseProgram, GlobalContext, HeadProgram
+from .parser import BaseBlock, BaseProgramLocation, BaseProgramPoint, BaseProgram, GlobalContext, HeadProgram
 from ..experiment import Experiment
 from ..ureg import ureg
 
@@ -154,7 +154,7 @@ class Master:
     self.experiment.save()
 
   def receive(self, exec_path: list[int], message: Any):
-    self._logger.critical(f"Received {message!r}")
+    self._logger.debug(f"Received {message!r}")
 
     current_handle = self._handle
 
@@ -269,11 +269,9 @@ class Master:
     update_handle(self._handle)
     self._master_analysis += analysis
 
-    self._logger.debug(f"Update: {user_significant}")
-
     if self._update_callback and user_significant:
       assert self._root_entry
-      self._location = self._root_entry.export()
+      self._location = self._root_entry.export(GlobalContext(self.host))
 
       self._update_callback()
 
@@ -329,7 +327,7 @@ class ProgramHandleEntry(HierarchyNode):
   children_terms: dict[int, Term] = field(default_factory=dict)
   children: dict[int, Self] = field(default_factory=dict)
   index: int
-  location: Exportable
+  location: BaseProgramLocation
   start_time: float
   term: Term = field(default_factory=DurationTerm.unknown)
 
@@ -339,15 +337,15 @@ class ProgramHandleEntry(HierarchyNode):
   def __get_node_children__(self):
     return self.children.values()
 
-  def export(self):
+  def export(self, context: GlobalContext):
     return {
       "children": {
-        child_id: child.export() for child_id, child in self.children.items()
+        child_id: child.export(context) for child_id, child in self.children.items()
       },
       "childrenTerms": { child_id: child_term.export() for child_id, child_term in self.children_terms.items() },
       "startDate": (self.start_time * 1000),
       "term": self.term.export(),
-      **self.location.export()
+      **self.location.export(context)
     }
 
 
@@ -372,7 +370,7 @@ class ProgramHandle:
     self._program: BaseProgram
 
     self._analysis = RuntimeAnalysis()
-    self._location: Optional[Exportable] = None
+    self._location: Optional[BaseProgramLocation] = None
     self._term_info: Optional[tuple[Term, dict[int, Term]]] = None
 
     self._consumed = False
@@ -461,6 +459,8 @@ class ProgramHandle:
     return True
 
   def send(self, event: ProgramExecEvent, *, lock: bool = False):
+    raise Exception("Deprecated")
+
     self._analysis += event.analysis
     self._location = event.location or self._location
     self._updated_location = True
@@ -497,7 +497,7 @@ class ProgramHandle:
 
     self._term_info = self._program.term_info(current_children_terms)
 
-  def send_location(self, location: Exportable, /):
+  def send_location(self, location: BaseProgramLocation, /):
     self._location = location
     self._updated_location = True
 

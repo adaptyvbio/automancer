@@ -5,22 +5,11 @@ from types import EllipsisType
 from typing import TYPE_CHECKING, Any, cast, final
 
 import automancer as am
-from pr1.devices.nodes.collection import CollectionNode
-from pr1.devices.nodes.common import BaseNode, NodePath
-from pr1.devices.nodes.numeric import NumericNode
-from pr1.devices.nodes.primitive import BooleanNode, EnumNode
-from pr1.devices.nodes.value import Null, ValueNode
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
-from pr1.fiber.expr import Evaluable, export_value
-from pr1.fiber.parser import (BaseBlock, BaseParser,
-                              BasePartialPassiveTransformer,
-                              BasePassiveTransformer, BlockUnitState,
-                              FiberParser, ProtocolUnitData,
+from pr1.fiber.parser import (BasePartialPassiveTransformer,
+                              BasePassiveTransformer, ProtocolUnitData,
                               ProtocolUnitDetails, TransformerAdoptionResult)
-from pr1.input import (AnyType, Attribute, AutoExprContextType, BoolType, ChainType,
-                       EnumType, PrimitiveType, QuantityType, Type)
 from pr1.reader import LocatedValue
-from pr1.util.decorators import debug
 
 from . import namespace
 
@@ -40,8 +29,8 @@ class DevicesProtocolDetails(ProtocolUnitDetails):
 
 @dataclass
 @final
-class ApplierBlock(BaseBlock):
-  child: BaseBlock
+class ApplierBlock(am.BaseBlock):
+  child: am.BaseBlock
 
   def __get_node_children__(self):
     return [self.child]
@@ -71,9 +60,9 @@ class ApplierBlock(BaseBlock):
 
 @dataclass
 @final
-class PublisherBlock(BaseBlock):
-  assignments: dict[NodePath, Evaluable[LocatedValue[Any]]]
-  child: BaseBlock
+class PublisherBlock(am.BaseBlock):
+  assignments: dict[am.NodePath, am.Evaluable[LocatedValue[am.DynamicValue[am.NullType | object]]]]
+  child: am.BaseBlock
   stable: bool
 
   def __get_node_children__(self):
@@ -97,14 +86,14 @@ class PublisherBlock(BaseBlock):
       "namespace": namespace,
       "name": "publisher",
 
-      "assignments": [[path, value.export_inner(cast(ValueNode, context.host.root_node.find(path)).export_value)] for path, value in self.assignments.items()],
+      "assignments": [[path, value.export_inner(cast(am.ValueNode, context.host.root_node.find(path)).export_value)] for path, value in self.assignments.items()],
       "duration": self.duration().export(),
       "child": self.child.export(context),
       "stable": self.stable
     }
 
 
-class NoneToNullType(Type):
+class NoneToNullType(am.Type):
   def analyze(self, obj, /, context):
     result = LocatedValue(am.Null, obj.area) if obj.value is None else obj
     return am.DiagnosticAnalysis(), am.EvaluableConstantValue(result) if context.auto_expr else result
@@ -117,38 +106,38 @@ class PublisherTransformer(BasePassiveTransformer):
 
   @functools.cached_property
   def attributes(self):
-    def get_type(node):
+    def get_type_for_node(node):
       match node:
-        case BooleanNode():
-          return PrimitiveType(bool)
-        case EnumNode():
-          return EnumType(*[case.id for case in node.cases])
-        case NumericNode():
-          return ChainType(
-            QuantityType(node.context.dimensionality, allow_nil=node.nullable, min=(node.range[0] if node.range else None), max=(node.range[1] if node.range else None)),
+        case am.BooleanNode():
+          return am.BoolType()
+        case am.EnumNode():
+          return am.EnumType(*[case.id for case in node.cases])
+        case am.NumericNode():
+          return am.ChainType(
+            am.QuantityType(node.context.dimensionality, allow_nil=node.nullable, min=(node.range[0] if node.range else None), max=(node.range[1] if node.range else None)),
             NoneToNullType()
           )
         case _:
-          return AnyType()
+          return am.AnyType()
 
     return {
-      key: Attribute(
-        description=(node.description or f"""Sets the value of "{node.label or node.id}"."""),
+      key: am.Attribute(
+        description=(node.description or f'Set the value of "{node.label or node.id}".'),
         # documentation=([f"Unit: {node.context!r}"] if isinstance(node, NumericNode) else None),
         label=node.label,
         optional=True,
-        type=AutoExprContextType(get_type(node))
+        type=am.AutoExprContextType(am.DynamicValueType(get_type_for_node(node)))
       ) for key, (node, path) in self._parser.node_map.items()
     } | {
-      'stable': Attribute(
+      'stable': am.Attribute(
         optional=True,
-        type=BoolType()
+        type=am.BoolType()
       )
     }
 
-  def adopt(self, data: dict[str, Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
+  def adopt(self, data: dict[str, am.Evaluable[LocatedValue[Any]]], /, adoption_stack, trace):
     analysis = am.LanguageServiceAnalysis()
-    values = dict[NodePath, Evaluable[LocatedValue[Any]]]()
+    values = dict[am.NodePath, am.Evaluable[LocatedValue[Any]]]()
 
     stable = data['stable'].value if ('stable' in data) else False # type: ignore
 
@@ -167,7 +156,7 @@ class PublisherTransformer(BasePassiveTransformer):
     else:
       return analysis, None
 
-  def execute(self, data: tuple[dict[NodePath, Evaluable[LocatedValue[Any]]], bool], /, block):
+  def execute(self, data: tuple[dict[am.NodePath, am.Evaluable[LocatedValue[Any]]], bool], /, block):
     values, stable = data
     return am.LanguageServiceAnalysis(), PublisherBlock(values, block, stable=stable)
 
@@ -177,10 +166,10 @@ class ApplierTransformer(BasePartialPassiveTransformer):
     return am.LanguageServiceAnalysis(), ApplierBlock(block)
 
 
-class Parser(BaseParser):
+class Parser(am.BaseParser):
   namespace = namespace
 
-  def __init__(self, fiber: FiberParser):
+  def __init__(self, fiber):
     super().__init__(fiber)
 
     self._fiber = fiber
@@ -190,26 +179,26 @@ class Parser(BaseParser):
 
   @functools.cached_property
   def node_map(self):
-    queue: list[tuple[BaseNode, NodePath]] = [(self._fiber.host.root_node, NodePath())]
-    nodes = dict[str, tuple[BaseNode, NodePath]]()
+    queue: list[tuple[am.BaseNode, am.NodePath]] = [(self._fiber.host.root_node, am.NodePath())]
+    nodes = dict[str, tuple[am.BaseNode, am.NodePath]]()
 
     while queue:
       node, node_path = queue.pop()
 
-      if isinstance(node, CollectionNode):
+      if isinstance(node, am.CollectionNode):
         for child_node in node.nodes.values():
           queue.append((
             child_node,
-            NodePath((*node_path, child_node.id))
+            am.NodePath((*node_path, child_node.id))
           ))
 
-      if isinstance(node, ValueNode) and node.writable:
+      if isinstance(node, am.ValueNode) and node.writable:
         nodes[".".join(node_path)] = node, node_path
 
     return nodes
 
   def enter_protocol(self, attrs, /, envs):
-    def create_type(node: BaseNode, parent_path: NodePath = ()):
+    def create_type(node: am.BaseNode, parent_path: am.NodePath = ()):
       node_path = (*parent_path, node.id)
       match node:
         case am.CollectionNode():
@@ -235,7 +224,7 @@ class Parser(BaseParser):
 
     env = EvalEnv({
       'devices': EvalEnvValue(
-        lambda node: DevicesExprDef(self._fiber.host.root_node, NodePath(), symbol)
+        lambda node: DevicesExprDef(self._fiber.host.root_node, am.NodePath(), symbol)
       )
     }, name="Devices", symbol=symbol)
 
@@ -302,7 +291,7 @@ class DevicesExprDef(am.BaseExprDef):
 
 @dataclass
 class ValueNodeValueExprDef(am.BaseExprDef):
-  path: NodePath
+  path: am.NodePath
   symbol: int
   node: ast.expr
 

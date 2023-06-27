@@ -1,14 +1,12 @@
+from abc import ABC, abstractmethod
 from asyncio import Event
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import Any, AsyncGenerator, Hashable, Iterable, TypeVar
+from typing import Any, AsyncGenerator, Generic, Hashable, Iterable, Never, TypeVar
 
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
-
 from ..fiber.parser import AnalysisContext
-
 from ..fiber.eval import EvalContext
-
 from ..fiber.expr import Evaluable, EvaluableConstantValue, EvaluablePythonExpr
 from ..langservice import *
 from ..reader import LocatedValue
@@ -17,6 +15,7 @@ from ..util.pool import Pool
 from . import PossibleExprType, Type
 
 
+T = TypeVar('T')
 T_Hashable = TypeVar('T_Hashable', bound=Hashable)
 
 
@@ -34,15 +33,15 @@ class DynamicValueType(Type):
       return analysis, Ellipsis
 
     if isinstance(result, EvaluableConstantValue):
-      new_result = analysis.add(self._type.analyze(result.inner_value, context))
+      new_result = analysis.add(self._type.analyze(result.inner_value, context.update(symbolic=result.symbolic)))
 
       if isinstance(new_result, EllipsisType):
         return analysis, Ellipsis
 
       if isinstance(new_result, EvaluableConstantValue):
-        return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(new_result.inner_value.value), current_obj.area))
+        return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(new_result.inner_value.value), current_obj.area), symbolic=result.symbolic)
       else:
-        return analysis, EvaluableDeferredDynamicValue(new_result)
+        return analysis, EvaluableDeferredDynamicValue(new_result, symbolic=new_result.symbolic)
     else:
       return analysis, EvaluableDynamicValue(result, self._type)
 
@@ -64,7 +63,7 @@ class EvaluableDeferredDynamicValue(Evaluable):
       return analysis, Ellipsis
 
     if isinstance(result, EvaluableConstantValue):
-      return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(result.inner_value.value), result.inner_value.area))
+      return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(result.inner_value.value), result.inner_value.area), symbolic=result.symbolic)
 
     return analysis, EvaluableDeferredDynamicValue(result)
 
@@ -81,7 +80,7 @@ class EvaluableDynamicValue(Evaluable):
 
   def evaluate(self, context):
     if context.stack is None:
-      return LanguageServiceAnalysis(), EvaluableConstantValue(LocatedValue.new(VariableDynamicValue(self._type, self._obj, self._obj.expr.to_watched()), self._obj.contents.area))
+      return LanguageServiceAnalysis(), EvaluableConstantValue(LocatedValue.new(VariableDynamicValue(self._type, self._obj, self._obj.expr.to_watched()), self._obj.contents.area), symbolic=True)
 
     analysis, result = self._obj.evaluate(context)
 
@@ -89,20 +88,25 @@ class EvaluableDynamicValue(Evaluable):
       return analysis, Ellipsis
 
     if isinstance(result, EvaluableConstantValue):
-      new_result = analysis.add(self._type.analyze(result.inner_value, AnalysisContext(auto_expr=True))) # type: ignore
+      analysis, new_result = analysis.add_const(self._type.analyze(result.inner_value, AnalysisContext(auto_expr=True, symbolic=True))) # type: ignore
 
       if isinstance(new_result, EllipsisType):
         return analysis, Ellipsis
 
       if isinstance(new_result, EvaluableConstantValue):
-        return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(new_result.inner_value.value), result.inner_value.area))
+        return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(new_result.inner_value.value), result.inner_value.area), symbolic=True)
       else:
         return analysis, EvaluableDeferredDynamicValue(new_result)
 
     return analysis, EvaluableDynamicValue(result, self._type)
 
+class DynamicValue(ABC, Generic[T]):
+  @abstractmethod
+  def watch(self, context: EvalContext) -> AsyncGenerator[tuple[BaseAnalysis, T], Never]:
+    ...
+
 @dataclass
-class ConstantDynamicValue:
+class ConstantDynamicValue(DynamicValue):
   value: Any
 
   async def watch(self, context: EvalContext):
@@ -139,7 +143,7 @@ async def collect_generators(generators: Iterable[tuple[T_Hashable, AsyncGenerat
 
 
 @dataclass
-class VariableDynamicValue:
+class VariableDynamicValue(DynamicValue):
   _obj_type: Type
   _obj: EvaluablePythonExpr
   _watched: BaseExprWatch
@@ -161,8 +165,6 @@ class VariableDynamicValue:
 
     assert isinstance(result, EvaluableConstantValue)
     return analysis, result.inner_value.value
-
-DynamicValue = ConstantDynamicValue | VariableDynamicValue
 
 
 __all__ = [

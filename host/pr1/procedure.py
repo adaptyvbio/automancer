@@ -17,7 +17,7 @@ from . import logger
 from .error import Diagnostic
 from .eta import DurationTerm, Term
 from .fiber.expr import Evaluable
-from .fiber.parser import BaseBlock, BaseProgram, BaseProgramPoint
+from .fiber.parser import BaseBlock, BaseProgram, BaseProgramLocation, BaseProgramPoint
 from .master.analysis import Effect, RuntimeAnalysis
 from .plugin.manager import PluginName
 from .reader import PossiblyLocatedValue
@@ -345,10 +345,10 @@ class ProcessProgramMode:
 
 @comserde.serializable
 @dataclass
-class ProcessProgramLocation:
+class ProcessProgramLocation(BaseProgramLocation):
   mode: ProcessProgramMode.AnyLocation
 
-  def export(self):
+  def export(self, context) -> dict:
     return {
       "mode": self.mode.export()
     }

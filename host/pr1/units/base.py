@@ -120,7 +120,6 @@ __all__ = [
   'BaseExecutor',
   'BaseParser',
   'BaseRunner',
-  'BaseRunner',
   'Metadata',
   'MetadataIcon',
   'plugin_logger'

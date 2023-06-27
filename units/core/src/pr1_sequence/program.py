@@ -16,10 +16,10 @@ class ProgramMode(IntEnum):
 
 @comserde.serializable
 @dataclass(kw_only=True)
-class ProgramLocation(am.Exportable):
+class ProgramLocation(am.BaseProgramLocation):
   index: int
 
-  def export(self):
+  def export(self, context):
     return {
       "index": self.index
     }

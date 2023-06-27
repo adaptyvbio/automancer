@@ -6,7 +6,7 @@ from .history import TreeChange
 from .master.analysis import MasterAnalysis
 from .analysis import DiagnosticAnalysis
 from .draft import Draft
-from .fiber.parser import BaseBlock
+from .fiber.parser import BaseBlock, GlobalContext
 
 
 @comserde.serializable
@@ -18,12 +18,12 @@ class ExperimentReportHeader:
   root: Annotated[BaseBlock, comserde.SerializationFormat('object')]
   start_time: float
 
-  def export(self):
+  def export(self, context: GlobalContext):
     return {
       "draft": self.draft.export(),
       "initialAnalysis": self.analysis.export(),
       "name": self.name,
-      "root": self.root.export(),
+      "root": self.root.export(context),
       "startDate": (self.start_time * 1000)
     }
 

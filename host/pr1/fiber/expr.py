@@ -240,13 +240,13 @@ class Evaluable(Exportable, ABC, Generic[T]):
 
   def export_inner(self, export_inner_value: Callable[[Any], Any], /):
     from ..input import EvaluableChain
-    from ..input.dynamic import EvaluableDynamicValue
+    from ..input.dynamic import ConstantDynamicValue, EvaluableDynamicValue
 
     match self:
-      case EvaluableConstantValue(inner_value):
+      case EvaluableConstantValue(LocatedValue(ConstantDynamicValue(inner_value))) | EvaluableConstantValue(LocatedValue(inner_value)):
         return {
           "type": "constant",
-          "innerValue": export_inner_value(inner_value.value)
+          "innerValue": export_inner_value(inner_value)
         }
       case EvaluablePythonExpr(contents) | EvaluableChain(EvaluablePythonExpr(contents)) | EvaluableDynamicValue(EvaluablePythonExpr(contents)):
         return {
@@ -321,7 +321,7 @@ class EvaluablePythonExpr(Evaluable):
       except EvaluationError as e:
         return DiagnosticAnalysis(errors=[EvalError(self.contents.area, f"{e} ({e.__class__.__name__})")]), Ellipsis
       else:
-        return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result, area=self.contents.area, deep=True))
+        return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result, area=self.contents.area, deep=True), symbolic=True)
     else:
       try:
         # Idea: check that the expression doesn't take to long to evaluate (e.g. not more than 100 ms) by running it in a separate thread and killing it if it takes too long
@@ -332,7 +332,7 @@ class EvaluablePythonExpr(Evaluable):
         return DiagnosticAnalysis(), Ellipsis
       else:
         if isinstance(result, ConstantExprEval):
-          return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True))
+          return DiagnosticAnalysis(), EvaluableConstantValue(LocatedValue.new(result.value, area=self.contents.area, deep=True), symbolic=True)
 
         return DiagnosticAnalysis(), EvaluablePythonExpr(self.contents, result, self.symbols)
 
@@ -352,6 +352,7 @@ S = TypeVar('S', bound=PossiblyLocatedValue)
 @dataclass(frozen=True)
 class EvaluableConstantValue(Evaluable[S], Generic[S]):
   inner_value: S
+  symbolic: bool = False
 
   @property
   def dependencies(self):

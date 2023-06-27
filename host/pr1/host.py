@@ -349,7 +349,7 @@ class Host:
 
       case "getExperimentReportInfo":
         experiment = self.experiments[request["experimentId"]]
-        return experiment.report_reader.export()
+        return experiment.report_reader.export(GlobalContext(self))
 
       case "getExperimentReportEvents":
         experiment = self.experiments[request["experimentId"]]

@@ -98,7 +98,7 @@ class PluginManager:
         continue
 
       plugin_conf: 'PluginConf' = conf.value.get(namespace, create_datainstance(dict(
-        development=True,
+        development=False,
         enabled=True,
         options=LocatedValue({}, conf.area)
       )))

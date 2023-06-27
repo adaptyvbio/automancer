@@ -774,16 +774,9 @@ class PossibleExprType(Type):
 
         return analysis, expr_result
 
-        # if isinstance(expr_result, EllipsisType):
-        #   return analysis, Ellipsis
-
-        # result = analysis.add(PostAnalysisType(self._type).analyze(expr_result, context))
-        # return analysis, result
-
     return BaseAnalysis(), EvaluableConstantValue(obj)
-    # return self._type.analyze(obj, context)
 
-def PotentialExprType(obj_type: Type):
+def PotentialExprType(obj_type: Type, /):
   return ChainType(
     PossibleExprType(),
     obj_type
@@ -807,8 +800,8 @@ class QuantityType(Type):
 
   def analyze(self, obj, /, context):
     if self._allow_nil and (
-      ((not context.symbolic) and (obj == "nil")) or
-      (context.symbolic and (obj.value == None))
+      ((not context.symbolic) and (obj.value == "nil")) or
+      (context.symbolic and (obj.value is None))
     ):
       result = LocatedValue.new(None, obj.area)
       return DiagnosticAnalysis(), EvaluableConstantValue(result) if context.auto_expr else result
@@ -1116,52 +1109,6 @@ class EvaluableContainerType(Type):
   def analyze(self, obj, /, context):
     return self._type.analyze(obj, context.update(eval_depth=self._depth))
 
-class PostAnalysisType(Type):
-  def __init__(self, obj_type: Type, /):
-    self._type = obj_type
-
-  def analyze(self, obj: Evaluable, /, context):
-    if isinstance(obj, EvaluableConstantValue):
-      return self._type.analyze(obj.inner_value, context.update(auto_expr=True))
-
-    return DiagnosticAnalysis(), EvaluablePostAnalysis(obj, self._type)
-
-@dataclass
-class EvaluablePostAnalysis(Evaluable[T_PossiblyLocatedValue], Generic[T_PossiblyLocatedValue]):
-  _obj: Evaluable
-  _type: Type
-
-  def evaluate(self, context):
-    from ..fiber.parser import AnalysisContext
-
-    analysis, eval_result = self._obj.evaluate(context)
-
-    if isinstance(eval_result, EllipsisType):
-      return analysis, Ellipsis
-
-    if isinstance(eval_result, EvaluableConstantValue):
-      analysis, analysis_result = self._type.analyze(eval_result.inner_value, AnalysisContext(auto_expr=True, symbolic=True))
-
-      if isinstance(analysis_result, EllipsisType):
-        return analysis, Ellipsis
-
-      final_result = analysis.add(analysis_result.evaluate(context))
-      return analysis, final_result
-    else:
-      return analysis, EvaluablePostAnalysis(eval_result, self._type)
-
-    # return PostAnalysisType(self._type).analyze(result, AnalysisContext(symbolic=True))
-
-    # if isinstance(validation_result, EllipsisType):
-    #   return analysis, Ellipsis
-
-    # return analysis, EvaluableConstantValue(validation_result)
-
-  # PostAnalysis(PossiblyDeferred(...))
-
-  def export(self):
-    return self._obj.export()
-
 class HasAttrType(Type):
   def __init__(self, attribute: str, /):
     self._attribute = attribute
@@ -1244,13 +1191,13 @@ class EvaluableChain(Evaluable):
       return analysis, Ellipsis
 
     if isinstance(result, EvaluableConstantValue):
-      analysis, final_result = analysis.add_const(ChainType(*self._types).analyze(result.inner_value, AnalysisContext(auto_expr=True)))
+      analysis, last_result = analysis.add_const(ChainType(*self._types).analyze(result.inner_value, AnalysisContext(auto_expr=True, symbolic=result.symbolic)))
 
-      if isinstance(final_result, EllipsisType):
+      if isinstance(last_result, EllipsisType):
         return analysis, Ellipsis
 
-      x = analysis.add(final_result.evaluate(context))
-      return analysis, x
+      final_result = analysis.add(last_result.evaluate(context))
+      return analysis, final_result
 
     return analysis, EvaluableChain(result, self._types)
 
@@ -1276,7 +1223,6 @@ __all__ = [
   'IntType',
   'KVDictType',
   'ListType',
-  'PostAnalysisType',
   'PotentialExprType',
   'PrimitiveType',
   'QuantityContextType',

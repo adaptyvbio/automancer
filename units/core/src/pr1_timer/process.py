@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional, TypeVar
 
 import automancer as am
-from pr1.fiber.expr import (Evaluable, EvaluableConstantValue,
-                            EvaluablePythonExpr)
 from pr1.reader import LocatedValue, PossiblyLocatedValue
 from quantops import Quantity
+
+from . import logger
 
 
 ProcessData = Quantity | Literal['forever']
@@ -35,18 +35,18 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
   name = "_"
   namespace = am.PluginName("timer")
 
-  def duration(self, data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
+  def duration(self, data: am.Evaluable[PossiblyLocatedValue[ProcessData]], /):
     match data:
-      case EvaluableConstantValue(LocatedValue('forever')):
+      case am.EvaluableConstantValue(LocatedValue('forever')):
         return am.DurationTerm.forever()
-      case EvaluableConstantValue(LocatedValue(Quantity() as duration)):
+      case am.EvaluableConstantValue(LocatedValue(Quantity() as duration)):
         return am.DurationTerm((duration / am.ureg.second).magnitude)
       case _:
         return am.DurationTerm.unknown()
 
-  def export_data(self, data: Evaluable[PossiblyLocatedValue[ProcessData]], /):
+  def export_data(self, data: am.Evaluable[PossiblyLocatedValue[ProcessData]], /):
     return {
-      "duration": export_evaluable(data, lambda value: (value / am.ureg.second).magnitude if not isinstance(value, str) else None)
+      "duration": data.export_inner(lambda value: (value / am.ureg.second).magnitude if not isinstance(value, str) else None)
     }
 
   def import_point(self, raw_point, /):
@@ -56,6 +56,8 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
     total_duration = (context.data / am.ureg.sec).magnitude if not isinstance(context.data, str) else None
 
     context.pausable = True
+
+    logger.debug("Starting")
 
     # Infinite duration
     if total_duration is None:
@@ -110,21 +112,3 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
           break
 
 process = Process()
-
-
-T = TypeVar('T')
-
-def export_evaluable(target: Evaluable[PossiblyLocatedValue[T]], /, export_inner_value: Callable[[T], Any]):
-  match target:
-    case EvaluableConstantValue(inner_value):
-      return {
-        "type": "constant",
-        "innerValue": export_inner_value(inner_value.value)
-      }
-    case EvaluablePythonExpr(contents) | am.EvaluableChain(EvaluablePythonExpr(contents)) | am.EvaluableDynamicValue(EvaluablePythonExpr(contents)):
-      return {
-        "type": "expression",
-        "contents": contents.value
-      }
-    case _:
-      raise ValueError

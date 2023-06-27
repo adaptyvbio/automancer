@@ -146,6 +146,10 @@ class BlockUnitPreparationData:
 BlockPreparationData = dict[str, BlockUnitPreparationData]
 ProtocolDetails = dict[str, ProtocolUnitDetails]
 
+@dataclass(frozen=True, slots=True)
+class GlobalContext:
+  host: 'Host'
+
 class BaseProgram(ABC):
   def __init__(self, block: 'BaseBlock', handle: 'ProgramHandle'):
     self.__block = block
@@ -192,12 +196,12 @@ class HeadProgram(BaseProgram):
   def stable(self):
     return False
 
+class BaseProgramLocation(ABC):
+  def export(self, context: GlobalContext) -> dict:
+    ...
+
 class BaseProgramPoint(ExportableABC):
   pass
-
-@dataclass(frozen=True, slots=True)
-class GlobalContext:
-  host: 'Host'
 
 class BaseBlock(ABC, HierarchyNode):
   def duration(self):
@@ -807,3 +811,12 @@ class FiberParser:
           return analysis, Ellipsis
 
     return analysis, current_block
+
+
+__all__ = [
+  'BaseBlock',
+  'BaseParser',
+  'BaseProgramLocation',
+  'BaseProgramPoint',
+  'ProcessTransformer'
+]

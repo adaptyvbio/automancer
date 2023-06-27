@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, NewType, Optional, Self
 
 import comserde
 
+from .fiber.parser import GlobalContext
 from .history import TreeAdditionChange, TreeRemovalChange, TreeUpdateChange
 from .master.analysis import MasterAnalysis
 from .report import ExperimentReportEvent, ExperimentReportHeader
@@ -129,9 +130,9 @@ class ExperimentReportReader:
 
     return result
 
-  def export(self):
+  def export(self, context: GlobalContext):
     return {
-      **self.header.export(),
+      **self.header.export(context),
       "endDate": (self.end_time * 1000),
       "masterAnalysis": self.master_analysis.export(),
       "rootStaticEntry": self.root_static_entry.children[0].export()

@@ -254,8 +254,8 @@ class OPCUADevice(DeviceNode):
     self._client: Optional[Client] = None
     self._task: Optional[asyncio.Task[None]] = None
 
-    self._read_worker = BatchWorker[OPCUADeviceNode, Any](self._commit_read)
-    self._write_worker = BatchWorker[tuple[OPCUADeviceNode, Any], None](self._commit_write)
+    self._read_worker = BatchWorker[OPCUADeviceNode, Any](self._commit_read, dispatch_exceptions=True)
+    self._write_worker = BatchWorker[tuple[OPCUADeviceNode, Any], None](self._commit_write, dispatch_exceptions=True)
 
     self.nodes: dict[NodeId, OPCUADeviceNode] = {
       (node := self._create_node(node_conf)).id: node for node_conf in nodes_conf

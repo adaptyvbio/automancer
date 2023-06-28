@@ -6,7 +6,7 @@ from logging import Logger
 from typing import Awaitable, Callable, Generic, TypeVar
 
 from ..host import logger as parent_logger
-from .asyncio import race
+from .asyncio import race, suppress, transfer_future
 from .decorators import provide_logger
 
 
@@ -22,8 +22,9 @@ class BatchWorker(Generic[K, R]):
   Batched items are pushed to the batch queue. using `write()`. If there is no batch currently being committed, all items in the batch queue are committed by providing a list to the committer function. If all writes are cancelled, the committer function is not called, or cancelled if is already running. The committer function returns a list of results, which are returned to the corresponding `write()` calls.
   """
 
-  def __init__(self, commit: Callable[[list[K]], Awaitable[list[R]]]):
+  def __init__(self, commit: Callable[[list[K]], Awaitable[list[R]]], *, dispatch_exceptions: bool = False):
     self._commit = commit
+    self._dispatch_exceptions = dispatch_exceptions
 
     self._futures = dict[int, Future[R]]()
     self._items = dict[int, K]()
@@ -41,23 +42,26 @@ class BatchWorker(Generic[K, R]):
       items = list(self._items.values())
       self._items.clear()
 
-      self._logger.debug(f"Committing {items} items")
+      self._logger.debug(f"Committing {len(items)} items")
 
       futures = [self._futures[index] for index in indices]
+      commit_task = asyncio.ensure_future(self._commit(items))
 
-      end_index, results = await race(
-        self._commit(items),
+      end_index, _ = await race(
+        (suppress(commit_task) if self._dispatch_exceptions else commit_task),
         asyncio.wait(futures)
       )
 
       if end_index == 0:
         self._logger.debug('Committed')
 
-        for index, result in zip(indices, results):
-          future = self._futures.get(index)
+        for result_index, write_index in enumerate(indices):
+          future = self._futures.get(write_index)
 
           if future:
-            future.set_result(result)
+            transfer_future(commit_task, future, transform=(lambda result: result[result_index]))
+      else:
+        self._logger.debug('Cancelled commit')
 
   async def write(self, item: K, /):
     self._logger.debug(f"Write request: {item}")

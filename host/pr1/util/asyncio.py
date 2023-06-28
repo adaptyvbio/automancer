@@ -268,6 +268,24 @@ async def shield(awaitable: Awaitable[T], /) -> T:
     raise
 
 
+async def suppress(awaitable: Awaitable, /):
+  try:
+    await awaitable
+  except Exception:
+    pass
+
+
+def transfer_future(source: Future[T], destination: Future[S], *, transform: Callable[[T], S] = (lambda x: x)):
+  assert source.done()
+
+  if source.cancelled():
+    destination.cancel()
+  elif exc := source.exception():
+    destination.set_exception(exc)
+  else:
+    destination.set_result(transform(source.result()))
+
+
 async def try_all(items: Iterable[Coroutine[Any, Any, Any] | Task[Any]], /):
   """
   Wait for all provided coroutines or tasks to complete.

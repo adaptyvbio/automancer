@@ -1,10 +1,8 @@
-import type { ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import type { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import type { ReactNode } from 'react';
 
-import type { Point, RectSurface, Size } from '../geometry';
 import type { GraphRenderSettings } from '../components/graph-editor';
-import type { Host } from '../host';
-import type { UnitContext } from './unit';
+import type { Point, RectSurface, Size } from '../geometry';
 import type { GlobalContext } from './plugin';
 
 
@@ -31,10 +29,11 @@ export interface ProtocolBlockGraphRendererRenderOptions {
   attachmentStart: boolean;
 }
 
-export type ProtocolBlockGraphRenderer<Block extends ProtocolBlock, Location = never> = (
+export type ProtocolBlockGraphRenderer<Block extends ProtocolBlock, Location extends MasterBlockLocation = never> = (
   block: Block,
   path: ProtocolBlockPath,
-  ancestors: ProtocolBlock[],
+  pairs: ProtocolBlockGraphPair[],
+  group: ProtocolBlockGraphGroup,
   location: Location | null,
   options: {
     computeMetrics(key: number): ProtocolBlockGraphRendererMetrics;
@@ -42,3 +41,14 @@ export type ProtocolBlockGraphRenderer<Block extends ProtocolBlock, Location = n
   },
   context: GlobalContext
 ) => ProtocolBlockGraphRendererMetrics;
+
+
+export interface ProtocolBlockGraphPair {
+  block: ProtocolBlock;
+  location: MasterBlockLocation | null;
+}
+
+export interface ProtocolBlockGraphGroup {
+  name: string | null;
+  pairs: ProtocolBlockGraphPair[];
+}

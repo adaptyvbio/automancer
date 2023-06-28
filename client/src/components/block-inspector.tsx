@@ -1,7 +1,6 @@
 import { MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
 import { Fragment, ReactNode } from 'react';
 
-import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Application } from '../application';
@@ -12,7 +11,7 @@ import { GlobalContext } from '../interfaces/plugin';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
 import { getDateFromTerm } from '../term';
 import { usePool } from '../util';
-import { FeatureEntry, FeatureList } from './features';
+import { FeatureEntry, FeatureList, FeatureRoot } from './features';
 import { Icon } from './icon';
 import { TimeSensitive } from './time-sensitive';
 
@@ -101,11 +100,16 @@ export function BlockInspector(props: {
             interval={30e3} />
         </div>
 
-        {blockAnalysis.isLeafBlockTerminal && (
-          <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext)} />
-        )}
+        <FeatureRoot>
+          {blockAnalysis.isLeafBlockTerminal && (
+            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
+              ...feature,
+              accent: true
+            }))} />
+          )}
+        </FeatureRoot>
 
-        <div className={featureStyles.root}>
+        <FeatureRoot>
           {blockAnalysis.groups.slice().reverse().map((group) =>
             group.pairs.slice().reverse().map((pair, pairIndex) => {
               let blockImpl = getBlockImpl(pair.block, globalContext);
@@ -121,7 +125,7 @@ export function BlockInspector(props: {
               );
             })
           )}
-        </div>
+        </FeatureRoot>
       </div>
       {props.footer && (
         <div className={spotlightStyles.footerRoot}>

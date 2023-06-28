@@ -8,20 +8,36 @@ import { RectSurface } from './geometry';
 import { ProtocolBlockGraphRenderer } from './interfaces/graph';
 import { BlockContext, PluginBlockImpl } from './interfaces/plugin';
 import { deepEqual } from './util';
+import { getBlockImpl } from './protocol';
 
 
-const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<unknown>> = (block, path, ancestors, location, options, context) => {
-  let impl = context.host.plugins[block.namespace].blocks[block.name];
-  let features = impl.createFeatures!(block, null, context);
+const DEFAULT_PROCESS_FEATURES: FeatureDef[] = [
+  { icon: 'not_listed_location',
+    label: 'Process' }
+];
 
-  let name: string | null = null;
+
+const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<unknown>> = (block, path, pairs, group, location, options, context) => {
+  let features = group.pairs
+    .slice()
+    .reverse()
+    .flatMap((pair, index): FeatureDef[] => {
+      let isProcessBlock = (index === 0);
+      let blockImpl = getBlockImpl(pair.block, context);
+      let features = blockImpl.createFeatures?.(pair.block, null, context) ?? (isProcessBlock ? DEFAULT_PROCESS_FEATURES : []);
+
+      return features.map((feature) => ({
+        ...feature,
+        accent: feature.accent || isProcessBlock
+      }));
+    });
 
   let featureCount = features.length;
   let settings = options.settings;
 
   let width = Math.round((280 + settings.nodePadding * 2) / settings.cellPixelSize);
   let height = Math.ceil((
-    ((name !== null) ? settings.nodeHeaderHeight : 0)
+    ((group.name !== null) ? settings.nodeHeaderHeight : 0)
     + (30 * featureCount)
     + (5.6 * (featureCount - 1))
     + (settings.nodeBodyPaddingY * 2)
@@ -62,20 +78,19 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<un
               width,
               height
             }}
-            node={{
-              id: '_',
-              title: (name !== null)
-                ? {
-                  text: name,
-                  value: name
-                }
-                : null,
-              features,
-              position
-            }}
+            features={features}
+            position={position}
             path={path}
             status={status}
-            settings={options.settings} />
+            settings={options.settings}
+            title={
+              (group.name !== null)
+                ? {
+                  node: group.name,
+                  text: group.name
+                }
+                : null
+            } />
         ),
         nodes: [{
           path,
@@ -202,10 +217,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
         ? location.mode.processInfo?.location ?? null
         : null;
 
-      return options.createFeatures?.(block.data, processLocation) ?? [
-        { icon: 'not_listed_location',
-          label: 'Process' }
-      ];
+      return options.createFeatures?.(block.data, processLocation) ?? DEFAULT_PROCESS_FEATURES;
     },
     getLabel(block) {
       return options.getLabel?.(block.data) ?? null;

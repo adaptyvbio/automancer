@@ -1,6 +1,5 @@
 import { OrdinaryId } from 'pr1-shared';
-import * as React from 'react';
-import { ReactNode, memo, useState } from 'react';
+import { PropsWithChildren, ReactNode, memo, useState } from 'react';
 
 import styles from '../../styles/components/features.module.scss';
 
@@ -130,10 +129,21 @@ export function FeatureList(props: {
   features: FeatureDef[];
 }) {
   return (
-    <div className={styles.list}>
-      {props.features.map((feature, featureIndex) => (
-        <Feature feature={feature} key={featureIndex} />
-      ))}
+    <div className={styles.entry}>
+      <div className={styles.features}>
+        {props.features.map((feature, featureIndex) => (
+          <Feature feature={feature} key={featureIndex} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+export function FeatureRoot(props: PropsWithChildren<{}>) {
+  return (
+    <div className={styles.root}>
+      {props.children}
     </div>
   );
 }

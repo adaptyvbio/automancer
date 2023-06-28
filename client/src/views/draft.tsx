@@ -587,20 +587,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       this.setState({ cursorPosition: position });
                     }}
                     refTextEditor={this.refTextEditor} />
-                  {/* <TextEditor
-                    autoSave={false}
-                    documentItem={this.state.documentItems.find((documentItem) => documentItem.snapshot.id === this.state.selectedDocumentId)!}
-                    // draft={this.props.draft}
-                    getCompilation={this.getCompilation.bind(this)}
-                    save={(compilation, source) => {
-                      this.pool.add(async () => {
-                        await this.props.app.saveDraftSource(this.props.draft, source);
-                        await this.props.app.saveDraftCompilation(this.props.draft, compilation);
-
-                        this.refTitleBar.current!.notify();
-                      });
-                    }}
-                    summary={null} /> */}
                     {/* summary={!this.state.graphOpen ? summary : null} /> */}
                 </div>
               ) },

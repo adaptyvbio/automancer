@@ -11,7 +11,7 @@ $entry-height: 30px;
 .root
   .entry [+]
     .features
-      .feature [+]
+      .feature [+] [&Accent] [&Disabled]
         .icon
         .body
           .description

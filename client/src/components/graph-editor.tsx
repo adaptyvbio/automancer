@@ -1,20 +1,21 @@
 import { Map as ImMap, List } from 'immutable';
-import { Protocol, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
+import { MasterBlockLocation, ProtocolBlock, ProtocolBlockPath } from 'pr1-shared';
 import { Component, ReactNode, createRef } from 'react';
 
 import graphEditorStyles from '../../styles/components/graph-editor.module.scss';
 
+import { Application } from '../application';
 import { FeatureList } from '../components/features';
 import { OverflowableText } from '../components/overflowable-text';
 import { Point, RectSurface, SideValues, Size, squareDistance, squareLength } from '../geometry';
 import { Host } from '../host';
-import { ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
+import { ProtocolBlockGraphGroup, ProtocolBlockGraphPair, ProtocolBlockGraphRenderer, ProtocolBlockGraphRendererMetrics } from '../interfaces/graph';
 import { GlobalContext, UnknownPluginBlockImpl } from '../interfaces/plugin';
 import { FeatureGroupDef } from '../interfaces/unit';
 import { getBlockImpl, getBlockName } from '../protocol';
 import * as util from '../util';
 import { Icon } from './icon';
-import { Application } from '../application';
+import { AccessibleText } from '../interfaces/misc';
 
 
 export interface GraphEditorProps {
@@ -27,7 +28,7 @@ export interface GraphEditorProps {
     blockPath: ProtocolBlockPath;
     observed: boolean;
   } | null;
-  location?: unknown;
+  location?: MasterBlockLocation;
   summary?: ReactNode;
 }
 
@@ -276,8 +277,8 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
       let computeGraph = (
         groupRootBlock: ProtocolBlock,
         path: ProtocolBlockPath,
-        ancestors: ProtocolBlock[],
-        location: unknown
+        ancestorPairs: ProtocolBlockGraphPair[],
+        location: MasterBlockLocation | null
       ): ProtocolBlockGraphRendererMetrics => {
         let currentBlock = groupRootBlock;
         let currentBlockImpl: UnknownPluginBlockImpl;
@@ -285,13 +286,25 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
         let currentLocation = location;
 
         let groupBlocks: ProtocolBlock[] = [];
+        let groupPairs: ProtocolBlockGraphPair[] = [];
         let groupName: string | null = null;
+
 
         while (true) {
           currentBlockImpl = getBlockImpl(currentBlock, globalContext);
           let currentBlockName = getBlockName(currentBlock);
 
-          if (currentBlockImpl.computeGraph || (currentBlockName && groupName)) {
+          if (currentBlockName && groupName) {
+            break;
+          }
+
+          groupBlocks.push(currentBlock);
+          groupPairs.push({
+            block: currentBlock,
+            location: currentLocation
+          });
+
+          if (currentBlockImpl.computeGraph) {
             break;
           }
 
@@ -299,36 +312,39 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
             groupName = currentBlockName;
           }
 
-          groupBlocks.push(currentBlock);
-
           let key = 0;
           currentBlock = currentBlockImpl.getChildren!(currentBlock, globalContext)[key].block;
           currentBlockPath.push(key);
           currentLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, globalContext)?.[key]?.location ?? null);
         }
 
-        let defaultLabelComponents = groupBlocks.flatMap((block) => {
+        let defaultLabelComponents: ReactNode[] = groupBlocks.flatMap((block) => {
           return getBlockImpl(block, globalContext).getLabel?.(block) ?? [];
         });
 
-        if ((groupBlocks.length > 0) && (groupName || (defaultLabelComponents.length > 0))) {
-          return computeContainerBlockGraph(({
-            label: (groupName ?? defaultLabelComponents.join(', '))
-          } as any), currentBlockPath.slice(0, -1), [], null, {
-            settings,
-            computeMetrics(key) {
-              return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation);
-            },
-          }, globalContext);
-        }
+        // if (groupName || (defaultLabelComponents.length > 0)) {
+        //   return computeContainerBlockGraph(({
+        //     label: (groupName ?? defaultLabelComponents.join(', '))
+        //   } as any), currentBlockPath.slice(0, -1), [], null, {
+        //     settings,
+        //     computeMetrics(key) {
+        //       return computeGraph(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation);
+        //     },
+        //   }, globalContext);
+        // }
 
-        return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestors, ...groupBlocks], currentLocation, {
+        let group: ProtocolBlockGraphGroup = {
+          name: groupName,
+          pairs: groupPairs
+        };
+
+        return currentBlockImpl.computeGraph!(currentBlock, currentBlockPath, [...ancestorPairs, ...groupPairs], group, currentLocation, {
           settings,
           computeMetrics: (key) => {
             let childBlock = currentBlockImpl.getChildren!(currentBlock, globalContext)[key].block;
             let childLocation = currentLocation && (currentBlockImpl.getChildrenExecution!(currentBlock, currentLocation, globalContext)?.[key]?.location ?? null);
 
-            return computeGraph(childBlock, [...currentBlockPath, key], [...ancestors, currentBlock], childLocation);
+            return computeGraph(childBlock, [...currentBlockPath, key], [...ancestorPairs, ...groupPairs], childLocation);
           }
         }, globalContext);
       };
@@ -526,39 +542,23 @@ export interface GraphRenderSettings {
 }
 
 
-type GraphNodeId = string;
-
-interface GraphNodeDef {
-  id: GraphNodeId;
-  title: {
-    text: string;
-    value: ReactNode;
-  } | null;
-  features: FeatureGroupDef;
-  position: {
-    x: number;
-    y: number;
-  };
-}
-
 export function GraphNode(props: {
   activity?: 'active' | 'default' | 'paused';
-  autoMove: unknown;
+  autoMove?: unknown;
   cellSize: Size;
-  node: GraphNodeDef;
+  features: FeatureGroupDef;
   path: ProtocolBlockPath;
+  position: Point;
   settings: GraphRenderSettings;
   status: 'default' | 'observed' | 'selected';
+  title?: AccessibleText | null;
 }) {
-  let { node, settings } = props;
-
-  // let host = props.settings.editor.props.host;
-  // let blockAnalysis = analyzeBlockPath(props.settings.editor.props.protocol!, props.path, { host });
+  let settings = props.settings;
 
   return (
     <g
       className={util.formatClass(graphEditorStyles.noderoot, { '_automove': props.autoMove })}
-      transform={`translate(${settings.cellPixelSize * node.position.x} ${settings.cellPixelSize * node.position.y})`}>
+      transform={`translate(${settings.cellPixelSize * props.position.x} ${settings.cellPixelSize * props.position.y})`}>
       <foreignObject
         x="0"
         y="0"
@@ -576,13 +576,13 @@ export function GraphNode(props: {
           onDoubleClick={() => {
             settings.editor.selectBlock(props.path, { showInspector: true });
           }}>
-          {node.title && (
+          {props.title && (
             <div className={graphEditorStyles.header}>
-              <div className={graphEditorStyles.title} title={node.title.text}>{node.title.value}</div>
+              <div className={graphEditorStyles.title} title={props.title.text}>{props.title.node}</div>
             </div>
           )}
           <div className={graphEditorStyles.body}>
-            <FeatureList features={node.features} />
+            <FeatureList features={props.features} />
           </div>
         </div>
       </foreignObject>
@@ -700,7 +700,7 @@ export function GraphNodeContainer(props: {
 
 const computeContainerBlockGraph: ProtocolBlockGraphRenderer<ProtocolBlock & {
   label: string;
-}, 0> = (block, path, ancestors, location, options, context) => {
+}, never> = (block, path, pairs, blockPairs, location, options, context) => {
   let childMetrics = options.computeMetrics(0);
 
   let size = {

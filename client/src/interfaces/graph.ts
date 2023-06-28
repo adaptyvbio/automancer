@@ -49,6 +49,7 @@ export interface ProtocolBlockGraphPair {
 }
 
 export interface ProtocolBlockGraphGroup {
+  labels: ReactNode[];
   name: string | null;
   pairs: ProtocolBlockGraphPair[];
 }

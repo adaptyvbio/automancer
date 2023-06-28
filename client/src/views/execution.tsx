@@ -319,8 +319,7 @@ export class ViewExecution extends Component<ViewExecutionProps, ViewExecutionSt
         selection: {
           blockPath: activeBlockPaths.first()!.toArray(),
           observed: true
-        },
-        toolsTabId: 'inspector'
+        }
       };
     }
 

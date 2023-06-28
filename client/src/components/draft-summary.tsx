@@ -9,7 +9,7 @@ import { ShortcutGuide } from './shortcut-guide';
 
 export function DraftSummary(props: {
   description?: ReactNode | null;
-  message: ReactNode | null;
+  message?: ReactNode | null;
   onTrigger?: (() => void) | null;
   status: 'default' | 'error' | 'success' | 'warning';
   title: ReactNode;

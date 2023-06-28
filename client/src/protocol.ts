@@ -1,7 +1,7 @@
-import { DatetimeTerm, DurationTerm, Experiment, ExperimentId, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms } from 'pr1-shared';
+import { DatetimeTerm, DurationTerm, Experiment, MasterBlockLocation, Protocol, ProtocolBlock, ProtocolBlockPath, Term, addTerms, createErrorWithCode } from 'pr1-shared';
 
-import { BlockContext, GlobalContext } from './interfaces/plugin';
 import { HostDraftMark } from './interfaces/draft';
+import { BlockContext, GlobalContext } from './interfaces/plugin';
 
 
 export interface BlockGroup {
@@ -85,7 +85,7 @@ export function getRefPaths(block: ProtocolBlock, location: MasterBlockLocation,
  *
  * Rules
  *  1. Only one `name` block can be present in a group. If another `name` block is encountered, a new group is created with this block as its root.
- *  2. Certain blocks known as _sparse_ blocks, especially those which require custom graph rendering such as `sequence` and `parallel` blocks, are always at the root of their group. If such a block is encountered, a new group is created.
+ *  2. Certain blocks known as _sparse_ blocks, especially those which require custom graph rendering such as `sequence` and `parallel` blocks, are always at the end of their group. After such a block is encountered, a new group is created.
  *  3. A block is _terminal_ if it contains no children, regardless of whether the target block is that block or one its children.
  *  4. The leaf block is the target block, as specified by the path provided as an argument.
  */
@@ -122,17 +122,14 @@ export function analyzeBlockPath(
     }
   }];
 
-  let groups: BlockGroup[] = [{
-    name: protocol.name,
-    pairs: [],
-    path: []
-  }];
-
-  let isLeafBlockTerminal = false;
-
   for (let key of blockPath) {
     let currentBlockImpl = getBlockImpl(currentBlock, context);
-    let childInfo = currentBlockImpl.getChildren!(currentBlock, context)[key];
+    let childInfo = currentBlockImpl.getChildren?.(currentBlock, context)[key];
+
+    if (!childInfo) {
+      throw createErrorWithCode('Invalid block path', 'INVALID_BLOCK_PATH');
+    }
+
     let childLocation = (currentLocation?.children[key] ?? null);
 
     let childMark = (currentMark?.childrenMarks[key] ?? null);
@@ -171,10 +168,14 @@ export function analyzeBlockPath(
     });
   }
 
+  let groups: BlockGroup[] = [];
+  let isLeafBlockTerminal = false;
+  let sparse = false;
+
   for (let [blockIndex, pair] of pairs.entries()) {
     let isBlockLeaf = (blockIndex === (pairs.length - 1));
 
-    let group = groups.at(-1)!;
+    let group = groups.at(-1);
     let blockName = getBlockName(pair.block);
     let blockImpl = getBlockImpl(pair.block, context);
 
@@ -183,7 +184,7 @@ export function analyzeBlockPath(
       continue;
     }
 
-    if (blockImpl.computeGraph || (blockName && group.name)) {
+    if (sparse || !group || (blockName && group.name)) {
       group = {
         name: null,
         pairs: [],
@@ -192,6 +193,8 @@ export function analyzeBlockPath(
 
       groups.push(group);
     }
+
+    sparse = !!blockImpl.computeGraph;
 
     if (blockName) {
       group.name = blockName;
@@ -203,6 +206,8 @@ export function analyzeBlockPath(
       group.path.push(blockPath[blockIndex]);
     }
   }
+
+  groups[0].name ??= protocol.name;
 
   // console.log({
   //   groups,

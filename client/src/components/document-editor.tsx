@@ -62,13 +62,13 @@ export class DocumentEditor extends Component<DocumentEditorProps, DocumentEdito
                   <>
                     <p>This file is missing.</p>
 
-                    <div className={viewStyles.blankActions}>
+                    {/* <div className={viewStyles.blankActions}>
                       <Button onClick={() => {
                         this.pool.add(async () => {
                           // ...
                         });
                       }}>Create</Button>
-                    </div>
+                    </div> */}
                   </>
                 );
               default:

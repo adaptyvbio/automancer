@@ -55,6 +55,8 @@ export type ViewDraftProps = Omit<ViewProps, 'route'> & {
 }
 
 export interface ViewDraftState {
+  self: ViewDraft;
+
   compilation: HostDraftCompilerResult | null;
   compiling: boolean;
   cursorPosition: monaco.Position | null;
@@ -154,6 +156,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     } satisfies DocumentItem));
 
     this.state = {
+      self: this,
+
       compilation: null,
       compiling: true, // The draft will soon be compiling if it's readable.
       cursorPosition: null,
@@ -712,6 +716,41 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
         )}
       </main>
     );
+  }
+
+
+  static getDerivedStateFromProps(props: ViewDraftProps, state: ViewDraftState): Partial<ViewDraftState> | null {
+    if (state.compilation?.protocol && state.selectedBlockPath) {
+      let analysis: ReturnType<typeof analyzeBlockPath> | null;
+
+      try {
+        analysis = analyzeBlockPath(
+          state.compilation?.protocol,
+          null,
+          null,
+          state.selectedBlockPath,
+          {
+            app: props.app,
+            host: props.host,
+            pool: state.self.pool
+          }
+        );
+      } catch (err: any) {
+        if (err.code === 'INVALID_BLOCK_PATH') {
+          analysis = null;
+        } else {
+          throw err;
+        }
+      }
+
+      if (!analysis || !analysis.isLeafBlockTerminal) {
+        return {
+          selectedBlockPath: null
+        };
+      }
+    }
+
+    return null;
   }
 
 

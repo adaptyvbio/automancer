@@ -61,7 +61,7 @@ export class ShortcutManager {
 
       let properties: ShortcutProperties = {
         altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
+        ctrlKey: (IS_MAC && event.ctrlKey),
         key,
         metaKey: (IS_MAC ? event.metaKey : event.ctrlKey),
         shiftKey: event.shiftKey

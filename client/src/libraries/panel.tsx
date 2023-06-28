@@ -4,6 +4,7 @@ import { Fragment, PropsWithChildren, ReactNode } from 'react';
 import styles from '../../styles/libraries/panel.module.scss';
 import { Props } from '@floating-ui/react-dom-interactions/src/FloatingFocusManager';
 import { Button } from '../components/button';
+import { OrdinaryId } from 'pr1-shared';
 
 
 export function PanelRoot(props: PropsWithChildren<{}>) {
@@ -50,16 +51,19 @@ export function PanelAction(props: PropsWithChildren<{}>) {
   );
 }
 
+export interface PanelDataEntry {
+  id: OrdinaryId;
+  label: ReactNode;
+  value: ReactNode;
+}
+
 export function PanelDataList(props: {
-  data: {
-    label: ReactNode;
-    value: ReactNode;
-  }[];
+  data: PanelDataEntry[] | Omit<PanelDataEntry, 'id'>[];
 }) {
   return (
     <dl className={styles.datalist}>
       {props.data.map((item, index) => (
-        <Fragment key={index}>
+        <Fragment key={('id' in item) ? item.id : index}>
           <dt>{item.label}</dt>
           <dd>{item.value}</dd>
         </Fragment>

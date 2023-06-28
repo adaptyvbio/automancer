@@ -44,7 +44,7 @@ export interface HostDraftMark {
 
 export interface DraftLanguageAnalysis {
   completions: DraftCompletion[];
-  diagnostics: Diagnostic[];
+  errors: Diagnostic[];
   folds: DraftFold[];
   hovers: DraftHover[];
   markers: DraftMarker[];
@@ -52,4 +52,5 @@ export interface DraftLanguageAnalysis {
   renames: DraftRename[];
   selections: DraftSelection[];
   tokens: DraftToken[];
+  warnings: Diagnostic[];
 }

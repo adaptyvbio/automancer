@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build": "npm run build:js && (npm test || true)",
-    "build:js": "esbuild src/index.tsx --bundle --external:pr1 --external:react --format=esm --minify --outdir=../src/pr1_s3/client",
+    "build:js": "esbuild src/index.tsx --bundle --external:pr1 --external:react --format=esm --minify --outdir=../src/pr1_slack/client",
     "test": "tsc"
   },
   "devDependencies": {

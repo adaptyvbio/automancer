@@ -1,24 +1,16 @@
 import asyncio
-from logging import Logger
-import math
-from asyncio import Event
 from dataclasses import dataclass
-from typing import Literal, Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import pr1 as am
-from pr1.fiber.expr import export_value
-from pr1.fiber.process import (BaseProcess, BaseProcessPoint, ProcessExecEvent,
-                               ProcessFailureEvent, ProcessPauseEvent, ProcessTerminationEvent)
-from pr1.master.analysis import MasterAnalysis, MasterError
-from pr1.util.asyncio import AsyncIteratorThread
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from . import logger, namespace
+from . import namespace
 
 
 class SlackFile(Protocol):
-  contents: am.FileRef
+  contents: am.DataRef
   format: Optional[str]
   name: Optional[str]
 
@@ -26,7 +18,7 @@ class SlackSettings(Protocol):
   channel_id: str
   icon_url: Optional[str]
   token: str
-  user_name: str
+  user_name: Optional[str]
 
 class ProcessData(Protocol):
   body: str
@@ -34,89 +26,79 @@ class ProcessData(Protocol):
   settings: SlackSettings
 
 
-class SlackError(MasterError):
-  def __init__(self, exception: Exception, /):
-    super().__init__(exception.args[0])
-
-class SourceError(MasterError):
-  def __init__(self, exception: OSError, /):
-    super().__init__(str(exception))
-
-
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ProcessLocation:
+  body: str
   file_count: int
   phase: int
 
   def export(self):
     return {
+      "body": self.body,
       "fileCount": self.file_count,
       "phase": self.phase
     }
 
 @dataclass(kw_only=True)
-class ProcessPoint(BaseProcessPoint):
+class ProcessPoint(am.BaseProcessPoint):
   pass
 
-@am.provide_logger(logger)
-class Process(BaseProcess[ProcessData, ProcessPoint]):
+class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
   name = "_"
   namespace = namespace
 
-  def __init__(self, data: ProcessData, /, master):
-    self._data = data
-    self._halted = False
-    self._resume_event: Optional[Event] = None
+  def duration(self, data):
+    return am.DurationTerm(5.0)
 
-    self._logger: Logger
+  def export_data(self, data):
+    return {
+      "body": "" # TODO: Fill in with something like export_value(data.get("body"))
+    }
 
-  async def run(self, point, stack):
-    client = WebClient(token=self._data.settings.token)
+  async def __call__(self, context: am.ProcessContext[ProcessData, ProcessLocation, ProcessPoint]):
+    client = WebClient(token=context.data.settings.token)
     phase = 0
 
-    def create_location():
-      return ProcessLocation(
-        file_count=len(self._data.files),
+    def send_location():
+      context.send_location(ProcessLocation(
+        body=context.data.body,
+        file_count=len(context.data.files),
         phase=phase
-      )
+      ))
 
-    yield ProcessExecEvent(
-      location=create_location()
-    )
+    send_location()
 
     try:
-      result = await asyncio.to_thread(lambda: client.chat_postMessage(
-        channel=self._data.settings.channel_id,
-        text=self._data.body
+      response = await asyncio.to_thread(lambda: client.chat_postMessage(
+        channel=context.data.settings.channel_id,
+        text=context.data.body,
+        username=context.data.settings.user_name
       ))
 
       phase += 1
+      send_location()
 
-      for data_file in self._data.files:
-        with data_file.contents.open("r") as file:
-          result = await asyncio.to_thread(lambda: client.files_upload(
-            channels=self._data.settings.channel_id,
+      for data_file in context.data.files:
+        with data_file.contents.open(text=False) as file:
+          # TODO: Test what happends when data_file.name is None
+
+          response: Any = await asyncio.to_thread(lambda: client.files_upload(
+            channels=context.data.settings.channel_id,
             file=file,
             filename=data_file.name,
             filetype=data_file.format # To be standardized
           ))
 
-          print(result)
+          context.send_effect(am.GenericEffect(
+            "Uploaded file to Slack",
+            description=am.RichText("Uploaded file ", am.RichTextLink(response['file']['title'], url=response['file']['permalink'])),
+            icon="upload_file"
+          ))
 
         phase += 1
+        send_location()
     except SlackApiError as e:
-      yield ProcessFailureEvent(
-        analysis=MasterAnalysis(errors=[SlackError(e)]),
-        location=create_location()
-      )
-    else:
-      yield ProcessTerminationEvent(
-        # analysis=MasterAnalysis(effects=[Effect(...)]),
-        location=create_location()
-      )
+      raise am.ProcessFailureError from e
 
-  @staticmethod
-  def export_data(data):
-    return {
-      "body": export_value(data['body'])
-    }
+
+process = Process()

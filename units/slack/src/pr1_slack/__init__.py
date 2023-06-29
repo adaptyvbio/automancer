@@ -1,19 +1,19 @@
 from importlib.resources import files
 
-from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
+import automancer as am
 
 
-namespace = "slack"
+namespace = am.PluginName("slack")
 version = 0
 
-metadata = Metadata(
+metadata = am.Metadata(
   description="Slack",
-  icon=MetadataIcon(kind='icon', value="chat"),
+  icon=am.MetadataIcon(kind='icon', value="chat"),
   title="Slack",
   version="1.0"
 )
 
 client_path = files(__name__ + '.client')
-logger = parent_logger.getChild(namespace)
+logger = am.logger.getChild(namespace)
 
 from .parser import Parser

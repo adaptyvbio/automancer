@@ -11,7 +11,7 @@ dependencies=[
   "slack_sdk~=3.21.3"
 ]
 
-[project.entry-points."pr1.units"]
+[project.entry-points."automancer.plugins"]
 slack = "pr1_slack"
 
 [tool.setuptools.packages.find]

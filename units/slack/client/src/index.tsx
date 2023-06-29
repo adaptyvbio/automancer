@@ -3,15 +3,13 @@ import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface ProcessData {
-  bucket: DynamicValue;
-  multipart: DynamicValue;
-  target: DynamicValue;
+
 }
 
 export interface ProcessLocation {
-  paused: boolean;
-  phase: 'complete' | 'create' | 'done' | 'part_upload' | 'upload';
-  progress: number;
+  body: string;
+  fileCount: number;
+  phase: number;
 }
 
 export default {
@@ -19,39 +17,13 @@ export default {
   blocks: {
     ['_' as ProtocolBlockName]: createProcessBlockImpl<ProcessData, ProcessLocation>({
       Component(props) {
-        let progress = (() => {
-          switch (props.location.phase) {
-            case 'complete':
-              return 0.9;
-            case 'create':
-              return 0;
-            case 'done':
-              return 1;
-            case 'part_upload':
-              return 0.1 + props.location.progress * 0.8;
-            case 'upload':
-              return props.location.progress;
-          }
-        })();
-
-        return (
-          <div>
-            <ProgressBar
-              description={() => (
-                <ExpandableText expandedValue="100%">
-                  {(progress * 100).toFixed() + '%'}
-                </ExpandableText>
-              )}
-              paused={props.location.paused}
-              value={progress} />
-          </div>
-        );
+        return <p>Progress: {props.location.phase}/{props.location.fileCount + 1}</p>
       },
       createFeatures(data, location) {
         return [
-          { icon: 'cloud_upload',
-            description: 'Upload to S3',
-            label: <>Bucket {formatDynamicValue(data.bucket)}</> }
+          { icon: 'chat',
+            description: 'Slack message',
+            label: location?.body ?? '...' }
         ];
       }
     })

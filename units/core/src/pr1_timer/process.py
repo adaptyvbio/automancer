@@ -1,9 +1,8 @@
 import asyncio
-import math
 import time
-from asyncio import Event, Future, Task
-from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, Optional, TypeVar
+from asyncio import Future
+from dataclasses import dataclass
+from typing import Literal, Optional
 
 import automancer as am
 from pr1.reader import LocatedValue, PossiblyLocatedValue
@@ -18,9 +17,11 @@ ProcessData = Quantity | Literal['forever']
 class ProcessLocation:
   duration: Optional[float] # in seconds, None = wait forever
   progress: float
+  time: Optional[float] = None
 
   def export(self):
     return {
+      "date": (self.time * 1000) if (self.time is not None) else None,
       "duration": self.duration,
       "progress": self.progress
     }
@@ -78,7 +79,7 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
         start_time = time.time()
         remaining_duration = total_duration * (1.0 - progress)
 
-        context.send_location(ProcessLocation(total_duration, progress))
+        context.send_location(ProcessLocation(total_duration, progress, time=start_time))
         context.send_term(am.DatetimeTerm(start_time + remaining_duration))
 
         try:

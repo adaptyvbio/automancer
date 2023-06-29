@@ -1,16 +1,15 @@
-import * as React from 'react';
-import { ReactNode, createRef } from 'react';
+import { Component, ReactNode, createRef } from 'react';
 
 import styles from '../../styles/components/progress-bar.module.scss';
 
-import * as util from '../util';
+import { formatClass } from '../util';
 
 
 export interface ProgressBarProps {
   description?(selectValue: number | null): ReactNode;
   endDate?: number | null;
   paused?: unknown;
-  setValue?(newValue: number): void;
+  setValue?: ((newValue: number) => void) | null;
   value: number;
 }
 
@@ -18,7 +17,7 @@ export interface ProgressBarState {
   selectValue: number | null;
 }
 
-export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
+export class ProgressBar extends Component<ProgressBarProps, ProgressBarState> {
   private animation: {
     obj: Animation;
     startDate: number;
@@ -39,12 +38,7 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
 
   override componentDidUpdate(prevProps: Readonly<ProgressBarProps>, prevState: Readonly<ProgressBarState>, snapshot?: any) {
     if (this.props.endDate !== prevProps.endDate) {
-      // if (prevProps.endDate && this.animation && (prevProps !== this.props)) {
-      if (false) {
-        // this.updateAnimation(prevProps.value + (1 - prevProps.value) * (Date.now() - this.animation.startDate) / (prevProps.endDate - this.animation.startDate));
-      } else {
-        this.updateAnimation();
-      }
+      this.updateAnimation();
     }
   }
 
@@ -76,13 +70,15 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
   }
 
   override render() {
+    // console.log('Render', this.props.value);
+
     return (
-      <div className={util.formatClass(styles.root, {
+      <div className={formatClass(styles.root, {
         '_paused': this.props.paused,
         '_writable': this.props.setValue
       })}>
         <div className={styles.outer}
-          onMouseMove={this.props.setValue && ((event) => {
+          onMouseMove={(this.props.setValue ?? undefined) && ((event) => {
             let inner = event.currentTarget.firstChild as HTMLDivElement;
             let innerRect = inner.getBoundingClientRect();
 
@@ -91,10 +87,10 @@ export class ProgressBar extends React.Component<ProgressBarProps, ProgressBarSt
 
             this.setState({ selectValue: value });
           })}
-          onMouseLeave={this.props.setValue && (() => {
+          onMouseLeave={(this.props.setValue ?? undefined) && (() => {
             this.setState({ selectValue: null });
           })}
-          onClick={this.props.setValue && (() => {
+          onClick={(this.props.setValue ?? undefined) && (() => {
             this.props.setValue!(this.state.selectValue!);
           })}>
           <div className={styles.inner} />

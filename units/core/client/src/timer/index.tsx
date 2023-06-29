@@ -1,5 +1,5 @@
-import { EvaluableValue, Form, PanelAction, PanelActions, PanelDataList, PanelLoader, PanelPlaceholder, PanelRoot, PanelSection, PanelSpinner, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
-import { PluginName, ProtocolBlockName } from 'pr1-shared';
+import { EvaluableValue, Form, PanelAction, PanelActions, PanelDataList, PanelLoader, PanelPlaceholder, PanelRoot, PanelSection, PanelSpinner, Plugin, ProgressBar, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
+import { MasterBlockLocation, PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface ProcessData {
@@ -7,6 +7,7 @@ export interface ProcessData {
 }
 
 export interface ProcessLocation {
+  date: number | null;
   duration: number | null;
   progress: number;
 }
@@ -29,9 +30,8 @@ export default {
 
         return (
           <TimedProgressBar
-            date={props.date}
+            date={props.location.date!}
             duration={props.location.duration * 1000}
-            paused={props.status === 'paused'}
             setValue={(progress) => {
               props.context.pool.add(async () => {
                 await props.context.sendMessage({

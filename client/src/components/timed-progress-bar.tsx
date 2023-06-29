@@ -1,16 +1,14 @@
-import * as React from 'react';
+import { Component } from 'react';
 
-import { ProgressBar } from './progress-bar';
 import { ExpandableText } from './expandable-text';
+import { ProgressBar } from './progress-bar';
 import { TimeSensitive } from './time-sensitive';
-import { formatDuration } from '../format';
 
 
 export interface TimedProgressBarProps {
-  date: number;
+  date: number | null; // null => paused
   displayMode?: ProgressDisplayMode;
   duration: number;
-  paused?: unknown;
   setValue?(newValue: number): void;
   value: number;
 }
@@ -19,18 +17,38 @@ export interface TimedProgressBarState {
 
 }
 
-export class TimedProgressBar extends React.Component<TimedProgressBarProps, TimedProgressBarState> {
+export class TimedProgressBar extends Component<TimedProgressBarProps, TimedProgressBarState> {
   private getStats() {
-    let nowDate = Date.now();
-    let currentValue = Math.min(1, this.props.value + (!this.props.paused ? ((nowDate - this.props.date) / this.props.duration) : 0));
-    let endDate = this.props.date + this.props.duration * (1 - this.props.value);
-    let remainingDuration = endDate - nowDate;
+    if (this.props.date !== null) {
+      let nowDate = Date.now();
+      let endDate = this.props.date + this.props.duration * (1 - this.props.value);
 
-    return { currentValue, endDate, remainingDuration };
+      return {
+        currentValue: Math.min(1, this.props.value + ((this.props.date !== null) ? ((nowDate - this.props.date) / this.props.duration) : 0)),
+        endDate,
+        remainingDuration: endDate - nowDate
+      };
+    } else {
+      return {
+        currentValue: this.props.value,
+        endDate: null,
+        remainingDuration: Infinity
+      };
+    }
+  }
+
+  override shouldComponentUpdate(nextProps: Readonly<TimedProgressBarProps>) {
+    return (
+      (nextProps.date !== this.props.date) ||
+      (nextProps.displayMode !== this.props.displayMode) ||
+      (nextProps.duration !== this.props.duration) ||
+      (nextProps.value !== this.props.value)
+    );
   }
 
   override render() {
     let { currentValue, endDate, remainingDuration } = this.getStats();
+    // console.log('Stats', currentValue, endDate);
 
     return (
       <ProgressBar
@@ -44,19 +62,25 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
                       ? (
                         <>{(selectValue * 100).toFixed()}</>
                       )
-                      : (
-                        <TimeSensitive
-                          contents={() => (
-                            <>{(this.getStats().currentValue * 100).toFixed()}</>
-                          )}
-                          interval={remainingDuration / (1 - currentValue) / 100} />
-                      )}
+                      : (endDate !== null)
+                        ? (
+                          <TimeSensitive
+                            contents={() => (
+                              <>{(this.getStats().currentValue * 100).toFixed()}</>
+                            )}
+                            interval={remainingDuration / (1 - currentValue) / 100} />
+                        )
+                        : <>{(currentValue * 100).toFixed()}</>
+                    }
                   </ExpandableText>
                   &thinsp;%
                 </div>
               );
 
-              case ProgressDisplayMode.TimeElapsed:
+            default:
+              throw new Error('Not implemented');
+
+/*               case ProgressDisplayMode.TimeElapsed:
                 return (selectValue !== null)
                   ? (
                     <div>{formatDuration((this.props.duration * selectValue), { style: 'numeric' })}</div>
@@ -80,12 +104,12 @@ export class TimedProgressBar extends React.Component<TimedProgressBarProps, Tim
                         <div>{formatDuration(this.getStats().remainingDuration, { style: 'numeric' })}</div>
                       )}
                       interval={1000} />
-                );
+                ); */
           }
         }}
-        endDate={!this.props.paused ? endDate : null}
-        paused={this.props.paused}
-        setValue={this.props.setValue}
+        endDate={endDate}
+        paused={endDate === null}
+        setValue={this.props.setValue ?? null}
         value={currentValue} />
     );
   }

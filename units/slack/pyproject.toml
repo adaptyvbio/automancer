@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=66", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pr1-slack"
+dynamic = ["version"]
+requires-python = ">3.11"
+
+dependencies=[
+  "slack_sdk~=3.21.3"
+]
+
+[project.entry-points."pr1.units"]
+slack = "pr1_slack"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"pr1_slack.client" = ["*"]
+
+[tool.setuptools_scm]
+root = "../.."

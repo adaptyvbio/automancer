@@ -71,7 +71,7 @@ export const Feature = memo(({ feature, onAction }: {
 
 export const FeatureEntry = memo((props: {
   actions?: FeatureActionDef[];
-  detail?(): ReactNode;
+  detail?: (() => ReactNode) | null;
   features: FeatureDef[];
   onAction?(actionId: OrdinaryId): void;
 }) => {

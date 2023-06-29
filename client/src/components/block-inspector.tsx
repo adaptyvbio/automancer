@@ -100,14 +100,14 @@ export function BlockInspector(props: {
             interval={30e3} />
         </div>
 
-        <FeatureRoot>
-          {blockAnalysis.isLeafBlockTerminal && (
+        {blockAnalysis.isLeafBlockTerminal && (
+          <FeatureRoot>
             <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
               ...feature,
               accent: true
             }))} />
-          )}
-        </FeatureRoot>
+          </FeatureRoot>
+        )}
 
         <FeatureRoot>
           {blockAnalysis.groups.slice().reverse().map((group) =>

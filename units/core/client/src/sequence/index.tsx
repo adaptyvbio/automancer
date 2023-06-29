@@ -22,7 +22,7 @@ export interface Point {
 const horizontalCellGap = 2;
 const verticalCellGap = 1;
 
-const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, ancestors, location, options, context) => {
+const computeGraph: ProtocolBlockGraphRenderer<Block, Location> = (block, path, pairs, group, location, options, context) => {
   let vertical = options.settings.vertical;
 
   let childrenMetrics = block.children.map((child, childIndex) => options.computeMetrics(childIndex));
@@ -179,9 +179,6 @@ export default {
           { location: location.children[location.index] },
           ...(new Array(block.children.length - location.index - 1).fill(null))
         ];
-      },
-      getLabel(block) {
-        return 'Sequence';
       }
     } satisfies PluginBlockImpl<Block, Location>
   }

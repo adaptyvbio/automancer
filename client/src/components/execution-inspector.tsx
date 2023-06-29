@@ -1,8 +1,6 @@
 import { Experiment, MasterBlockLocation, Protocol, ProtocolBlockPath, addTerms } from 'pr1-shared';
 import { Component, Fragment } from 'react';
 
-import featureStyles from '../../styles/components/features.module.scss';
-import formStyles from '../../styles/components/form.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
 import { Icon } from './icon';
@@ -12,7 +10,7 @@ import { ErrorBoundary } from './error-boundary';
 import { BlockContext, GlobalContext } from '../interfaces/plugin';
 import { Pool } from '../util';
 import { analyzeBlockPath, createBlockContext, getBlockImpl } from '../protocol';
-import { FeatureEntry, FeatureList } from './features';
+import { FeatureEntry, FeatureList, FeatureRoot } from './features';
 import { Application } from '../application';
 import { formatDateOrTimePair, formatRemainingDuration } from '../format';
 import { TimeSensitive } from './time-sensitive';
@@ -54,20 +52,20 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
       );
     }
 
-    let context: GlobalContext = {
+    let globalContext: GlobalContext = {
       app: this.props.app,
       host: this.props.host,
       pool: this.pool
     };
 
-    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, null, this.props.blockPath, context);
+    let blockAnalysis = analyzeBlockPath(this.props.protocol, this.props.location, null, this.props.blockPath, globalContext);
 
     let ancestorGroups = blockAnalysis.groups.slice(0, -1);
     let leafGroup = blockAnalysis.groups.at(-1)!;
 
     let leafPair = blockAnalysis.pairs.at(-1)!;
-    let leafBlockImpl = getBlockImpl(leafPair.block, context);
-    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment, context);
+    let leafBlockImpl = getBlockImpl(leafPair.block, globalContext);
+    let leafBlockContext = createBlockContext(this.props.blockPath, this.props.experiment, globalContext);
 
     // console.log('*', blockAnalysis);
 
@@ -129,7 +127,12 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
           </div>
 
           {blockAnalysis.isLeafBlockTerminal && (
-            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, context)} />
+            <FeatureRoot>
+              <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
+                ...feature,
+                accent: true
+              }))} />
+            </FeatureRoot>
           )}
 
           {leafBlockImpl.Component && (
@@ -141,14 +144,14 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
             </ErrorBoundary>
           )}
 
-          <div className={featureStyles.root}>
+          <FeatureRoot>
             {blockAnalysis.groups.slice().reverse().map((group) =>
               group.pairs.slice().reverse().map((pair, pairIndex) => {
-                let blockImpl = getBlockImpl(pair.block, context);
+                let blockImpl = getBlockImpl(pair.block, globalContext);
                 let blockPath = (pairIndex > 0)
                   ? group.path.slice(0, -pairIndex)
                   : group.path;
-                let blockContext = createBlockContext(blockPath, this.props.experiment, context);
+                let blockContext = createBlockContext(blockPath, this.props.experiment, globalContext);
 
                 if (!blockImpl.createFeatures) {
                   return null;
@@ -163,7 +166,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                       { id: '_halt',
                         icon: 'skip_next' }
                     ]}
-                    detail={blockImpl.Component && (() => {
+                    detail={(blockImpl.Component ?? null) && (() => {
                       let Component = blockImpl.Component!;
 
                       return (
@@ -173,7 +176,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                           location={pair.location} />
                       );
                     })}
-                    features={blockImpl.createFeatures(pair.block, pair.location, context)}
+                    features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
                     onAction={(actionId) => {
                       if (actionId === '_halt') {
                         this.pool.add(async () => {
@@ -192,7 +195,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                 );
               })
             )}
-          </div>
+          </FeatureRoot>
         </div>
         <div className={spotlightStyles.footerRoot}>
           <div className={spotlightStyles.footerActions}>

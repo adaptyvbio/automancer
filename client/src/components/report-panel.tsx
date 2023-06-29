@@ -14,7 +14,8 @@ export function ReportPanel(props: {
     props.compilationAnalysis.errors.length +
     props.compilationAnalysis.warnings.length +
     (props.masterAnalysis?.errors.length ?? 0) +
-    (props.masterAnalysis?.warnings.length ?? 0)
+    (props.masterAnalysis?.warnings.length ?? 0) +
+    (props.masterAnalysis?.effects.length ?? 0)
   ) < 1) {
     return (
       <PanelPlaceholder message="Nothing to report" />

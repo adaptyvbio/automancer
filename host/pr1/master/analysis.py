@@ -8,10 +8,10 @@ import comserde
 from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..error import Diagnostic, DiagnosticReference
 from ..rich_text import RichText
-from ..util.misc import Exportable, ExportableABC
+from ..util.misc import ExportableABC
 
 
-T_Exportable = TypeVar('T_Exportable', bound=Exportable)
+T_DiagnosticOrEffect = TypeVar('T_DiagnosticOrEffect', Diagnostic, 'Effect')
 
 
 @comserde.serializable
@@ -63,8 +63,8 @@ class TimedDiagnostic(Diagnostic):
 
 @comserde.serializable
 @dataclass
-class RuntimeMasterAnalysisItem(Generic[T_Exportable]):
-  value: T_Exportable
+class RuntimeMasterAnalysisItem(Generic[T_DiagnosticOrEffect]):
+  value: T_DiagnosticOrEffect
   _: KW_ONLY
   author_path: list[int]
   event_index: int
@@ -98,7 +98,7 @@ class MasterAnalysis(BaseAnalysis):
   warnings: list[RuntimeMasterAnalysisItem[Diagnostic]] = field(default_factory=list)
 
   def add_runtime(self, other: RuntimeAnalysis, /, author_path: list[int], event_index: int):
-    def add_items(items: list[T_Exportable]):
+    def add_items(items: list[T_DiagnosticOrEffect]):
       return [RuntimeMasterAnalysisItem(item, author_path=author_path, event_index=event_index) for item in items]
 
     self.effects += add_items(other.effects)

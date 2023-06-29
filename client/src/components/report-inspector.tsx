@@ -137,7 +137,7 @@ export function ReportInspector(props: {
           <>
             {blockAnalysis.isLeafBlockTerminal && (
               <FeatureRoot>
-                <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
+                <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext).map((feature) => ({
                   ...feature,
                   accent: true
                 }))} />

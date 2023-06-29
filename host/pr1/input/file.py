@@ -156,10 +156,11 @@ class FileDataRefType(Type):
 
   def analyze(self, obj, /, context):
     analysis, result = PrimitiveType(IOBase).analyze(obj, context.update(auto_expr=False))
-    assert isinstance(result, LocatedValue)
 
     if isinstance(result, EllipsisType):
       return analysis, Ellipsis
+
+    assert isinstance(result, LocatedValue)
 
     match self.mode:
       case 'read':

@@ -9,7 +9,7 @@ import { Icon } from './icon';
 export function Report(props: {
   analysis: CompilationAnalysis | MasterAnalysis;
 }) {
-  if ((props.analysis.errors.length + props.analysis.warnings.length) < 1) {
+  if ((props.analysis.errors.length + props.analysis.warnings.length + (('effects' in props.analysis) ? props.analysis.effects.length : 0)) < 1) {
     return null;
   }
 

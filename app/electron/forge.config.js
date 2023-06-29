@@ -19,7 +19,7 @@ module.exports = {
       /^\/tmp(\/|$)/
     ],
     afterCopy: [
-      setLanguages(['en'])
+      setLanguages(['en', 'en_US'])
     ]
   },
   makers: [

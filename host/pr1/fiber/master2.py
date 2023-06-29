@@ -14,7 +14,7 @@ import traceback
 
 from ..report import ExperimentReportEvent
 from ..eta import DurationTerm, Term
-from ..analysis import DiagnosticAnalysis
+from ..analysis import BaseAnalysis, DiagnosticAnalysis
 from ..draft import DraftCompilation
 from ..util.asyncio import wait_all
 from ..host import logger
@@ -475,7 +475,7 @@ class ProgramHandle:
     else:
       self.master.update_soon()
 
-  def send_analysis(self, analysis: DiagnosticAnalysis, /):
+  def send_analysis(self, analysis: BaseAnalysis, /):
     self._analysis += analysis
     self.master.update_soon()
 

@@ -5,6 +5,12 @@ div.hover-row.status-bar {
   display: none !important;
 }
 
+@layer reset {
+  .monaco-editor, .monaco-editor * {
+    all: revert-layer;
+  }
+}
+
 
 // ---
 
@@ -123,6 +129,16 @@ $icons: (
     .readMore::before {
       vertical-align: middle;
     }
+  }
+}
+
+.monaco-hover {
+  :is(h1, h2, h3, h4, h5, h6) {
+    margin: initial;
+  }
+
+  h4 {
+    text-transform: uppercase;
   }
 }
 

@@ -145,7 +145,7 @@ class Attribute:
 
     if self._description or self._documentation or self._label:
       analysis.hovers.append(LanguageServiceHover(
-        contents=([f"#### {self._label or key.upper()}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
+        contents=([f"#### {self._label or key}"] + ([self._description] if self._description else list()) + (self._documentation or list())),
         range=key_range
       ))
 

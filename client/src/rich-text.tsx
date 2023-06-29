@@ -10,6 +10,8 @@ export function formatRichText(richText: RichText) {
     switch (component.type) {
       case 'code':
         return <code key={index}>{formatRichText(component.value)}</code>
+      case 'link':
+        return <a href={component.url} key={index}>{formatRichText(component.value)}</a>
       case 'strong':
         return <strong key={index}>{formatRichText(component.value)}</strong>
     }

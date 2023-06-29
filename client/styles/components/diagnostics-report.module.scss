@@ -54,6 +54,16 @@
   &Description {
     grid-column: 2 / span 2;
     margin-top: 0.2rem;
+
+    a {
+      display: inline;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    strong {
+      font-weight: 500;
+    }
   }
 
   &Source {

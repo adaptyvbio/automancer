@@ -257,6 +257,9 @@ def evaluate_eval_expr(
     case ast.Constant(None):
       return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(NoneType))
 
+    case ast.Constant(bytes()):
+      return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['bytes']))
+
     case ast.Constant(float()):
       return StaticAnalysisAnalysis(), CompositeExprDef(node, instantiate_type_instance(prelude_type_defs['float']))
 
@@ -359,8 +362,6 @@ def evaluate_eval_expr(
         [target_expr, subscript_expr],
         lambda nodes: transfer_node_location(node, ast.Subscript(nodes[0], nodes[1], ctx=ast.Load()))
       )
-
-      return analysis, result
 
     case ast.UnaryOp(op, operand):
       analysis, operand_expr = evaluate_eval_expr(operand, foreign_symbols, prelude_symbols, context)

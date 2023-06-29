@@ -36,7 +36,7 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
   name = "_"
   namespace = am.PluginName("timer")
 
-  def duration(self, data: am.Evaluable[PossiblyLocatedValue[ProcessData]], /):
+  def duration(self, data: am.Evaluable[PossiblyLocatedValue[ProcessData]]):
     match data:
       case am.EvaluableConstantValue(LocatedValue('forever')):
         return am.DurationTerm.forever()

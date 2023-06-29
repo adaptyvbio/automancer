@@ -160,6 +160,7 @@ Symbols = tuple[ExportedTypeDefs, TypeInstances]
 
 class PreludeTypeDefs(TypedDict):
   bool: ClassDef
+  bytes: ClassDef
   float: ClassDef
   int: ClassDef
   list: ClassDef
@@ -167,6 +168,7 @@ class PreludeTypeDefs(TypedDict):
   str: ClassDef
 
 class PreludeTypeInstances(TypedDict):
+  bytes: ClassDefWithTypeArgs
   float: ClassDefWithTypeArgs
   int: ClassDefWithTypeArgs
   list: ClassDef

@@ -49,6 +49,10 @@ class int:
 class bool:
   ...
 
+class bytes:
+  def __add__(self, other: bytes, /) -> bytes:
+    ...
+
 class slice:
   pass
 

@@ -29,6 +29,25 @@ class RichTextCode(BaseRichTextExplicitComponent):
 
 
 @dataclass(slots=True)
+class RichTextLink(BaseRichTextExplicitComponent):
+  url: str
+  value: 'RichText'
+
+  def __init__(self, *components: RichTextComponent, url: str):
+    self.url = url
+    self.value = RichText(*components)
+
+  def export(self) -> object:
+    return {
+      "type": "link",
+      "url": self.url,
+      "value": self.value.export()
+    }
+
+  def format(self):
+    return f"\033]8;;{self.url}\033\\{self.value.format()}\033]8;;\033\\"
+
+@dataclass(slots=True)
 class RichTextStrong(BaseRichTextExplicitComponent):
   value: 'RichText'
 
@@ -64,6 +83,7 @@ __all__ = [
   'RichText',
   'RichTextCode',
   'RichTextComponent',
+  'RichTextLink',
   'RichTextStrong'
 ]
 

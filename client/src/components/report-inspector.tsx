@@ -1,19 +1,16 @@
-import { Experiment, ExperimentReportEvents, ExperimentReportInfo, ExperimentReportStaticEntry, MasterBlockLocation, Protocol, ProtocolBlockPath } from 'pr1-shared';
-import { Fragment, ReactNode, useEffect, useState } from 'react';
+import { Experiment, ExperimentReportEvents, ExperimentReportInfo, ExperimentReportStaticEntry, Protocol, ProtocolBlockPath } from 'pr1-shared';
+import { Fragment, useEffect, useState } from 'react';
 
-import featureStyles from '../../styles/components/features.module.scss';
 import spotlightStyles from '../../styles/components/spotlight.module.scss';
 
+import { Application } from '../application';
+import { formatDateOrTimePair } from '../format';
 import { Host } from '../host';
 import { GlobalContext } from '../interfaces/plugin';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
 import { usePool } from '../util';
-import { FeatureEntry, FeatureList } from './features';
+import { FeatureEntry, FeatureList, FeatureRoot } from './features';
 import { Icon } from './icon';
-import { Application } from '../application';
-import { formatDateOrTimePair, formatDigitalDate, formatDigitalTime, formatDurationTerm, formatPair } from '../format';
-import { TimeSensitive } from './time-sensitive';
-import { getDateFromTerm } from '../term';
 import { StaticSelect } from './static-select';
 
 
@@ -64,7 +61,7 @@ export function ReportInspector(props: {
     ? events[occurences[selectedOccurenceIndex][0]].location
     : null;
 
-  let blockAnalysis = analyzeBlockPath(props.protocol, location, props.blockPath, globalContext);
+  let blockAnalysis = analyzeBlockPath(props.protocol, location, null, props.blockPath, globalContext);
 
   let ancestorGroups = blockAnalysis.groups.slice(0, -1);
   let leafGroup = blockAnalysis.groups.at(-1)!;
@@ -139,10 +136,15 @@ export function ReportInspector(props: {
         {events && (
           <>
             {blockAnalysis.isLeafBlockTerminal && (
-              <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext)} />
+              <FeatureRoot>
+                <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
+                  ...feature,
+                  accent: true
+                }))} />
+              </FeatureRoot>
             )}
 
-            <div className={featureStyles.root}>
+            <FeatureRoot>
               {blockAnalysis.groups.slice().reverse().map((group) =>
                 group.pairs.slice().reverse().map((pair, pairIndex) => {
                   let blockImpl = getBlockImpl(pair.block, globalContext);
@@ -158,7 +160,7 @@ export function ReportInspector(props: {
                   );
                 })
               )}
-            </div>
+            </FeatureRoot>
           </>
         )}
       </div>

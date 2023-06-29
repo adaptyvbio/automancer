@@ -9,8 +9,6 @@ import automancer as am
 from pr1.fiber.eval import EvalContext, EvalStack
 from pr1.fiber.master2 import ProgramOwner
 from pr1.fiber.parser import BaseProgram, BaseProgramPoint
-from pr1.fiber.process import ProgramExecEvent
-from pr1.master.analysis import MasterAnalysis
 
 from .parser import Block
 
@@ -39,13 +37,13 @@ class ProgramMode:
 
 
 @dataclass
-class ProgramLocation:
+class ProgramLocation(am.BaseProgramLocation):
   mode: int
   _: KW_ONLY
   count: Optional[int] = None
   iteration: Optional[int] = None
 
-  def export(self):
+  def export(self, context):
     return {
       "count": self.count,
       "iteration": self.iteration,

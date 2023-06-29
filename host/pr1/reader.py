@@ -7,7 +7,7 @@ import re
 import sys
 from typing import Any, Generic, Optional, TypeVar, cast
 
-from .util.misc import BaseDataInstance, create_datainstance
+from .util.misc import DataInstance, create_datainstance
 from .error import Diagnostic, DiagnosticDocumentReference
 from .util.decorators import deprecated
 
@@ -297,7 +297,7 @@ class LocatedValue(Generic[T_co]):
 
   def dislocate(self) -> Any:
     match self.value:
-      case BaseDataInstance():
+      case DataInstance():
         return create_datainstance({
           key: value.dislocate() for key, value in self.value._asdict().items()
         })

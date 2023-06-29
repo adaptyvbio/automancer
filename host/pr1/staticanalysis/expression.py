@@ -323,7 +323,7 @@ def evaluate_eval_expr(
       return analysis, instantiate_type_instance(prelude_type_defs['slice'])
 
     case ast.Subscript(value=target, slice=subscript):
-      analysis, target_type = evaluate_eval_expr(target, foreign_symbols, prelude_symbols, context)
+      analysis, target_expr = evaluate_eval_expr(target, foreign_symbols, prelude_symbols, context)
 
       match subscript:
         case ast.Tuple(args, ctx=ast.Load()):
@@ -331,27 +331,34 @@ def evaluate_eval_expr(
         case _:
           subscript_items = [subscript]
 
-      if isinstance(target_type, ClassConstructorDef):
-        target_type = target_type.target
+      # if isinstance(target_type, ClassConstructorDef):
+      #   target_type = target_type.target
 
-        if not isinstance(target_type, ClassDef):
-          return StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownDef()
+      #   if not isinstance(target_type, ClassDef):
+      #     return StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownDef()
 
-        type_args = analysis.add_sequence([evaluate_type_expr(item, (foreign_type_defs | prelude_type_defs), None, context) for item in subscript_items])
+      #   type_args = analysis.add_sequence([evaluate_type_expr(item, (foreign_type_defs | prelude_type_defs), None, context) for item in subscript_items])
 
-        if len(type_args) != len(target_type.type_variables):
-          return analysis + StaticAnalysisDiagnostic("Invalid type argument count", node, context).analysis(), UnknownDef()
+      #   if len(type_args) != len(target_type.type_variables):
+      #     return analysis + StaticAnalysisDiagnostic("Invalid type argument count", node, context).analysis(), UnknownDef()
 
-        return analysis, ClassConstructorDef(ClassDefWithTypeArgs(target_type, [instantiate_type_instance(type_arg) for type_arg in type_args]))
+      #   return analysis, ClassConstructorDef(ClassDefWithTypeArgs(target_type, [instantiate_type_instance(type_arg) for type_arg in type_args]))
 
-      subscript_type = analysis.add(evaluate_eval_expr(subscript, foreign_symbols, prelude_symbols, context))
+      subscript_expr = analysis.add(evaluate_eval_expr(subscript, foreign_symbols, prelude_symbols, context))
 
-      method = get_attribute(target_type, "__getitem__")
+      if isinstance(target_expr.type, UnknownDef) or isinstance(subscript_expr.type, UnknownDef):
+        result_type = UnknownDef()
+      elif method := get_attribute(target_expr.type, "__getitem__"):
+        result_type = analysis.add(call(method, [subscript_expr.type], dict(), node, context))
+      else:
+        analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", node, context))
+        result_type = UnknownDef()
 
-      if not method:
-        return analysis + StaticAnalysisDiagnostic("Invalid subscript target", target, context).analysis(), UnknownDef()
-
-      result = analysis.add(call(method, [subscript_type], dict(), node, context))
+      return analysis, CompositeExprDef.assemble(
+        result_type,
+        [target_expr, subscript_expr],
+        lambda nodes: transfer_node_location(node, ast.Subscript(nodes[0], nodes[1], ctx=ast.Load()))
+      )
 
       return analysis, result
 
@@ -363,7 +370,7 @@ def evaluate_eval_expr(
       else:
         operator_name = UnaryOpMethodMap[op.__class__]
 
-        if (method := get_attribute(operand_expr.type, f"__{operator_name}__")):
+        if method := get_attribute(operand_expr.type, f"__{operator_name}__"):
           result_type = analysis.add(call(method, list(), dict(), node, context))
         else:
           analysis.errors.append(StaticAnalysisDiagnostic("Invalid operation", node, context))

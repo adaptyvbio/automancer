@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, NewType, Optional, Self
 
 import comserde
 
-from .fiber.parser import GlobalContext
+from .fiber.parser import BaseProgramLocation, GlobalContext
 from .history import TreeAdditionChange, TreeRemovalChange, TreeUpdateChange
 from .master.analysis import MasterAnalysis
 from .report import ExperimentReportEvent, ExperimentReportHeader
@@ -118,14 +118,14 @@ class ExperimentReportReader:
   def _get_file(self):
     return self._path.open("rb")
 
-  def export_events(self, event_indices: set[EventIndex], /):
+  def export_events(self, context: GlobalContext, event_indices: set[EventIndex], /):
     result = dict[EventIndex, Any]()
 
     for event_index, event, root_entry in self._iter_events():
       if event_index in event_indices:
         result[event_index] = {
           "date": (event.time * 1000),
-          "location": root_entry and root_entry.export()
+          "location": root_entry and root_entry.export(context)
         }
 
     return result
@@ -143,7 +143,7 @@ class ExperimentReportReader:
 class ReportEntry(Exportable, HierarchyNode):
   children: dict[int, Self] = field(default_factory=dict)
   index: int
-  location: Optional[Exportable] = None
+  location: Optional[BaseProgramLocation] = None
   parent: Optional[tuple[Self, int]] = None
   static_counterpart: ReportStaticEntry
 
@@ -153,14 +153,14 @@ class ReportEntry(Exportable, HierarchyNode):
   def __get_node_children__(self):
     return self.children.values()
 
-  def export(self):
+  def export(self, context: GlobalContext):
     assert self.location
 
     return {
       "children": {
-        child_id: child.export() for child_id, child in self.children.items()
+        child_id: child.export(context) for child_id, child in self.children.items()
       },
-      **self.location.export()
+      **self.location.export(context)
     }
 
 

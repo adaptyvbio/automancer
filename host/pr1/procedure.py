@@ -181,7 +181,7 @@ class BaseClassProcess(ABC, Generic[T_ProcessData, T_ProcessLocation, T_ProcessP
   namespace: PluginName
 
   def duration(self, data: T_ProcessData) -> DurationTerm:
-    raise NotImplementedError
+    return DurationTerm.unknown()
 
   def import_point(self, raw_point: Any, /) -> T_ProcessPoint:
     raise NotImplementedError

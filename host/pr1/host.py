@@ -353,7 +353,7 @@ class Host:
 
       case "getExperimentReportEvents":
         experiment = self.experiments[request["experimentId"]]
-        return experiment.report_reader.export_events(set(request["eventIndices"]))
+        return experiment.report_reader.export_events(GlobalContext(self), set(request["eventIndices"]))
 
       case "requestToExecutor":
         return await self.executors[request["namespace"]].request(request["data"], agent=agent)

@@ -108,47 +108,23 @@ class HierarchyNode:
     ])
 
 
-class BaseDataInstance(ABC):
-  __slots__ = ()
+class DataInstance:
+  def __init__(self, data: Mapping[str, Any] = dict(), /):
+    self.__dict__.update(data)
 
-  @abstractmethod
   def _asdict(self) -> Mapping[str, Any]:
-    ...
+    return self.__dict__
 
+  def __repr__(self):
+    return f"{self.__class__.__name__}({', '.join(f'{key}={value!r}' for key, value in self.__dict__.items())})"
+
+# @deprecated
 def create_datainstance(data: Mapping[str, Any]) -> Any:
-  # return type(
-  #   "FlexibleDataclass",
-  #   (BaseFlexibleDataclass,),
-  #   {
-  #     "__slots__": tuple(data.keys()),
-  #     "_asdict": lambda self: data,
-  #     "__getitem__": lambda self, key: getattr(self, key),
-  #     # **data
-  #   }
-  # )
-
-  class DataInstance(BaseDataInstance):
-    __slots__ = tuple(data.keys())
-
-    def _asdict(self):
-      return data
-
-    def __getitem__(self, key: str, /):
-      return getattr(self, key)
-
-    def __repr__(self):
-      return f"{self.__class__.__name__}({', '.join(f'{key}={data[key]!r}' for key in self.__slots__)})"
-
-  obj = DataInstance()
-
-  for key, value in data.items():
-    setattr(obj, key, value)
-
-  return obj
+  return DataInstance(data)
 
 
 __all__ = [
-  'BaseDataInstance',
+  'DataInstance',
   'create_datainstance',
   'cumsum',
   'Exportable',

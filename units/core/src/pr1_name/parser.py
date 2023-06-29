@@ -2,8 +2,7 @@ from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any, TypedDict
 
-import pr1 as am
-from pr1.fiber.eval import EvalContext
+import automancer as am
 from pr1.fiber.expr import Evaluable
 from pr1.input import (Attribute, PotentialExprType,
                                    StrType)
@@ -34,13 +33,13 @@ class Transformer(BasePassiveTransformer):
     else:
       return am.LanguageServiceAnalysis(), None
 
-  def adopt(self, data: Evaluable[LocatedString], /, adoption_stack, trace):
-    analysis, result = data.eval(EvalContext(adoption_stack), final=True)
+  def adopt(self, data: LocatedString, /, adoption_stack, trace):
+    # analysis, result = data.evaluate_final(EvalContext(adoption_stack))
 
-    if isinstance(result, EllipsisType):
-      return analysis, Ellipsis
+    # if isinstance(result, EllipsisType):
+    #   return analysis, Ellipsis
 
-    return analysis, TransformerAdoptionResult(result)
+    return am.DiagnosticAnalysis(), TransformerAdoptionResult(data)
 
   def execute(self, data: LocatedString, /, block):
     return am.LanguageServiceAnalysis(), NameBlock(block, name=data.value)
@@ -59,14 +58,18 @@ class NameBlock(BaseBlock):
   def create_program(self, handle):
     return TransparentProgram(self.child, handle)
 
+  def duration(self):
+    return self.child.duration()
+
   def import_point(self, data, /):
     return self.child.import_point(data)
 
-  def export(self):
+  def export(self, context):
     return {
       "name": "_",
       "namespace": namespace,
 
-      "child": self.child.export(),
+      "duration": self.child.duration().export(),
+      "child": self.child.export(context),
       "value": self.name
     }

@@ -155,3 +155,11 @@ class StableReadableNode(SubscribableReadableNode):
 
     await self.wait_disconnected()
     raise NodeUnavailableError
+
+
+__all__ = [
+  'PollableReadableNode',
+  'StableReadableNode',
+  'SubscribableReadableNode',
+  'WatchableNode'
+]

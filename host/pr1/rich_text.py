@@ -59,6 +59,15 @@ class RichText:
     return str().join(component.format() if isinstance(component, BaseRichTextExplicitComponent) else component for component in self.components)
 
 
+__all__ = [
+  'BaseRichTextExplicitComponent',
+  'RichText',
+  'RichTextCode',
+  'RichTextComponent',
+  'RichTextStrong'
+]
+
+
 if __name__ == "__main__":
   t = RichText(
     'Hello ',

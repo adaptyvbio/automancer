@@ -4,8 +4,7 @@ from asyncio import Event, Future, Task
 from dataclasses import dataclass
 from traceback import FrameSummary
 import traceback
-from typing import Any, AsyncGenerator, Coroutine, Optional, Self, Sequence, TypeVar
-from weakref import WeakKeyDictionary
+from typing import Any, AsyncGenerator, Coroutine, Optional, TypeVar
 
 from .asyncio import race
 from .misc import HierarchyNode
@@ -351,6 +350,14 @@ class TaskHandle:
 
   def interrupted(self):
     return self.task.cancelling() > 0
+
+
+__all__ = [
+  'Pool',
+  'PoolExceptionGroup',
+  'PoolTaskInfo',
+  'TaskHandle'
+]
 
 
 if __name__ == "__main__":

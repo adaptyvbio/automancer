@@ -31,7 +31,7 @@ export default {
 
   blocks: {
     ['_' as ProtocolBlockName]: {
-      createFeatures(block, location, context) {
+      createFeatures(block, location, descendantPairs, context) {
         let numericCount = location?.count ?? (
           (block.count.type === 'number')
             ? block.count.value

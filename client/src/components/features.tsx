@@ -35,7 +35,10 @@ export const Feature = memo(({ feature, onAction }: {
   onAction?(actionId: OrdinaryId): void;
 }) => {
   return (
-    <div className={formatClass(styles.feature, { [styles.featureAccent]: feature.accent })}>
+    <div className={formatClass(styles.feature, {
+      [styles.featureAccent]: feature.accent,
+      [styles.featureDisabled]: feature.disabled
+    })}>
       <Icon name={feature.icon} className={styles.icon} />
       <div className={styles.body}>
         {feature.description && <div className={styles.description}>{feature.description}</div>}

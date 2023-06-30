@@ -21,15 +21,17 @@ const computeGraph: ProtocolBlockGraphRenderer<ProtocolBlock, ProcessLocation<un
   let features = group.pairs
     .slice()
     .reverse()
-    .flatMap((pair, index): FeatureDef[] => {
+    .flatMap((pair, index, reversedPairs): FeatureDef[] => {
       let isProcessBlock = (index === 0);
       let blockImpl = getBlockImpl(pair.block, context);
-      let features = blockImpl.createFeatures?.(pair.block, null, context) ?? (isProcessBlock ? DEFAULT_PROCESS_FEATURES : []);
+      let features = blockImpl.createFeatures?.(pair.block, null, reversedPairs.slice(0, index), context) ?? (isProcessBlock ? DEFAULT_PROCESS_FEATURES : []);
 
-      return features.map((feature) => ({
-        ...feature,
-        accent: feature.accent || isProcessBlock
-      }));
+      return features
+        .filter((feature) => !feature.disabled)
+        .map((feature) => ({
+          ...feature,
+          accent: feature.accent || isProcessBlock
+        }));
     });
 
   let featureCount = features.length;
@@ -212,7 +214,7 @@ export function createProcessBlockImpl<Data, Location>(options: {
 
       return [];
     },
-    createFeatures(block, location) {
+    createFeatures(block, location, descendentPairs, context) {
       let processLocation = (location?.mode.type === 'running')
         ? location.mode.processInfo?.location ?? null
         : null;

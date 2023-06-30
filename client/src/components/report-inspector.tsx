@@ -137,7 +137,7 @@ export function ReportInspector(props: {
           <>
             {blockAnalysis.isLeafBlockTerminal && (
               <FeatureRoot>
-                <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext).map((feature) => ({
+                <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, [], globalContext).map((feature) => ({
                   ...feature,
                   accent: true
                 }))} />
@@ -148,6 +148,7 @@ export function ReportInspector(props: {
               {blockAnalysis.groups.slice().reverse().map((group) =>
                 group.pairs.slice().reverse().map((pair, pairIndex) => {
                   let blockImpl = getBlockImpl(pair.block, globalContext);
+                  let descendantPairs = blockAnalysis.pairs.slice(group.firstPairIndex + group.pairs.length - pairIndex);
 
                   if (!blockImpl.createFeatures) {
                     return null;
@@ -155,7 +156,7 @@ export function ReportInspector(props: {
 
                   return (
                     <FeatureEntry
-                      features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
+                      features={blockImpl.createFeatures(pair.block, pair.location, descendantPairs, globalContext)}
                       key={pairIndex} />
                   );
                 })

@@ -128,7 +128,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
 
           {blockAnalysis.isLeafBlockTerminal && (
             <FeatureRoot>
-              <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, globalContext).map((feature) => ({
+              <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, leafPair.location, [], globalContext).map((feature) => ({
                 ...feature,
                 accent: true
               }))} />
@@ -152,6 +152,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                   ? group.path.slice(0, -pairIndex)
                   : group.path;
                 let blockContext = createBlockContext(blockPath, this.props.experiment, globalContext);
+                let descendantPairs = blockAnalysis.pairs.slice(group.firstPairIndex + group.pairs.length - pairIndex);
 
                 if (!blockImpl.createFeatures) {
                   return null;
@@ -176,7 +177,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                           location={pair.location} />
                       );
                     })}
-                    features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
+                    features={blockImpl.createFeatures(pair.block, pair.location, descendantPairs, globalContext)}
                     onAction={(actionId) => {
                       if (actionId === '_halt') {
                         this.pool.add(async () => {

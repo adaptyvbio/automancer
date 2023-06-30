@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react';
 
 import type { Application } from '../application';
 import type { Host } from '../host';
-import type { ProtocolBlockGraphRenderer } from './graph';
+import type { ProtocolBlockGraphPair, ProtocolBlockGraphRenderer } from './graph';
 import type { FeatureDef } from '../components/features';
 import type { Pool } from '../util';
 import type { StoreConsumer, StoreEntries } from '../store/types';
@@ -105,7 +105,7 @@ export interface PluginBlockImpl<Block extends ProtocolBlock, Location extends M
   computeGraph?: ProtocolBlockGraphRenderer<Block, Location>;
   createActions?(block: Block, location: Location, context: BlockContext): PluginBlockImplAction[];
   createCommands?(block: Block, location: Location, context: BlockContext): PluginBlockImplCommand[];
-  createFeatures?(block: Block, location: Location | null, context: GlobalContext): FeatureDef[];
+  createFeatures?(block: Block, location: Location | null, descendantPairs: ProtocolBlockGraphPair[], context: GlobalContext): FeatureDef[];
 
   // Missing -> inherits child's point
   // Returns null -> point is null

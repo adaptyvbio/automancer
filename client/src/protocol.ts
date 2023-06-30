@@ -5,6 +5,7 @@ import { BlockContext, GlobalContext } from './interfaces/plugin';
 
 
 export interface BlockGroup {
+  firstPairIndex: number;
   name: string | null;
   pairs: BlockPair[];
   path: ProtocolBlockPath;
@@ -88,6 +89,7 @@ export function getRefPaths(block: ProtocolBlock, location: MasterBlockLocation,
  *  2. Certain blocks known as _sparse_ blocks, especially those which require custom graph rendering such as `sequence` and `parallel` blocks, are always at the end of their group. After such a block is encountered, a new group is created.
  *  3. A block is _terminal_ if it contains no children, regardless of whether the target block is that block or one its children.
  *  4. The leaf block is the target block, as specified by the path provided as an argument.
+ *  5. If the leaf block is terminal, the last group does not countain that block.
  */
 export function analyzeBlockPath(
   protocol: Protocol,
@@ -186,6 +188,7 @@ export function analyzeBlockPath(
 
     if (sparse || !group || (blockName && group.name)) {
       group = {
+        firstPairIndex: blockIndex,
         name: null,
         pairs: [],
         path: []

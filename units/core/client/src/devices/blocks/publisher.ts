@@ -1,20 +1,20 @@
-import { List } from 'immutable';
+import { Set as ImSet, List } from 'immutable';
 import { EvaluableValue, PluginBlockImpl, formatEvaluable, ureg } from 'pr1';
 import { MasterBlockLocation, ProtocolBlock, createZeroTerm } from 'pr1-shared';
 import { ReactNode, createElement } from 'react';
 
-import { BooleanValue, EnumValue, ExecutorState, NodePath, NullableValue, NumericValue, ValueNode, namespace } from '../types';
+import { BooleanValue, EnumValue, ExecutorState, NodePathArray, NullableValue, NumericValue, ValueNode, namespace } from '../types';
 import { findNode } from '../util';
 
 
 export interface PublisherBlock extends ProtocolBlock {
-  assignments: [NodePath, EvaluableValue<NullableValue>][];
+  assignments: [NodePathArray, EvaluableValue<NullableValue>][];
   child: ProtocolBlock;
 }
 
 export interface PublisherLocation extends MasterBlockLocation {
   children: { 0: MasterBlockLocation; };
-  assignments: [NodePath, NullableValue | null][];
+  assignments: [NodePathArray, NullableValue | null][];
   mode: {
     type: 'failed';
   } | {
@@ -38,8 +38,19 @@ export default {
       ? [{ location: location.children[0] }]
       : null;
   },
-  createFeatures(block, location, context) {
+  createFeatures(block, location, descendantPairs, context) {
     let executor = context.host.state.executors[namespace] as ExecutorState;
+
+    let overridenNodePaths = ImSet(
+      descendantPairs.flatMap((pair) => {
+        if ((pair.block.namespace !== namespace) || (pair.block.name !== 'publisher')) {
+          return [];
+        }
+
+        let block = pair.block as PublisherBlock;
+        return block.assignments.map(([path, value]) => List(path));
+      })
+    );
 
     return block.assignments.map(([path, value]) => {
       let parentNode = findNode(executor.root, path.slice(0, -1))!;
@@ -77,6 +88,7 @@ export default {
         : formatEvaluable(value, formatInnerValue);
 
       return {
+        disabled: overridenNodePaths.has(List(path)),
         description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
         icon: (node.icon ?? 'settings_input_hdmi'),
         label

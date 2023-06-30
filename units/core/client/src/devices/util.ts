@@ -1,9 +1,9 @@
 import { List } from 'immutable';
 
-import { BaseNode, CollectionNode, NodePath, ValueNode } from './types';
+import { BaseNode, CollectionNode, NodePath, NodePathLike, ValueNode } from './types';
 
 
-export function findNode(node: BaseNode, path: NodePath) {
+export function findNode(node: BaseNode, path: NodePathLike) {
   let currentNode = node;
 
   for (let id of path) {

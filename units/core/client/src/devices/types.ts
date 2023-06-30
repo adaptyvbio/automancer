@@ -15,6 +15,8 @@ export interface ExecutorState {
 
 export type NodeId = Brand<string, 'NodeId'>;
 export type NodePath = List<NodeId>;
+export type NodePathArray = NodeId[];
+export type NodePathLike = NodePath | NodePathArray;
 
 export interface BaseNode {
   id: NodeId;

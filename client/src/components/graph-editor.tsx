@@ -324,6 +324,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           return getBlockImpl(block, globalContext).getLabel?.(block) ?? [];
         });
 
+        // TODO: Avoid putting the terminal block in a group, like analyzeBlockPath()
         let group: ProtocolBlockGraphGroup = {
           labels: defaultLabelComponents,
           name: groupName,

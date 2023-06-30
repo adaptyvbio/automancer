@@ -11,7 +11,7 @@ import { GlobalContext } from '../interfaces/plugin';
 import { analyzeBlockPath, getBlockImpl } from '../protocol';
 import { getDateFromTerm } from '../term';
 import { usePool } from '../util';
-import { FeatureEntry, FeatureList, FeatureRoot } from './features';
+import { FeatureDef, FeatureEntry, FeatureList, FeatureRoot } from './features';
 import { Icon } from './icon';
 import { TimeSensitive } from './time-sensitive';
 import { PanelPlaceholder } from '../libraries/panel';
@@ -101,7 +101,7 @@ export function BlockInspector(props: {
 
         {blockAnalysis.isLeafBlockTerminal && (
           <FeatureRoot>
-            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, globalContext).map((feature) => ({
+            <FeatureList features={leafBlockImpl.createFeatures!(leafPair.block, null, [], globalContext).map((feature): FeatureDef => ({
               ...feature,
               accent: true
             }))} />
@@ -112,6 +112,7 @@ export function BlockInspector(props: {
           {blockAnalysis.groups.slice().reverse().map((group) =>
             group.pairs.slice().reverse().map((pair, pairIndex) => {
               let blockImpl = getBlockImpl(pair.block, globalContext);
+              let descendantPairs = blockAnalysis.pairs.slice(group.firstPairIndex + group.pairs.length - pairIndex);
 
               if (!blockImpl.createFeatures) {
                 return null;
@@ -119,7 +120,7 @@ export function BlockInspector(props: {
 
               return (
                 <FeatureEntry
-                  features={blockImpl.createFeatures(pair.block, pair.location, globalContext)}
+                  features={blockImpl.createFeatures(pair.block, pair.location, descendantPairs, globalContext)}
                   key={pairIndex} />
               );
             })

@@ -14,6 +14,7 @@ import { usePool } from '../util';
 import { FeatureEntry, FeatureList, FeatureRoot } from './features';
 import { Icon } from './icon';
 import { TimeSensitive } from './time-sensitive';
+import { PanelPlaceholder } from '../libraries/panel';
 
 
 export function BlockInspector(props: {
@@ -30,9 +31,7 @@ export function BlockInspector(props: {
 
   if (!props.blockPath) {
     return (
-      <div className={spotlightStyles.placeholder}>
-        <p>Nothing selected</p>
-      </div>
+      <PanelPlaceholder message="Nothing selected" />
     );
   }
 

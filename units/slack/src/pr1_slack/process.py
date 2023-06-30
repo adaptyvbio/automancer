@@ -86,7 +86,7 @@ class Process(am.BaseClassProcess[ProcessData, ProcessLocation, ProcessPoint]):
             channels=context.data.settings.channel_id,
             file=file,
             filename=data_file.name,
-            filetype=data_file.format # To be standardized
+            filetype=data_file.format # TODO: Standardize
           ))
 
           context.send_effect(am.GenericEffect(

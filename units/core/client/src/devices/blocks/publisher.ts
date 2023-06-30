@@ -1,8 +1,9 @@
-import { DynamicValue, EvaluableValue, PluginBlockImpl, formatEvaluable, ureg } from 'pr1';
+import { List } from 'immutable';
+import { EvaluableValue, PluginBlockImpl, formatEvaluable, ureg } from 'pr1';
 import { MasterBlockLocation, ProtocolBlock, createZeroTerm } from 'pr1-shared';
-
 import { ReactNode, createElement } from 'react';
-import { EnumValue, ExecutorState, NodePath, NullableValue, NumericValue, ValueNode, namespace } from '../types';
+
+import { BooleanValue, EnumValue, ExecutorState, NodePath, NullableValue, NumericValue, ValueNode, namespace } from '../types';
 import { findNode } from '../util';
 
 
@@ -13,7 +14,7 @@ export interface PublisherBlock extends ProtocolBlock {
 
 export interface PublisherLocation extends MasterBlockLocation {
   children: { 0: MasterBlockLocation; };
-  assignments: [NodePath, DynamicValue | null][];
+  assignments: [NodePath, NullableValue | null][];
   mode: {
     type: 'failed';
   } | {
@@ -45,14 +46,14 @@ export default {
       let node = findNode(executor.root, path) as ValueNode;
       // let locationValue = location?.assignments.find(([otherPath, value]) => (util.deepEqual(otherPath, path)))?.[1];
 
-      let label: ReactNode = formatEvaluable(value, (nullableValue) => {
+      let formatInnerValue = (nullableValue: NullableValue) => {
         if (nullableValue.type === 'null') {
           return '[Disabled]';
         }
 
         switch (node.spec.type) {
           case 'boolean': {
-            return nullableValue.innerValue ? 'On' : 'Off';
+            return (nullableValue.innerValue as BooleanValue) ? 'On' : 'Off';
           }
 
           case 'enum': {
@@ -67,7 +68,13 @@ export default {
             return ureg.formatQuantityAsReact(numericValue.magnitude, (node.spec.resolution ?? 0), ureg.deserializeContext(node.spec.context), { createElement });
           };
         }
-      });
+      };
+
+      let locValue = location?.assignments.find(([otherPath, value]) => List(otherPath).equals(List(path)))?.[1];
+
+      let label: ReactNode = locValue
+        ? formatInnerValue(locValue)
+        : formatEvaluable(value, formatInnerValue);
 
       return {
         description: `${parentNode.label ?? parentNode.id} › ${node.label ?? node.id}`,
@@ -77,6 +84,8 @@ export default {
     });
   },
   createActions(block, location, context) {
+    return [];
+
     if (location.mode.type !== 'normal') {
       return [];
     }

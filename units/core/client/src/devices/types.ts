@@ -114,6 +114,8 @@ export type NullableValue<T = unknown> = {
   innerValue: T;
 };
 
+export type BooleanValue = boolean;
+
 export type EnumValue = number | string;
 
 export interface NumericValue {

@@ -17,7 +17,7 @@ class Parser(BaseParser):
         type=am.EvaluableContainerType(
           am.RecordType({
             'body': am.Attribute(
-              am.PotentialExprType(am.StrType()),
+              am.StrType(),
               description="The message body."
             ),
             'files': am.Attribute(
@@ -28,12 +28,12 @@ class Parser(BaseParser):
                     description="The file content.",
                   ),
                   'format': am.Attribute(
-                    am.PotentialExprType(am.StrType()),
+                    am.StrType(),
                     default=None,
                     description="The file format, such as `png`. Defaults to automatic detection."
                   ),
                   'name': am.Attribute(
-                    am.PotentialExprType(am.StrType()),
+                    am.StrType(),
                     default=None,
                     description="The file name. Optional."
                   )
@@ -46,23 +46,24 @@ class Parser(BaseParser):
             'settings': am.Attribute(
               am.RecordType({
                 'channel_id': am.Attribute(
-                  am.PotentialExprType(am.StrType()),
+                  am.StrType(),
                   description="The Slack channel id, such as `C04NP6J8EMV`."
                 ),
                 'icon_url': am.Attribute(
-                  am.PotentialExprType(am.StrType()),
+                  am.StrType(),
                   description="The URL of the icon to use for the message.",
                   default=None
                 ),
                 'token': am.Attribute(
-                  am.PotentialExprType(am.StrType()),
+                  am.StrType(),
                   description="The Slack API token, starting with `xoxb-` (for bot tokens), `xoxp-` (for user tokens) or `xapp-` (for app-level tokens).",
                   documentation=[
                     "See [Access tokens](https://api.slack.com/authentication/token-types) for details."
                   ]
                 ),
                 'user_name': am.Attribute(
-                  am.PotentialExprType(am.StrType()),
+                  am.StrType(),
+                  default=None,
                   description="The name of the user sending the message.",
                   documentation=["The `chat:write.customize` scope is required when using this option."]
                 )

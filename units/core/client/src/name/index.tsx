@@ -1,5 +1,5 @@
 import { Plugin, PluginBlockImpl } from 'pr1';
-import { PluginName, ProtocolBlock, ProtocolBlockName } from 'pr1-shared';
+import { MasterBlockLocation, PluginName, ProtocolBlock, ProtocolBlockName, createZeroTerm } from 'pr1-shared';
 
 
 export interface Block extends ProtocolBlock {
@@ -7,7 +7,7 @@ export interface Block extends ProtocolBlock {
   value: string;
 }
 
-export interface Location {
+export interface Location extends MasterBlockLocation {
 
 }
 
@@ -16,9 +16,17 @@ export default {
   namespace: ('name' as PluginName),
   blocks: {
     ['_' as ProtocolBlockName]: {
-      getChildren(block, key) {
-        return [block.child];
+      getChildren(block, context) {
+        return [{
+          block: block.child,
+          delay: createZeroTerm()
+        }];
       },
+      getChildrenExecution(block, location, context) {
+        return [{
+          location: location.children[0]
+        }];
+      }
     } satisfies PluginBlockImpl<Block, Location>
   }
 } satisfies Plugin

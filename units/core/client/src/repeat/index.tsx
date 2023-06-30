@@ -31,13 +31,6 @@ export default {
 
   blocks: {
     ['_' as ProtocolBlockName]: {
-      Component(props) {
-        return (
-          <div>
-            Mode: {LocationMode[props.location.mode]}
-          </div>
-        );
-      },
       createFeatures(block, location, context) {
         let numericCount = location?.count ?? (
           (block.count.type === 'number')

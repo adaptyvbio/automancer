@@ -444,7 +444,7 @@ export class TextEditor extends Component<TextEditorProps, TextEditorState> {
   override render() {
     return (
       <div className={textEditorStyles.root} onKeyDown={(event) => {
-        if (this.editor.hasTextFocus() && !event.ctrlKey && !event.metaKey) {
+        if ((this.editor.hasTextFocus() || event.nativeEvent.composedPath().includes(this.ref.current!)) && !event.ctrlKey && !event.metaKey) {
           event.stopPropagation();
         }
       }}>

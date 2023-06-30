@@ -6,7 +6,7 @@ import { OrdinaryId } from 'pr1-shared';
 
 import styles from '../styles.module.scss';
 
-import { BaseNode, Context, ExecutorState, NodePath, NodeState, NumericNodeSpec, namespace } from '../types';
+import { BaseNode, BooleanValue, Context, EnumValue, ExecutorState, NodePath, NodeState, NumericNodeSpec, namespace } from '../types';
 import { isValueNode } from '../util';
 import { NumericValue } from '../types';
 
@@ -284,15 +284,15 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                     } else {
                       switch (spec.type) {
                         case 'boolean': {
-                          magnitude = (lastValueEvent.value.innerValue as boolean) ? 'true' : 'false';
+                          magnitude = (lastValueEvent.value.innerValue as BooleanValue) ? 'On' : 'Off';
                           break;
                         }
 
                         case 'enum': {
-                          let caseId = lastValueEvent.value.innerValue as (number | string);
-                          let specCase = spec.cases.find((specCase) => (specCase.id === caseId))!;
+                          let enumValue = lastValueEvent.value.innerValue as EnumValue;
+                          let enumCase = spec.cases.find((specCase) => (specCase.id === enumValue))!;
+                          magnitude = enumCase.label;
 
-                          magnitude = specCase.label;
                           break;
                         }
 

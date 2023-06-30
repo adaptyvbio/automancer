@@ -33,6 +33,7 @@ import { ViewDrafts } from './protocols';
 import { InfoBar } from '../components/info-bar';
 import { ViewExperiment } from './experiment';
 import { ReportPanel } from '../components/report-panel';
+import { PanelPlaceholder } from '../libraries/panel';
 
 
 export interface DocumentItem {
@@ -632,7 +633,9 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                                     selectBlock={this.selectBlock.bind(this)} />
                                 </ErrorBoundary>
                               )
-                              : <div />
+                              : (
+                                <PanelPlaceholder message="Nothing selected" />
+                              )
                           ) },
                         { id: 'report',
                           label: 'Report',

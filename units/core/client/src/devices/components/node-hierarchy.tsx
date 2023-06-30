@@ -4,7 +4,7 @@ import { ReactNode, createElement, useState } from 'react';
 
 import styles from './node-hierarchy.module.scss';
 
-import { BaseNode, CollectionNode, Context, EnumValue, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
+import { BaseNode, BooleanValue, CollectionNode, Context, EnumValue, NodePath, NodePreference, NodeStates, NumericValue } from '../types';
 import { isCollectionNode, isValueNode, iterNodes } from '../util';
 
 
@@ -175,15 +175,15 @@ export function NodeHierarchyNode(props: {
     if (lastValue && (lastValue.type === 'default')) {
       switch (spec.type) {
         case 'boolean': {
-          entryValue = (lastValue.innerValue as boolean) ? 'On' : 'Off';
+          entryValue = (lastValue.innerValue as BooleanValue) ? 'On' : 'Off';
           break;
         }
 
         case 'enum': {
-          let caseId = lastValue.innerValue as EnumValue;
-          let specCase = spec.cases.find((specCase) => (specCase.id === caseId))!;
+          let enumValue = lastValue.innerValue as EnumValue;
+          let enumCase = spec.cases.find((specCase) => (specCase.id === enumValue))!;
+          entryValue = (enumCase.label ?? enumCase.id);
 
-          entryValue = (specCase.label ?? specCase.id);
           break;
         }
 

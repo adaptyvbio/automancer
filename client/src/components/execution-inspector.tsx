@@ -191,7 +191,7 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
                         actions.find((action) => (action.id === actionId))?.onTrigger();
                       }
                     }}
-                    key={blockPath.at(-1) ?? -1} />
+                    key={pairIndex} />
                 );
               })
             )}

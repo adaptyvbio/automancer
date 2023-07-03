@@ -84,17 +84,16 @@ export type IPCEndpoint = {
   };
 
   drafts: {
-    // create(source: string): Promise<DraftEntry>;
+    create(contents: string): Promise<DraftSkeleton | null>;
     delete(draftEntryId: DraftEntryId): Promise<void>;
     list(): Promise<DraftSkeleton[]>;
+    openFile(filePath: string): Promise<void>;
     query(): Promise<DraftSkeleton | null>;
+    revealFile(filePath: string): Promise<void>;
     setName(draftEntryId: DraftEntryId, name: string): Promise<void>;
     watch(filePath: string, callback: ((change: DocumentChange) => void), onSignalAbort: (callback: (() => void)) => void): void;
     watchStop(filePath: string): Promise<void>;
     write(filePath: string, contents: string): Promise<void>;
-    // load(): Promise<DraftEntry | null>;
-    // openFile(draftId: DraftId, filePath: string): Promise<void>;
-    // revealFile(draftId: DraftId, filePath: string): Promise<void>;
   };
 
   store: {
@@ -155,25 +154,22 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   drafts: {
-    query: async () =>
-      await ipcRenderer.invoke('drafts.query'),
-    write: async (filePath, contents) =>
-      await ipcRenderer.invoke('drafts.write', filePath, contents),
-
-    // create: async (source) =>
-    //   await ipcRenderer.invoke('drafts.create', source),
+    create: async (source) =>
+      await ipcRenderer.invoke('drafts.create', source),
     delete: async (draftEntryId) =>
       await ipcRenderer.invoke('drafts.delete', draftEntryId),
     list: async () =>
       await ipcRenderer.invoke('drafts.list'),
+    openFile: async (filePath) =>
+      await ipcRenderer.invoke('drafts.openFile', filePath),
+    query: async () =>
+      await ipcRenderer.invoke('drafts.query'),
+    revealFile: async (filePath) =>
+      await ipcRenderer.invoke('drafts.revealFile', filePath),
     setName: async (draftEntryId, name) =>
       await ipcRenderer.invoke('drafts.setName', draftEntryId, name),
-    // load: async () =>
-    //   await ipcRenderer.invoke('drafts.load'),
-    // openFile: async (draftId, filePath) =>
-    //   await ipcRenderer.invoke('drafts.openFile', draftId, filePath),
-    // revealFile: async (draftId, filePath) =>
-    //   await ipcRenderer.invoke('drafts.revealFile', draftId, filePath),
+    write: async (filePath, contents) =>
+      await ipcRenderer.invoke('drafts.write', filePath, contents),
 
     watch: async (filePath, callback, onSignalAbort) => {
       let changeListener = (event: any, changeFilePath: string, change: DocumentChange) => {

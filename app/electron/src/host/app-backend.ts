@@ -6,7 +6,7 @@ import './navigation';
 
 
 export class ElectronAppBackend extends SnapshotProvider<AppBackendSnapshot> implements AppBackend {
-  private _drafts: Record<DraftInstanceId, DraftInstance> = {};
+  _drafts: Record<DraftInstanceId, DraftInstance> = {};
 
   protected override _createSnapshot(): AppBackendSnapshot {
     return {
@@ -38,7 +38,23 @@ export class ElectronAppBackend extends SnapshotProvider<AppBackendSnapshot> imp
     }
   }
 
-  async queryDraft(options: { directory: boolean; }) {
+
+  async createDraft(contents: string) {
+    let skeleton = await window.api.drafts.create(contents);
+
+    if (skeleton) {
+      let instance = new ElectronAppDraftInstance(this, skeleton);
+
+      this._drafts[instance.id] = instance;
+      this._update();
+
+      return instance;
+    }
+
+    return null;
+  }
+
+  async queryDraft() {
     let skeleton = await window.api.drafts.query();
 
     if (skeleton) {
@@ -88,6 +104,8 @@ export class ElectronAppDraftInstance extends SnapshotProvider<DraftInstanceSnap
 
   async remove() {
     await window.api.drafts.delete(this._draftEntryId);
+    delete this._appBackend._drafts[this.id];
+    this._appBackend._update();
   }
 
   async setName(name: string) {
@@ -123,6 +141,14 @@ export class ElectronAppDocumentSlot extends SnapshotProvider<DocumentSlotSnapsh
       path: this._path.split((window.api.platform === 'win32') ? '\\' : '/'),
       status: this._status
     };
+  }
+
+  async open() {
+    await window.api.drafts.openFile(this._path);
+  }
+
+  async reveal() {
+    await window.api.drafts.revealFile(this._path);
   }
 
   async watch(options: { signal: AbortSignal; }) {

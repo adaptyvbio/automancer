@@ -2,20 +2,15 @@ import { Component } from 'react';
 
 import viewStyles from '../../styles/components/view.module.scss';
 
-import type { Application } from '../application';
-import type { Host } from '../host';
-import type { Draft, DraftId, DraftPrimitive } from '../draft';
+import { Button } from '../components/button';
 import { ContextMenuArea, ContextMenuAreaProps } from '../components/context-menu-area';
 import { Icon } from '../components/icon';
 import { TitleBar } from '../components/title-bar';
+import { BaseUrl } from '../constants';
+import { ViewProps } from '../interfaces/view';
 import * as util from '../util';
 import { Pool } from '../util';
-import { analyzeProtocol } from '../analysis';
-import { formatDuration } from '../format';
-import { ViewProps } from '../interfaces/view';
-import { BaseUrl } from '../constants';
 import { ViewDraft } from './draft';
-import { Button } from '../components/button';
 
 
 export class ViewDrafts extends Component<ViewProps, {}> {
@@ -38,37 +33,39 @@ export class ViewDrafts extends Component<ViewProps, {}> {
               <div className="actions">
                 <Button onClick={() => {
                   this.pool.add(async () => {
-                    let draftId = await this.props.app.createDraft({ directory: false });
+                    let draftInstance = await this.props.app.appBackend.createDraft('name: Example protocol\n\nsteps:\n  actions:\n    - wait: 10 sec\n');
 
-                    if (draftId) {
-                      ViewDraft.navigate(draftId);
+                    if (draftInstance) {
+                      ViewDraft.navigate(draftInstance.id);
                     }
                   });
                 }}>New file</Button>
                 <Button onClick={() => {
                   this.pool.add(async () => {
-                    let draftId = await this.props.app.queryDraft({ directory: false });
+                    let draftInstance = await this.props.app.appBackend.queryDraft();
 
-                    if (draftId) {
-                      ViewDraft.navigate(draftId);
+                    if (draftInstance) {
+                      ViewDraft.navigate(draftInstance.id);
                     }
                   });
                 }}>Open file</Button>
-                <Button onClick={() => {
-                  this.pool.add(async () => {
-                    let draftId = await this.props.app.queryDraft({ directory: true });
+                {this.props.app.appBackend.queryDraftDirectory && (
+                  <Button onClick={() => {
+                    this.pool.add(async () => {
+                      let draftInstance = await this.props.app.appBackend.queryDraftDirectory!();
 
-                    if (draftId) {
-                      ViewDraft.navigate(draftId);
-                    }
-                  });
-                }}>Open directory</Button>
+                      if (draftInstance) {
+                        ViewDraft.navigate(draftInstance.id);
+                      }
+                    });
+                  }}>Open directory</Button>
+                )}
               </div>
             </header>
 
             <div className="lproto-list">
               {drafts.map((draft) => {
-                // let analysis = draft.compilation?.protocol && analyzeProtocol(draft.compilation.protocol);
+                let entryDocumentSlot = draft.model.getEntryDocumentSlot();
 
                 return (
                   <DraftEntry
@@ -96,19 +93,19 @@ export class ViewDrafts extends Component<ViewProps, {}> {
                       // { id: 'archive', name: 'Archive', icon: 'archive' },
                       // { id: 'open-readonly', name: 'Open in read-only mode' },
                       // { id: '_divider1', type: 'divider' },
-                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !entryDocument.model.reveal },
-                      { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !entryDocument.model.open },
+                      { id: 'reveal', name: 'Reveal in explorer', icon: 'folder_open', disabled: !entryDocumentSlot.reveal },
+                      { id: 'open', name: 'Open in external editor', icon: 'code', disabled: !entryDocumentSlot.open },
                       { id: '_divider2', type: 'divider' },
                       // { id: 'download', name: 'Download', icon: 'download', disabled: true },
-                      { id: 'save', name: 'Save as...', icon: 'save', disabled: true },
-                      { id: '_divider3', type: 'divider' },
+                      // { id: 'save', name: 'Save as...', icon: 'save', disabled: true },
+                      // { id: '_divider3', type: 'divider' },
                       { id: 'remove', name: 'Remove from list', icon: 'highlight_off' }
                     ]}
                     onSelect={(path) => {
                       switch (path.first()) {
                         case 'remove': {
                           this.pool.add(async () => {
-                            await this.props.app.deleteDraft(draft.id);
+                            await draft.model.remove();
                           });
 
                           break;
@@ -116,7 +113,7 @@ export class ViewDrafts extends Component<ViewProps, {}> {
 
                         case 'open': {
                           this.pool.add(async () => {
-                            await entryDocument.model.open!();
+                            await entryDocumentSlot.open!();
                           });
 
                           break;
@@ -124,7 +121,7 @@ export class ViewDrafts extends Component<ViewProps, {}> {
 
                         case 'reveal': {
                           this.pool.add(async () => {
-                            await entryDocument.model.reveal!();
+                            await entryDocumentSlot.reveal!();
                           });
 
                           break;

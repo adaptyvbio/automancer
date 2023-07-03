@@ -1,23 +1,27 @@
 import { Client } from 'pr1-shared';
-import * as React from 'react';
+import { Component } from 'react';
 
 import type { AppBackend } from './app-backends/base';
 import { BrowserAppBackend } from './app-backends/browser';
 import { Application } from './application';
-import { WebsocketBackend } from './websocket';
 import { HostInfoId } from './interfaces/host';
 import { Pool } from './util';
+import { WebsocketBackend } from './websocket';
 
+
+export interface BrowserAppProps {
+
+}
 
 export interface BrowserAppState {
   client: Client | null;
 }
 
-export class BrowserApp extends React.Component<{}, BrowserAppState> {
+export class BrowserApp extends Component<BrowserAppProps, BrowserAppState> {
   appBackend: AppBackend = new BrowserAppBackend();
   pool = new Pool();
 
-  constructor(props: {}) {
+  constructor(props: BrowserAppProps) {
     super(props);
 
     this.state = {
@@ -25,7 +29,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
     };
   }
 
-  componentDidMount() {
+  override componentDidMount() {
     this.pool.add(async () => {
       let backend = new WebsocketBackend('ws://localhost:4567');
       await backend.ready;
@@ -41,7 +45,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
     });
   }
 
-  render() {
+  override render() {
     if (!this.state.client) {
       return <div />;
     }
@@ -52,7 +56,7 @@ export class BrowserApp extends React.Component<{}, BrowserAppState> {
         client={this.state.client}
         hostInfo={{
           id: ('_' as HostInfoId),
-          imageUrl: 'http://localhost:9050/logo.png',
+          imageUrl: null,
           description: '192.168.1.18:4235',
           label: 'Setup',
           local: false

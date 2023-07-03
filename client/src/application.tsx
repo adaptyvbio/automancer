@@ -384,36 +384,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
   }
 
 
-  // async createDraft(options: { directory: boolean; }): Promise<DraftId | null> {
-  //   let sample = await this.state.host!.client.request({ type: 'createDraftSample' });
-  //   let draftItem = await this.appBackend.createDraft({
-  //     directory: options.directory,
-  //     source: sample
-  //   });
-
-  //   if (draftItem) {
-  //     this.setState((state) => ({
-  //       drafts: {
-  //         ...state.drafts,
-  //         [draftItem!.id]: createDraftFromItem(draftItem!)
-  //       }
-  //     }));
-  //   }
-
-  //   return (draftItem?.id ?? null);
-  // }
-
-  async deleteDraft(draftId: DraftInstanceId) {
-    let instance = this.state.drafts[draftId].model;
-    await instance.remove();
-  }
-
-  async queryDraft(options: { directory: boolean; }) {
-    let draftInstance = await this.appBackend.queryDraft({ directory: options.directory });
-    return draftInstance?.id ?? null;
-  }
-
-
   override render() {
     let contents = null;
     let routeData = this.state.currentRouteData;

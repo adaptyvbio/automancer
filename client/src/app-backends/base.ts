@@ -126,6 +126,13 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
   initialize(): Promise<void>;
 
   /**
+   * Trigger a file save dialog to create a new draft.
+   *
+   * @returns A promise that resolves to a {@link DraftInstance} object or `null` if the user cancelled the dialog.
+   */
+  createDraft(contents: string): Promise<DraftInstance | null>;
+
+  /**
    * Create a {@link Store} object.
    *
    * @param name The name of the store.
@@ -134,9 +141,18 @@ export interface AppBackend extends SnapshotTarget<AppBackendSnapshot> {
   createStore(name: string, options: { type: 'persistent' | 'session'; }): Store;
 
   /**
-   * Trigger a file or directory open dialog and return a corresponding {@link DraftInstance} object.
+   * Trigger a file open dialog to open a draft.
+   *
+   * @returns A promise that resolves to a {@link DraftInstance} object or `null` if the user cancelled the dialog.
    */
-  queryDraft(options: { directory: boolean; }): Promise<DraftInstance | null>;
+  queryDraft(): Promise<DraftInstance | null>;
+
+  /**
+   * Trigger a directory open dialog to open a draft.
+
+   * @returns A promise that resolves to a {@link DraftInstance} object or `null` if the user cancelled the dialog.
+   */
+  queryDraftDirectory?(): Promise<DraftInstance | null>;
 }
 
 export interface AppBackendSnapshot {

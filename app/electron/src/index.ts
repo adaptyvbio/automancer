@@ -623,36 +623,36 @@ export class CoreApplication {
 
     // Draft management
 
-    // ipcMain.handle('drafts.create', async (event, source) => {
-    //   let result = await dialog.showSaveDialog(
-    //     BrowserWindow.fromWebContents(event.sender)!,
-    //     { filters: ProtocolFileFilters,
-    //       buttonLabel: 'Create' }
-    //   );
+    ipcMain.handle('drafts.create', async (event, contents) => {
+      let result = await dialog.showSaveDialog(
+        BrowserWindow.fromWebContents(event.sender)!,
+        { filters: ProtocolFileFilters }
+      );
 
-    //   if (result.canceled) {
-    //     return null;
-    //   }
+      if (result.canceled) {
+        return null;
+      }
 
-    //   let draftEntry: DraftEntry = {
-    //     id: crypto.randomUUID(),
-    //     lastOpened: Date.now(),
-    //     name: path.basename(result.filePath!),
-    //     path: result.filePath!
-    //   };
+      let draftEntry = {
+        id: crypto.randomUUID() as DraftEntryId,
+        name: null,
+        entryPath: result.filePath!
+      };
 
-    //   await fs.writeFile(draftEntry.path!, source);
+      await fileManager.writeFile(draftEntry.entryPath, contents);
 
-    //   await this.setData({
-    //     drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
-    //   });
+      await this.setData({
+        drafts: { ...this.data.drafts, [draftEntry.id]: draftEntry }
+      });
 
-    //   draftEntryStates[draftEntry.id] = createDraftEntryState();
+      return {
+        id: draftEntry.id,
+        entryPath: draftEntry.entryPath,
+        name: draftEntry.name
+      };
+    });
 
-    //   return createClientDraftEntry(draftEntry);
-    // });
-
-    ipcMain.handle('drafts.delete', async (_event, draftEntryId) => {
+    ipcMain.handle('drafts.delete', async (event, draftEntryId) => {
       let { [draftEntryId]: _, ...drafts } = this.data.drafts;
       await this.setData({ drafts });
     });
@@ -663,6 +663,10 @@ export class CoreApplication {
         entryPath: draftEntry.entryPath,
         name: draftEntry.name
       }));
+    });
+
+    ipcMain.handle('drafts.openFile', async (event, filePath) => {
+      shell.openPath(filePath);
     });
 
     ipcMain.handle('drafts.query', async (event) => {
@@ -698,6 +702,10 @@ export class CoreApplication {
       };
     });
 
+    ipcMain.handle('drafts.revealFile', async (event, filePath) => {
+      shell.showItemInFolder(filePath);
+    });
+
     ipcMain.handle('drafts.setName', async (event, draftEntryId, name) => {
       let draftEntry = this.data.drafts[draftEntryId];
 
@@ -711,16 +719,6 @@ export class CoreApplication {
         }
       });
     });
-
-    // ipcMain.handle('drafts.openFile', async (_event, draftId, filePath) => {
-    //   let draftEntry = this.data.drafts[draftId];
-    //   shell.openPath(draftEntry.path);
-    // });
-
-    // ipcMain.handle('drafts.revealFile', async (_event, draftId, filePath) => {
-    //   let draftEntry = this.data.drafts[draftId];
-    //   shell.showItemInFolder(draftEntry.path);
-    // });
 
     let fileManager = new FileManager();
     this.disposables.add(fileManager);

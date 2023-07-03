@@ -3,6 +3,7 @@ from dataclasses import KW_ONLY, dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 import uuid
 
+from .rich_text import RichText
 from .util.misc import Exportable
 
 if TYPE_CHECKING:
@@ -73,7 +74,7 @@ Trace = list[DiagnosticReference]
 class Diagnostic(Exportable):
   message: str
   _: KW_ONLY
-  description: list[str] = field(default_factory=list)
+  description: Optional[RichText] = None
   id: Optional[int] = None
   name: str = 'unknown'
   references: list[DiagnosticReference] = field(default_factory=list)
@@ -82,7 +83,7 @@ class Diagnostic(Exportable):
   def export(self):
     return {
       "type": "default",
-      "description": self.description,
+      "description": self.description and self.description.export(),
       "id": self.id,
       "message": self.message,
       "name": self.name,

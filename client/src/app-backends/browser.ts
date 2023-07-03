@@ -142,10 +142,6 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
     }
   }
 
-  // private async _queryHandle() {
-  //   return await findFile(this._draftInstance._container!.rootHandle, this._path);
-  // }
-
   private _poll() {
     this._pollTimeoutId = setTimeout(() => {
       this._pollTimeoutId = null;
@@ -199,7 +195,7 @@ export class BrowserDocumentSlot extends SnapshotProvider<DocumentSlotSnapshot> 
   }
 
   async write(contents: string) {
-    return this._writeLock.acquireWith(async () => {
+    await this._writeLock.acquireWith(async () => {
       if (!this._instance) {
         throw new TypeError('Missing instance');
       }
@@ -400,21 +396,48 @@ export class BrowserAppBackend extends SnapshotProvider<AppBackendSnapshot> impl
     this._update();
   }
 
-  async queryDraft(options: { directory: boolean; }) {
-    let selectedHandle = options.directory
-      ? await wrapAbortable(window.showDirectoryPicker())
-      : (await wrapAbortable(window.showOpenFilePicker()))?.[0];
+
+  async createDraft(contents: string) {
+    let selectedHandle = await wrapAbortable(window.showSaveFilePicker());
 
     if (!selectedHandle) {
       return null;
     }
 
+    try {
+      // TODO: Move somewhere else
+      let writable = await selectedHandle.createWritable();
+
+      await writable.write(contents);
+      await writable.close();
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+
+    return await this._createInstanceFromCandidate(selectedHandle, null);
+  }
+
+  async queryDraft() {
+    let selectedHandle = (await wrapAbortable(window.showOpenFilePicker()))?.[0];
+
+    if (!selectedHandle) {
+      return null;
+    }
+
+    return await this._createInstanceFromCandidate(selectedHandle, null);
+  }
+
+  async queryDraftDirectory() {
+    let selectedHandle = await wrapAbortable(window.showDirectoryPicker());
+
+    if (!selectedHandle) {
+      return null;
+    }
 
     for await (let { handle, path } of walkFilesystemHandle(selectedHandle)) {
-      let rootHandle = (selectedHandle.kind === 'directory') ? selectedHandle : null;
-
       if (handle.name.endsWith(DraftDocumentExtension)) {
-        return await this._createInstanceFromCandidate(handle, rootHandle);
+        return await this._createInstanceFromCandidate(handle, selectedHandle);
       }
     }
 

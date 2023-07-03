@@ -53,7 +53,7 @@ export class App extends Component<AppProps, AppState> {
           hostInfo={{
             id: (this.state.hostSettings.id as string as HostInfoId),
             imageUrl: null,
-            description: this.state.hostSettings.label,
+            description: null,
             label: this.state.hostSettings.label,
             local: true
           }}

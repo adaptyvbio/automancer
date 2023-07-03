@@ -13,3 +13,7 @@ export interface StoreConsumer<PersistentStoreEntries extends StoreEntries, Sess
 export type StoreManagerHookFromEntries<T extends StoreEntries> = UnionToIntersection<{
   [S in keyof T]: SpecializedStoreManagerHook<S, T[S]>;
 }[keyof T]>;
+
+export type StoreManagerReadFromEntries<T extends StoreEntries> = UnionToIntersection<{
+  [S in keyof T]: (key: S) => T[S];
+}[keyof T]>;

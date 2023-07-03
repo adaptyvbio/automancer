@@ -279,11 +279,13 @@ export namespace renumber {
 }
 
 
-export function debounce(delay: number, callback: () => void, options?: { signal?: AbortSignal; }): {
+export interface Debounced {
   (): void;
   cancel(): void;
   isActive(): boolean;
-} {
+}
+
+export function debounce(delay: number, callback: () => void, options?: { signal?: AbortSignal; }): Debounced {
   let timeout: number | null = null;
 
   options?.signal?.addEventListener('abort', () => {

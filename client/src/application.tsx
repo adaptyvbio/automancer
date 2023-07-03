@@ -103,16 +103,6 @@ export class Application extends Component<ApplicationProps, ApplicationState> {
       host: null
     };
 
-
-    this.persistentStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'persistent' }));
-    this.sessionStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'session' }));
-
-    this.store = {
-      usePersistent: this.persistentStoreManager.useEntry,
-      useSession: this.sessionStoreManager.useEntry
-    };
-
-
     this.persistentStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'persistent' }));
     this.sessionStoreManager = new StoreManager(this.appBackend.createStore('application', { type: 'session' }));
 

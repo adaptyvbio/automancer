@@ -1,9 +1,8 @@
-import { OrdinaryId } from 'pr1-shared';
 import { useCallback, useSyncExternalStore } from 'react';
 
 import { Pool } from '../util';
 import { Store } from './base';
-import { StoreEntries, StoreManagerHookFromEntries } from './types';
+import { StoreEntries, StoreManagerHookFromEntries, StoreManagerReadFromEntries } from './types';
 
 
 export interface StoreManagerEntryInfo {
@@ -56,6 +55,10 @@ export class StoreManager<Entries extends StoreEntries> {
       listener();
     }
   }
+
+  get = ((key: string) => {
+    return this.entryInfos.get(key)!.value;
+  }) as StoreManagerReadFromEntries<Entries>;
 
   useEntry = ((key: string) => {
     let value = useSyncExternalStore<unknown>(useCallback((listener) => {

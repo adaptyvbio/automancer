@@ -13,27 +13,25 @@ import { DraftSummary } from '../components/draft-summary';
 import { ErrorBoundary } from '../components/error-boundary';
 import { FileTabNav } from '../components/file-tab-nav';
 import { GraphEditor } from '../components/graph-editor';
+import { InfoBar } from '../components/info-bar';
 import { StartProtocolModal } from '../components/modals/start-protocol';
 import { UnsavedDocumentModal } from '../components/modals/unsaved-document';
+import { ReportPanel } from '../components/report-panel';
 import { SplitPanels } from '../components/split-panels';
 import { TabNav } from '../components/tab-nav';
 import { TextEditor } from '../components/text-editor';
 import { TimeSensitive } from '../components/time-sensitive';
 import { TitleBar } from '../components/title-bar';
 import { BaseUrl } from '../constants';
-import { DraftCompilation } from '../draft';
 import { formatDigitalDate, formatDurationTerm, formatTimeDifference } from '../format';
 import { HostDraftCompilerResult } from '../interfaces/draft';
 import { GlobalContext } from '../interfaces/plugin';
 import { ViewHashOptions, ViewProps } from '../interfaces/view';
+import { PanelPlaceholder } from '../libraries/panel';
 import { analyzeBlockPath } from '../protocol';
-import { Pool, formatClass } from '../util';
+import { Debounced, Pool, debounce } from '../util';
 import { ViewExperimentWrapper } from './experiment-wrapper';
 import { ViewDrafts } from './protocols';
-import { InfoBar } from '../components/info-bar';
-import { ViewExperiment } from './experiment';
-import { ReportPanel } from '../components/report-panel';
-import { PanelPlaceholder } from '../libraries/panel';
 
 
 export interface DocumentItem {
@@ -45,6 +43,7 @@ export interface DocumentItem {
 
   meta: {
     currentVersionId: number | null;
+    autoSave: Debounced | null;
     updated: boolean; // = Updated since the last start of a compilation.
   };
 }
@@ -80,13 +79,16 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
   private refTextEditor = createRef<TextEditor>();
   private refTitleBar = createRef<TitleBar>();
 
+  autoSave = this.props.app.persistentStoreManager.get('editor.automaticSave');
+
   constructor(props: ViewDraftProps) {
     super(props);
 
     let entrySlot = this.props.draft.model.getEntryDocumentSlot();
 
+    let entryDocumentController = new AbortController();
     let entryDocumentItem: DocumentItem = {
-      controller: new AbortController(),
+      controller: entryDocumentController,
       slotSnapshot: entrySlot.getSnapshot(),
       textModel: null,
       unsaved: false,
@@ -94,6 +96,13 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
 
       meta: {
         currentVersionId: null,
+        autoSave: this.autoSave
+          ? debounce(5000, () => {
+            this.pool.add(async () => {
+              await this.saveDocuments(this.selectedDocumentItem);
+            });
+          })
+          : null,
         updated: true
       }
     };
@@ -135,6 +144,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
             this.setDocumentItem(documentItem.slotSnapshot.id, {
               unsaved: true
             });
+
+            documentItem.meta.autoSave?.();
           }
         });
 
@@ -203,6 +214,8 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
           writing: true
         });
 
+        documentItem.meta.autoSave?.cancel();
+
         try {
           await this.saveDraftName(documentItem);
           await slot.write(contents);
@@ -265,10 +278,14 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
     this.props.setUnsavedDataCallback(async () => {
       for (let documentItem of this.state.documentItems.values()) {
         if (documentItem.unsaved) {
-          let deferred = defer<boolean>();
-          this.setState({ unsavedDocumentDeferred: deferred });
+          if (this.autoSave) {
+            await this.saveDocuments(documentItem);
+          } else {
+            let deferred = defer<boolean>();
+            this.setState({ unsavedDocumentDeferred: deferred });
 
-          return await deferred.promise;
+            return await deferred.promise;
+          }
         }
       }
 
@@ -546,7 +563,7 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                       id: documentItem.slotSnapshot.id,
                       label: documentItem.slotSnapshot.path.at(-1)!,
                       missing: (documentItem.slotSnapshot.status === 'missing'),
-                      unsaved: documentItem.unsaved,
+                      unsaved: (!this.autoSave && documentItem.unsaved),
                       selected: (documentItem.slotSnapshot.id === this.state.selectedDocumentId),
                       onClose() {
                         ViewDrafts.navigate();
@@ -581,7 +598,6 @@ export class ViewDraft extends Component<ViewDraftProps, ViewDraftState> {
                     };
                   })} />
                   <DocumentEditor
-                    autoSave={false}
                     documentItem={this.state.documentItems.find((documentItem) => documentItem.slotSnapshot.id === this.state.selectedDocumentId)!}
                     getCompilation={this.getCompilation.bind(this)}
                     onCursorChange={(position) => {

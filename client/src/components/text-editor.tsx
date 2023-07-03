@@ -25,17 +25,9 @@ window.MonacoEnvironment = {
 
 
 export interface TextEditorProps {
-  autoSave: boolean;
   documentItem: DocumentItem;
   getCompilation(): Promise<HostDraftCompilerResult>;
   onCursorChange(position: monaco.Position): void;
-
-  // autoSave: boolean;
-  // compilation: DraftCompilation | null;
-  // draft: Draft;
-  // getCompilation(options?: { source?: string; }): Promise<DraftCompilation>;
-  // save(compilation: DraftCompilation, source: string): void;
-  // summary: React.ReactNode;
 }
 
 export interface TextEditorState {
@@ -53,18 +45,6 @@ export class TextEditor extends Component<TextEditorProps, TextEditorState> {
     this.pool.add(async () => {
       await this.markerManager.update();
     });
-
-    // this.pool.add(async () => {
-    //   await this.getCompilation();
-    // });
-
-    // let source = this.model.getValue();
-
-    // if (this.props.autoSave) {
-    //   this.props.onChangeSave(source);
-    // } else {
-    //   this.props.onChange(source);
-    // }
   }, { signal: this.controller.signal });
 
   constructor(props: TextEditorProps) {

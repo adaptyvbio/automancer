@@ -1,4 +1,5 @@
 import type { DocumentId } from './draft';
+import type { RichText } from './rich-text';
 import type { Brand } from './util';
 
 
@@ -6,7 +7,7 @@ export type DiagnosticId = Brand<number, 'DiagnosticId'>;
 
 export type Diagnostic = {
   id: DiagnosticId | null;
-  description: string[];
+  description: RichText | null;
   message: string;
   name: string;
   references: DiagnosticReference[];

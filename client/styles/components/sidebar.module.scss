@@ -93,12 +93,23 @@
     }
 
     &Title {
+      grid-row: 1;
+
       font-size: 1.1rem;
       font-weight: 500;
+
+      @include text-ellipsis();
     }
 
     &Subtitle {
+      grid-row: 2;
       color: #666;
+
+      @include text-ellipsis();
+    }
+
+    &Title:first-child, &Title:first-child + &Subtitle {
+      grid-column-end: span 2;
     }
 
     &Expand {
@@ -160,11 +171,7 @@
       background-color: #eee;
       border-radius: 4px;
 
-      font-variation-settings:
-        'FILL' 0,
-        'wght' 200,
-        'GRAD' 200,
-        'opsz' 24;
+      @include icon();
     }
   }
 }

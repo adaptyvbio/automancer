@@ -3,7 +3,7 @@ import type { Brand } from 'pr1-shared';
 
 export interface HostInfo {
   id: HostInfoId;
-  description: string;
+  description: string | null;
   imageUrl: string | null;
   label: string;
   local: boolean;

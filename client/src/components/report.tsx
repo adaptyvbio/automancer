@@ -33,7 +33,10 @@ export function ReportDiagnostic(props: {
     <div className={styles.entryRoot} data-kind={props.kind}>
       <Icon name={{ error: 'report', warning: 'warning' }[props.kind]} className={styles.entryIcon} />
       <div className={styles.entryTitle}>{props.diagnostic.message}</div>
-      {/* <button type="button" className={styles.entryLocation}>foo.yml 13:8</button> */}
+      {/* <button type="button" className={styles.entryLocation}>5 minutes ago</button> */}
+      {props.diagnostic.description && (
+        <p className={styles.entryDescription}>{formatRichText(props.diagnostic.description)}</p>
+      )}
       {/* <p className={styles.entryDescription}>This line contains a syntax error. See the documentation for details.</p> */}
       {/* TODO: Transform to dropdown */}
       {/* <div className={styles.entryActions}>
@@ -83,6 +86,7 @@ export function ReportEffect(props: {
     <div className={styles.entryRoot} data-kind="effect">
       <Icon name={effectInfo.icon} className={styles.entryIcon} />
       <div className={styles.entryTitle}>{effectInfo.message}</div>
+      <button type="button" className={styles.entryLocation}>12 minutes ago</button>
       {effectInfo.description && (
         <p className={styles.entryDescription}>{formatRichText(effectInfo.description)}</p>
       )}

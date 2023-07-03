@@ -386,7 +386,7 @@ export interface ConfPageComponentProps {
 
 function GeneralConfPage(props: ConfPageComponentProps) {
   let [automaticSave, setAutomaticSave] = props.app.store.usePersistent('editor.automaticSave');
-  let [graphDirection, setGraphDirection] = props.app.store.usePersistent('graph.direction');
+  // let [graphDirection, setGraphDirection] = props.app.store.usePersistent('graph.direction');
   let [shortcutDisplayMode, setShortcutDisplayMode] = props.app.store.usePersistent('general.shortcutDisplayMode');
 
   return (
@@ -401,7 +401,7 @@ function GeneralConfPage(props: ConfPageComponentProps) {
         <p className={formStyles.checkDescription}>Save the editor's contents automatically at regular intervals.</p>
       </label>
 
-      <Form.Select
+      {/* <Form.Select
         label="Graph direction"
         value={graphDirection}
         onInput={setGraphDirection}
@@ -410,7 +410,7 @@ function GeneralConfPage(props: ConfPageComponentProps) {
             label: 'Vertical' },
           { id: GraphDirection.Horizontal,
             label: 'Horizontal' }
-        ]} />
+        ]} /> */}
 
       <h3>Shortcuts</h3>
 

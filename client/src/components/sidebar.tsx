@@ -8,6 +8,7 @@ import type { Host } from '../host';
 import { HostInfo } from '../interfaces/host';
 import * as util from '../util';
 import { ContextMenuArea } from './context-menu-area';
+import { StaticSelect } from './static-select';
 
 
 const CollapsedStorageKey = 'sidebarCollapsed';
@@ -182,14 +183,22 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
                 ))}
               </select>
             )} */}
-            <div className={styles.headerValueRoot}>
-              <img src={this.props.hostInfo.imageUrl!} className={styles.headerValueIcon} />
-              <div className={styles.headerValueTitle}>{this.props.hostInfo.label}</div>
-              {/* <div className={styles.headerValueSubtitle}>{this.props.hostInfo.description}</div> */}
-              <div className={styles.headerValueExpand}>
-                <span className="material-symbols-sharp">unfold_more</span>
+            <StaticSelect
+              options={[{ id: '_', label: this.props.hostInfo.label }]}
+              selectedOptionId="_">
+              <div className={styles.headerValueRoot}>
+                {this.props.hostInfo.imageUrl && (
+                  <img src={this.props.hostInfo.imageUrl} className={styles.headerValueIcon} />
+                )}
+                <div className={styles.headerValueTitle}>{this.props.hostInfo.label}</div>
+                {this.props.hostInfo.description && (
+                  <div className={styles.headerValueSubtitle}>{this.props.hostInfo.description}</div>
+                )}
+                <div className={styles.headerValueExpand}>
+                  <span className="material-symbols-sharp">unfold_more</span>
+                </div>
               </div>
-            </div>
+            </StaticSelect>
           </div>
           <nav className={styles.navRoot}>
             {groups.map((group) => (

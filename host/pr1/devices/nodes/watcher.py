@@ -38,10 +38,27 @@ class Watcher:
 
   async def __aiter__(self):
     if not self._started:
-      await self.start()
+      raise RuntimeError("Watcher not started")
 
     while True:
       yield await self.wait_event()
+
+  async def merged(self):
+    if not self._started:
+      raise RuntimeError("Watcher not started")
+
+    while True:
+      await self._event.wait()
+      self._event.clear()
+
+      merged_event = WatchEvent()
+
+      for event in self._queue:
+        for node, modes in event.items():
+          merged_event.setdefault(node, WatchModes()).update(modes)
+
+      self._queue.clear()
+      yield merged_event
 
   async def wait_event(self):
     await self._event.wait()

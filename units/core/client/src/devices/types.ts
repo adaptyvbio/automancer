@@ -1,6 +1,6 @@
 import { List, Map as ImMap, Set as ImSet } from 'immutable';
 import { DynamicValue, PluginContext } from 'pr1';
-import { Brand, ClientId, PluginName } from 'pr1-shared';
+import { Brand, ClientId, ExperimentId, PluginName } from 'pr1-shared';
 import { SerializedContext } from 'quantops';
 
 
@@ -80,16 +80,20 @@ export interface NodeStateLocation {
 }
 
 
+export type NodeClaimOwner = {
+  type: 'master';
+  experimentId: ExperimentId;
+} | {
+  type: 'user';
+} | {
+  type: 'unknown';
+};
+
 export interface NodeStateChange {
   connected: boolean;
   valueEvent: ValueEvent | null;
   writer: {
-    owner: {
-      type: 'client';
-      clientId: ClientId;
-    } | {
-      type: 'unknown';
-    } | null;
+    owner: NodeClaimOwner | null;
     targetValueEvent: ValueEvent | null;
   } | null;
 }

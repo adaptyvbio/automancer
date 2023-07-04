@@ -2,7 +2,7 @@ import ast
 import functools
 from dataclasses import dataclass
 from types import EllipsisType
-from typing import TYPE_CHECKING, Any, cast, final
+from typing import TYPE_CHECKING, Any, AsyncIterator, TypeVar, cast, final
 
 import automancer as am
 from pr1.fiber.eval import EvalContext, EvalEnv, EvalEnvValue, EvalSymbol
@@ -126,6 +126,7 @@ class PublisherTransformer(BasePassiveTransformer):
         # documentation=([f"Unit: {node.context!r}"] if isinstance(node, NumericNode) else None),
         label=node.label,
         optional=True,
+        # type=am.AutoExprContextType(am.PotentialExprType(get_type_for_node(node)))
         type=am.AutoExprContextType(am.DynamicValueType(get_type_for_node(node)))
       ) for key, (node, path) in self._parser.node_map.items()
     } | {
@@ -353,5 +354,6 @@ class ValueNodeValueDependency(am.Dependency):
       break
 
   async def watch(self):
-    async for _ in am.Watcher([self.node], modes={'value'}):
-      yield
+    async with am.Watcher([self.node], modes={'value'}) as watcher:
+      async for _ in watcher.merged():
+        yield

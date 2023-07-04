@@ -55,7 +55,6 @@ export default {
     return block.assignments.map(([path, value]) => {
       let parentNode = findNode(executor.root, path.slice(0, -1))!;
       let node = findNode(executor.root, path) as ValueNode;
-      // let locationValue = location?.assignments.find(([otherPath, value]) => (util.deepEqual(otherPath, path)))?.[1];
 
       let formatInnerValue = (nullableValue: NullableValue) => {
         if (nullableValue.type === 'null') {
@@ -81,10 +80,10 @@ export default {
         }
       };
 
-      let locValue = location?.assignments.find(([otherPath, value]) => List(otherPath).equals(List(path)))?.[1];
+      let locationValue = location?.assignments.find(([otherPath, value]) => List(otherPath).equals(List(path)))?.[1];
 
-      let label: ReactNode = locValue
-        ? formatInnerValue(locValue)
+      let label: ReactNode = locationValue
+        ? formatInnerValue(locationValue)
         : formatEvaluable(value, formatInnerValue);
 
       return {
@@ -96,31 +95,29 @@ export default {
     });
   },
   createActions(block, location, context) {
-    return [];
-
     if (location.mode.type !== 'normal') {
       return [];
     }
 
     return location.mode.active
       ? [{
-        id: 'suspend',
+        id: 'deactivate',
         icon: 'pause',
         onTrigger() {
           context.pool.add(async () => {
             await context.sendMessage({
-              type: 'suspend'
+              type: 'deactivate'
             });
           });
         }
       }]
       : [{
-        id: 'apply',
+        id: 'activate',
         icon: 'play_arrow',
         onTrigger() {
           context.pool.add(async () => {
             await context.sendMessage({
-              type: 'apply'
+              type: 'activate'
             });
           });
         }

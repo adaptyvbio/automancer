@@ -1,18 +1,16 @@
 from asyncio import Future
 from typing import Any
 
-import pr1 as am
-from pr1.devices.claim import Claim
-from pr1.units.base import BaseExecutor
+import automancer as am
 from quantops import Quantity
 
 from . import logger
 
 
-class Executor(BaseExecutor):
+class Executor(am.BaseExecutor):
   def __init__(self, conf, *, host: am.Host):
     self._channels = set()
-    self._claims = dict[tuple[Any, am.ValueNode], Claim]()
+    self._claims = dict[tuple[Any, am.ValueNode], am.Claim]()
     self._host = host
 
     # from .mock import MockDevice
@@ -97,7 +95,7 @@ class Executor(BaseExecutor):
     }
 
 
-def export_node_state(node: am.BaseNode, /):
+def export_node_state(node: am.BaseNode, /) -> object:
   state = {
     "connected": node.connected,
     "valueEvent": None,
@@ -127,10 +125,18 @@ def export_node_state(node: am.BaseNode, /):
 
   return state
 
-def export_claim_marker(marker: Any, /):
+def export_claim_marker(marker: Any, /) -> object:
   match marker:
+    case am.Master():
+      return {
+        "type": "master",
+        "experimentId": marker.experiment.id
+      }
     case _:
       return {
-        "type": "client",
-        "clientId": marker.client.id
+        "type": "user"
       }
+    # case _:
+    #   return {
+    #     "type": "unknown"
+    #   }

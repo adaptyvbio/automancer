@@ -8,13 +8,7 @@ export interface ApplierBlock extends ProtocolBlock {
 
 export interface ApplierLocation extends MasterBlockLocation {
   children: { 0: MasterBlockLocation };
-  mode: ApplierLocationMode;
-}
-
-export enum ApplierLocationMode {
-  Applying = 0,
-  Halting = 2,
-  Normal = 1
+  mode: 'applying' | 'halting' | 'normal';
 }
 
 
@@ -26,7 +20,7 @@ export default {
     }];
   },
   getChildrenExecution(block, location, context) {
-    return (location.mode === ApplierLocationMode.Normal)
+    return (location.mode === 'normal')
       ? [{ location: location.children[0] }]
       : null;
   }

@@ -1,20 +1,21 @@
 from importlib.resources import files
 from pathlib import Path
 
-from pr1.units.base import Metadata, MetadataIcon, logger as parent_logger
+import automancer as am
 
-namespace = "devices"
+
+namespace = am.PluginName("devices")
 version = 0
 
-metadata = Metadata(
+metadata = am.Metadata(
   description="Devices",
-  icon=MetadataIcon(kind='icon', value="settings_input_hdmi"),
+  icon=am.MetadataIcon(kind='icon', value="settings_input_hdmi"),
   title="Devices",
   version="3.0"
 )
 
-client_path = Path(files(__name__ + '.client'))
-logger = parent_logger.getChild(namespace)
+client_path = files(__name__ + '.client')
+logger = am.logger.getChild(namespace)
 
 from .executor import Executor
 from .parser import Parser

@@ -1,5 +1,5 @@
-import { EvaluableValue, Form, PanelAction, PanelActions, PanelDataList, PanelLoader, PanelPlaceholder, PanelRoot, PanelSection, PanelSpinner, Plugin, ProgressBar, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
-import { MasterBlockLocation, PluginName, ProtocolBlockName } from 'pr1-shared';
+import { EvaluableValue, Plugin, ProgressDisplayMode, TimeSensitive, TimedProgressBar, createProcessBlockImpl, formatDuration, formatEvaluable } from 'pr1';
+import { PluginName, ProtocolBlockName } from 'pr1-shared';
 
 
 export interface ProcessData {
@@ -64,7 +64,7 @@ export default {
     })
   },
 
-  executionPanels: [{
+/*   executionPanels: [{
     id: '_',
     label: 'Timer',
     shortcut: 'T',
@@ -131,9 +131,9 @@ export default {
         </PanelRoot>
       );
     }
-  }],
+  }], */
 
-  SettingsComponent(props) {
+/*   SettingsComponent(props) {
     let [shortcutPref, setShortcutPref] = props.context.store.usePersistent('progressDisplayMode');
 
     return (
@@ -154,7 +154,7 @@ export default {
           ]} />
       </>
     );
-  },
+  }, */
 
   persistentStoreDefaults: {
     progressDisplayMode: ProgressDisplayMode.Fraction

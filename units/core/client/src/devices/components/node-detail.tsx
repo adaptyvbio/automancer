@@ -180,8 +180,9 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
   override render() {
     let { node, nodePath, nodeState } = this.props;
 
-    let owner = nodeState.writer?.owner;
-    let owned = (owner?.type === 'client') && (owner.clientId === this.props.context.host.clientId);
+    let owner = nodeState.writer?.owner ?? null;
+    let owned = (owner?.type === 'user');
+    // (owner?.type === 'client') && (owner.clientId === this.props.context.host.clientId);
 
     return (
       <div className={styles.detailRoot} key={nodePath.join('.')}>
@@ -218,7 +219,7 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                 {nodeState.connected ? 'Connected' : 'Disconnected'}
               </div>
             </div>
-            {false && nodeState.writer && (
+            {nodeState.writer && (
               <div className={styles.detailInfoEntry}>
                 <div className={styles.detailInfoLabel}>Current user</div>
                 <div className={styles.detailInfoValue}>{(() => {
@@ -226,8 +227,9 @@ export class NodeDetail extends Component<NodeDetailProps, NodeDetailState> {
                     return '\u2013';
                   } if (owned) {
                     return 'You';
-                  } if (owner.type === 'client') {
-                    return 'Another client';
+                  } if (owner.type === 'master') {
+                    let experiment = this.props.context.host.state.experiments[owner.experimentId];
+                    return `Experiment ${experiment.title}`;
                   }
 
                   return '[Unknown]';

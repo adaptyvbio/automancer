@@ -11,7 +11,7 @@ import { Icon } from './icon';
 export interface FeatureDef {
   id?: OrdinaryId;
   accent?: unknown;
-  actions?: FeatureActionDef[];
+  actions?: (FeatureActionDef | null)[]; // null = empty action slot used for alignment
   description?: string | null;
   disabled?: unknown;
   error?: {
@@ -56,17 +56,23 @@ export const Feature = memo(({ feature, onAction }: {
           }[feature.error.kind]}
           title={feature.error.message} />
       )}
-      {feature.actions?.map((action) => (
-        <button
-          type="button"
-          disabled={!!action.disabled}
-          title={action.label}
-          className={styles.action}
-          key={action.id}
-          onClick={() => void onAction!(action.id)}>
-          <Icon name={action.icon} style="sharp" />
-        </button>
-      ))}
+      <div className={styles.actions}>
+        {feature.actions?.map((action, actionIndex) => (
+          action
+            ? (
+              <button
+                type="button"
+                disabled={!!action.disabled}
+                title={action.label}
+                className={styles.action}
+                key={action.id}
+                onClick={() => void onAction!(action.id)}>
+                <Icon name={action.icon} style="sharp" />
+              </button>
+            )
+            : <div key={-actionIndex} />
+        ))}
+      </div>
     </div>
   );
 });
@@ -90,21 +96,19 @@ export const FeatureEntry = memo((props: {
               actions: (featureIndex === 0)
                 ? [
                   ...(props.actions ?? []),
-                  ...(
-                    props.detail
-                      ? detailOpen
-                        ? [{
-                          id: '_toggle',
-                          label: 'Collapse',
-                          icon: 'expand_less'
-                        }]
-                        : [{
-                          id: '_toggle',
-                          label: 'Expand',
-                          icon: 'expand_more'
-                        }]
-                      : []
-                  )
+                  props.detail
+                    ? detailOpen
+                      ? {
+                        id: '_toggle',
+                        label: 'Collapse',
+                        icon: 'expand_less'
+                      }
+                      : {
+                        id: '_toggle',
+                        label: 'Expand',
+                        icon: 'expand_more'
+                      }
+                    : null
                 ]
                 : []
             }}

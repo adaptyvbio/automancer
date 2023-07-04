@@ -106,8 +106,8 @@ class BaseRunner(ABC):
   def __init__(self, master: 'Master'):
     ...
 
-  async def cleanup(self):
-    pass
+  async def start(self):
+    await Future()
 
   def export(self):
     return None

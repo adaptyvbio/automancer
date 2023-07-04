@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
 from traceback import StackSummary
-from typing import IO, TYPE_CHECKING, Any, Optional, Self
+from typing import IO, TYPE_CHECKING, Any, Optional, Self, TypeVar
 import asyncio
 import traceback
 
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 @provide_logger(logger)
 class Master:
-  def __init__(self, compilation: DraftCompilation, /, experiment: Experiment, *, cleanup_callback: Optional[SimpleCallbackFunction] = None, host: 'Host'):
+  def __init__(self, compilation: DraftCompilation, /, experiment: Experiment, *, host: 'Host'):
     assert compilation.protocol
 
     self.id = str(uuid4())
@@ -53,7 +53,6 @@ class Master:
     self._initial_analysis = DiagnosticAnalysis.downcast(compilation.analysis)
     self._master_analysis = MasterAnalysis()
 
-    self._cleanup_callback = cleanup_callback
     self._entry_counter = IndexCounter(start=1)
     self._events = list[ProgramExecEvent]()
     self._file: IO[bytes]
@@ -71,10 +70,6 @@ class Master:
 
     for line in self.protocol.root.format_hierarchy().splitlines():
       self._logger.debug(line)
-
-  @property
-  def pool(self):
-    return self._pool
 
   def allocate_analysis_item_id(self):
     analysis_item_id = self._next_analysis_item_id
@@ -116,21 +111,6 @@ class Master:
     self._handle._program = self.protocol.root.create_program(self._handle)
     self._owner = ProgramOwner(self._handle, self._handle._program)
 
-    async def func():
-      try:
-        self.update_soon()
-        await self._owner.run(None, runtime_stack)
-        self.update_now()
-      finally:
-        if self._update_handle:
-          self._update_handle.cancel()
-          self._update_handle = None
-
-        if self._cleanup_callback:
-          self._cleanup_callback()
-
-        await wait_all([runner.cleanup() for runner in self.runners.values()])
-
     with self.experiment.report_path.open("wb") as self._file:
       assert (self.protocol.name is not None)
 
@@ -146,7 +126,19 @@ class Master:
       self._logger.debug(f"Saving data in {self.experiment.report_path}")
 
       async with Pool.open() as self._pool:
-        self._pool.start_soon(func())
+        for runner in self.runners.values():
+          self._pool.start_soon(runner.start())
+
+        try:
+          self.update_soon()
+          await self._owner.run(None, runtime_stack)
+          self.update_now()
+        finally:
+          if self._update_handle:
+            self._update_handle.cancel()
+            self._update_handle = None
+
+        self._pool.close()
 
     del self._file
 
@@ -168,8 +160,8 @@ class Master:
 
 
   def export(self) -> object:
-    if not self._root_entry:
-      return None
+    # if not self._root_entry:
+    #   return None
 
     return {
       "id": self.id,
@@ -258,8 +250,8 @@ class Master:
 
         if parent_entry:
           del parent_entry.children[entry_id]
-        else:
-          self._root_entry = None
+        # else:
+        #   self._root_entry = None
 
       user_significant = user_significant or (handle._updated_location and (not handle._consumed))
 
@@ -362,6 +354,9 @@ class Mark:
       "childrenOffsets": { child_id: (child_offset and child_offset.export()) for child_id, child_offset in self.children_offsets.items() }
     }
 
+
+T = TypeVar('T', bound=BaseProgram)
+
 class ProgramHandle:
   def __init__(self, parent: 'Master | ProgramHandle', id: int):
     self._children = dict[int, ProgramHandle]()
@@ -385,17 +380,17 @@ class ProgramHandle:
   def master(self) -> Master:
     return self._parent.master if isinstance(self._parent, ProgramHandle) else self._parent
 
-  def ancestors(self, *, include_self: bool = False, same_type: bool = True):
-    reversed_ancestors = list[BaseProgram]()
+  def ancestors(self, *, include_self: bool = False, type: Optional[type[T]] = None):
+    reversed_ancestors = list[T]()
 
-    if include_self:
-      reversed_ancestors.append(self._program)
+    if include_self and ((type is None) or isinstance(self._program, type)):
+      reversed_ancestors.append(self._program) # type: ignore
 
     handle = self
 
     while not isinstance(handle := handle._parent, Master):
-      if (not same_type) or isinstance(handle._program, type(self._program)):
-        reversed_ancestors.insert(0, handle._program)
+      if (type is None) or isinstance(handle._program, type):
+        reversed_ancestors.insert(0, handle._program) # type: ignore
 
     return reversed_ancestors[::-1]
 

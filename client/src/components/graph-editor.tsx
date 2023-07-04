@@ -441,7 +441,7 @@ export class GraphEditor extends Component<GraphEditorProps, GraphEditorState> {
           </g>
         </svg>
         <div className={graphEditorStyles.actionsRoot}>
-          {this.props.onEditDraft && (
+          {false && this.props.onEditDraft && (
             <div className={graphEditorStyles.actionsGroup}>
               <button type="button" className={graphEditorStyles.actionsButton} onClick={() => void this.props.onEditDraft!()}>
                 {/* <Icon name="edit_note" className={graphEditorStyles.actionsIcon} /> */}

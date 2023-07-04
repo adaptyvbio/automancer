@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger("pr1.host")
 
 from .analysis import *
+from .devices.claim import *
 from .devices.nodes.collection import *
 from .devices.nodes.common import *
 from .devices.nodes.numeric import *

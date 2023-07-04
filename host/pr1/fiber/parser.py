@@ -816,6 +816,7 @@ class FiberParser:
 __all__ = [
   'BaseBlock',
   'BaseParser',
+  'BaseProgram',
   'BaseProgramLocation',
   'BaseProgramPoint',
   'ProcessTransformer'

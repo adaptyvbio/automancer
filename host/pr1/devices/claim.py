@@ -130,3 +130,9 @@ class Claimable:
 
   def owner(self):
     return self._get_current_claim()
+
+
+__all__ = [
+  'Claim',
+  'Claimable'
+]

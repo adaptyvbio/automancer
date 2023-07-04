@@ -8,6 +8,8 @@ export interface BlockGroup {
   firstPairIndex: number;
   name: string | null;
   pairs: BlockPair[];
+
+  /** @deprecated */
   path: ProtocolBlockPath;
 }
 

@@ -148,15 +148,15 @@ export class ExecutionInspector extends Component<ExecutionInspectorProps, Execu
             {blockAnalysis.groups.slice().reverse().map((group) =>
               group.pairs.slice().reverse().map((pair, pairIndex) => {
                 let blockImpl = getBlockImpl(pair.block, globalContext);
-                let blockPath = (pairIndex > 0)
-                  ? group.path.slice(0, -pairIndex)
-                  : group.path;
-                let blockContext = createBlockContext(blockPath, this.props.experiment, globalContext);
-                let descendantPairs = blockAnalysis.pairs.slice(group.firstPairIndex + group.pairs.length - pairIndex);
 
                 if (!blockImpl.createFeatures) {
                   return null;
                 }
+
+                let blockPath = this.props.blockPath!.slice(0, group.firstPairIndex + group.pairs.length - pairIndex - 1);
+
+                let blockContext = createBlockContext(blockPath, this.props.experiment, globalContext);
+                let descendantPairs = blockAnalysis.pairs.slice(group.firstPairIndex + group.pairs.length - pairIndex);
 
                 let actions = (blockImpl.createActions?.(pair.block, pair.location, blockContext) ?? []);
 

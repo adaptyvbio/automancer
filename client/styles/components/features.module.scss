@@ -14,11 +14,12 @@ $entry-height: 30px;
       .feature [+] [&Accent] [&Disabled]
         .icon
         .body
-          .description
+          .description [?]
           .label
         .errorIcon
-        .action [+]
-          :global(.icon)
+        .actions [?]
+          .action [+]
+            :global(.icon)
     .detail
 
 */
@@ -100,9 +101,17 @@ $entry-height: 30px;
   }
 }
 
+.actions {
+  display: grid;
+  column-gap: 0.2rem;
+  grid-auto-columns: 28px;
+  grid-auto-flow: column;
+  grid-template-rows: 28px;
+}
+
 .action {
-  display: flex;
-  padding: 1px;
+  display: grid;
+  place-content: center;
 
   border: 1px solid transparent;
   border-radius: 4px;

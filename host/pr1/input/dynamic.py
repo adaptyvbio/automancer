@@ -41,7 +41,7 @@ class DynamicValueType(Type):
       if isinstance(new_result, EvaluableConstantValue):
         return analysis, EvaluableConstantValue(LocatedValue.new(ConstantDynamicValue(new_result.inner_value.value), current_obj.area), symbolic=result.symbolic)
       else:
-        return analysis, EvaluableDeferredDynamicValue(new_result, symbolic=new_result.symbolic)
+        return analysis, EvaluableDeferredDynamicValue(new_result)
     else:
       return analysis, EvaluableDynamicValue(result, self._type)
 
@@ -102,7 +102,7 @@ class EvaluableDynamicValue(Evaluable):
 
 class DynamicValue(ABC, Generic[T]):
   @abstractmethod
-  def watch(self, context: EvalContext) -> AsyncGenerator[tuple[BaseAnalysis, T], Never]:
+  def watch(self, context: EvalContext) -> AsyncGenerator[tuple[BaseAnalysis, T | EllipsisType], Never]:
     ...
 
 @dataclass

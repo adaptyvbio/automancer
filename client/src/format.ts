@@ -112,6 +112,10 @@ export function formatDuration(input: number, options?: {
     }
   }
 
+  if (segments.length < 1) {
+    segments.push(formatUnitQuantity(0, TIME_UNITS.at(-2)!, style));
+  }
+
   switch (style) {
     case 'long':
       return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(segments);

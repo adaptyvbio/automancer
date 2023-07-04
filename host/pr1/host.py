@@ -386,21 +386,15 @@ class Host:
         draft = Draft.load(request["draft"])
         compilation = draft.compile(host=self)
 
-        def cleanup_callback():
-          experiment.master = None
-
-        def update_callback():
-          self.update_callback()
-
         logger.info(f"Running protocol on experiment '{experiment.id}'")
 
         experiment.prepare()
-        experiment.master = Master(compilation, experiment, cleanup_callback=cleanup_callback, host=self)
+        experiment.master = Master(compilation, experiment, host=self)
 
         async def func():
           assert experiment.master
 
-          run_task = asyncio.create_task(experiment.master.run(update_callback))
+          run_task = asyncio.create_task(experiment.master.run(self.update_callback))
 
           try:
             await asyncio.shield(run_task)
@@ -409,6 +403,8 @@ class Host:
             experiment.master.halt()
 
             await run_task
+          finally:
+            experiment.master = None
 
           logger.info(f"Ran protocol on experiment '{experiment.id}'")
           self.update_callback()

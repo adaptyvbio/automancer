@@ -1,6 +1,6 @@
 # Automancer
 
-Automancer is a software application that enables researchers to design, automate, and manage their experiments. For a detailed introduction to Automancer, see the [launch blog plot](https://www.adaptyvbio.com/blog/automancer).
+Automancer is a software application that enables researchers to design, automate, and manage their experiments. For a detailed introduction to Automancer, see the [launch blog post](https://www.adaptyvbio.com/blog/automancer).
 
 ![Automancer preview diagram](https://raw.githubusercontent.com/adaptyvbio/automancer-docs/1e1062859c878aca0d3efce003d609286fc91513/assets/hero.webp)
 
